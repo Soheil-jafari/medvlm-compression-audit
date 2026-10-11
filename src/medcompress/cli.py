@@ -14,7 +14,7 @@ from medcompress.config import (
     find_todos,
     load_config,
 )
-from medcompress.registry import BUDGET_IDS, REGISTRY, validate_run
+from medcompress.registry import BUDGET_IDS, REGISTRY, get_experiment, validate_run
 
 NOT_IMPLEMENTED_EXIT_CODE = 3
 """Exit code used when a stage is still a stub, so pipelines never mistake it for success."""
@@ -55,12 +55,84 @@ def resolve_config(args: argparse.Namespace) -> dict[str, Any]:
     return load_config(path, args.override)
 
 
-def run_context(args: argparse.Namespace) -> RunContext | None:
+def run_context(
+    args: argparse.Namespace, *, require_budget: bool = True, require_variant: bool = True
+) -> RunContext | None:
     """Validate ``--exp/--budget/--variant`` against the registry and build a RunContext."""
     if not getattr(args, "exp", None):
         return None
-    validate_run(args.exp, args.budget, args.variant)
+    validate_run(
+        args.exp,
+        args.budget,
+        args.variant,
+        require_budget=require_budget,
+        require_variant=require_variant,
+    )
     return RunContext(args.exp, seed=args.seed, budget=args.budget, variant=args.variant)
+
+
+def parse_stage_args(
+    parser: argparse.ArgumentParser,
+    argv: list[str] | None,
+    *,
+    script: str,
+    default_exp: str | None = None,
+    require_budget: bool = True,
+) -> tuple[argparse.Namespace, RunContext]:
+    """Parse and validate arguments for a stage script.
+
+    Checks that the experiment exists, that the budget/variant/seed are valid for
+    it, and that ``script`` (e.g. ``"scripts/03_quantize.py"``) is one of the
+    experiment's registered scripts. Invalid input exits via ``parser.error``.
+    """
+    args = parser.parse_args(argv)
+    if args.exp is None:
+        if default_exp is None:
+            parser.error("--exp is required")
+        args.exp = default_exp
+    spec = get_experiment(args.exp)
+    if script not in spec.scripts:
+        users = [eid for eid, s in REGISTRY.items() if script in s.scripts]
+        parser.error(f"{script} is not part of {args.exp}. Used by: {', '.join(users)}")
+    try:
+        run = run_context(args, require_budget=require_budget)
+    except (KeyError, ValueError) as exc:
+        parser.error(str(exc.args[0] if exc.args else exc))
+    assert run is not None
+    return args, run
+
+
+def stage_functions() -> dict[str, Callable[..., Any]]:
+    """Map each stage script to the library function it calls (imported lazily)."""
+    from medcompress.compression.distillation.offline_kd import run_student_training
+    from medcompress.compression.pruning.criteria.base import score_units_for_experiment
+    from medcompress.compression.quantization.ptq import run_quantization
+    from medcompress.compression.recovery import run_prune_and_recover
+    from medcompress.evaluation.efficiency import run_efficiency_benchmark
+    from medcompress.evaluation.image_reliance import check_teacher_image_reliance
+    from medcompress.evaluation.runner import run_evaluation
+    from medcompress.models.teacher_cache import run_teacher_caching
+    from medcompress.registry import (
+        BENCHMARK,
+        CACHE_TEACHER,
+        CHECK_TEACHER,
+        EVALUATE,
+        PRUNE_RECOVER,
+        QUANTIZE,
+        SCORE_UNITS,
+        TRAIN_STUDENT,
+    )
+
+    return {
+        CHECK_TEACHER: check_teacher_image_reliance,
+        CACHE_TEACHER: run_teacher_caching,
+        TRAIN_STUDENT: run_student_training,
+        QUANTIZE: run_quantization,
+        SCORE_UNITS: score_units_for_experiment,
+        PRUNE_RECOVER: run_prune_and_recover,
+        EVALUATE: run_evaluation,
+        BENCHMARK: run_efficiency_benchmark,
+    }
 
 
 def report_todos(config: dict[str, Any], limit: int = 10) -> None:

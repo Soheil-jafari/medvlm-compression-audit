@@ -317,9 +317,19 @@ def get_experiment(experiment_id: str) -> ExperimentSpec:
 
 
 def validate_run(
-    experiment_id: str, budget: str | None = None, variant: str | None = None
+    experiment_id: str,
+    budget: str | None = None,
+    variant: str | None = None,
+    *,
+    require_budget: bool = True,
+    require_variant: bool = False,
 ) -> ExperimentSpec:
     """Check that an (experiment, budget, variant) combination is allowed.
+
+    Args:
+        require_budget: If False, a budget-matched experiment may omit the budget
+            (e.g. unit scoring, which is shared across budgets).
+        require_variant: If True, experiments with variants must name one.
 
     Raises:
         KeyError: unknown experiment ID.
@@ -328,11 +338,13 @@ def validate_run(
     spec = get_experiment(experiment_id)
     if budget is not None and budget not in BUDGET_IDS:
         raise ValueError(f"Unknown budget {budget!r}. Valid budgets: {', '.join(BUDGET_IDS)}")
-    if spec.uses_budgets and budget is None:
+    if require_budget and spec.uses_budgets and budget is None:
         raise ValueError(f"{experiment_id} requires --budget (one of {', '.join(spec.budgets)})")
     if budget is not None and budget not in spec.budgets:
         allowed = ", ".join(spec.budgets) or "none (not budget-matched)"
         raise ValueError(f"{experiment_id} does not run at budget {budget}. Allowed: {allowed}")
+    if require_variant and spec.variants and variant is None:
+        raise ValueError(f"{experiment_id} requires --variant (one of {', '.join(spec.variants)})")
     if variant is not None and variant not in spec.variants:
         allowed = ", ".join(spec.variants) or "none"
         raise ValueError(f"{experiment_id} has no variant {variant!r}. Allowed: {allowed}")
