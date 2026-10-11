@@ -1,0 +1,61 @@
+\section{Experimental Setup}
+\label{sec:setup}
+
+\subsection{Models}
+% TODO: teacher / student pair (shared tokenizer), adapters, precision. Undecided.
+\todo{models}
+
+\subsection{Data}
+% TODO: datasets and roles, patient-level splits, masks, finding list, prevalence
+% groups, deduplication of the external test set. Undecided; candidates include
+% Colon-X \cite{colonx}.
+\todo{data}
+
+\begin{table}[t]
+  \centering
+  \caption{Datasets, roles and split sizes. \todo{fill once datasets are decided}}
+  \label{tab:data}
+  \begin{tabular}{llll}
+    \toprule
+    Dataset & Role & Images (train/val/test) & Masks \\
+    \midrule
+    -- & -- & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Budgets}
+% TODO: measurement protocol, hardware, B1-B3 as fractions of E2 peak memory.
+\todo{budgets}
+
+\begin{table}[t]
+  \centering
+  \caption{Measured budgets: \expid{E2} reference and targets \expid{B1}--\expid{B3}.}
+  \label{tab:budgets}
+  \begin{tabular}{lll}
+    \toprule
+    Budget & Target fraction of \expid{E2} & Measured peak memory / latency \\
+    \midrule
+    reference (\expid{E2}) & 1.00 & -- \\
+    \expid{B1} & -- & -- \\
+    \expid{B2} & -- & -- \\
+    \expid{B3} & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Metrics}
+% TODO: clinical, small findings (lesion-area quartiles), rare findings (prevalence
+% groups), image reliance (blank, lesion vs random mask, other patient),
+% calibration (ECE, Brier, risk-coverage), hallucination/omission/negation,
+% efficiency.
+\todo{metrics}
+
+\subsection{Statistics}
+% TODO: paired bootstrap 95% CIs, McNemar per finding, Holm correction, mean and SD
+% over 3 seeds; primary endpoints pre-registered.
+\todo{statistics}
+
+\subsection{Hardware}
+% TODO: Kaggle 2x T4 for development, rented GPU (type TODO) for final timing.
+\todo{hardware}

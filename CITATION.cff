@@ -1,0 +1,15 @@
+# Placeholder citation metadata. Update authors, licence and release date before
+# the first public release.
+cff-version: 1.2.0
+message: "Placeholder: citation details will be added when the paper is released."
+title: "What Compression Forgets: Pruning vs. Quantization vs. Distillation in Medical Vision-Language Models, and a Clinically Weighted Pruning Criterion for Preserving Small Findings"
+type: software
+version: 0.0.1
+authors:
+  - given-names: Amir
+    family-names: TODO
+  - given-names: Soheil
+    family-names: Jafari
+  - given-names: Farzan
+    family-names: TODO
+repository-code: "https://github.com/Soheil-jafari/medvlm-compression-audit"

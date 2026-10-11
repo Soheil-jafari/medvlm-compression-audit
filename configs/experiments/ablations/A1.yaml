@@ -1,0 +1,16 @@
+# Ablation of E7: unweighted criterion (w_c = 1). Everything else as in E7.
+_base_: ../E7.yaml
+
+experiment:
+  id: A1
+  name: ablation_unweighted
+  description: Clinical criterion with uniform finding weights (w_c = 1).
+  kind: ablation
+  variant_of: E7
+  budgets: [B2]                           # TODO: confirm ablations run at the primary budget only
+  outputs:
+    - results/A1/B2/seed{0,1,2}/metrics.csv
+
+pruning:
+  clinical:
+    weighting: uniform

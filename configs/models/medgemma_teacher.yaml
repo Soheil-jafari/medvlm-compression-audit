@@ -1,0 +1,10 @@
+_base_: _model_base.yaml
+
+model:
+  name: "MedGemma (teacher variant TODO)"
+  role: teacher
+  family: medgemma
+  size: "TODO"
+  tokenizer_shared_with: models/medgemma_student.yaml   # TODO: verify the tokenizers are identical
+  adapter: null
+  notes: "MedGemma family candidate; which variant is teacher is undecided."

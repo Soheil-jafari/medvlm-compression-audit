@@ -1,0 +1,16 @@
+# Heavy dependencies for training, compression and evaluation on GPU.
+# Install on Kaggle / Colab / rented GPU only, never needed for CI.
+-r base.txt
+torch>=2.1
+transformers          # TODO: pin a version once the teacher/student pair is decided
+peft
+accelerate
+datasets
+
+# Optional quantization backends (E3, E4, E8, E9).
+# TODO: choose backends after checking which ones run on T4 (Kaggle) and on the
+# final timing GPU, then pin versions and uncomment.
+# gptqmodel           # TODO: GPTQ backend candidate
+# autoawq             # TODO: AWQ backend candidate
+# llmcompressor       # TODO: W8A8 backend candidate
+# bitsandbytes        # TODO: optional 8-bit / 4-bit loading for quick checks

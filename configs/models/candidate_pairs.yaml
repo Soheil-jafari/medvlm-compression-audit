@@ -1,0 +1,19 @@
+# Candidate teacher -> student pairs. Teacher and student MUST share a tokenizer
+# (offline distillation uses cached top-k token probabilities).
+status: "CANDIDATE - NOT DECIDED"
+candidate_pairs:
+  - id: qwen2_5_vl
+    teacher: models/qwen2_5_vl_7b_teacher.yaml
+    student: models/qwen2_5_vl_3b_student.yaml
+    shared_tokenizer_verified: TODO
+    notes: "Teacher has a published Kvasir-VQA-x1 adapter (to verify)."
+  - id: qwen3_vl
+    teacher: models/qwen3_vl_8b_teacher.yaml
+    student: models/qwen3_vl_2b_student.yaml
+    shared_tokenizer_verified: TODO
+    notes: ""
+  - id: medgemma
+    teacher: models/medgemma_teacher.yaml
+    student: models/medgemma_student.yaml
+    shared_tokenizer_verified: TODO
+    notes: "Variants within the family TODO."

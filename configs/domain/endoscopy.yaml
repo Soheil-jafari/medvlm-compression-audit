@@ -1,0 +1,37 @@
+domain:
+  name: endoscopy
+  modality: GI endoscopy
+  status: "CANDIDATE - NOT DECIDED (lead candidate)"
+  candidate_datasets:
+    - data/kvasir_vqa_x1.yaml
+    - data/kvasir_seg.yaml
+    - data/colonvqa.yaml
+    - data/colonpert.yaml
+    - data/endobench.yaml
+
+  # Finding list C used by probes, per-finding metrics and the clinical criterion.
+  findings:
+    - TODO
+
+  # Prevalence groups are fixed in advance from training-split prevalence.
+  prevalence_groups:
+    method: TODO
+    thresholds:
+      common_min: TODO
+      rare_max: TODO
+    common: []
+    medium: []
+    rare: []
+
+  probe:
+    template: "Is there a {finding} in this image? Answer yes or no."
+    answers:
+      positive: "yes"
+      negative: "no"
+    display_names: {}                     # TODO: finding ID -> wording used in the probe
+
+  small_findings:
+    area_source: lesion_masks
+    n_strata: 4                           # quartiles
+    small_stratum: 0                      # smallest quartile = "small"
+    thresholds: TODO                      # frozen in the preregistration

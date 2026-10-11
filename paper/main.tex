@@ -1,0 +1,45 @@
+% Placeholder: plain article class so the outline compiles anywhere.
+% TODO: switch to the venue template once the venue is decided, e.g. Springer LNCS
+% for MICCAI:
+%   \documentclass[runningheads]{llncs}
+% (and remove geometry / adjust the bibliography style to splncs04).
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\expid}[1]{\texttt{#1}}
+
+\title{What Compression Forgets: Pruning vs.\ Quantization vs.\ Distillation in
+Medical Vision-Language Models, and a Clinically Weighted Pruning Criterion for
+Preserving Small Findings}
+% TODO: anonymise for double-blind review.
+\author{Amir \and Soheil Jafari \and Farzan \\ \todo{affiliations}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\input{sections/00_abstract}
+\input{sections/01_introduction}
+\input{sections/02_related_work}
+\input{sections/03_method}
+\input{sections/04_experimental_setup}
+\input{sections/05_results}
+\input{sections/06_discussion}
+\input{sections/07_conclusion}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\appendix
+\input{sections/appendix}
+
+\end{document}

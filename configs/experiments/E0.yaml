@@ -1,0 +1,42 @@
+_base_: ../base.yaml
+
+experiment:
+  id: E0
+  name: teacher_full_precision
+  description: >-
+    Teacher, full precision. Reference model: checks that the teacher relies on the
+    image, then caches its answers and top-k probabilities once for distillation
+    and recovery.
+  kind: main
+  parent: null
+  variant_of: null
+  requires: []
+  budgets: []
+  seeds: [0]                              # no training; seed only drives stress-test sampling
+  variants: []
+  scripts:
+    - scripts/00_check_teacher_image_reliance.py
+    - scripts/01_cache_teacher_outputs.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E0/nobudget/seed0/metrics.csv
+    - results/E0/nobudget/seed0/efficiency.csv
+    - cache/teacher/ (answers + top-k probabilities; never committed)
+  status: planned
+
+model:
+  role: teacher
+  config: TODO                            # one of configs/models/*_teacher.yaml (CANDIDATE)
+  start_from: pretrained
+  precision: full
+
+image_reliance_check:
+  tests: [blank_image, lesion_masked, random_region_masked, other_patient_image]
+  go_no_go_threshold: TODO                # pre-registered
+
+teacher_cache:
+  splits: TODO
+  top_k: TODO
+  max_new_tokens: TODO
+  shard_size: 1000

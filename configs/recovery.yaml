@@ -1,0 +1,18 @@
+# Shared recovery recipe: IDENTICAL for every pruning arm (E5, E6, E7, A1-A6).
+# Do not override any key below in an experiment config. tests/test_configs.py
+# checks that the merged recovery section is the same for all pruning arms.
+recovery:
+  method: lora_plus_offline_kd
+  teacher_cache_from: E0
+  lora:
+    rank: TODO
+    alpha: TODO
+    dropout: TODO
+    target_modules: TODO
+  steps: TODO
+  learning_rate: TODO
+  batch_size: TODO
+  grad_accumulation: TODO
+  kd_weight: TODO
+  kd_temperature: TODO
+  data_subset: TODO

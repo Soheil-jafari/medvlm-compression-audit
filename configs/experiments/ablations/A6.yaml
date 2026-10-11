@@ -1,0 +1,19 @@
+# Ablation of E7: unit granularity.
+_base_: ../E7.yaml
+
+experiment:
+  id: A6
+  name: ablation_unit_granularity
+  description: Decoder layers only vs attention heads + MLP channel groups.
+  kind: ablation
+  variant_of: E7
+  budgets: [B2]
+  variants: [layers_only, heads_channels]
+  outputs:
+    - results/A6/<variant>/B2/seed{0,1,2}/metrics.csv
+
+pruning:
+  units:
+    types_by_variant:
+      layers_only: [decoder_layer]
+      heads_channels: [attention_head, mlp_channel_group]  # TODO: confirm whether layers are also included

@@ -1,0 +1,79 @@
+# ---- Data, models and run artefacts: never commit these ----
+data/
+datasets/
+checkpoints/
+cache/
+outputs/
+wandb/
+mlruns/
+lightning_logs/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.gguf
+*.onnx
+*.npz
+*.npy
+*.parquet
+*.h5
+*.hdf5
+*.zip
+*.tar
+*.tar.gz
+
+# Medical images (keep them out of git even if dropped in by accident)
+*.dcm
+*.nii
+*.nii.gz
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+# Paper figures are allowed (plots only, never patient images)
+!paper/figures/*.png
+
+# Large results: only small summary CSVs under results/ are tracked
+results/raw/
+results/predictions/
+results/runs/
+results/**/*.jsonl
+
+# ---- Secrets ----
+.env
+.env.*
+*.pem
+*.key
+kaggle.json
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# ---- LaTeX ----
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.synctex.gz
+paper/main.pdf
+
+# ---- OS / editors ----
+.DS_Store
+.idea/
+.vscode/

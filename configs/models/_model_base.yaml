@@ -1,0 +1,16 @@
+# Template inherited by every candidate model config. Do not guess hub IDs,
+# paths or licence terms: leave TODO until verified by the owner.
+model:
+  status: "CANDIDATE - NOT DECIDED"
+  name: TODO
+  role: TODO                              # teacher | student
+  family: TODO
+  size: TODO
+  source: TODO                            # verified hub ID or local path
+  revision: TODO                          # pinned commit / version once chosen
+  adapter: null                           # optional LoRA adapter (verified ID or path)
+  tokenizer_shared_with: TODO             # teacher <-> student must share a tokenizer
+  dtype: TODO
+  licence: TODO                           # verify terms before use
+  model_card: docs/model_cards/TEMPLATE.md
+  notes: ""

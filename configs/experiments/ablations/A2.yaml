@@ -1,0 +1,16 @@
+# Ablation of E7: rarity-only weights (capped inverse prevalence, no clinical tier).
+_base_: ../E7.yaml
+
+experiment:
+  id: A2
+  name: ablation_rarity_only
+  description: Clinical criterion with w_c = min(1 / prevalence_c, cap), no tier multiplier.
+  kind: ablation
+  variant_of: E7
+  budgets: [B2]
+  outputs:
+    - results/A2/B2/seed{0,1,2}/metrics.csv
+
+pruning:
+  clinical:
+    weighting: rarity_only

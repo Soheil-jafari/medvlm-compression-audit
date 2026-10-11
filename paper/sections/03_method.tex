@@ -1,0 +1,70 @@
+\section{Method}
+\label{sec:method}
+
+\subsection{Study design}
+% TODO: one teacher (E0), one student (E1, E2); every compression arm starts from E2
+% (or E7 for E8, E0 for E9); all arms are compared at the same MEASURED budget
+% (peak memory or latency as a fraction of E2), not parameter count.
+\todo{study design}
+
+\subsection{Compression arms}
+% TODO: describe E3 (PTQ: W8, W4 via GPTQ/AWQ, W8A8), E4 (QAKD, GRACE-style),
+% E5 (magnitude, activation, Taylor), E6 (output-similarity layer pruning), E7 (ours),
+% E8 (E7 + 4-bit), E9 (teacher 4-bit).
+
+\begin{table}[t]
+  \centering
+  \caption{Experiment ladder (\expid{E0}--\expid{E9}) and ablations
+  (\expid{A1}--\expid{A6}). Source: \texttt{src/medcompress/registry.py}.}
+  \label{tab:ladder}
+  \begin{tabular}{llll}
+    \toprule
+    ID & Description & Starts from & Budgets \\
+    \midrule
+    \expid{E0} & Teacher, full precision & -- & -- \\
+    \expid{E1} & Student, answer fine-tuning & -- & -- \\
+    \expid{E2} & Student + offline KD & -- & reference \\
+    \expid{E3} & PTQ (W8/W4/W8A8) & \expid{E2} & measured \\
+    \expid{E4} & QAKD & -- & measured \\
+    \expid{E5} & Generic structured pruning + recovery & \expid{E2} & B1--B3 \\
+    \expid{E6} & Output-similarity layer pruning + recovery & \expid{E2} & B1--B3 \\
+    \expid{E7} & Clinical pruning (ours) + recovery & \expid{E2} & B1--B3 \\
+    \expid{E8} & \expid{E7} + 4-bit PTQ & \expid{E7} & B1--B3 \\
+    \expid{E9} & Teacher 4-bit (suppl.) & \expid{E0} & measured \\
+    \expid{A1}--\expid{A6} & Criterion ablations & \expid{E2} & B2 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Clinically weighted pruning criterion}
+% TODO: units (layers, GQA-consistent head groups, MLP channel groups; projector kept),
+% probes, Delta variants, weights, procedure. Keep consistent with
+% src/medcompress/compression/pruning/criteria/clinical.py.
+For each candidate unit $j$ we compute
+\begin{equation}
+  I_j = \sum_{c \in C} w_c \, \frac{1}{|X_{\mathrm{cal}}|} \sum_{x \in X_{\mathrm{cal}}} \Delta_j(c, x),
+  \label{eq:importance}
+\end{equation}
+where $\Delta_j(c, x) = \log p_\theta(y_{c,x} \mid x, q_c) - \log p_{\theta \setminus j}(y_{c,x} \mid x, q_c)$
+is the drop in log-probability of the correct yes/no answer to the probe $q_c$ when
+unit $j$ is ablated, and $w_c = \min(1/\pi_c, \kappa)\, \tau(c)$ combines capped
+inverse prevalence and a pre-registered clinical importance tier.
+\todo{full definitions, KL variant, procedure}
+
+\begin{figure}[t]
+  \centering
+  \fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}
+    Placeholder: probe $\rightarrow$ ablate $\rightarrow$ score $\rightarrow$ rank
+    $\rightarrow$ remove to budget $\rightarrow$ recover $\rightarrow$ mask audit.\vspace{3em}}}
+  \caption{Overview of the clinical pruning criterion (\expid{E7}).}
+  \label{fig:method}
+\end{figure}
+
+\subsection{Shared recovery}
+% TODO: identical LoRA + offline KD recovery for all pruning arms (E5, E6, E7,
+% A1-A6): same data subset, steps and hyper-parameters; recovery config fingerprint.
+\todo{recovery}
+
+\subsection{Mask audit}
+% TODO: lesion masked vs area-matched random region masked; lesion-mask effect.
+\todo{mask audit}

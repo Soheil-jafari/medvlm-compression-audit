@@ -1,0 +1,31 @@
+_base_: [../base.yaml, ../pruning.yaml, ../recovery.yaml]
+
+experiment:
+  id: E5
+  name: generic_structured_pruning
+  description: >-
+    E2 + generic structured pruning (magnitude, activation/Wanda-style,
+    gradient/Taylor) + shared recovery, at every budget.
+  kind: main
+  parent: E2
+  variant_of: null
+  requires: [E0]
+  budgets: [B1, B2, B3]
+  seeds: [0, 1, 2]
+  variants: [magnitude, activation, taylor]
+  scripts:
+    - scripts/04_score_pruning_units.py
+    - scripts/05_prune_and_recover.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E5/<variant>/<budget>/seed{0,1,2}/unit_scores.csv
+    - results/E5/<variant>/<budget>/seed{0,1,2}/metrics.csv
+  status: planned
+
+pruning:
+  criterion: by_variant
+  criterion_by_variant:
+    magnitude: magnitude
+    activation: activation
+    taylor: taylor

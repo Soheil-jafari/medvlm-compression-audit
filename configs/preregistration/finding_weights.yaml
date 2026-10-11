@@ -1,0 +1,26 @@
+# PRE-REGISTERED finding weights for the clinical pruning criterion (E7, E8, A2, A4-A6).
+# Fill in, review as a team, then set frozen_on / frozen_by / commit BEFORE any E7 run.
+# After freezing, changes require a dated entry in docs/decisions_log.md.
+preregistration:
+  document: docs/preregistration.md
+  frozen_on: TODO
+  frozen_by: TODO
+  commit: TODO
+  domain: TODO
+
+weighting:
+  formula: "w_c = min(1 / prevalence_c, cap) * tier_multiplier(importance_tier_c)"
+  prevalence_source: TODO                 # training-split manifest file + hash
+  normalisation: TODO                     # e.g. none, or rescale to sum to |C|
+  tiers:
+    - tier: TODO
+      multiplier: TODO
+      definition: TODO                    # clinical rationale for the tier
+
+# One row per finding in the domain finding list C.
+findings:
+  - finding: TODO
+    prevalence: TODO
+    importance_tier: TODO
+    cap: TODO
+    final_weight: TODO

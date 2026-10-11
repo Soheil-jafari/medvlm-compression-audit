@@ -1,0 +1,31 @@
+_base_: [../base.yaml, ../training.yaml]
+
+experiment:
+  id: E4
+  name: qakd
+  description: >-
+    Student trained with quantization-aware distillation (GRACE-style, Chen et al.,
+    arXiv:2601.22709) from cached E0 outputs.
+  kind: main
+  parent: null
+  variant_of: null
+  requires: [E0]
+  budgets: []
+  seeds: [0, 1, 2]
+  variants: []
+  scripts:
+    - scripts/02_train_student.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E4/nobudget/seed{0,1,2}/metrics.csv
+    - checkpoints/E4/ (never committed)
+  status: planned
+
+training:
+  mode: qakd
+
+quantization:
+  weight_bits: TODO
+  group_size: TODO
+  objective: TODO                         # write down the GRACE-style objective before implementing

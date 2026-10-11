@@ -1,0 +1,29 @@
+# Matched compression budgets. All arms are compared at the same MEASURED budget.
+# B1-B3 are PLACEHOLDERS until frozen in docs/preregistration.md.
+budgets:
+  reference_experiment: E2                # budgets are fractions of E2's measured footprint
+  metric: TODO                            # peak_memory (default candidate) or latency
+  tolerance: TODO                         # allowed relative deviation from the target
+  measurement:
+    description: >-
+      Peak GPU memory during inference (weights + activations + KV cache) and/or
+      per-sample latency, measured with the protocol below on the final timing GPU.
+      Parameter counts are reported but never used to match budgets.
+    hardware: TODO                        # same GPU for every arm
+    batch_size: TODO
+    image_resolution: TODO
+    prompt_length_tokens: TODO
+    max_new_tokens: TODO
+    warmup_runs: TODO
+    repeats: TODO
+    samples: TODO                         # fixed list of sample IDs used for timing
+  levels:
+    B1:
+      target_fraction: null               # placeholder, e.g. about 0.75 of E2 peak memory
+      description: "Mild compression (placeholder)"
+    B2:
+      target_fraction: null               # placeholder, e.g. about 0.60; PRIMARY budget
+      description: "Moderate compression, primary endpoints (placeholder)"
+    B3:
+      target_fraction: null               # placeholder, e.g. about 0.50
+      description: "Aggressive compression (placeholder)"

@@ -1,0 +1,8 @@
+# Light dependencies: enough to import every module, load configs, run tests and
+# compute statistics. Keep in sync with [project.dependencies] in pyproject.toml.
+pyyaml>=6.0
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+scikit-learn>=1.3
+matplotlib>=3.7

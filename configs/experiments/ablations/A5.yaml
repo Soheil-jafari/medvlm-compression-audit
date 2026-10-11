@@ -1,0 +1,19 @@
+# Ablation of E7: Delta = correct-answer log-prob drop vs prediction change (KL).
+_base_: ../E7.yaml
+
+experiment:
+  id: A5
+  name: ablation_delta_definition
+  description: Delta as correct-answer log-probability drop vs prediction change (KL).
+  kind: ablation
+  variant_of: E7
+  budgets: [B2]
+  variants: [logprob_drop, kl]
+  outputs:
+    - results/A5/<variant>/B2/seed{0,1,2}/metrics.csv
+
+pruning:
+  clinical:
+    delta_by_variant:
+      logprob_drop: logprob_drop
+      kl: kl
