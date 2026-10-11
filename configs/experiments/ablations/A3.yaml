@@ -1,0 +1,15 @@
+# Ablation of E7: random removal on the same unit set and budget (lower bound).
+_base_: ../E7.yaml
+
+experiment:
+  id: A3
+  name: ablation_random
+  description: Random unit removal at the same budget and unit set as E7.
+  kind: ablation
+  variant_of: E7
+  budgets: [B2]
+  outputs:
+    - results/A3/B2/seed{0,1,2}/metrics.csv
+
+pruning:
+  criterion: random

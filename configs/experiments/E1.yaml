@@ -1,0 +1,27 @@
+_base_: [../base.yaml, ../training.yaml]
+
+experiment:
+  id: E1
+  name: student_answer_finetune
+  description: Student fine-tuned on correct (ground-truth) answers only, full precision.
+  kind: main
+  parent: null
+  variant_of: null
+  requires: []
+  budgets: []
+  seeds: [0, 1, 2]
+  variants: []
+  scripts:
+    - scripts/02_train_student.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E1/nobudget/seed{0,1,2}/metrics.csv
+    - checkpoints/E1/ (LoRA adapters; never committed)
+  status: planned
+
+training:
+  mode: sft
+  kd_weight: 0.0
+  kd_temperature: null
+  teacher_cache_from: null

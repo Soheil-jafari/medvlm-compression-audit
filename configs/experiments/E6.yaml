@@ -1,0 +1,29 @@
+_base_: [../base.yaml, ../pruning.yaml, ../recovery.yaml]
+
+experiment:
+  id: E6
+  name: output_similarity_layer_pruning
+  description: >-
+    E2 + output-similarity layer pruning (Khan et al. style, arXiv:2507.21976) +
+    shared recovery, at every budget.
+  kind: main
+  parent: E2
+  variant_of: null
+  requires: [E0]
+  budgets: [B1, B2, B3]
+  seeds: [0, 1, 2]
+  variants: []
+  scripts:
+    - scripts/04_score_pruning_units.py
+    - scripts/05_prune_and_recover.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E6/<budget>/seed{0,1,2}/unit_scores.csv
+    - results/E6/<budget>/seed{0,1,2}/metrics.csv
+  status: planned
+
+pruning:
+  criterion: output_similarity
+  units:
+    types: [decoder_layer]

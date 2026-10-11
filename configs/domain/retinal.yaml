@@ -1,0 +1,32 @@
+domain:
+  name: retinal
+  modality: retinal fundus photography
+  status: "CANDIDATE - NOT DECIDED (alternative)"
+  candidate_datasets:
+    - data/idrid.yaml
+    - data/fgadr.yaml
+
+  findings:
+    - TODO
+
+  prevalence_groups:
+    method: TODO
+    thresholds:
+      common_min: TODO
+      rare_max: TODO
+    common: []
+    medium: []
+    rare: []
+
+  probe:
+    template: "Is there a {finding} in this image? Answer yes or no."
+    answers:
+      positive: "yes"
+      negative: "no"
+    display_names: {}
+
+  small_findings:
+    area_source: lesion_masks
+    n_strata: 4
+    small_stratum: 0
+    thresholds: TODO

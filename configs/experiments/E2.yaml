@@ -1,0 +1,27 @@
+_base_: [../base.yaml, ../training.yaml]
+
+experiment:
+  id: E2
+  name: student_offline_kd
+  description: >-
+    Student trained with offline distillation from cached E0 outputs, full precision.
+    Starting point of every compression arm (E3, E5, E6, E7) and budget reference.
+  kind: main
+  parent: null
+  variant_of: null
+  requires: [E0]
+  budgets: []
+  seeds: [0, 1, 2]
+  variants: []
+  scripts:
+    - scripts/02_train_student.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E2/nobudget/seed{0,1,2}/metrics.csv
+    - results/E2/nobudget/seed{0,1,2}/efficiency.csv (budget reference)
+    - checkpoints/E2/ (never committed)
+  status: planned
+
+training:
+  mode: offline_kd

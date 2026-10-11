@@ -1,0 +1,37 @@
+_base_: [../base.yaml, ../pruning.yaml, ../recovery.yaml]
+
+experiment:
+  id: E7
+  name: clinical_pruning
+  description: >-
+    E2 + clinically weighted structured pruning (ours) + shared recovery, at every
+    budget. Primary endpoints at B2 compare E7 against the best of E5 and E6.
+  kind: main
+  parent: E2
+  variant_of: null
+  requires: [E0]
+  budgets: [B1, B2, B3]
+  seeds: [0, 1, 2]
+  variants: []
+  scripts:
+    - scripts/04_score_pruning_units.py
+    - scripts/05_prune_and_recover.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E7/<budget>/seed{0,1,2}/unit_scores.csv
+    - results/E7/<budget>/seed{0,1,2}/metrics.csv
+    - results/E7/<budget>/seed{0,1,2}/mask_audit.csv
+  status: planned
+
+pruning:
+  criterion: clinical
+  clinical:
+    delta: logprob_drop                   # A5 alternative: kl
+    weighting: clinical                   # A1: uniform, A2: rarity_only
+    weights_table: preregistration/finding_weights.yaml
+    probe_template: from_domain           # configs/domain/<domain>.yaml probe.template
+    negatives_per_positive: TODO
+    negative_delta: TODO                  # keep or clip at 0
+    ablation_method: TODO                 # how a unit is disabled during scoring
+    batch_size: TODO

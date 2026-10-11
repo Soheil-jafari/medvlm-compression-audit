@@ -1,0 +1,10 @@
+_base_: _model_base.yaml
+
+model:
+  name: "Qwen3-VL-8B"
+  role: teacher
+  family: qwen3_vl
+  size: "8B"
+  tokenizer_shared_with: models/qwen3_vl_2b_student.yaml   # TODO: verify the tokenizers are identical
+  adapter: null
+  notes: "Candidate teacher."

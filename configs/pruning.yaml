@@ -1,0 +1,26 @@
+# Shared pruning settings for E5, E6, E7 and A1-A6. Experiments override only the
+# criterion-specific keys.
+model:
+  role: student
+  start_from: E2
+
+pruning:
+  criterion: TODO                         # set per experiment
+  units:
+    types: [decoder_layer, attention_head, mlp_channel_group]
+    include_vision_blocks: false          # optional
+    keep_projector: true                  # the projector is never pruned
+    respect_gqa: true                     # heads removed in grouped-KV-consistent groups
+    mlp_channel_group_size: TODO
+  calibration:
+    split: train
+    size: TODO                            # E7 default; A4 sweeps 32/64/128/256
+  removal:
+    physical: true                        # weights are deleted, not masked
+    stop_when: measured_budget_met
+    schedule: TODO                        # one-shot vs iterative
+
+mask_audit:
+  enabled: true
+  fill: TODO                              # same fill for lesion and random region
+  random_region_max_tries: 100

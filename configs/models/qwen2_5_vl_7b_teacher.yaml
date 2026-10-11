@@ -1,0 +1,10 @@
+_base_: _model_base.yaml
+
+model:
+  name: "Qwen2.5-VL-7B"
+  role: teacher
+  family: qwen2_5_vl
+  size: "7B"
+  tokenizer_shared_with: models/qwen2_5_vl_3b_student.yaml   # TODO: verify the tokenizers are identical
+  adapter: TODO   # published Kvasir-VQA-x1 adapter; ID not verified
+  notes: "Candidate teacher with a published Kvasir-VQA-x1 adapter (adapter ID to be verified)."

@@ -1,0 +1,32 @@
+_base_: E7.yaml
+
+experiment:
+  id: E8
+  name: clinical_pruning_plus_ptq4
+  description: E7 + 4-bit post-training quantization, at every budget.
+  kind: main
+  parent: E7
+  variant_of: null
+  requires: []
+  budgets: [B1, B2, B3]
+  seeds: [0, 1, 2]                        # one PTQ run per E7 seed
+  variants: []
+  scripts:
+    - scripts/03_quantize.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E8/<budget>/seed{0,1,2}/metrics.csv
+    - results/E8/<budget>/seed{0,1,2}/efficiency.csv
+  status: planned
+
+model:
+  start_from: E7
+
+quantization:
+  method: ptq
+  backend: TODO                           # gptq | awq (same as E3:w4)
+  weight_bits: 4
+  activation_bits: null
+  group_size: TODO
+  calibration_size: TODO

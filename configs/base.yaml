@@ -1,0 +1,66 @@
+# Base config inherited (directly or indirectly) by every experiment config.
+# Undecided values are strings starting with "TODO". Paths can be redirected with
+# environment variables (e.g. on Kaggle: MEDCOMPRESS_DATA_ROOT=/kaggle/input/<dataset>).
+schema_version: 1
+
+project:
+  name: medcompress
+  working_title: >-
+    What Compression Forgets: Pruning vs. Quantization vs. Distillation in Medical
+    Vision-Language Models, and a Clinically Weighted Pruning Criterion for
+    Preserving Small Findings
+
+paths:
+  data_root: ${env:MEDCOMPRESS_DATA_ROOT,data}
+  cache_root: ${env:MEDCOMPRESS_CACHE_ROOT,cache}
+  checkpoint_root: ${env:MEDCOMPRESS_CHECKPOINT_ROOT,checkpoints}
+  output_root: ${env:MEDCOMPRESS_OUTPUT_ROOT,outputs}
+  results_root: ${env:MEDCOMPRESS_RESULTS_ROOT,results}
+
+# Which candidate configs are active. Nothing here is decided yet.
+components:
+  status: "CANDIDATE - NOT DECIDED"
+  domain: domain/endoscopy.yaml          # lead candidate; alternative: domain/retinal.yaml
+  budgets: budgets.yaml
+  finding_weights: preregistration/finding_weights.yaml
+  candidate_model_pairs: models/candidate_pairs.yaml
+  teacher: TODO                           # one of configs/models/*_teacher.yaml
+  student: TODO                           # must share the teacher's tokenizer
+  datasets:
+    train_qa: TODO                        # e.g. one of configs/data/*.yaml
+    masks: TODO
+    rare_findings: TODO
+    external_test: TODO
+
+seeds:
+  training: [0, 1, 2]                     # 3 seeds for every training arm
+  data_split: TODO                        # single fixed seed, recorded in the preregistration
+  deterministic: false
+
+logging:
+  level: INFO
+  backend: csv                            # TODO: decide on an optional tracker; never log images
+  log_every_n_steps: TODO
+
+hardware:
+  development: "Kaggle (2x T4, 16 GB each) and Google Colab"
+  final_timing: TODO                      # rented GPU type for final efficiency numbers
+  precision: TODO                         # fp16 vs bf16, depends on the GPU
+  device_map: auto
+  num_workers: 2
+
+evaluation:
+  suites:
+    - clinical
+    - small_findings
+    - rare_findings
+    - image_reliance
+    - calibration
+    - hallucination
+    - language
+  test_split: TODO
+  external_test: TODO
+  calibration_bins: TODO
+  bootstrap_resamples: TODO
+  ci_level: 0.95
+  multiple_testing: holm

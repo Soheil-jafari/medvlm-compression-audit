@@ -1,0 +1,21 @@
+# Ablation of E7: calibration set size (nested subsets).
+_base_: ../E7.yaml
+
+experiment:
+  id: A4
+  name: ablation_calibration_size
+  description: Clinical criterion with 32, 64, 128 and 256 calibration images.
+  kind: ablation
+  variant_of: E7
+  budgets: [B2]
+  variants: [n32, n64, n128, n256]
+  outputs:
+    - results/A4/<variant>/B2/seed{0,1,2}/metrics.csv
+
+pruning:
+  calibration:
+    size_by_variant:
+      n32: 32
+      n64: 64
+      n128: 128
+      n256: 256

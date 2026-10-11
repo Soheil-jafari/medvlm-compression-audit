@@ -1,0 +1,23 @@
+# Shared student-training defaults for E1, E2 and E4 (same hyper-parameters so the
+# only difference between arms is the training signal).
+model:
+  role: student
+  config: TODO                            # one of configs/models/*_student.yaml (CANDIDATE)
+  start_from: pretrained
+
+training:
+  mode: TODO                              # sft (E1) | offline_kd (E2) | qakd (E4)
+  method: lora
+  lora:
+    rank: TODO
+    alpha: TODO
+    dropout: TODO
+    target_modules: TODO
+  steps: TODO
+  learning_rate: TODO
+  batch_size: TODO
+  grad_accumulation: TODO
+  kd_weight: TODO
+  kd_temperature: TODO
+  data_subset: TODO
+  teacher_cache_from: E0
