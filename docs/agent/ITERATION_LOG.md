@@ -75,3 +75,15 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: D01 teacher memo; then fix the student pool from the teacher's family.
 - Needs the team: nothing new.
+
+## Iteration 5: 2026-10-12 (interactive)
+- Stage / item: S01, D01 teacher memo.
+- Did: wrote `docs/decisions/D01_teacher.md` comparing five teachers. Verified that the
+  SimulaMet Kvasir-VQA-x1 LoRA was trained on Qwen2.5-VL-7B-Instruct with the train
+  file only (`args.json`), and compared tokenizer file hashes of the teacher and the
+  Qwen-family student candidates. Filled verified facts into the two Qwen teacher
+  configs.
+- Verified: pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: team decides D01; then fix the student pool from the teacher's family.
+- Needs the team: D01.

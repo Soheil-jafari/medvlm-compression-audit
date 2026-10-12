@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 4 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 5 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S01 (decisions), with S02 worked in parallel
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
@@ -25,7 +25,7 @@
 | 1 | Review `research-loop` and open the pull request into `main` | Soheil | 2026-10-12 |
 | 2 | Answer D03 (licence): memo `docs/decisions/D03_licence.md`; also confirm full names for the copyright line and any institutional licence or IP policy | team | 2026-10-12 |
 | 2b | CI on `main` is red (import error fixed on `research-loop` in a7ec704); merging `research-loop` into `main` turns it green | Soheil | 2026-10-12 |
-| 3 | Answer D01 (teacher) and D02 (datasets) once the memos are up | team | - |
+| 3 | Answer D01 (teacher, memo up, recommendation T1) and D02 (datasets, once the memo is up) | team | 2026-10-12 |
 | 4 | Each member confirms own access to the chosen datasets | all | - |
 
 ## Stages

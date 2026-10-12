@@ -6,7 +6,7 @@ in `docs/agent/INBOX.md`; the agent then records the decision in
 
 | Memo | Decision | Stage | Status |
 |---|---|---|---|
-| D01 | Teacher (the student is chosen by D05) | S01 | not written yet |
+| [D01](D01_teacher.md) | Teacher (the student is chosen by D05) | S01 | written 2026-10-12, waiting on the team |
 | D02 | Datasets and their roles; first finding list | S01 | not written yet |
 | [D03](D03_licence.md) | Code licence | S01 | written 2026-10-12, waiting on the team |
 | D04 | Gate 1 thresholds | S05 | not written yet |
