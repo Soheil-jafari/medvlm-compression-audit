@@ -12,7 +12,7 @@ work while S01 waits on the team.
 All with unit tests on small synthetic inputs. Replace entries in
 `test_stubs_raise_not_implemented_with_todo` as stubs are implemented.
 
-- [ ] [agent] `evaluation/statistics.py`: paired bootstrap CI, McNemar test, Holm
+- [x] [agent] `evaluation/statistics.py`: paired bootstrap CI, McNemar test, Holm
   correction, mean and SD over seeds, Kendall's tau with bootstrap CI (for H4).
 - [ ] [agent] `evaluation/clinical.py`: per-finding sensitivity and specificity,
   macro-F1, overall accuracy.

@@ -129,3 +129,15 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S02, starting with `evaluation/statistics.py`.
 - Needs the team: dataset-access confirmations; optional full names for the
   copyright line.
+
+## Iteration 9: 2026-10-12 (interactive)
+- Stage / item: S02, `evaluation/statistics.py`.
+- Did: implemented paired and single-model bootstrap CIs (images resampled jointly,
+  undefined resamples dropped), McNemar (exact binomial below 25 discordant pairs,
+  chi-square with continuity correction above), Holm step-down, seed mean/SD, and
+  Kendall's tau with a joint-image bootstrap for H4. `aggregate_results` stays a
+  stub. New `tests/test_statistics.py` (16 tests).
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: S02 metric modules (`clinical`, `small_findings`, `rare_findings`).
+- Needs the team: nothing new.
