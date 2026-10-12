@@ -168,3 +168,16 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: data pure functions (`probes.build_probes`, `splits`, `masks`, `dedup`).
 - Needs the team: nothing new.
+
+## Iteration 12: 2026-10-12 (interactive)
+- Stage / item: S02, `data/probes.build_probes` and `data/splits.py`.
+- Did: probes for every labelled (sample, finding) pair; splits grouped by patient,
+  falling back to the image (Kvasir has no patient IDs), deterministic for a seed
+  and independent of input order (used to halve the official test split into
+  validation and test); disjointness check; nested, finding-stratified calibration
+  subsets of distinct training images; split fingerprint. New
+  `tests/test_splits_probes.py`.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: `data/masks.py`, `data/dedup.py`, `data/manifests.py`.
+- Needs the team: nothing new.

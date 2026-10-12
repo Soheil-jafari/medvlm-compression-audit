@@ -62,4 +62,21 @@ def build_probes(
     ``answers`` maps ``positive``/``negative`` to the answer strings (default
     "yes"/"no"). Samples without a label for a finding get no probe for it.
     """
-    raise NotImplementedError("TODO: cross product of samples and labelled findings.")
+    names = dict(display_names or {})
+    answer_map = {"positive": "yes", "negative": "no", **dict(answers or {})}
+    probes: list[FindingProbe] = []
+    for sample in samples:
+        for finding in findings:
+            if finding not in sample.findings:
+                continue
+            present = bool(sample.findings[finding])
+            probes.append(
+                FindingProbe(
+                    sample_id=sample.sample_id,
+                    image_path=sample.image_path,
+                    finding=finding,
+                    question=format_probe_question(template, names.get(finding, finding)),
+                    answer=answer_map["positive" if present else "negative"],
+                )
+            )
+    return probes
