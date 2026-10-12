@@ -152,6 +152,52 @@ def select_subset(sample_ids: Sequence[str], n: int | None, seed: int) -> list[i
     return order if n is None else order[:n]
 
 
+def data_seed(config: Mapping[str, Any]) -> int:
+    """The pre-registered data seed (``seeds.data_split``) that fixes the training pool.
+
+    Raises:
+        ConfigError: the seed is missing or still ``TODO``.
+    """
+    from medcompress.config import ConfigError, find_todos
+
+    value = (config.get("seeds") or {}).get("data_split")
+    if value is None or find_todos({"v": value}):
+        raise ConfigError("seeds.data_split is still open (it fixes the training pool)")
+    return int(value)
+
+
+def training_pool(samples: Sequence[VQASample], n: int | str | None, seed: int) -> list[VQASample]:
+    """The training examples that every student run and every recovery draws from.
+
+    One seeded draw of ``n`` samples (all of them for ``None`` or ``"all"``) from the **whole**
+    training split, made with the data seed (``seeds.data_split``), not with the seed of the
+    run. Consequences:
+
+    * E1 and E2 train on the same examples; only the training signal differs (D06).
+    * The teacher cache needs only these examples (``teacher_cache.pool_size``), not the whole
+      split.
+    * A smaller draw is the first part of a larger one, so the recovery examples (25 % of the
+      E2 examples, D06) lie inside the E2 examples and are the same for every pruning arm.
+
+    The seed of a run changes only the order in which the pool is visited and the start of
+    the adapter.
+    """
+    count = None if n is None or n == "all" else int(n)
+    return [samples[i] for i in select_subset([s.sample_id for s in samples], count, seed)]
+
+
+def require_teacher_records(pool: Sequence[VQASample], examples: Sequence[TrainExample]) -> None:
+    """Raise if some examples of the training pool have no cached teacher answer."""
+    if len(examples) != len(pool):
+        have = {e.sample_id for e in examples}
+        missing = [s.sample_id for s in pool if s.sample_id not in have]
+        raise ValueError(
+            f"{len(missing)} of {len(pool)} examples of the training pool have no cached "
+            f"teacher answer (first: {missing[0]}); the teacher cache must hold the training "
+            "pool (teacher_cache.pool_size = training.data_subset, same seeds.data_split)"
+        )
+
+
 def examples_from_samples(
     samples: Sequence[VQASample],
     data_root: Path,
@@ -350,8 +396,9 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
     """Stage entry point for ``scripts/02_train_student.py``.
 
     Dispatches on ``training.mode``: ``sft`` (E1) and ``offline_kd`` (E2) here;
-    ``qakd`` (E4) is part of the quantization stage. Writes the adapter under
-    ``paths.checkpoint_root`` and a few training numbers to the results CSV.
+    ``qakd`` (E4) is part of the quantization stage. Both modes train on the same
+    :func:`training_pool`. Writes the adapter under ``paths.checkpoint_root`` and a few
+    training numbers to the results CSV.
     """
     from medcompress.config import ConfigError, find_todos, load_config
     from medcompress.utils.io import upsert_results
@@ -383,9 +430,10 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
         records = {
             r.sample_id: r for r in load_teacher_cache(Path(paths["cache_root"]) / "teacher")
         }
-    examples = examples_from_samples(train, Path(paths["data_root"]), records=records)
-    n = None if cfg.data_subset == "all" else int(cfg.data_subset)
-    examples = [examples[i] for i in select_subset([e.sample_id for e in examples], n, seed)]
+    pool = training_pool(train, cfg.data_subset, data_seed(config))
+    examples = examples_from_samples(pool, Path(paths["data_root"]), records=records)
+    if records is not None:
+        require_teacher_records(pool, examples)
     student = load_model(
         ModelSpec.from_config(load_config(student_cfg)),
         device_map={"": 0},

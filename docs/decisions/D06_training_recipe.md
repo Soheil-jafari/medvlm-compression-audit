@@ -61,6 +61,10 @@ memo fixes **rules**, and the numbers follow from the throughput:
 - **Recovery after pruning:** **25 %** of the E2 steps with the same learning rate, adapter
   and loss; the examples are drawn from the training split by the seed alone, so every arm
   sees the same ones.
+  *Note (iteration 36, agent proposal awaiting Soheil):* the code now draws one training pool
+  with the data seed (`seeds.data_split`) instead of the run seed: E1, E2, E4 and every
+  recovery use it (recovery = its first 25 %), and the teacher cache holds only this pool.
+  The run seed changes the order and the adapter's start. See the open-decisions table.
 - Options for the recovery share: 10 % (cheaper, recovers less after a deep cut), 50 %
   (recovers more, doubles the cost of the 45 pruning runs).
 

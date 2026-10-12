@@ -664,3 +664,24 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: continue the bug hunt (data, training, pruning, budgets, recovery, efficiency).
 - Needs the team: nothing new.
+
+## Iteration 36: 2026-10-12 (interactive)
+- Stage / item: bug hunt, part 2: training data and the teacher cache.
+- Did: **The teacher cache covered all 143,594 training rows** while every student run and
+  recovery trains on `training.data_subset` rows; generating that cache with the 7B teacher is
+  the most expensive job of the project. And **E1 and E2 drew different examples** whenever the
+  cache did not cover the whole split (E2 drew only from cached rows, E1 from all rows), and
+  every seed drew a different subset. New: `offline_kd.training_pool` draws one pool from the
+  whole training split with `seeds.data_split`; E1, E2 (`run_student_training`), the recovery
+  (`run_prune_and_recover`, its first 25 %, so inside the E2 pool) and the teacher cache
+  (`teacher_cache.pool_size`, new in `configs/experiments/E0.yaml`) all use it, and training
+  stops with a clear error if a pool example has no cached teacher answer. `seeds.data_split`
+  set to 20261012, the seed RC-D1 already uses. The cache metadata now records the image size,
+  so a resumed cache cannot mix shards made at two sizes. Tests: pool nesting and seed
+  independence, the cached pool, the image-size check, and a config test that
+  `teacher_cache.pool_size` equals `training.data_subset`. RC-E0b names the new setting; RC-M1
+  now runs the whole test suite on Kaggle (the torch tests cannot run in this session).
+- Verified: ruff check, ruff format, pytest (651 passed, 13 skipped without torch).
+- Commit: see `git log` on `research-loop`.
+- Next: bug hunt part 3 (pruning, budgets, efficiency), then quantization (S08).
+- Needs the team: confirm the fixed training pool (open-decisions table; Soheil).

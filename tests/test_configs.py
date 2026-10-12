@@ -250,3 +250,16 @@ def test_open_settings_of_several_readers_are_listed_in_one_error() -> None:
             reader("x must be positive"),
         )
     assert str(caught.value) == "settings still open: a.b, c, d; x must be positive"
+
+
+def test_the_teacher_cache_holds_exactly_the_training_pool() -> None:
+    """The E0 cache must cover the examples E2 trains on (one fixed pool, ``training_pool``)."""
+    cache = load_experiment("E0")[0]["teacher_cache"]
+    training = load_experiment("E2")[0]["training"]
+    recovery = load_experiment("E7")[0]["recovery"]
+    assert cache["pool_size"] == training["data_subset"] or (
+        str(cache["pool_size"]).startswith("TODO")
+        and str(training["data_subset"]).startswith("TODO")
+    ), "teacher_cache.pool_size must equal training.data_subset"
+    if not str(recovery["data_subset"]).startswith("TODO"):
+        assert int(recovery["data_subset"]) <= int(training["data_subset"])

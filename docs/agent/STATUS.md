@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 35 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 36 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
@@ -8,8 +8,8 @@
 ## Next agent action
 
 0. Bug hunt requested by Soheil (iteration 35 onwards): evaluation and statistics fixed (split
-   files, image-level bootstrap, bootstrap memory); data, training, pruning, budgets, recovery and
-   efficiency next. Then quantization (S08).
+   files, image-level bootstrap, bootstrap memory); training pool and teacher cache fixed
+   (iteration 36). Pruning, budgets and efficiency next. Then quantization (S08).
 1. Student: Qwen2.5-VL-3B chosen with checks (D05 amendment, 2026-10-12; fallback Qwen3-VL-2B).
    After RC-M1 and RC-S0, propose the image side, the G2 threshold and the training length from
    the measured speed, and pin the revision.
@@ -30,6 +30,7 @@ cards for the team (decision of 2026-10-12).
 | 4 | Each member confirms own access to Kvasir-VQA-x1 and Kvasir-SEG (inbox) | all | 2026-10-12 |
 | 5 | Run RC-D1 (`docs/runs/RC-D1_data_preparation.md`) and commit `results/data/summary.csv` | Farzan | 2026-10-12 |
 | 7 | Tell Amir and Farzan that the staged selection was replaced by one student with checks (D05 amendment) | Soheil | 2026-10-12 |
+| 8 | Confirm the fixed training pool (one pool from `seeds.data_split` for E1, E2, E4 and the recoveries; the teacher cache holds only that pool) | Soheil | 2026-10-12 |
 | 6 | Run RC-M1 (`docs/runs/RC-M1_model_smoke_test.md`, Kaggle 2 x T4) and commit `results/smoke/RC-M1.csv` | Soheil | 2026-10-12 |
 
 ## Stages

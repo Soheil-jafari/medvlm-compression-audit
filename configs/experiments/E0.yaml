@@ -39,6 +39,8 @@ image_reliance_check:                     # tests, fill, mask_findings and caps 
 
 teacher_cache:
   splits: [train]                         # S05: cache on the training split only
+  pool_size: TODO                         # = training.data_subset: cache exactly the training
+                                          # pool E2, E4 and the recoveries use, not all 143k rows
   top_k: 20                               # D04 decided 2026-10-12
   max_new_tokens: TODO                    # D04 rule: ceil(1.5 x p99 answer words) + 8, from the RC-D1 counts
   shard_size: 1000

@@ -189,3 +189,29 @@ def test_open_settings_stop_the_stage_cleanly(
     )
     assert code == CONFIG_INCOMPLETE_EXIT_CODE
     assert "configuration incomplete" in capsys.readouterr().out
+
+
+def test_the_cache_can_hold_just_the_training_pool(tmp_path: Path) -> None:
+    from medcompress.compression.distillation.offline_kd import training_pool
+
+    samples = _samples(7)
+    config = {**_config(tmp_path, pool_size=3), "seeds": {"data_split": 5}}
+    run_teacher_caching(config, None, teacher=FakeTeacher(), samples=samples)
+    cached = [r.sample_id for r in load_teacher_cache(tmp_path / "cache" / "teacher")]
+    assert cached == [s.sample_id for s in training_pool(samples, 3, 5)]
+    for bad, match in (({"pool_size": "TODO"}, "pool_size"), ({}, "seeds.data_split")):
+        config = {**_config(tmp_path / "x", pool_size=3), "seeds": {"data_split": 5}}
+        config["teacher_cache"].update(bad)
+        if not bad:
+            config.pop("seeds")
+        with pytest.raises(ConfigError, match=match):
+            run_teacher_caching(config, None, teacher=FakeTeacher(), samples=samples)
+
+
+def test_the_cache_metadata_records_the_image_size(tmp_path: Path) -> None:
+    teacher = FakeTeacher()
+    teacher.image_longest_side = 448  # type: ignore[attr-defined]
+    cache_teacher_outputs(teacher, _samples(2), tmp_path / "c", top_k=TOP_K, max_new_tokens=2)
+    teacher.image_longest_side = 512  # type: ignore[attr-defined]
+    with pytest.raises(ValueError, match="image_longest_side"):
+        cache_teacher_outputs(teacher, _samples(2), tmp_path / "c", top_k=TOP_K, max_new_tokens=2)

@@ -16,7 +16,8 @@ recovery:
   grad_accumulation: 4
   kd_weight: 0.5
   kd_temperature: 2.0
-  data_subset: TODO                       # 25 % of the E2 examples; drawn from the seed alone
+  data_subset: TODO                       # 25 % of the E2 examples: the first part of the same
+                                          # training pool (seeds.data_split), inside the E2 pool
   warmup_steps: 20
   lr_schedule: linear
   max_grad_norm: 1.0
