@@ -17,6 +17,11 @@ by capped inverse prevalence and clinical importance.
 > documented stub that raises `NotImplementedError`. Only infrastructure (config
 > loading, experiment registry, CLI parsing, small utilities) runs. No data, model
 > weights or results are in this repository.
+>
+> **Progress:** [`docs/agent/STATUS.md`](docs/agent/STATUS.md). **Definition of
+> done:** [`docs/FINAL_GOAL.md`](docs/FINAL_GOAL.md). Work is planned in stages
+> S00-S12 ([`docs/stages/`](docs/stages/README.md)) and advanced in small
+> iterations on the `research-loop` branch ([`docs/agent/PROTOCOL.md`](docs/agent/PROTOCOL.md)).
 
 ## Decided vs. undecided
 
@@ -59,7 +64,7 @@ src/medcompress/         Python package (src layout)
 scripts/                 thin entry points 00-08 and run_experiment.py
 notebooks/               Kaggle / Colab template
 results/                 results CSV schema (only small summaries are tracked)
-docs/                    project definition, plan, preregistration, policies, cards, logs
+docs/                    goal, status, stages, run cards, memos, plan, preregistration, policies
 paper/                   LaTeX outline (sections, placeholder tables, references.bib)
 tests/                   import, config, registry, script and utility tests
 ```
@@ -128,4 +133,5 @@ Roles are provisional. See `docs/team.md` for review rules.
 - Data: [docs/data_policy.md](docs/data_policy.md). No data, images, checkpoints or
   secrets are ever committed.
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
-- Licence: TODO (to be decided before the repository is made public).
+- Licence: TODO. The repository is already public, so this is urgent (memo D03 in
+  `docs/decisions/`).
