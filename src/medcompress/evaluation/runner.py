@@ -33,9 +33,22 @@ EVALUATION_SUITES: tuple[str, ...] = (
     "calibration",
     "hallucination",
     "language",
+    "blank_image",
+    "mask_audit",
 )
+"""``blank_image`` and ``mask_audit`` are the two halves of ``image_reliance`` (answers on blank
+images; lesion-mask audit). Student selection uses them separately; they are not run together
+with ``image_reliance``, which already contains both."""
 PROBE_SUITES = frozenset(
-    {"clinical", "small_findings", "rare_findings", "calibration", "image_reliance"}
+    {
+        "clinical",
+        "small_findings",
+        "rare_findings",
+        "calibration",
+        "image_reliance",
+        "blank_image",
+        "mask_audit",
+    }
 )
 FREE_TEXT_SUITES = frozenset({"hallucination", "language"})
 SPLITS = ("val", "test")
@@ -112,7 +125,9 @@ def resolve_settings(config: Mapping[str, Any]) -> EvalSettings:
     if not wanted & PROBE_SUITES:
         template = None
     resamples = None
-    if wanted & {"clinical", "small_findings", "image_reliance"}:
+    if "image_reliance" in wanted and wanted & {"blank_image", "mask_audit"}:
+        raise ConfigError("image_reliance already contains blank_image and mask_audit")
+    if wanted & {"clinical", "small_findings", "image_reliance", "mask_audit"}:
         resamples = need("evaluation.bootstrap_resamples", evaluation.get("bootstrap_resamples"))
     thresholds = mask_findings = groups = n_bins = fill = max_new = limit = None
     if "small_findings" in wanted:
@@ -120,7 +135,7 @@ def resolve_settings(config: Mapping[str, Any]) -> EvalSettings:
         if not thresholds:
             thresholds = "TODO"  # an empty list is as open as a placeholder
         need("domain.small_findings.thresholds", thresholds)
-    if wanted & {"small_findings", "image_reliance"}:
+    if wanted & {"small_findings", "image_reliance", "mask_audit"}:
         mask_findings = need("image_reliance_check.mask_findings", check.get("mask_findings"))
     if "rare_findings" in wanted:
         members = domain.get("prevalence_groups", {})
@@ -129,7 +144,7 @@ def resolve_settings(config: Mapping[str, Any]) -> EvalSettings:
             open_keys.add("domain.prevalence_groups")
     if "calibration" in wanted:
         n_bins = need("evaluation.calibration_bins", evaluation.get("calibration_bins"))
-    if "image_reliance" in wanted:
+    if wanted & {"image_reliance", "blank_image", "mask_audit"}:
         fill = need("image_reliance_check.fill", check.get("fill"))
     if wanted & FREE_TEXT_SUITES:
         max_new = need("evaluation.max_new_tokens", evaluation.get("max_new_tokens"))
@@ -205,9 +220,20 @@ def score_probes(
     samples: Sequence[VQASample],
     settings: EvalSettings,
     data_root: Path,
+    *,
+    blank_fill: int | None = None,
 ) -> ProbeOutcomes:
-    """Score one yes/no probe per (image, finding); the probe set does not depend on the seed."""
-    from medcompress.evaluation.image_reliance import subsample_per_finding, unique_image_probes
+    """Score one yes/no probe per (image, finding); the probe set does not depend on the seed.
+
+    With ``blank_fill`` every probe is scored a second time on a uniform image of that grey
+    level (``yes_blank``).
+    """
+    from medcompress.evaluation.image_reliance import (
+        _open,
+        blank_image,
+        subsample_per_finding,
+        unique_image_probes,
+    )
 
     assert settings.template is not None
     probes = subsample_per_finding(
@@ -220,14 +246,16 @@ def score_probes(
     if not probes:
         raise ValueError("No labelled probes on this split.")
     area = {s.sample_id: s.lesion_area for s in samples}
-    yes, margin = [], []
+    yes, margin, blank = [], [], []
     for start in range(0, len(probes), _CHUNK):
         part = probes[start : start + _CHUNK]
-        scores = model.score_yes_no(
-            [Path(data_root) / p.image_path for p in part], [p.question for p in part]
-        )
+        questions = [p.question for p in part]
+        scores = model.score_yes_no([Path(data_root) / p.image_path for p in part], questions)
         yes += [s.predicted == "yes" for s in scores]
         margin += [s.logp_yes - s.logp_no for s in scores]
+        if blank_fill is not None:
+            blanks = [blank_image(_open(data_root, p.image_path), blank_fill) for p in part]
+            blank += [s.predicted == "yes" for s in model.score_yes_no(blanks, questions)]
     return ProbeOutcomes(
         sample_ids=tuple(p.sample_id for p in probes),
         findings=tuple(p.finding for p in probes),
@@ -236,6 +264,7 @@ def score_probes(
         margin=np.array(margin, dtype=float),
         area=np.array([area.get(p.sample_id) or math.nan for p in probes], dtype=float),
         has_mask=np.array([p.mask_path is not None for p in probes], dtype=bool),
+        yes_blank=np.array(blank, dtype=bool) if blank_fill is not None else None,
     )
 
 
@@ -250,6 +279,39 @@ def metrics_from_summary(summary: Mapping[str, float]) -> list[Metric]:
     return out
 
 
+def _audit_kwargs(settings: EvalSettings, data_root: Path, seed: int) -> dict[str, Any]:
+    assert settings.template is not None and settings.fill is not None
+    return {
+        "seed": seed,
+        "data_root": data_root,
+        "template": settings.template,
+        "display_names": settings.display_names,
+        "fill": settings.fill,
+    }
+
+
+def _mask_audit(
+    model: VLMWrapper,
+    samples: Sequence[VQASample],
+    settings: EvalSettings,
+    data_root: Path,
+    seed: int,
+) -> tuple[list[Metric], Any]:
+    from medcompress.evaluation.image_reliance import mask_audit
+
+    assert settings.mask_findings is not None and settings.n_resamples is not None
+    audit = mask_audit(
+        model,
+        samples,
+        findings=list(settings.mask_findings),
+        max_probes=settings.max_mask_probes,
+        subsample_seed=PROBE_SAMPLE_SEED,
+        **_audit_kwargs(settings, data_root, seed),
+    )
+    summary = audit.summary(n_resamples=settings.n_resamples, seed=seed)
+    return metrics_from_summary(summary), audit
+
+
 def _image_reliance(
     model: VLMWrapper,
     samples: Sequence[VQASample],
@@ -257,33 +319,111 @@ def _image_reliance(
     data_root: Path,
     seed: int,
 ) -> tuple[list[Metric], Any]:
-    from medcompress.evaluation.image_reliance import mask_audit, reliance_metrics
+    from medcompress.evaluation.image_reliance import reliance_metrics
 
-    assert settings.template is not None and settings.fill is not None
-    assert settings.mask_findings is not None and settings.n_resamples is not None
-    common = {
-        "seed": seed,
-        "data_root": data_root,
-        "template": settings.template,
-        "display_names": settings.display_names,
-        "fill": settings.fill,
-    }
     reliance = reliance_metrics(
         model,
         samples,
         findings=list(settings.findings),
         max_per_finding=settings.max_per_finding,
-        **common,
+        **_audit_kwargs(settings, data_root, seed),
     )
-    audit = mask_audit(
-        model,
-        samples,
-        findings=list(settings.mask_findings),
-        max_probes=settings.max_mask_probes,
-        **common,
-    )
-    summary = audit.summary(n_resamples=settings.n_resamples, seed=seed)
-    return metrics_from_summary(reliance) + metrics_from_summary(summary), audit
+    audit_metrics, audit = _mask_audit(model, samples, settings, data_root, seed)
+    return metrics_from_summary(reliance) + audit_metrics, audit
+
+
+@dataclass
+class EvaluationResult:
+    """Metrics of the enabled suites plus the per-probe objects the callers may keep."""
+
+    metrics: list[Metric]
+    arrays: dict[str, np.ndarray]
+    probes: ProbeOutcomes | None = None
+    audit: Any = None
+
+
+def evaluate_model(
+    model: VLMWrapper,
+    samples: Sequence[VQASample],
+    settings: EvalSettings,
+    data_root: Path,
+    seed: int,
+) -> EvaluationResult:
+    """Score the suites in ``settings.suites`` for one model on ``samples``.
+
+    Used by the evaluation stage and by student selection (which keeps the per-probe
+    answers for its paired bootstrap).
+    """
+    wanted = set(settings.suites)
+    metrics: list[Metric] = []
+    arrays: dict[str, np.ndarray] = {}
+    out: ProbeOutcomes | None = None
+    audit = None
+    if wanted & (PROBE_SUITES - {"image_reliance", "mask_audit"}):
+        out = score_probes(
+            model,
+            samples,
+            settings,
+            data_root,
+            blank_fill=settings.fill if "blank_image" in wanted else None,
+        )
+        arrays |= {
+            "probe_sample_ids": np.array(out.sample_ids),
+            "probe_findings": np.array(out.findings),
+            "probe_truth": out.truth,
+            "probe_yes": out.yes,
+            "probe_margin": out.margin,
+            "probe_area": out.area,
+        }
+        if out.yes_blank is not None:
+            arrays["probe_yes_blank"] = out.yes_blank
+        n, alpha = settings.n_resamples, settings.alpha
+        if "clinical" in wanted:
+            metrics += probe_suites.clinical_metrics(
+                out, settings.findings, n_resamples=n, alpha=alpha, seed=seed
+            )
+        if "small_findings" in wanted:
+            metrics += probe_suites.small_finding_metrics(
+                out,
+                settings.thresholds,
+                settings.mask_findings,
+                n_resamples=n,
+                alpha=alpha,
+                seed=seed,
+            )
+        if "rare_findings" in wanted:
+            metrics += probe_suites.rare_finding_metrics(
+                out, settings.groups, pooling=settings.pooling
+            )
+        if "calibration" in wanted:
+            metrics += probe_suites.calibration_metrics(out, n_bins=settings.n_bins)
+        if "blank_image" in wanted:
+            metrics += probe_suites.blank_image_metrics(out)
+    if "image_reliance" in wanted:
+        reliance, audit = _image_reliance(model, samples, settings, data_root, seed)
+        metrics += reliance
+    elif "mask_audit" in wanted:
+        reliance, audit = _mask_audit(model, samples, settings, data_root, seed)
+        metrics += reliance
+    if audit is not None:
+        arrays |= {
+            "audit_sample_ids": np.array(audit.sample_ids),
+            "audit_original_yes": audit.original_yes,
+            "audit_lesion_flip": audit.lesion_flip,
+            "audit_random_flip": audit.random_flip,
+        }
+    if wanted & FREE_TEXT_SUITES:
+        rows_qa = free_text.sample_qa_rows(samples, settings.generation_samples, PROBE_SAMPLE_SEED)
+        answers = free_text.generate_answers(
+            model, rows_qa, data_root, max_new_tokens=int(settings.max_new_tokens)
+        )
+        if "language" in wanted:
+            metrics += free_text.language_metrics(answers, [r.answer for r in rows_qa])
+        if "hallucination" in wanted:
+            metrics += free_text.hallucination_metrics(
+                answers, rows_qa, settings.findings, settings.display_names
+            )
+    return EvaluationResult(metrics, arrays, out, audit)
 
 
 # --------------------------------------------------------------------- rows
@@ -350,59 +490,8 @@ def run_evaluation(
     if model is None:
         model = load_run_model(config, run, int(side))
     seed = run.seed
-    wanted = set(settings.suites)
-    metrics: list[Metric] = []
-    arrays: dict[str, np.ndarray] = {}
-    if wanted & PROBE_SUITES - {"image_reliance"}:
-        out = score_probes(model, samples, settings, data_root)
-        arrays |= {
-            "probe_sample_ids": np.array(out.sample_ids),
-            "probe_findings": np.array(out.findings),
-            "probe_truth": out.truth,
-            "probe_yes": out.yes,
-            "probe_margin": out.margin,
-            "probe_area": out.area,
-        }
-        n, alpha = settings.n_resamples, settings.alpha
-        if "clinical" in wanted:
-            metrics += probe_suites.clinical_metrics(
-                out, settings.findings, n_resamples=n, alpha=alpha, seed=seed
-            )
-        if "small_findings" in wanted:
-            metrics += probe_suites.small_finding_metrics(
-                out,
-                settings.thresholds,
-                settings.mask_findings,
-                n_resamples=n,
-                alpha=alpha,
-                seed=seed,
-            )
-        if "rare_findings" in wanted:
-            metrics += probe_suites.rare_finding_metrics(
-                out, settings.groups, pooling=settings.pooling
-            )
-        if "calibration" in wanted:
-            metrics += probe_suites.calibration_metrics(out, n_bins=settings.n_bins)
-    if "image_reliance" in wanted:
-        reliance, audit = _image_reliance(model, samples, settings, data_root, seed)
-        metrics += reliance
-        arrays |= {
-            "audit_sample_ids": np.array(audit.sample_ids),
-            "audit_original_yes": audit.original_yes,
-            "audit_lesion_flip": audit.lesion_flip,
-            "audit_random_flip": audit.random_flip,
-        }
-    if wanted & FREE_TEXT_SUITES:
-        rows_qa = free_text.sample_qa_rows(samples, settings.generation_samples, PROBE_SAMPLE_SEED)
-        answers = free_text.generate_answers(
-            model, rows_qa, data_root, max_new_tokens=int(settings.max_new_tokens)
-        )
-        if "language" in wanted:
-            metrics += free_text.language_metrics(answers, [r.answer for r in rows_qa])
-        if "hallucination" in wanted:
-            metrics += free_text.hallucination_metrics(
-                answers, rows_qa, settings.findings, settings.display_names
-            )
+    result = evaluate_model(model, samples, settings, data_root, seed)
+    metrics, arrays = result.metrics, result.arrays
     budget = run.budget or ""
     rows = to_rows(metrics, run.experiment_tag, budget, seed)
     undefined = sorted(m.name for m in metrics if math.isnan(m.value))

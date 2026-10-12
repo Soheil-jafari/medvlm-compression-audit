@@ -46,6 +46,7 @@ class ProbeOutcomes:
 
     ``margin`` is ``log P(yes) - log P(no)``; ``area`` is the lesion area fraction
     (NaN without a mask) and ``has_mask`` tells whether a lesion mask exists.
+    ``yes_blank`` (optional) is the predicted answer on the blanked image.
     """
 
     sample_ids: tuple[str, ...]
@@ -55,11 +56,14 @@ class ProbeOutcomes:
     margin: np.ndarray
     area: np.ndarray
     has_mask: np.ndarray
+    yes_blank: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         n = len(self.sample_ids)
         sizes = {len(self.findings), len(self.truth), len(self.yes), len(self.margin)}
         sizes |= {len(self.area), len(self.has_mask)}
+        if self.yes_blank is not None:
+            sizes.add(len(self.yes_blank))
         if sizes != {n}:
             raise ValueError("all probe arrays must have the same length")
         if n == 0:
@@ -139,6 +143,23 @@ def clinical_metrics(
 # ---------------------------------------------------------------- small findings
 
 
+def small_positive_strata(
+    out: ProbeOutcomes, thresholds: Sequence[float], mask_findings: Sequence[str]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Rows that count for the small-finding recall and their lesion-size stratum.
+
+    Returns ``(keep, strata)``: ``keep`` marks positive probes of the findings that the
+    lesion masks delineate and that have a mask and an area; ``strata`` gives the stratum
+    (0 = smallest) of the rows where ``keep`` is true, in order.
+    """
+    wanted = np.array([f in set(mask_findings) for f in out.findings])
+    keep = out.truth & out.has_mask & wanted & np.isfinite(out.area)
+    strata = np.array(
+        [assign_size_stratum(float(a), thresholds) for a in out.area[keep]], dtype=int
+    )
+    return keep, strata
+
+
 def small_finding_metrics(
     out: ProbeOutcomes,
     thresholds: Sequence[float],
@@ -156,11 +177,9 @@ def small_finding_metrics(
     Used by: all (primary endpoint at B2).
     """
     n_strata = len(thresholds) + 1
-    wanted = np.array([f in set(mask_findings) for f in out.findings])
-    keep = out.truth & out.has_mask & wanted & np.isfinite(out.area)
+    keep, strata = small_positive_strata(out, thresholds, mask_findings)
     if not keep.any():
         raise ValueError("no positive, mask-annotated probes for the small-finding recall")
-    strata = np.array([assign_size_stratum(float(a), thresholds) for a in out.area[keep]])
     detected = out.yes[keep]
     per_stratum = small_findings.recall_by_size_stratum(detected, strata.tolist(), n_strata)
 
@@ -177,6 +196,27 @@ def small_finding_metrics(
     metrics += [Metric(f"recall_stratum:{s}", per_stratum[s]) for s in range(n_strata)]
     metrics += [Metric(f"n_stratum:{s}", float((strata == s).sum())) for s in range(n_strata)]
     return metrics
+
+
+def blank_image_metrics(out: ProbeOutcomes) -> list[Metric]:
+    """Balanced accuracy on real and on blank images and the drop between them.
+
+    The drop is the image-reliance component of selection round R1: a model that still
+    answers as well on a blank image does not use the image. Needs ``yes_blank``.
+    """
+    from medcompress.evaluation.image_reliance import macro_balanced_accuracy
+
+    if out.yes_blank is None:
+        raise ValueError("the probes were not scored on blank images")
+    names, truth = list(out.findings), out.truth.tolist()
+    original = macro_balanced_accuracy(names, truth, out.yes.tolist())
+    blank = macro_balanced_accuracy(names, truth, out.yes_blank.tolist())
+    return [
+        Metric("original_balanced_accuracy", original),
+        Metric("blank_balanced_accuracy", blank),
+        Metric("blank_accuracy_drop", original - blank),
+        Metric("blank_yes_rate", float(out.yes_blank.mean())),
+    ]
 
 
 # --------------------------------------------------------------- rare findings

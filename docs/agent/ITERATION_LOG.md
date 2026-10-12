@@ -457,3 +457,34 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S05b student-selection runner and ranking (`scripts/select_student.py`), run
   cards RC-S0 to RC-S3.
 - Needs the team: nothing new.
+
+## Iteration 28: 2026-10-12 (interactive)
+- Stage / item: S05b, student-selection runner, ranking and run cards.
+- Did: `selection/ranking.py` (score S of D05: macro-F1, small-finding recall and image
+  reliance, min-max scaled within the round across candidates that passed their gates;
+  paired bootstrap over validation images with the same draws for every candidate, so the
+  interval of the gap between neighbouring ranks reflects the paired design; advance by
+  point estimate; one or several seeds per candidate), `selection/rounds.py` (R0
+  feasibility: fp16 load, 20 synthetic probes, visual tokens, one LoRA step, gate G1 that
+  cannot pass without CUDA; R1 zero-shot then the same short LoRA run on the same rows,
+  blank-image gate G2; R2/R3 distillation from the cached teacher answers with a
+  tokenizer-match check of at least 99 % that is recorded as a gate failure rather than an
+  error; a candidate that cannot load in R0 is recorded as a G1 failure) and
+  `selection/driver.py` (gates from the metrics files, tie-break on Round 0 fp16 peak
+  memory, `ranking.csv`, `docs/results/SELECTION.md` from committed CSVs only).
+  `scripts/select_student.py` (`--round`, `--rank`, `--report`, `--list`; exit code 4
+  while settings are open). The evaluation runner now returns per-probe answers
+  (`evaluate_model`, blank-image and mask-audit suites) so selection rounds and E0 share
+  one scoring path. Run cards RC-S0 to RC-S3 written and blocked. Design note: the
+  per-probe answers are never committed, so one person collects them to rank; the report
+  step is separate because it needs only the committed CSVs.
+  Problems found while writing it: the derived training length of R1/R2 was rejected as
+  an open `training.steps` (now pre-filled and replaced from `compute_unit_b`); an
+  undefined value (a failed LoRA step has no loss) would have broken the results schema
+  (left out); the first test of the waiting rule hit the missing-gate-row error before the
+  missing-file one, which is the better order, so the test now checks both.
+- Verified: ruff check, ruff format, pytest.
+- Commit: see `git log` on `research-loop`.
+- Next: D06 recipe memo (training hyper-parameters, calibration bins, bootstrap
+  resamples, image size, token budget), then S06 run cards and recovery code.
+- Needs the team: nothing new (RC-S0 follows RC-M1).

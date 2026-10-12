@@ -2,6 +2,8 @@
 # stage docs/stages/S05b_student_selection.md).
 # Successive halving 10 -> 5 -> 3 -> 1 on the VALIDATION split only.
 # Every TODO is fixed, and frozen_on is set, before Round 1 runs.
+_base_: [base.yaml, training.yaml]   # paths, domain, evaluation settings and the training recipe
+
 student_selection:
   status: "CANDIDATE - NOT DECIDED"
   memo: docs/decisions/D05_student_selection.md
@@ -32,23 +34,32 @@ student_selection:
     - Qwen/Qwen3-VL-4B-Instruct       # apache-2.0, 4.44B (other size of candidate 2)
     - nvidia/Eagle2-2B                # cc-by-nc-4.0, 2.21B; tokenizer files byte-different
 
-  compute_unit_b: TODO          # training samples per candidate in R1, set from R0 throughput
+  compute_unit_b: TODO          # training samples per candidate in R1 (the unit b of the budget), set from R0 throughput;
+                                # R2 trains on compute_units x b samples
+  data_seed: 0                  # picks the same training rows for every candidate and round
+  manual_gate_failures: {}      # gates G4 and G5 are checked by the team: {candidate: [G5_no_test_exposure]}
 
   rounds:
     R0:
-      purpose: feasibility on one Kaggle T4, no training
+      purpose: feasibility on one Kaggle T4, one LoRA step only
       keep: 10
       training: none
       compute_units: 0
       seeds: 1
       probes: 20
+      lora_step:                # feasibility only; these numbers do not carry over to later rounds
+        rank: 16
+        alpha: 32
+        dropout: 0.0
+        learning_rate: 1.0e-4
     R1:
       purpose: simplified screen, identical short LoRA fine-tune for every candidate
       keep: 5
       training: short_lora
       zero_shot_first: true
-      train_examples: TODO      # n1, same examples and order for all candidates
-      validation_subset: TODO   # fixed list of validation sample IDs
+      validation_subset:        # the same images for every candidate, drawn by seed (no list of names stored)
+        n_images: TODO
+        seed: 0
       compute_units: 1
       seeds: 1
     R2:
@@ -89,12 +100,12 @@ student_selection:
     G5_no_test_exposure: {round: R0, rule: "no documented use of our test images in training"}
 
   fairness:
-    image_longest_side: TODO    # 448 or 512 px; native visual-token counts recorded
-    lora_rank: TODO
+    # Image size: inputs.image_longest_side (one value for the teacher and every student).
+    # LoRA settings, learning rate, batch size and KD weight: the training section (training.yaml),
+    # the same for every candidate; R1 only changes the number of examples and uses kd_weight 0.
     lora_targets: [decoder_attention, decoder_mlp]
     vision_encoder: frozen
     precision: fp16             # T4 has no bf16
     decoding: greedy
-    max_new_tokens: TODO
     chat_template: per_model
     yes_no_scoring: log_probability

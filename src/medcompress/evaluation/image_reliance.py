@@ -331,13 +331,15 @@ def mask_audit(
     display_names: Mapping[str, str] | None = None,
     fill: int = DEFAULT_FILL,
     max_probes: int | None = None,
+    subsample_seed: int | None = None,
 ) -> MaskAuditResult:
     """Post-pruning audit: does the model still depend on the lesion region?
 
     For every positive, mask-annotated (image, finding) probe the lesion is filled in,
     and separately an area-matched random region of the same shape is filled in. A
     flip is a change of the predicted answer relative to the unmodified image.
-    ``max_probes`` keeps a reproducible random subset.
+    ``max_probes`` keeps a random subset drawn with ``subsample_seed`` (default ``seed``);
+    give every model the same ``subsample_seed`` so they are audited on the same probes.
 
     Used by: E5, E6, E7, A1-A6 (after recovery); E0, E2 for reference.
     """
@@ -347,7 +349,7 @@ def mask_audit(
         if p.present and p.mask_path
     ]
     if max_probes is not None and len(probes) > max_probes:
-        rng = np.random.default_rng(seed)
+        rng = np.random.default_rng(seed if subsample_seed is None else subsample_seed)
         probes = [
             probes[i] for i in sorted(rng.choice(len(probes), size=max_probes, replace=False))
         ]

@@ -62,6 +62,13 @@ def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) 
             ["--exp", "A4", "--budget", "B2", "--variant", "n64"],
             "domain.findings",
         ),
+        ("select_student.py", ["--round", "R1", "--candidate", "qwen3_vl_2b"], "compute_unit_b"),
+        (
+            "select_student.py",
+            ["--round", "R0", "--candidate", "qwen3_vl_2b"],
+            "image_longest_side",
+        ),
+        ("select_student.py", ["--rank", "R1"], "evaluation.bootstrap_resamples"),
     ],
 )
 def test_implemented_stages_stop_cleanly_while_settings_are_open(
@@ -116,3 +123,22 @@ def test_aggregate_script_writes_summary_and_tables(tmp_path: Path) -> None:
         assert (tmp_path / "paper" / "tables" / name).is_file(), name
     assert (tmp_path / "paper" / "figures" / "headline_vs_hidden.pdf").is_file()
     assert "pending" in (tmp_path / "docs" / "results" / "VERDICTS.md").read_text()
+
+
+def test_select_student_lists_the_pool_and_checks_its_arguments(tmp_path: Path) -> None:
+    listed = _run("select_student.py", "--list", cwd=tmp_path)
+    assert listed.returncode == 0, listed.stderr
+    assert "qwen3_vl_2b" in listed.stdout.split() and len(listed.stdout.split()) == 10
+    for args in (["--round", "R1"], ["--round", "R9", "--candidate", "x"], []):
+        result = _run("select_student.py", *args, cwd=tmp_path)
+        assert result.returncode == 2 and "Traceback" not in result.stderr
+    unknown = _run("select_student.py", "--round", "R1", "--candidate", "nope", cwd=tmp_path)
+    assert unknown.returncode != 0  # an unknown candidate is a mistake, not an open setting
+
+
+def test_select_student_writes_the_report_from_committed_results(tmp_path: Path) -> None:
+    target = tmp_path / "SELECTION.md"
+    result = _run("select_student.py", "--report", "--report-path", str(target), cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    text = target.read_text()
+    assert text.startswith("# Student selection (D05)") and "Not run yet." in text

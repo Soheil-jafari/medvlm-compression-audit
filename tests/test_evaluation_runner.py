@@ -24,6 +24,7 @@ from medcompress.evaluation.aggregate import validate_results_tree
 from medcompress.evaluation.clinical import macro_f1
 from medcompress.evaluation.probe_suites import Metric, ProbeOutcomes
 from medcompress.evaluation.runner import (
+    evaluate_model,
     load_run_model,
     resolve_settings,
     run_evaluation,
@@ -362,3 +363,35 @@ def test_stage_needs_a_run_and_a_loadable_model(dataset: tuple[Path, list[VQASam
         load_run_model(eval_config(root), RunContext("E2", seed=0), 448)
     with pytest.raises(NotImplementedError, match="E7"):
         load_run_model(eval_config(root), RunContext("E7", seed=0, budget="B2"), 448)
+
+
+def test_blank_image_and_mask_audit_suites_run_on_their_own(
+    dataset: tuple[Path, list[VQASample]],
+) -> None:
+    root, samples = dataset
+    config = eval_config(root, suites=["clinical", "small_findings", "blank_image", "mask_audit"])
+    settings = resolve_settings(config)
+    result = evaluate_model(Detector(min_pixels=20), samples, settings, root, seed=0)
+    values = {m.name: m.value for m in result.metrics}
+    assert values["blank_accuracy_drop"] > 0 and values["lesion_mask_effect"] > 0
+    assert result.probes is not None and result.probes.yes_blank is not None
+    assert not result.probes.yes_blank.any()  # a blank image shows no blob
+    assert len(result.arrays["probe_yes_blank"]) == 24
+    assert len(result.arrays["audit_lesion_flip"]) == 6
+    assert "blank_balanced_accuracy" in values and "n_probes_scored" in values
+    both = eval_config(root, suites=["image_reliance", "blank_image"])
+    with pytest.raises(ConfigError, match="already contains"):
+        resolve_settings(both)
+
+
+def test_audit_rows_do_not_depend_on_the_run_seed(
+    dataset: tuple[Path, list[VQASample]],
+) -> None:
+    root, samples = dataset
+    config = eval_config(root, suites=["mask_audit"])
+    config["image_reliance_check"]["max_mask_probes"] = 4
+    settings = resolve_settings(config)
+    first = evaluate_model(Detector(20), samples, settings, root, seed=0).arrays
+    second = evaluate_model(Detector(20), samples, settings, root, seed=7).arrays
+    assert first["audit_sample_ids"].tolist() == second["audit_sample_ids"].tolist()
+    assert len(first["audit_sample_ids"]) == 4
