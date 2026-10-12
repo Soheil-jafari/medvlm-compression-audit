@@ -44,6 +44,8 @@ EXPECTED_MODULES = {
     "medcompress.compression.pruning.criteria.output_similarity",
     "medcompress.compression.pruning.criteria.random",
     "medcompress.compression.pruning.criteria.clinical",
+    "medcompress.compression.lora",
+    "medcompress.compression.distillation.batching",
     "medcompress.compression.distillation.losses",
     "medcompress.compression.distillation.offline_kd",
     "medcompress.compression.recovery",

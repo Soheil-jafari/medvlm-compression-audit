@@ -1,6 +1,7 @@
 # D04: Gate 1 (does the teacher really look at the image?) and the teacher cache
 
-**Status:** proposal, waiting for the team. **Stage:** S05. **Prepared:** 2026-10-12.
+**Status:** answered 2026-10-12 (Soheil): moderate Gate 1 rule, mid-grey fill, `top_k` 20.
+The `max_new_tokens` rule stays a proposal until the RC-D1 counts arrive. **Stage:** S05. **Prepared:** 2026-10-12.
 **Depends on:** D01 (teacher), D02 (data). The numbers below are set **before** any
 result exists, so they cannot be tuned to a result.
 
@@ -103,7 +104,15 @@ approved.
 3. RC-M1 done (the teacher loads and its adapter works).
 4. The student-selection freeze set `inputs.image_longest_side`.
 
-## Questions for the team
+## Decision (2026-10-12)
+
+- Gate 1: moderate rule (0.65 / 0.10 / CI above 0). Written into `configs/experiments/E0.yaml`.
+- Fill: flat mid-grey (128).
+- Cache `top_k`: 20.
+- `max_new_tokens`: rule `ceil(1.5 x p99 answer words) + 8`, applied when the RC-D1
+  counts arrive unless the team objects then.
+
+## Questions that were asked
 
 1. Approve the three Gate 1 thresholds (0.65 / 0.10 / CI above 0)?
 2. Approve mid-grey (128) as the fill?

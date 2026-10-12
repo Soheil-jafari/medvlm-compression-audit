@@ -14,7 +14,7 @@
 Blocked until all of these are true; the agent changes the status to `ready` when
 they are:
 
-- D04 approved and its numbers written into `configs/experiments/E0.yaml`
+- D04 approved (done 2026-10-12) and its numbers written into `configs/experiments/E0.yaml`
   (`image_reliance_check.gate1`, `fill`, `mask_findings`).
 - RC-D1 done, label rules and the finding list frozen (`configs/domain/endoscopy.yaml`,
   `configs/data/kvasir_vqa_x1.yaml`), so the validation probes exist.

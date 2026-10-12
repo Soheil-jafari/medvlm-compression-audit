@@ -28,6 +28,26 @@ score weights finding-probe macro-F1, small-finding recall and image reliance
 (0.4 / 0.3 / 0.3), because a student that already misses small findings, or ignores
 the image, leaves compression nothing to remove.
 
+\paragraph{Training objective.}
+Students and recovered models are trained with LoRA adapters on the attention and MLP
+projections of the language decoder; the vision encoder and the projector stay
+frozen. For a question $x$ with ground-truth answer $a$ and a cached teacher answer
+$\hat a=(\hat a_1,\dots,\hat a_T)$, the loss is
+\begin{equation}
+  \mathcal{L} = (1-\lambda)\,\mathrm{CE}\bigl(p_\theta(\cdot\mid x),\,a\bigr)
+  + \lambda\,\tau^{2}\,\frac{1}{T}\sum_{t=1}^{T}
+  \mathrm{KL}\bigl(\tilde p_t \,\|\, \tilde q_{\theta,t}\bigr),
+  \label{eq:loss}
+\end{equation}
+where $\tilde p_t$ and $\tilde q_{\theta,t}$ are the teacher and student next-token
+distributions at step $t$ of the teacher answer, restricted to the $k$ tokens the
+teacher cache stores for that step and renormalised after dividing by the temperature
+$\tau$. Probability mass outside the cached top-$k$ is not modelled; the
+cross-entropy term keeps the student's mass on the correct answer. Answer-only
+fine-tuning (\expid{E1}) is the case $\lambda=0$. \todo{$\lambda$, $\tau$, $k$ and the
+LoRA settings once fixed}
+
+
 \subsection{Compression arms}
 Table~\ref{tab:ladder} lists the arms. Post-training quantization (\expid{E3}) is
 applied to \expid{E2} at 8-bit and 4-bit weights and, where supported, 8-bit weights

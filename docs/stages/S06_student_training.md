@@ -7,10 +7,14 @@ measure E2's footprint, which defines the absolute budgets B1-B3.
 
 ## Tasks
 
-- [ ] [agent] `compression/distillation/losses.py` and `offline_kd.py` (KL on the
-  cached top-k teacher probabilities), the `sft` and `offline_kd` paths of
-  `scripts/02_train_student.py` with LoRA. Pure loss tests plus heavy tiny-model
-  tests.
+- [x] [agent] `compression/lora.py`, `compression/distillation/{losses,batching,offline_kd}.py`
+  (cross-entropy on the answer plus KL on the cached top-k teacher probabilities,
+  one shared trainer for E1, E2 and recovery) and the `sft` and `offline_kd` paths of
+  `scripts/02_train_student.py`. Loss tests and tiny-model tests (done in iteration
+  26); the hyper-parameters in `configs/training.yaml` are still `TODO` (see below).
+- [ ] [agent] Training recipe memo (rank, alpha, learning rate, steps, batch size,
+  KD weight and temperature): proposed from RC-S0/RC-S1 results, not tuned on the
+  result of any compression arm; team approves before RC-E1/RC-E2.
 - [ ] [agent] `evaluation/efficiency.py` and `scripts/07_benchmark_efficiency.py`:
   the measurement protocol from `configs/budgets.yaml` (peak memory, cold and warm
   latency, throughput, file size, parameter count).

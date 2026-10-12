@@ -31,6 +31,10 @@ must be logged here.
   Kvasir-VQA-x1 classes; external test = EndoBench (licence to verify); retinal kept
   as an optional later second domain.
 - **2026-10-12 (Soheil):** D03 decided: MIT licence for the code.
+- **2026-10-12 (Soheil):** D04 answered: Gate 1 moderate rule (balanced accuracy at
+  least 0.65, blank-image drop at least 0.10, lesion-mask effect CI above zero), mid-grey
+  fill (128), teacher cache `top_k` 20. `max_new_tokens` follows the rule in D04 once
+  the RC-D1 answer lengths are known.
 - **2026-10-12 (Soheil):** no scheduled runs; the research loop runs back to back in
   an interactive session until the team stops it.
 

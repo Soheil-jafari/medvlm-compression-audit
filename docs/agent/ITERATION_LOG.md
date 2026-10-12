@@ -406,3 +406,28 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: ask the team for D04; evaluation runner for E0 validation metrics (RC-E0b);
   student-selection runner (S05b).
 - Needs the team: D04 answers.
+
+## Iteration 26: 2026-10-12 (interactive)
+- Stage / item: S06 prerequisites, training core; D04 recorded.
+- Did: D04 answered in the session (moderate Gate 1 rule, flat mid-grey fill 128,
+  cache `top_k` 20) and written into `configs/experiments/E0.yaml`, the D04 memo, the
+  decisions log and run card RC-E0a. New: `compression/lora.py` (LoRA on decoder
+  attention and MLP projections only, save, merge), `compression/distillation/batching.py`
+  (prompt once, left-padded batches with right-aligned answer targets and top-k),
+  `losses.py` (answer cross-entropy, KL on the teacher's cached top-k with temperature,
+  weighted sum) and `offline_kd.py` (one trainer for E1, E2 and recovery: seeded order,
+  gradient accumulation, fp16 base with fp32 adapters and a gradient scaler on CUDA,
+  one forward pass when teacher and ground-truth answers are token-identical, stage
+  entry point that saves the adapter and upserts training rows). `HFVLMWrapper.stop_token_id()`.
+  Shared tiny offline model moved to `tests/tiny_vlm.py`. Method section now states the
+  loss (Eq. `eq:loss`). Training hyper-parameters stay `TODO` and the stage exits with
+  code 4 naming them.
+  Two issues found by the tests: with `mode: sft` an unset `kd_temperature` crashed
+  the parser (now ignored without a teacher), and a randomly initialised model has
+  almost flat logits, so the tests widen the output layer of the tiny model; this
+  limit comes from the stand-in model, not the trainer.
+- Verified: ruff check, ruff format, pytest (619 passed), paper builds.
+- Commit: see `git log` on `research-loop`.
+- Next: evaluation runner and run card RC-E0b (S05), then the student-selection runner
+  (S05b).
+- Needs the team: nothing new.

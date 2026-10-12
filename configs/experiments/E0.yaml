@@ -33,17 +33,17 @@ model:
 
 image_reliance_check:
   tests: [blank_image, lesion_masked, random_region_masked, other_patient_image]
-  fill: TODO                              # D04 proposes 128 (mid-grey) for the blank image and both mask conditions
+  fill: 128                               # D04 decided 2026-10-12: flat mid-grey for the blank image and both mask conditions
   mask_findings: TODO                     # finding ids the lesion masks delineate (polyp for Kvasir-SEG); must be in the frozen finding list
   max_probes_per_finding: null            # null = all labelled images; cap only if time requires, same cap for every model
   max_mask_probes: null
-  gate1:                                  # D04 proposals; approved by the team before RC-E0a
-    min_original_balanced_accuracy: TODO  # proposal 0.65
-    min_blank_accuracy_drop: TODO         # proposal 0.10
-    min_lesion_mask_effect_ci_low: TODO   # proposal 0.0 (CI of the lesion-mask effect excludes zero)
+  gate1:                                  # D04 decided 2026-10-12 (moderate rule)
+    min_original_balanced_accuracy: 0.65
+    min_blank_accuracy_drop: 0.10
+    min_lesion_mask_effect_ci_low: 0.0    # the CI of the lesion-mask effect must lie above zero
 
 teacher_cache:
   splits: [train]                         # S05: cache on the training split only
-  top_k: TODO                             # D04 proposal, to be approved
-  max_new_tokens: TODO                    # set from the RC-D1 answer-length counts (D04)
+  top_k: 20                               # D04 decided 2026-10-12
+  max_new_tokens: TODO                    # D04 rule: ceil(1.5 x p99 answer words) + 8, from the RC-D1 counts
   shard_size: 1000

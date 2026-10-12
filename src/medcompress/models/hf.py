@@ -113,6 +113,16 @@ class HFVLMWrapper(VLMWrapper):
 
     # -------------------------------------------------------------- generation
 
+    def stop_token_id(self) -> int:
+        """The id that ends an answer: the first end-of-sequence id of the model."""
+        config = getattr(self.module, "generation_config", None)
+        eos = getattr(config, "eos_token_id", None)
+        if eos is None:
+            eos = self.tokenizer.eos_token_id
+        if eos is None:
+            raise ValueError("the model has no end-of-sequence token")
+        return int(eos[0] if isinstance(eos, list | tuple) else eos)
+
     def _stop_ids(self) -> set[int]:
         config = getattr(self.module, "generation_config", None)
         eos = getattr(config, "eos_token_id", None)
