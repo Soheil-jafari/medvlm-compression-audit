@@ -2,10 +2,16 @@
 # stage docs/stages/S05b_student_selection.md).
 # Successive halving 10 -> 5 -> 3 -> 1 on the VALIDATION split only.
 # Every TODO is fixed, and frozen_on is set, before Round 1 runs.
+#
+# AMENDED 2026-10-12 (Soheil, D05 amendment): the study uses ONE student, Qwen2.5-VL-3B
+# (configs/models/qwen2_5_vl_3b_student.yaml), with Round 0 and the image-use checks only;
+# Qwen3-VL-2B is the named fallback and the optional second student. Rounds R1-R3, the score S
+# and the ranking stay in the code and in this file for the full protocol, but are not run
+# unless the team asks for them.
 _base_: [base.yaml, training.yaml]   # paths, domain, evaluation settings and the training recipe
 
 student_selection:
-  status: "CANDIDATE - NOT DECIDED"
+  status: "AMENDED - ONE STUDENT WITH CHECKS (D05 amendment, 2026-10-12); R1-R3 not run"
   memo: docs/decisions/D05_student_selection.md
   frozen_on: TODO
   split: val

@@ -1,5 +1,9 @@
 # S05b: Student selection (10 -> 5 -> 3 -> 1)
 
+> **Amended 2026-10-12 (Soheil):** one student, Qwen2.5-VL-3B, with Round 0 and the image-use
+> checks for the two models Qwen2.5-VL-3B and Qwen3-VL-2B (RC-S0). Rounds R1 to R3 and the run
+> cards RC-S1 to RC-S3 are kept but not run. The tasks below describe the full protocol.
+
 **Goal.** Choose the student every compression arm starts from, by a fixed staged
 comparison of 10 architectures on the validation split: a simplified common screen
 of 10, the top 5 rebuilt as new models with the full recipe, the top 3 trained with

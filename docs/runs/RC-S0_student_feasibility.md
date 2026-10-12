@@ -1,10 +1,15 @@
-# Run card RC-S0: student candidates, feasibility on one T4 (Round 0)
+# Run card RC-S0: student feasibility on one T4 (Round 0)
+
+> **Amended 2026-10-12 (D05 amendment):** this card covers two models only, the chosen student
+> Qwen2.5-VL-3B and its fallback Qwen3-VL-2B, and one person runs it. The split of ten
+> candidates below is kept for the record and is not used. Neither family is on the loader's
+> list of families that need downloaded model code, so `--allow-remote-code` is not needed.
 
 ## 1. What and why
 
 - Stage: S05b (decision D05, Round 0)
 - Experiments: none (selection runs; no dataset, no budget)
-- Purpose: find out for each of the 10 candidates whether it loads in fp16 on one T4,
+- Purpose: find out for each of the two models (originally 10 candidates) whether it loads in fp16 on one T4,
   scores 20 yes/no probes on synthetic images with finite values and takes one LoRA
   step (gate G1). The same run records the numbers that the team needs to fix the
   open Round 1 settings: visual tokens per image, scoring time per probe, peak memory,
@@ -24,9 +29,7 @@ when the RC-M1 numbers are in.
   its run. `export HF_HOME=/kaggle/temp/hf`.
 - Dataset access: none. No image of the study is used.
 - Split of the work (each person runs their own share, in their own session):
-  - Soheil: `qwen2_5_vl_3b`, `qwen3_vl_2b`, `internvl3_5_2b`, `ovis2_5_2b`
-  - Amir: `fastvlm_1_5b`, `hulu_med_4b`, `llava_onevision_1_5_4b`
-  - Farzan: `medvlm_r1_2b`, `sail_vl2_2b`, `llava_onevision_0_5b`
+  - Soheil: `qwen2_5_vl_3b`, `qwen3_vl_2b` (the other eight are not run)
 - Five candidates ship their own model code (`ovis2_5`, `fastvlm`, `hulu_med`,
   `sail_vl2`, `internvl3_5`): the script refuses to load them without
   `--allow-remote-code`. **Before** passing it, open the model repository at the

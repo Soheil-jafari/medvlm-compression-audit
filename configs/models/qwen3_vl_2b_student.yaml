@@ -20,4 +20,4 @@ model:
   tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # same vocab.json and merges.txt as the teacher; extra special tokens; runtime check in S04
   adapter: null
   flags: []
-  notes: "Selection candidate 2 (D05)."
+  notes: "Selection candidate 2 (D05). Named fallback for the chosen student and the optional second student (D05 amendment, 2026-10-12). Its DeepStack links change what a layer is for pruning."

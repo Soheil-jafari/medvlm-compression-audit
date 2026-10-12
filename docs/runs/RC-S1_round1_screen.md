@@ -1,5 +1,8 @@
 # Run card RC-S1: Round 1 screen of the candidate pool
 
+> **Not used (D05 amendment, 2026-10-12):** the study uses one student chosen after Round 0.
+> This card is kept for the full protocol and stays blocked.
+
 ## 1. What and why
 
 - Stage: S05b (decision D05, Round 1)

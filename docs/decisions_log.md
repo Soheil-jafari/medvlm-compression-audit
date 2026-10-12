@@ -58,12 +58,17 @@ must be logged here.
   not a ranking: nothing has been measured. An amendment is proposed in D05 (Qwen2.5-VL-3B
   with Round 0 and the image checks, Qwen3-VL-2B as the named fallback, no ranking); it is
   applied only after Soheil confirms it and Amir and Farzan are told.
+- **2026-10-12 (Soheil):** D05 amendment accepted: pick one student. Qwen2.5-VL-3B-Instruct
+  with Round 0 (RC-S0) and the image-use checks; Qwen3-VL-2B-Instruct is the named fallback
+  and the optional second student. Rounds R1 to R3 are not run. Applied to the base and
+  training configs; the training length and the image size follow from the RC-S0 numbers. Amir
+  and Farzan are to be told.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| Student choice | Confirm the amendment in D05 (one student with checks) or keep the staged selection; then set the G2 threshold and image side from RC-S0 | Soheil | next |
+| Student checks | Run RC-S0 for the two models, then set the image side, the G2 threshold and the training length from its numbers; tell Amir and Farzan about the amendment | Soheil | after RC-M1 |
 | EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |
 | Finding list and weights | Pre-registered table, frozen before E7 | team | TODO |
 | Budgets and timing hardware | B1-B3 fractions (rule after RC-B0) and the rented GPU type; metric, tolerance and protocol are decided | Amir | TODO |

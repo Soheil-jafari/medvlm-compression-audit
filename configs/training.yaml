@@ -2,7 +2,7 @@
 # only difference between arms is the training signal).
 model:
   role: student
-  config: TODO                            # one of configs/models/*_student.yaml (CANDIDATE)
+  config: models/qwen2_5_vl_3b_student.yaml   # D05 amendment (2026-10-12); status stays CANDIDATE until the RC-S0 checks pass
   start_from: pretrained
 
 training:

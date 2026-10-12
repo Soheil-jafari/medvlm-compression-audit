@@ -1,7 +1,9 @@
 # D05: Student selection (10 -> 5 -> 3 -> 1)
 
-**Status:** answered 2026-10-12 (Soheil). Protocol freeze waits for the Round 0
-numbers (`train_examples`, `compute_unit_b`, G2 threshold, image side).
+**Status:** answered 2026-10-12 (Soheil). **Amended 2026-10-12 (Soheil): pick one student**
+(see "Amendment" below); the staged protocol is kept for the record and is not run. The freeze
+now waits for the Round 0 numbers of the chosen student (image side, G2 threshold, training
+length).
 
 ## Decision (2026-10-12)
 
@@ -194,10 +196,11 @@ keep, Q3 = accept.)
 - **fp16 stability:** some families are trained in bf16 and may overflow in fp16
   on a T4; R0 checks this per model.
 
-## Proposed amendment (2026-10-12, waiting for Soheil's yes)
+## Amendment (2026-10-12, answered by Soheil: pick one)
 
-**Status:** proposal only. Nothing below is applied; the protocol above stays in force until
-the answer is in `docs/agent/INBOX.md` and logged.
+**Status:** accepted by Soheil on 2026-10-12 with the words "let's use the pick-one
+approach". The protocol above is not run. Amir and Farzan, who asked for the staged selection,
+still have to be told.
 
 Soheil's question: the paper asks what compression does to a student, not which student is
 best, so why compare ten candidates? The answer is that the comparison is not needed for the
@@ -236,9 +239,10 @@ Proposal:
 
 Not decided by this proposal: GPU hours. They are unmeasured until RC-S0 and RC-M1 report.
 
-Changes once confirmed: `configs/student_selection.yaml` (two candidates, no rounds R1 to R3),
-`docs/stages/S05b_student_selection.md`, run card RC-S0 (two candidates), the log, and a
-message to Amir and Farzan, who asked for the staged selection.
+Applied on 2026-10-12: `configs/base.yaml` and `configs/training.yaml` point at the chosen
+student (status stays `CANDIDATE` until RC-S0 passes, then the revision is pinned),
+`configs/student_selection.yaml` carries the amendment, run card RC-S0 covers the two models
+only, RC-S1 to RC-S3 are kept but not used. Still to do: tell Amir and Farzan.
 
 ## What changes in the repository once decided
 

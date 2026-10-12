@@ -623,3 +623,19 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: the quantization stage (S08); the pre-registration draft (S07); the D05 amendment once
   Soheil answers ("pick one" or "tournament").
 - Needs the team: unchanged (D05 amendment; RC-D1; RC-M1).
+
+## Iteration 34: 2026-10-12 (interactive)
+- Stage / item: S05b, applying the D05 amendment.
+- Did: Soheil accepted "pick one student". Qwen2.5-VL-3B is named in `configs/base.yaml`
+  (`components.student`) and `configs/training.yaml` (`model.config`); its status stays
+  `CANDIDATE` until RC-S0 has passed, then the revision is pinned. Qwen3-VL-2B is the named
+  fallback and the optional second student. `configs/student_selection.yaml`, D05, the plan,
+  stage S05b and the decisions log carry the amendment; RC-S0 covers the two models only;
+  RC-S1 to RC-S3 are kept as "not used". Explained to Soheil in plain terms what the training
+  and the distillation are and where the image tests sit (the image-use test is part of every
+  round of the full protocol and runs on the trained student under the amendment).
+- Verified: ruff check, ruff format, pytest (786 passed).
+- Commit: see `git log` on `research-loop`.
+- Next: quantization stage (S08) and the pre-registration draft (S07); after RC-M1 and RC-S0 the
+  image side, the G2 threshold and the training length.
+- Needs the team: tell Amir and Farzan about the amendment (Soheil); RC-D1 (Farzan); RC-M1 (Soheil).

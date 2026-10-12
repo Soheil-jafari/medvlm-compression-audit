@@ -1,5 +1,8 @@
 # Run card RC-S2: Round 2, top 5 with the full student recipe
 
+> **Not used (D05 amendment, 2026-10-12):** the study uses one student chosen after Round 0.
+> This card is kept for the full protocol and stays blocked.
+
 ## 1. What and why
 
 - Stage: S05b (decision D05, Round 2)

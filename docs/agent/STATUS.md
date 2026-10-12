@@ -1,18 +1,18 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 32 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 34 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
-1. Student choice: wait for Soheil's yes on the D05 amendment (one student, Qwen2.5-VL-3B, with
-   checks); then update `configs/student_selection.yaml`, S05b and RC-S0. D07 section 1 (how a
-   unit is switched off while scored) and the timing hardware / B1-B3 are asked later; none of
-   them is needed before E2 exists.
-2. Run cards: RC-B0 (E1/E2 and the E2 footprint), RC-G2 (Gate 2 at B2).
-3. S12 work-ahead (related work with verified references); quantization (S08).
+1. Student: Qwen2.5-VL-3B chosen with checks (D05 amendment, 2026-10-12; fallback Qwen3-VL-2B).
+   After RC-M1 and RC-S0, propose the image side, the G2 threshold and the training length from
+   the measured speed, and pin the revision.
+2. Quantization stage (S08) and the pre-registration draft (S07) can be prepared now.
+3. D07 section 1 (how a unit is switched off while scored), the timing hardware and B1-B3 are
+   asked later; none is needed before E2 exists.
 
 Nothing heavy runs in the agent session: training, scoring and measurements are written as run
 cards for the team (decision of 2026-10-12).
@@ -26,7 +26,7 @@ cards for the team (decision of 2026-10-12).
 | 2b | CI on `main` is red (import error fixed on `research-loop` in a7ec704); merging `research-loop` into `main` turns it green | Soheil | 2026-10-12 |
 | 4 | Each member confirms own access to Kvasir-VQA-x1 and Kvasir-SEG (inbox) | all | 2026-10-12 |
 | 5 | Run RC-D1 (`docs/runs/RC-D1_data_preparation.md`) and commit `results/data/summary.csv` | Farzan | 2026-10-12 |
-| 7 | Confirm or reject the D05 amendment (one student with checks instead of the 10 -> 5 -> 3 -> 1 selection); tell Amir and Farzan | Soheil | 2026-10-12 |
+| 7 | Tell Amir and Farzan that the staged selection was replaced by one student with checks (D05 amendment) | Soheil | 2026-10-12 |
 | 6 | Run RC-M1 (`docs/runs/RC-M1_model_smoke_test.md`, Kaggle 2 x T4) and commit `results/smoke/RC-M1.csv` | Soheil | 2026-10-12 |
 
 ## Stages

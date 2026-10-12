@@ -30,7 +30,11 @@ and reported relative to B1-B3.
 
 ## Student selection (before E1)
 
-The student is chosen by successive halving on the validation split
+**Amended 2026-10-12 (D05 amendment):** the study uses one student, Qwen2.5-VL-3B, after
+Round 0 and the image-use checks (RC-S0); Qwen3-VL-2B is the named fallback and the optional
+second student. The staged protocol below is kept for the record and is not run.
+
+The staged protocol chooses the student by successive halving on the validation split
 (`docs/decisions/D05_student_selection.md`, `configs/student_selection.yaml`,
 stage S05b): R0 feasibility of 10 architectures on one T4; R1 the same short LoRA
 fine-tune for all 10, keep 5; R2 the top 5 rebuilt as new models with the full

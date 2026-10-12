@@ -13,8 +13,10 @@
 
 Blocked until all of these are true; the agent changes the status to `ready` when they are:
 
-- The student is chosen (decision D05 or its amendment, answered in the inbox and logged), and
-  `configs/base.yaml: components.student` and `configs/training.yaml: model.config` name it.
+- RC-S0 passed for the chosen student (Qwen2.5-VL-3B; the fallback is Qwen3-VL-2B). The
+  student is already named in `configs/base.yaml: components.student` and
+  `configs/training.yaml: model.config` (D05 amendment); the agent pins its revision once RC-S0
+  has passed.
 - `training.data_subset` and `training.steps` are set (rule of D06: one pass over the subset,
   `steps = ceil(data_subset / 16)`; the agent proposes the subset from the RC-S0 speed and the
   team confirms). The other training values are already decided (D06).

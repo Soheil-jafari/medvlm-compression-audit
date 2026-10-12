@@ -1,5 +1,8 @@
 # Run card RC-S3: Round 3, top 3 with the E2 recipe, two seeds
 
+> **Not used (D05 amendment, 2026-10-12):** the study uses one student chosen after Round 0.
+> This card is kept for the full protocol and stays blocked.
+
 ## 1. What and why
 
 - Stage: S05b (decision D05, Round 3)
