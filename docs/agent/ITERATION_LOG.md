@@ -599,3 +599,27 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: apply the D05 amendment after the yes; run cards RC-B0 and RC-G2; quantization (S08).
 - Needs the team: confirm or reject the D05 amendment (Soheil); tell Amir and Farzan.
+
+## Iteration 33: 2026-10-12 (interactive)
+- Stage / item: S06, run cards for the student baselines and the budget reference.
+- Did: `evaluation/efficiency.py` gained `state_bytes_by_part` (decoder layers, vision side,
+  everything else; the parts add up to the state bytes) and the benchmark stage writes the
+  three numbers next to the others, so that the E2 reference shows how much of the footprint
+  pruning can reach (tested on the tiny model: removing a layer lowers only the decoder part,
+  by exactly that layer's bytes). Run cards **RC-E1**, **RC-E2** and **RC-B0** written and
+  queued as blocked (student choice, training length, RC-D1, open settings, RC-E0b). RC-E2
+  tells the person to compare the cache manifest hash with the logged one, because training
+  checks the shards against the cache's own manifest but not against the logged hash. RC-B0
+  measures the E2 peak memory twice in fresh processes, because the budget metric is only
+  usable if it repeats within the 3 % tolerance. D05 amendment: added that the image-use
+  checks also run on the trained E1/E2 students, and that training several students would not
+  show that the choice of student matters (that is a separate question for the team).
+  S06 tasks ticked: recipe memo, efficiency stage, run cards.
+  Run card **RC-G2** (Gate 2 pilot: E5 with three criteria, E6 and E7 at B2, seed 0, validation
+  only) written and queued as blocked (RC-E2, RC-B0, the scoring method of D07 section 1, the
+  finding weights).
+- Verified: ruff check, ruff format, pytest (786 passed).
+- Commit: see `git log` on `research-loop`.
+- Next: the quantization stage (S08); the pre-registration draft (S07); the D05 amendment once
+  Soheil answers ("pick one" or "tournament").
+- Needs the team: unchanged (D05 amendment; RC-D1; RC-M1).

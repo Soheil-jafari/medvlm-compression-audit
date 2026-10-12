@@ -153,6 +153,38 @@ def state_bytes(model: VLMWrapper | Any) -> int:
     return total
 
 
+def state_bytes_by_part(model: VLMWrapper | Any) -> dict[str, int]:
+    """Split :func:`state_bytes` into the decoder layers, the vision side and the rest.
+
+    ``decoder_layers_bytes`` is what pruning of layers, attention groups and MLP channels can
+    shrink; ``vision_bytes`` is every tensor whose module path names a vision tower;
+    ``other_bytes`` holds the token embeddings, the output head, the norms and the connector.
+    The parts add up to :func:`state_bytes`. RC-B0 reports them so that B1 to B3 can be set as
+    fractions of the part that pruning can reach.
+
+    Used by: E2 (RC-B0), the budget memo.
+    """
+    from medcompress.compression.pruning import surgery
+
+    module = getattr(model, "module", model)
+    stack = surgery.find_decoder_stack(module)
+    prefix = f"{stack.path}."
+    parts = {"decoder_layers_bytes": 0, "vision_bytes": 0, "other_bytes": 0}
+    seen: set[int] = set()
+    for name, tensor in [*module.named_parameters(), *module.named_buffers()]:
+        if id(tensor) in seen:
+            continue
+        seen.add(id(tensor))
+        size = tensor.numel() * tensor.element_size()
+        if name.startswith(prefix):
+            parts["decoder_layers_bytes"] += size
+        elif any(marker in name.lower() for marker in surgery.VISION_MARKERS):
+            parts["vision_bytes"] += size
+        else:
+            parts["other_bytes"] += size
+    return parts
+
+
 def file_size_bytes(checkpoint_dir: Path) -> int:
     """Size on disk of the saved model (weights, manifest and adapters). Used by: all."""
     root = Path(checkpoint_dir)
@@ -438,6 +470,16 @@ def run_efficiency_benchmark(
     )
     target = run.run_dir(paths["results_root"]) / "efficiency.csv"
     rows = report_rows(report, run, state=state_bytes(model))
+    rows += [
+        {
+            "experiment": run.experiment_tag,
+            "budget": run.budget or "",
+            "seed": run.seed,
+            "metric": metric,
+            "value": float(value),
+        }
+        for metric, value in state_bytes_by_part(model).items()
+    ]
     upsert_results(rows, target)
     write_json(
         {"hardware": report.hardware, "protocol": report.protocol},

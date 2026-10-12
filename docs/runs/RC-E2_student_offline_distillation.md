@@ -1,0 +1,85 @@
+# Run card RC-E2: student with offline distillation (E2), 3 seeds
+
+## 1. What and why
+
+- Stage: S06
+- Experiments: E2, no budget, seeds 0, 1 and 2
+- Purpose: train the chosen student with the same recipe as E1 plus the teacher's cached
+  top-20 token log-probabilities (KD weight 0.5, temperature 2), evaluate it on the validation
+  split and measure its footprint. E2 is the starting point of every compression arm and the
+  reference of the budgets.
+- Status: `blocked` (see section 2)
+
+## 2. Requirements
+
+Blocked until all of these are true; the agent changes the status to `ready` when they are:
+
+- Everything in RC-E1 section 2.
+- RC-E0b done: the teacher cache for the training split exists and its manifest hash is in
+  `docs/decisions_log.md`; E0 validation metrics are committed.
+- `training.steps` and `training.data_subset` are the same values as for E1 (the only
+  difference between E1 and E2 is the training signal).
+
+Platform, dataset access and environment: as in RC-E1. In addition the teacher cache must be
+attached as a private dataset (or copied to `MEDCOMPRESS_CACHE_ROOT`, with the shards in
+`<cache root>/teacher/`). The run checks every shard against the cache's own manifest and stops
+if one was changed. It does not compare the manifest hash with the logged one, so you do that
+yourself with the command in section 3 before training.
+
+Runtime: as E1 plus the reading of the cache. The agent fills in the estimate when it sets the
+card to `ready`.
+
+## 3. Commands
+
+```bash
+git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
+export HF_HOME=/kaggle/temp/hf
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+export MEDCOMPRESS_DATA_ROOT=/kaggle/working/data               # your own copy (from RC-D1)
+export MEDCOMPRESS_PRIVATE_ROOT=/kaggle/input/<your-rc-d1-private>
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/input/<your-teacher-cache>  # from RC-E0b
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
+export MEDCOMPRESS_RESULTS_ROOT=$PWD/results
+export CUDA_VISIBLE_DEVICES=0
+
+python -m pytest -q tests/test_training.py tests/test_training_config.py tests/test_teacher_cache.py
+python -c "from pathlib import Path; from medcompress.models.teacher_cache import cache_manifest_hash as h; print(h(Path('$MEDCOMPRESS_CACHE_ROOT/teacher')))"
+# the printed hash must equal the one in docs/decisions_log.md; if not, stop and tell the agent
+# one seed per session: 0, then 1, then 2
+python scripts/run_experiment.py --exp E2 --seed 0        # trains, evaluates, benchmarks
+python -m pytest -q tests/test_results.py                  # must pass before you commit
+```
+
+Keep `checkpoints/` as a private dataset named `<yourname>-e2` (the dataset root holds
+`E2/seed<k>/adapter`): every pruning and quantization run loads the E2 adapter of its own seed.
+It is never committed.
+
+## 4. What to commit back
+
+For each seed `k`:
+
+- `results/E2/nobudget/seed<k>/metrics.csv`
+- `results/E2/nobudget/seed<k>/efficiency.csv`
+- This card with section 6 filled.
+
+The footprint of seed 0 is the first reading of the budget reference; RC-B0 repeats it on a
+clean GPU and its numbers are the ones used.
+
+## 5. How the result is read
+
+The agent writes `docs/results/E2.md` (the same tables as E1, with the difference E2 minus E1
+and its paired interval). The agent does not tune anything on these numbers: the recipe is fixed
+(D06). A student that fails the image-reliance checks is reported to the team before anything
+is compressed.
+
+## 6. Run report (filled by the person who ran it)
+
+- Run by / date:
+- Commit actually used:
+- Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft"`):
+- Teacher cache manifest hash printed by the command in section 3 (must equal the logged one):
+- Per seed: wall time, peak GPU memory, final training loss and KD term:
+- Name of the private datasets with your adapters and `outcomes.npz` files:
+- Anything unusual (errors, retries, changed settings):

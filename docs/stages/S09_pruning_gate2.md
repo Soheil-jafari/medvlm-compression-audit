@@ -16,7 +16,8 @@ reading.
   `pruning/apply.py`) and the shared recovery (`compression/recovery.py`: LoRA +
   offline KD, same subset and steps for every arm), and the efficiency measurement
   (`evaluation/efficiency.py`, stage 07). Open settings are named by the stages (exit 4).
-- [ ] [agent] Run card **RC-G2** first: E5 (3 criteria), E6 and E7 at B2, seed 0,
+- [x] [agent] Run card **RC-G2** first (written, blocked until RC-E2, RC-B0 and the scoring
+  method of D07 section 1): E5 (3 criteria), E6 and E7 at B2, seed 0,
   scored on the **validation** split only.
 - [ ] [team:Amir] Execute RC-G2.
 - [ ] [agent] Gate 2 note in `docs/results/GATE2.md`: E7 vs best of E5/E6 on

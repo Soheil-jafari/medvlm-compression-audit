@@ -12,13 +12,13 @@ measure E2's footprint, which defines the absolute budgets B1-B3.
   one shared trainer for E1, E2 and recovery) and the `sft` and `offline_kd` paths of
   `scripts/02_train_student.py`. Loss tests and tiny-model tests (done in iteration
   26); the hyper-parameters in `configs/training.yaml` are still `TODO` (see below).
-- [ ] [agent] Training recipe memo (rank, alpha, learning rate, steps, batch size,
+- [x] [agent] Training recipe memo (rank, alpha, learning rate, steps, batch size,
   KD weight and temperature): proposed from RC-S0/RC-S1 results, not tuned on the
   result of any compression arm; team approves before RC-E1/RC-E2.
-- [ ] [agent] `evaluation/efficiency.py` and `scripts/07_benchmark_efficiency.py`:
+- [x] [agent] `evaluation/efficiency.py` and `scripts/07_benchmark_efficiency.py`:
   the measurement protocol from `configs/budgets.yaml` (peak memory, cold and warm
   latency, throughput, file size, parameter count).
-- [ ] [agent] Run cards **RC-E1** (3 seeds), **RC-E2** (3 seeds) and **RC-B0** (E2
+- [x] [agent] Run cards **RC-E1** (3 seeds), **RC-E2** (3 seeds) and **RC-B0** (E2
   reference footprint on the development GPU).
 - [ ] [team:Soheil] Execute RC-E1 and RC-E2. [team:Amir] Execute RC-B0.
 - [ ] [agent] `docs/results/E1.md` and `E2.md` (validation metrics, mean and SD over

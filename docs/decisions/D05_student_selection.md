@@ -219,9 +219,17 @@ Proposal:
 - Checks: Round 0 of this memo for these two models only (run card RC-S0), plus the
   blank-image gate G2 at the threshold that is fixed before the numbers are read. No score S,
   no ranking.
+- The image-use checks also run on the trained E1/E2 students: stage 06 includes the blank
+  image, lesion-masked, random-region-masked and other-patient-image tests
+  (`image_reliance_check` in `configs/base.yaml`), so a student that ignores the image is
+  caught before any compression starts. This is a pass/fail check on one student, not a reason
+  to train several.
 - Wording in the paper: "chosen because", never "the best student".
 - Kept in the repository, unused unless the team asks for it: the ranking code, the rounds
   R1 to R3 and the run cards RC-S1 to RC-S3.
+- Training several students would not show that the choice of student matters. That needs
+  every student compressed the same way and compared, which is a second research question and
+  a decision for the whole team.
 - Optional later: a second student (Qwen3-VL-2B) to show whether the findings hold for more
   than one student. That answers a reviewer better than a ten-model comparison and costs one
   more set of E1/E2/pruning runs, so it is decided after the first student's budget is known.

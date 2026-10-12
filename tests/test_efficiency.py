@@ -218,6 +218,24 @@ def test_parameters_and_state_bytes_follow_the_model(tiny: Any) -> None:
     assert eff.state_bytes(wrapper) == expected
 
 
+def test_the_bytes_split_into_decoder_vision_and_the_rest(tiny: Any) -> None:
+    from medcompress.compression.pruning import surgery
+
+    wrapper = tiny.tiny_wrapper(seed=0)
+    parts = eff.state_bytes_by_part(wrapper)
+    assert set(parts) == {"decoder_layers_bytes", "vision_bytes", "other_bytes"}
+    assert sum(parts.values()) == eff.state_bytes(wrapper)
+    assert all(v > 0 for v in parts.values())
+    stack = surgery.find_decoder_stack(wrapper.module)
+    layer = stack.layers[1]
+    one = sum(p.numel() * p.element_size() for p in layer.parameters())
+    surgery.remove_layers(wrapper.module, [1])
+    after = eff.state_bytes_by_part(wrapper)
+    assert parts["decoder_layers_bytes"] - after["decoder_layers_bytes"] == one
+    assert after["vision_bytes"] == parts["vision_bytes"]  # only the decoder changes
+    assert after["other_bytes"] == parts["other_bytes"]
+
+
 def test_the_benchmark_stage_writes_the_efficiency_files(tiny: Any, tmp_path: Path) -> None:
     import yaml
     from eval_fixtures import eval_config, write_dataset
@@ -235,6 +253,8 @@ def test_the_benchmark_stage_writes_the_efficiency_files(tiny: Any, tmp_path: Pa
     assert rows["num_parameters"] == eff.count_parameters(tiny.tiny_wrapper(seed=0))
     assert rows["warm_latency_s"] > 0 and rows["cold_latency_s"] > 0
     assert rows["throughput_samples_per_s"] > 0 and rows["state_bytes"] > 0
+    parts = ("decoder_layers_bytes", "vision_bytes", "other_bytes")
+    assert sum(rows[k] for k in parts) == rows["state_bytes"]
     assert "peak_memory_bytes" not in rows  # no CUDA device here: nothing is invented
     setup = json.loads((target.parent / "efficiency_setup.json").read_text())
     assert setup["protocol"]["samples"] == 3 and setup["protocol"]["n_samples"] == 3
