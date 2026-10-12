@@ -38,7 +38,7 @@ All with unit tests on small synthetic inputs. Replace entries in
   synthetic in every file.
 - [x] [agent] Tests over the real `results/` tree: every CSV matches the schema;
   budget-matched runs are within tolerance (active once budgets are frozen).
-- [ ] [agent] Test that `paper/sections/05_results.tex` and the abstract contain no
+- [x] [agent] Test that `paper/sections/05_results.tex` and the abstract contain no
   hand-typed result numbers (only `\input` tables and `numbers.tex` macros).
 
 ## Outputs

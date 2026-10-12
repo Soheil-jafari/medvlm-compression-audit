@@ -1,15 +1,16 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 19 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 20 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S02 (CPU infrastructure); S01 done except dataset-access confirmations
+**Current stage:** S03 (data pipeline); S02 done
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
-S02 (CPU infrastructure), in order: `evaluation/statistics.py` (paired bootstrap,
-McNemar, Holm, seed aggregation, Kendall's tau), then the metric modules, then the
-data pure functions, then the clinical-criterion pure parts, then aggregation.
+S03: Kvasir-VQA-x1 and Kvasir-SEG readers (synthetic fixtures copying the documented
+layouts), a data-preparation script that writes manifests and splits outside the
+repository and only aggregate counts to `results/data/summary.csv`, and run card
+RC-D1.
 
 ## Waiting on the team
 
@@ -26,8 +27,8 @@ data pure functions, then the clinical-criterion pure parts, then aggregation.
 |---|---|---|---|
 | S00 | Repository health and loop setup | done, pending PR merge | team review |
 | S01 | Decisions | done (dataset-access confirmations pending) | - |
-| S02 | CPU infrastructure | in progress (statistics, metrics, data functions done) | - |
-| S03 | Data pipeline | not started | - (datasets decided) |
+| S02 | CPU infrastructure | done | - |
+| S03 | Data pipeline | in progress | - |
 | S04 | Model wrappers and unit surgery | not started | - (teacher decided) |
 | S05 | Teacher: Gate 1, cache | not started | S03, S04 |
 | S05b | Student selection 10 -> 5 -> 3 -> 1 | pool fixed: 10 Qwen-family models | S03, S04; freeze after RC-S0 |

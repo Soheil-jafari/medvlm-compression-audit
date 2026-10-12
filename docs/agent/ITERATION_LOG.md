@@ -285,3 +285,19 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: wire `paper/sections/05_results.tex` to the generated files and add the
   test against hand-typed numbers (last S02 item).
 - Needs the team: nothing new.
+
+## Iteration 20: 2026-10-12 (interactive)
+- Stage / item: S02, paper wiring (last S02 item).
+- Did: `paper/sections/05_results.tex` now inputs the generated tables and figures;
+  `paper/main.tex` inputs `tables/numbers.tex`; the data table in the setup section
+  is generated. Ran `scripts/08_aggregate_results.py` from the repository root and
+  committed its placeholder outputs (tables, figures, `results/summary/`,
+  `docs/results/VERDICTS.md`). The paper compiles with latexmk (9 pages). New
+  `tests/test_paper.py`: no hand-typed decimals or percentages in the abstract,
+  results, discussion or conclusion; every input and figure exists; committed
+  generated files match a fresh aggregation run.
+- Verified: ruff check, ruff format --check, pytest (all passed); latexmk -pdf OK.
+- Commit: see `git log` on `research-loop`.
+- Next: S03 data pipeline (Kvasir-VQA-x1 and Kvasir-SEG readers, preparation
+  script, run card RC-D1).
+- Needs the team: nothing new.
