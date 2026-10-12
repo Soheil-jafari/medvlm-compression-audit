@@ -1,7 +1,11 @@
 _base_: _dataset_base.yaml
 
 dataset:
-  name: "ColonVQA"
+  name: "ColonVQA (Colon-X)"
   domain: endoscopy
   candidate_role: TODO  # rare_findings or external_test
-  notes: "Candidate colonoscopy VQA set. Verify scope, access and overlap with the main QA set before assigning a role."
+  access: registration                    # Google form for full access (README)
+  source: TODO                            # https://github.com/ai4colonoscopy/Colon-X lists the release; dataset licence not stated
+  licence: TODO                           # README has no licence; HF annotation repo tagged apache-2.0
+  reference: TODO                         # arXiv 2512.03667
+  notes: "1,100,786 queries, 212,742 images, 76 findings (README). Consolidates public sources incl. Kvasir and HyperKvasir: heavy overlap with our data."

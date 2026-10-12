@@ -102,3 +102,17 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: D02 datasets memo; then S02.
 - Needs the team: D03 (licence), D02 once written.
+
+## Iteration 7: 2026-10-12 (interactive)
+- Stage / item: S01, D02 datasets memo.
+- Did: wrote `docs/decisions/D02_datasets.md` (Kvasir-VQA-x1 split sizes and licence,
+  Kvasir-VQA, Kvasir-SEG terms, Colon-X, EndoBench, and the retinal sets IDRiD,
+  EyeVQA, FundusGround as a later second domain). Key points: the teacher saw the
+  whole train file, so validation should come from the official test split; no
+  patient IDs anywhere, so fingerprint deduplication is required; Kvasir-SEG masks
+  must be matched to VQA images by fingerprint. Filled verified facts into the data
+  configs.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: team answers D02; then S02 statistics.
+- Needs the team: D02 (five questions), D03.

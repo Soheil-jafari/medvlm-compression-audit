@@ -14,7 +14,7 @@ on verified evidence, and written into the configs.
   whether the published Kvasir-VQA-x1 adapter exists and what it was trained on,
   and which student candidates share its tokenizer (table in D05). End with a
   recommendation and risks.
-- [ ] [agent] **D02 memo** `docs/decisions/D02_datasets.md`. For each candidate in
+- [x] [agent] **D02 memo** `docs/decisions/D02_datasets.md`. For each candidate in
   `configs/data/`: verified source, licence, access type, size, label set, masks,
   patient/procedure IDs, official splits, image-overlap risks between datasets, and
   which role it can fill (main QA, masks, rare findings, stress test, external test).

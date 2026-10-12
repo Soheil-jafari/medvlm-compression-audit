@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 6 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 7 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S01 (decisions), with S02 worked in parallel
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
@@ -18,7 +18,7 @@
 | 1 | Review `research-loop` and open the pull request into `main` | Soheil | 2026-10-12 |
 | 2 | Answer D03 (licence): memo `docs/decisions/D03_licence.md`; also confirm full names for the copyright line and any institutional licence or IP policy | team | 2026-10-12 |
 | 2b | CI on `main` is red (import error fixed on `research-loop` in a7ec704); merging `research-loop` into `main` turns it green | Soheil | 2026-10-12 |
-| 3 | Answer D02 (datasets) once the memo is up | team | - |
+| 3 | Answer D02 (datasets): memo `docs/decisions/D02_datasets.md` | team | 2026-10-12 |
 | 4 | Each member confirms own access to the chosen datasets | all | - |
 
 ## Stages
@@ -26,7 +26,7 @@
 | Stage | Title | Status | Blocker |
 |---|---|---|---|
 | S00 | Repository health and loop setup | done, pending PR merge | team review |
-| S01 | Decisions | in progress | D01 and D05 decided; D03 waiting on the team; D02 not written yet |
+| S01 | Decisions | in progress | D01 and D05 decided; D02 and D03 waiting on the team |
 | S02 | CPU infrastructure | not started | - |
 | S03 | Data pipeline | not started | S01 datasets |
 | S04 | Model wrappers and unit surgery | not started | - (teacher decided) |

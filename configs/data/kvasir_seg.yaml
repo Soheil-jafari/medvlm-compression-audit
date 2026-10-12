@@ -4,4 +4,13 @@ dataset:
   name: "Kvasir-SEG"
   domain: endoscopy
   candidate_role: masks
-  notes: "Candidate source of polyp masks for small-finding strata and the lesion-mask audit. Verify how images link to the QA set."
+  access: open
+  source: https://datasets.simula.no/kvasir-seg/
+  licence: "research and educational use only; no commercial use without written permission"
+  verified_on: "2026-10-12"
+  verified_from: https://datasets.simula.no/kvasir-seg/
+  reference: TODO                         # Kvasir-SEG paper; add to paper/references.bib
+  size_images: 1000
+  has_masks: true                         # polyp masks + bounding boxes (JSON)
+  has_patient_ids: false
+  notes: "Images from Kvasir v2; to be matched to Kvasir-VQA-x1 images by fingerprint (D02)."
