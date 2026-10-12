@@ -203,3 +203,29 @@ def test_deep_merge_does_not_mutate_inputs() -> None:
     merged = deep_merge(base, {"a": {"c": 2}})
     assert base == {"a": {"b": 1}}
     assert merged == {"a": {"b": 1, "c": 2}}
+
+
+def test_apply_variant_picks_the_entry_of_every_by_variant_table() -> None:
+    from medcompress.config import ConfigError, apply_variant
+
+    config = {
+        "pruning": {
+            "criterion": "by_variant",
+            "criterion_by_variant": {"a": "magnitude", "b": "taylor"},
+            "calibration": {"size_by_variant": {"a": 32, "b": 64}, "split": "train"},
+        },
+        "other": {"keep": 1},
+    }
+    chosen = apply_variant(config, "b")
+    assert chosen["pruning"] == {
+        "criterion": "taylor",
+        "calibration": {"size": 64, "split": "train"},
+    }
+    assert chosen["other"] == {"keep": 1}
+    assert "criterion_by_variant" in config["pruning"]  # the input is left alone
+    with pytest.raises(ConfigError, match="pruning.criterion_by_variant needs a variant"):
+        apply_variant(config, None)
+    with pytest.raises(ConfigError, match="no entry for variant 'c'"):
+        apply_variant(config, "c")
+    plain = {"x": {"y": 1}}
+    assert apply_variant(plain, None) == plain and apply_variant(plain, "anything") == plain

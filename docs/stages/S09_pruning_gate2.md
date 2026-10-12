@@ -8,8 +8,10 @@ reading.
 
 ## Tasks
 
-- [ ] [agent] Criteria: `magnitude`, `activation`, `taylor`, `output_similarity`,
-  `random`, and the model-facing parts of `clinical` (`score`, `ablate`).
+- [x] [agent] Criteria: `magnitude`, `activation`, `taylor`, `output_similarity`,
+  `random`, and the model-facing parts of `clinical` (`score`, `ablate`), with the scoring
+  stage `scripts/04_score_pruning_units.py` (open settings: group size, calibration size,
+  and for E7 the clinical keys; decided by the D07 memo).
 - [ ] [agent] Budget-matched removal (`budgets.search_matched_budget`,
   `pruning/apply.py`) and the shared recovery (`compression/recovery.py`: LoRA +
   offline KD, same subset and steps for every arm).

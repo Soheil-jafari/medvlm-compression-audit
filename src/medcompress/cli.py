@@ -109,7 +109,7 @@ def parse_stage_args(
 def stage_functions() -> dict[str, Callable[..., Any]]:
     """Map each stage script to the library function it calls (imported lazily)."""
     from medcompress.compression.distillation.offline_kd import run_student_training
-    from medcompress.compression.pruning.criteria.base import score_units_for_experiment
+    from medcompress.compression.pruning.stage import score_units_for_experiment
     from medcompress.compression.quantization.ptq import run_quantization
     from medcompress.compression.recovery import run_prune_and_recover
     from medcompress.evaluation.efficiency import run_efficiency_benchmark

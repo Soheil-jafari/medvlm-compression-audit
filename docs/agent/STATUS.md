@@ -1,16 +1,16 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 28 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 29 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
-1. D06 memo: proposals for the open recipe settings (training hyper-parameters, calibration
-   bins, bootstrap resamples, image size, token budget) for the team to confirm.
-2. S06: run cards for E1/E2 and the budget reference, recovery code.
-3. S12 work-ahead: related-work draft with verified references.
+1. S09: recovery (`run_prune_and_recover`), matched-budget search, efficiency measurement.
+2. D06 memo (training recipe, calibration bins, bootstrap resamples, image size, token
+   budget) and D07 memo (pruning scoring settings) for the team to confirm.
+3. S06: run cards for E1/E2 and the budget reference; S12 work-ahead (related work).
 
 ## Waiting on the team
 
@@ -37,7 +37,7 @@
 | S06 | Students E1, E2, budget reference | trainer done; recipe memo and run cards next | S05, S05b |
 | S07 | Pre-registration freeze | not started | S03, S06 |
 | S08 | Quantization E3, E4, E9 | not started | S07 |
-| S09 | Pruning E5-E8, Gate 2 | not started | S07 |
+| S09 | Pruning E5-E8, Gate 2 | criteria and scoring stage done; recovery, budget search next | S07 |
 | S10 | Ablations A1-A6 | not started | S09 |
 | S11 | External test, timing, aggregation | not started | S08-S10 |
 | S12 | Paper and release | not started | S11 (method/related work can start early) |

@@ -82,7 +82,7 @@ def _records(root: Path, samples: list[VQASample], *, shift: int = 0) -> dict[st
         prompt = batching.prompt_inputs(teacher, root / s.image_path, s.question)
         batch = batching.assemble([prompt], [ids], pad)
         with torch.no_grad():
-            logits = offline_kd._forward_logits(teacher.module, batch)[0]
+            logits = offline_kd.forward_answer_logits(teacher.module, batch)[0]
         top = F.log_softmax(logits.float(), dim=-1).topk(5, dim=-1)
         out[s.sample_id] = CacheRecord(
             s.sample_id,

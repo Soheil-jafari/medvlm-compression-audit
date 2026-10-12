@@ -184,6 +184,27 @@ def resolve_settings(config: Mapping[str, Any]) -> EvalSettings:
 # ------------------------------------------------------------------- the model
 
 
+def load_trained_student(
+    config: Mapping[str, Any], tag: str, seed: int, side: int, *, device_map: Any = None
+) -> VLMWrapper:
+    """The student with the adapter that training run ``tag`` (``E1``, ``E2``) saved, merged.
+
+    The compression arms start from this model, so the weights they prune and evaluate
+    are the merged ones.
+    """
+    from medcompress.config import ConfigError, load_config
+    from medcompress.models.loading import ModelSpec, load_adapter, load_model
+
+    student = config.get("model", {}).get("config")
+    if _is_open(student):
+        raise ConfigError("settings still open: model.config (the student, from S05b)")
+    spec = ModelSpec.from_config(load_config(student))
+    kwargs = {} if device_map is None else {"device_map": device_map}
+    model = load_model(spec, allow_candidate=True, image_longest_side=side, **kwargs)
+    adapter = Path(config["paths"]["checkpoint_root"]) / tag.replace(":", "/")
+    return load_adapter(model, adapter / f"seed{seed}" / "adapter", merge=True)
+
+
 def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:
     """Load the model that ``run`` evaluates.
 
@@ -191,21 +212,14 @@ def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLM
     saved (merged into the weights, as the compression arms start from it). The
     compressed arms are added with their stages.
     """
-    from medcompress.config import ConfigError, load_config
-    from medcompress.models.loading import ModelSpec, load_adapter, load_model
+    from medcompress.config import load_config
+    from medcompress.models.loading import ModelSpec, load_model
 
     if run.experiment_id == "E0":
         spec = ModelSpec.from_config(load_config(config["components"]["teacher"]))
         return load_model(spec, image_longest_side=side)
     if run.experiment_id in ("E1", "E2"):
-        student = config.get("model", {}).get("config")
-        if _is_open(student):
-            raise ConfigError("settings still open: model.config (the student, from S05b)")
-        spec = ModelSpec.from_config(load_config(student))
-        model = load_model(spec, allow_candidate=True, image_longest_side=side)
-        tag = run.experiment_tag.replace(":", "/")
-        adapter = Path(config["paths"]["checkpoint_root"]) / tag / f"seed{run.seed}" / "adapter"
-        return load_adapter(model, adapter, merge=True)
+        return load_trained_student(config, run.experiment_tag, run.seed, side)
     raise NotImplementedError(
         f"loading the model of {run.experiment_id} arrives with its stage (E3/E4: S08, "
         "E5-E8 and A1-A6: S09/S10)."

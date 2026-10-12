@@ -22,7 +22,7 @@ from medcompress.cli import (  # noqa: E402
     resolve_config,
     run_stage,
 )
-from medcompress.compression.pruning.criteria.base import score_units_for_experiment  # noqa: E402
+from medcompress.compression.pruning.stage import score_units_for_experiment  # noqa: E402
 
 SCRIPT = "scripts/04_score_pruning_units.py"
 

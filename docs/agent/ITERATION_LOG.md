@@ -488,3 +488,41 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: D06 recipe memo (training hyper-parameters, calibration bins, bootstrap
   resamples, image size, token budget), then S06 run cards and recovery code.
 - Needs the team: nothing new (RC-S0 follows RC-M1).
+
+## Iteration 29: 2026-10-12 (interactive)
+- Stage / item: S09, pruning criteria and the scoring stage (stage 04).
+- Did: `pruning/scoring.py` (exact unit ablation by hooks, which equals physical removal;
+  first-order estimates from one gate per unit, so one backward pass scores every unit;
+  loss scaling for fp16; probe objectives with coefficients w_c / n_c), `criteria/common.py`
+  (weights of a unit, removal order with the tie rule, `feasible_sequence`, `removal_set`,
+  score files) and all six criteria: magnitude (L1 of the unit's weights), activation
+  (Wanda-style, sum of |W| times the input norm), Taylor (answer cross-entropy, one backward
+  pass per row), output similarity (Khan et al.: one minus the mean cosine of the answer
+  embeddings with the layer ablated), random (seeded by unit id) and clinical (exact, first
+  order or mixed per unit type). `pruning/stage.py` runs stage 04: it resolves the
+  `*_by_variant` tables (`config.apply_variant`), checks the settings, loads the E2 student
+  (adapter merged), draws the nested calibration images from the training split, writes
+  `unit_scores.csv` without a budget (the scores are shared by B1 to B3) and a settings file,
+  and reuses the file when the settings are unchanged. `HFVLMWrapper.yes_no_logprobs` returns
+  the yes/no log-probabilities with gradients; `forward_answer_logits` is public.
+  Config: `mask_audit.fill` is 128 (D04); new open keys `pruning.removal.score_normalisation`
+  and `pruning.removal.protected_layers.{first,last}` (for D07); E6 names the sentence encoder
+  (`sentence-transformers/all-MiniLM-L6-v2`, Apache-2.0, revision read from the hub today).
+  Checks on the tiny model: a zero gate equals ablation equals physical removal; the gate
+  gradient equals a finite difference and, for a channel group, the Taylor term of its
+  down-projection weights; the first-order estimate follows exact ablation (correlation above
+  0.9 for channel groups).
+  Cost note for D07: exact ablation of about 3200 units on about 700 probes would take about
+  80 h on a T4 (estimate, from 0.12 s per probe), so the memo proposes exact for layers and
+  KV groups and first-order for channel groups (about 3 h); the numbers are estimates until
+  RC-M1 reports the scoring time per probe.
+  Problems found by the tests: the settings file stored unit types as a tuple and compared
+  unequal to its JSON form, so the reuse check never matched; the config helper of the tests
+  rewrote the weight table that a test had just written; an unneeded channel-group size
+  (`TODO`) was validated for the layers-only variant of A6.
+- Verified: ruff check, ruff format, pytest (755 passed).
+- Commit: see `git log` on `research-loop`.
+- Next: recovery (`run_prune_and_recover`), matched-budget search, efficiency measurement,
+  then the D06 and D07 memos.
+- Needs the team: nothing new.
+

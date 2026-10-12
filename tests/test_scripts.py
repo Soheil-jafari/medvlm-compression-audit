@@ -38,10 +38,9 @@ def test_help(script: Path, tmp_path: Path) -> None:
     ("script", "args"),
     [
         ("03_quantize.py", ["--exp", "E3", "--variant", "w4"]),
-        ("04_score_pruning_units.py", ["--exp", "E7"]),
         ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"]),
         ("07_benchmark_efficiency.py", ["--exp", "E9"]),
-        ("run_experiment.py", ["--exp", "E7", "--budget", "B2", "--seed", "0"]),
+        ("run_experiment.py", ["--exp", "E3", "--variant", "w4", "--seed", "0"]),
     ],
 )
 def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) -> None:
@@ -69,6 +68,9 @@ def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) 
             "image_longest_side",
         ),
         ("select_student.py", ["--rank", "R1"], "evaluation.bootstrap_resamples"),
+        ("04_score_pruning_units.py", ["--exp", "E7"], "pruning.calibration.size"),
+        ("04_score_pruning_units.py", ["--exp", "E5", "--variant", "taylor"], "pruning.units"),
+        ("run_experiment.py", ["--exp", "E7", "--budget", "B2", "--seed", "0"], "pruning"),
     ],
 )
 def test_implemented_stages_stop_cleanly_while_settings_are_open(

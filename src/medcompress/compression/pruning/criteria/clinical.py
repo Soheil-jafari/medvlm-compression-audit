@@ -90,8 +90,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from medcompress.compression.pruning.criteria.base import PruningCriterion, register_criterion
+from medcompress.compression.pruning.units import UnitType
 
 if TYPE_CHECKING:
+    from contextlib import AbstractContextManager
+
     from medcompress.compression.pruning.units import PrunableUnit
     from medcompress.data.base import VQASample
     from medcompress.data.probes import FindingProbe
@@ -293,13 +296,115 @@ def aggregate_importance(
     return float(sum(weights[f] * (sum(values) / len(values)) for f, values in per_finding.items()))
 
 
+@dataclass(frozen=True)
+class ClinicalSettings:
+    """The ``pruning.clinical`` settings of a run, checked.
+
+    ``methods`` maps a unit type to how its importance is obtained: ``exact`` (switch the unit
+    off and score again) or ``first_order`` (gate derivative, one backward pass for all such
+    units).
+    """
+
+    delta: str
+    weighting: str
+    negatives_per_positive: float | None
+    clip_negative: bool
+    methods: Mapping[str, str]
+    batch_size: int
+    loss_scale: float | None
+    debug_unfrozen_weights: bool
+
+    @classmethod
+    def from_config(cls, config: Mapping[str, Any]) -> ClinicalSettings:
+        """Read and validate the settings.
+
+        Raises:
+            ConfigError: a setting is missing, still ``TODO`` or not allowed together with
+                another (the first-order estimate cannot clip per-probe values or take a KL).
+        """
+        from medcompress.compression.pruning.scoring import ABLATION_METHODS
+        from medcompress.config import ConfigError, find_todos
+
+        section = dict((config.get("pruning") or {}).get("clinical") or {})
+        keys = ("negative_delta", "ablation_method", "batch_size")
+        open_keys = [
+            f"pruning.clinical.{k}"
+            for k in keys
+            if k not in section or find_todos({"v": section[k]})
+        ]
+        if "negatives_per_positive" not in section or find_todos(
+            {"v": section["negatives_per_positive"]}
+        ):
+            open_keys.append("pruning.clinical.negatives_per_positive")
+        if open_keys:
+            raise ConfigError(f"settings still open: {', '.join(open_keys)}")
+        delta_variant = str(section.get("delta", "logprob_drop"))
+        weighting = str(section.get("weighting", "clinical"))
+        if delta_variant not in DELTA_VARIANTS:
+            raise ConfigError(f"pruning.clinical.delta must be one of {DELTA_VARIANTS}")
+        if weighting not in WEIGHTING_SCHEMES:
+            raise ConfigError(f"pruning.clinical.weighting must be one of {WEIGHTING_SCHEMES}")
+        negative = str(section["negative_delta"])
+        if negative not in ("keep", "clip0"):
+            raise ConfigError("pruning.clinical.negative_delta must be 'keep' or 'clip0'")
+        method = section["ablation_method"]
+        types = [t.value for t in UnitType]
+        methods = dict(method) if isinstance(method, Mapping) else {t: str(method) for t in types}
+        bad = {k: v for k, v in methods.items() if v not in ABLATION_METHODS or k not in types}
+        if bad:
+            raise ConfigError(
+                f"pruning.clinical.ablation_method: unknown entries {bad}; "
+                f"unit types {types}, methods {list(ABLATION_METHODS)}"
+            )
+        if "first_order" in methods.values():
+            if delta_variant == "kl":
+                raise ConfigError("the first-order estimate does not support delta: kl")
+            if negative == "clip0":
+                raise ConfigError("the first-order estimate cannot clip per-probe values")
+        per_positive = section["negatives_per_positive"]
+        scale = section.get("loss_scale")
+        return cls(
+            delta=delta_variant,
+            weighting=weighting,
+            negatives_per_positive=None if per_positive is None else float(per_positive),
+            clip_negative=negative == "clip0",
+            methods=methods,
+            batch_size=int(section["batch_size"]),
+            loss_scale=None if scale is None else float(scale),
+            debug_unfrozen_weights=bool(section.get("debug_unfrozen_weights", False)),
+        )
+
+
+def finding_weights_for(
+    config: Mapping[str, Any], findings: Sequence[str], scheme: str, *, allow_unfrozen: bool
+) -> dict[str, float]:
+    """The weight of each finding for a weighting scheme, from the pre-registered table.
+
+    ``uniform`` needs no table. The others read ``components.finding_weights`` and refuse a
+    table that is not frozen (``allow_unfrozen`` is for debugging runs only).
+    """
+    from medcompress.config import load_config
+
+    if scheme == "uniform":
+        return {f: 1.0 for f in findings}
+    table = load_config(config["components"]["finding_weights"])
+    rows = load_finding_weights(table, require_frozen=not allow_unfrozen)
+    normalisation = str((table.get("weighting") or {}).get("normalisation", "none"))
+    tiers = load_tier_multipliers(table) if scheme == "clinical" else None
+    return compute_weights(
+        findings, rows, scheme, tier_multipliers=tiers, normalisation=normalisation
+    )
+
+
 @register_criterion("clinical")
 class ClinicalCriterion(PruningCriterion):
     """Clinically weighted probe-based importance (see module docstring).
 
-    Config keys (``pruning.clinical``): ``delta``, ``weighting``, ``weights_table``,
-    ``calibration_size``, ``probe_template`` (from the domain config),
-    ``ablation_method``, ``batch_size``.
+    Config keys (``pruning.clinical``): ``delta``, ``weighting``, ``negatives_per_positive``,
+    ``negative_delta``, ``ablation_method`` (one method for all unit types or a mapping from
+    unit type to ``exact`` / ``first_order``), ``batch_size`` and ``loss_scale`` (first-order
+    scoring only). The weights come from ``components.finding_weights`` and the probes from
+    the domain config.
 
     Used by: E7 (all budgets), E8 (via E7), A1, A2, A4, A5, A6.
     """
@@ -311,14 +416,66 @@ class ClinicalCriterion(PruningCriterion):
         calibration: Sequence[VQASample],
     ) -> dict[str, float]:
         """Run steps 1-3 of the procedure and return ``{unit_id: I_j}``."""
-        raise NotImplementedError(
-            "TODO: probe -> ablate each unit -> Delta -> weighted importance I_j (E7, A1-A6)."
+        from medcompress.compression.pruning import scoring
+        from medcompress.config import ConfigError, find_todos, load_config
+        from medcompress.evaluation.image_reliance import unique_image_probes
+
+        settings = ClinicalSettings.from_config(self.config)
+        missing = sorted({u.unit_type.value for u in units} - set(settings.methods))
+        if missing:
+            raise ConfigError(f"pruning.clinical.ablation_method has no entry for {missing}")
+        domain = load_config(self.config["components"]["domain"])["domain"]
+        findings = domain.get("findings")
+        template = (domain.get("probe") or {}).get("template")
+        if any(find_todos({"v": v}) for v in (findings, template)) or not findings:
+            raise ConfigError("settings still open: domain.findings, domain.probe.template")
+        probes = unique_image_probes(
+            calibration,
+            findings,
+            template,
+            display_names=(domain.get("probe") or {}).get("display_names"),
         )
+        probes = scoring.balance_probes(probes, settings.negatives_per_positive, self.seed)
+        if not probes:
+            raise ValueError("the calibration images give no labelled probes")
+        present = [f for f in findings if any(p.finding == f for p in probes)]
+        weights = finding_weights_for(
+            self.config, present, settings.weighting, allow_unfrozen=settings.debug_unfrozen_weights
+        )
+        finding_probes = scoring.to_finding_probes(probes)
+        out: dict[str, float] = {}
+        exact = [u for u in units if settings.methods[u.unit_type.value] == "exact"]
+        first_order = [u for u in units if settings.methods[u.unit_type.value] == "first_order"]
+        if exact:
+            baseline = scoring.score_probe_images(model, finding_probes, self.data_root)
+            for number, unit in enumerate(exact, 1):
+                with scoring.ablate(model, unit):
+                    ablated = scoring.score_probe_images(model, finding_probes, self.data_root)
+                deltas = delta(baseline, ablated, finding_probes, settings.delta)
+                out[unit.unit_id] = aggregate_importance(
+                    deltas, weights, clip_negative=settings.clip_negative
+                )
+                if number % 25 == 0 or number == len(exact):
+                    print(f"[clinical] exact ablation: {number}/{len(exact)} units", flush=True)
+        if first_order:
+            objective = scoring.ProbeObjective.build(finding_probes, weights)
+            steps = scoring.probe_objective_steps(
+                model, objective, self.data_root, settings.batch_size
+            )
+            out.update(
+                scoring.accumulate_gate_gradients(
+                    model, first_order, steps, loss_scale=settings.loss_scale
+                )
+            )
+            print(f"[clinical] first-order estimate: {len(first_order)} units", flush=True)
+        return out
 
-    def ablate(self, model: VLMWrapper, unit: PrunableUnit) -> VLMWrapper:
-        """Temporarily disable one unit for scoring (context manager or copy).
+    def ablate(self, model: VLMWrapper, unit: PrunableUnit) -> AbstractContextManager[None]:
+        """Switch one unit off while the returned context is open (scoring only).
 
-        Ablation (zeroing outputs / bypassing a layer) is only used for scoring;
-        the final model removes units physically.
+        The final model removes units physically; this is the reversible stand-in used to
+        measure what the removal would do.
         """
-        raise NotImplementedError("TODO: reversible ablation of a single unit for scoring.")
+        from medcompress.compression.pruning.scoring import ablate
+
+        return ablate(model, unit)

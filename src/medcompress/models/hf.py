@@ -98,18 +98,35 @@ class HFVLMWrapper(VLMWrapper):
         Each value is the log of the summed probability of the single-token spellings
         of that answer, under the full vocabulary (the two values need not add to one).
         """
-        import torch
-
         scores: list[YesNoScore] = []
         for rows in self._batches(len(questions)):
-            inputs = self.build_inputs([images[i] for i in rows], [questions[i] for i in rows])
-            with torch.inference_mode():
-                logits = self.module(**inputs, use_cache=False, logits_to_keep=1).logits[:, -1, :]
-                logp = torch.log_softmax(logits.float(), dim=-1)
-                yes = torch.logsumexp(logp[:, list(self.yes_ids)], dim=-1)
-                no = torch.logsumexp(logp[:, list(self.no_ids)], dim=-1)
+            yes, no = self.yes_no_logprobs(
+                [images[i] for i in rows], [questions[i] for i in rows], grad=False
+            )
             scores.extend(YesNoScore(float(y), float(n)) for y, n in zip(yes, no, strict=True))
         return scores
+
+    def yes_no_logprobs(
+        self, images: Sequence[Path | Any], questions: Sequence[str], *, grad: bool = False
+    ) -> tuple[Any, Any]:
+        """Tensors ``(log P(yes), log P(no))`` of shape ``(n,)`` for one batch.
+
+        With ``grad`` the tensors stay attached to the autograd graph (first-order unit
+        scoring); otherwise the forward pass runs in inference mode. The caller chooses the
+        batch size; :meth:`score_yes_no` splits a long list by ``self.batch_size``.
+        """
+        import contextlib
+
+        import torch
+
+        inputs = self.build_inputs(images, questions)
+        mode = contextlib.nullcontext() if grad else torch.inference_mode()
+        with mode:
+            logits = self.module(**inputs, use_cache=False, logits_to_keep=1).logits[:, -1, :]
+            logp = torch.log_softmax(logits.float(), dim=-1)
+            yes = torch.logsumexp(logp[:, list(self.yes_ids)], dim=-1)
+            no = torch.logsumexp(logp[:, list(self.no_ids)], dim=-1)
+        return yes, no
 
     # -------------------------------------------------------------- generation
 

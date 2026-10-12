@@ -87,7 +87,7 @@ def _teacher_records(
         prompt = batching.prompt_inputs(teacher, ex.image, ex.question)
         batch = batching.assemble([prompt], [ids], pad)
         with torch.no_grad():
-            logits = offline_kd._forward_logits(teacher.module, batch)[0]
+            logits = offline_kd.forward_answer_logits(teacher.module, batch)[0]
         top = F.log_softmax(logits.float(), dim=-1).topk(top_k, dim=-1)
         record = CacheRecord(
             ex.sample_id,
@@ -238,10 +238,10 @@ def test_padded_batch_logits_equal_one_example_forward_passes() -> None:
     prompts = [batching.prompt_inputs(w, img, PROBE) for img in images]
     batch = batching.assemble(prompts, answers, pad)
     with torch.no_grad():
-        together = offline_kd._forward_logits(w.module, batch)
+        together = offline_kd.forward_answer_logits(w.module, batch)
         for b, ids in enumerate(answers):
             single = batching.assemble([prompts[b]], [ids], pad)
-            alone = offline_kd._forward_logits(w.module, single)[0]
+            alone = offline_kd.forward_answer_logits(w.module, single)[0]
             assert torch.allclose(together[b, -len(ids) :], alone, atol=1e-4)
             assert torch.equal(batch.targets[b, -len(ids) :], torch.tensor(ids))
             assert (batch.targets[b, : -len(ids)] == IGNORE_INDEX).all()
@@ -281,7 +281,7 @@ def _logits(w: HFVLMWrapper) -> torch.Tensor:
     prompt = batching.prompt_inputs(w, tiny_vlm.tiny_image(5), PROBE)
     batch = batching.assemble([prompt], [ids], w.tokenizer.pad_token_id)
     with torch.no_grad():
-        return offline_kd._forward_logits(w.module, batch)
+        return offline_kd.forward_answer_logits(w.module, batch)
 
 
 def _perturb(w: HFVLMWrapper) -> None:

@@ -19,7 +19,7 @@ experiment:
     - scripts/06_evaluate.py
     - scripts/07_benchmark_efficiency.py
   outputs:
-    - results/E5/<variant>/<budget>/seed{0,1,2}/unit_scores.csv
+    - results/E5/<variant>/nobudget/seed{0,1,2}/unit_scores.csv
     - results/E5/<variant>/<budget>/seed{0,1,2}/metrics.csv
   status: planned
 

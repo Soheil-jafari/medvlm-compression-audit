@@ -216,6 +216,39 @@ def apply_overrides(config: Mapping[str, Any], overrides: Iterable[str]) -> dict
     return result
 
 
+VARIANT_SUFFIX = "_by_variant"
+
+
+def apply_variant(config: Mapping[str, Any], variant: str | None) -> dict[str, Any]:
+    """Resolve every ``<key>_by_variant`` table of a config for one variant.
+
+    A table such as ``size_by_variant: {n32: 32, n64: 64}`` sets ``size`` to the entry of the
+    variant and is then dropped; an experiment that lists ``criterion: by_variant`` next to
+    ``criterion_by_variant`` gets the entry in the same way. A config with such a table needs
+    a variant that the table names (:class:`ConfigError` otherwise), and a config without
+    tables is returned unchanged (a copy), whatever the variant.
+    """
+    result = copy.deepcopy(dict(config))
+
+    def walk(node: dict[str, Any], path: str) -> None:
+        for key in [k for k in node if isinstance(k, str) and k.endswith(VARIANT_SUFFIX)]:
+            table, target = node.pop(key), key[: -len(VARIANT_SUFFIX)]
+            where = f"{path}{key}"
+            if not isinstance(table, Mapping):
+                raise ConfigError(f"{where} must map variants to values")
+            if variant is None:
+                raise ConfigError(f"{where} needs a variant (--variant), one of {sorted(table)}")
+            if variant not in table:
+                raise ConfigError(f"{where} has no entry for variant {variant!r}: {sorted(table)}")
+            node[target] = copy.deepcopy(table[variant])
+        for key, child in node.items():
+            if isinstance(child, dict):
+                walk(child, f"{path}{key}.")
+
+    walk(result, "")
+    return result
+
+
 def get_by_path(config: Mapping[str, Any], dotted: str, default: Any = None) -> Any:
     """Return ``config["a"]["b"]`` for ``dotted="a.b"``, or ``default`` if missing."""
     node: Any = config

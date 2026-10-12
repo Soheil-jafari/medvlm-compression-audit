@@ -205,7 +205,8 @@ def _micro_batches(
     return gt, teacher
 
 
-def _forward_logits(module: Any, batch: Batch) -> Any:
+def forward_answer_logits(module: Any, batch: Batch) -> Any:
+    """Logits that predict the answer slots of a batch (the last ``answer_length`` steps)."""
     out = module(**batch.inputs, use_cache=False, logits_to_keep=batch.answer_length + 1)
     return answer_logits(out.logits, batch.answer_length)
 
@@ -213,7 +214,7 @@ def _forward_logits(module: Any, batch: Batch) -> Any:
 def _step_loss(
     module: Any, gt: Batch, teacher: Batch | None, cfg: TrainConfig
 ) -> tuple[Any, float, float]:
-    logits = _forward_logits(module, gt)
+    logits = forward_answer_logits(module, gt)
     ce = answer_ce_loss(logits, gt.targets)
     if cfg.kd_weight <= 0:
         return ce, float(ce.detach()), 0.0
@@ -223,7 +224,7 @@ def _step_loss(
         )
     else:
         kl = topk_kl_loss(
-            _forward_logits(module, teacher),
+            forward_answer_logits(module, teacher),
             teacher.topk_ids,
             teacher.topk_logprobs,
             teacher.topk_mask,
