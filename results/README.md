@@ -25,7 +25,8 @@ The column order is defined once in `medcompress.utils.io.RESULTS_COLUMNS`; use
 
 ```
 results/
-  <ID>[/<variant>]/<budget or nobudget>/seed<k>/metrics.csv      # per run
+  <ID>[/<variant>]/<budget or nobudget>/seed<k>/metrics.csv      # per run, validation split
+  <ID>[/<variant>]/<budget or nobudget>/seed<k>/metrics_test.csv # per run, test split (after the freeze)
   <ID>[/<variant>]/<budget or nobudget>/seed<k>/efficiency.csv
   comparisons/<A>_vs_<B>/<budget or nobudget>/comparison.csv     # paired differences with CIs
   selection/<round>/<candidate>/metrics.csv                      # student selection (D05), e.g. R1:qwen3_vl_2b
@@ -34,7 +35,16 @@ results/
   summary/                                                       # written by scripts/08_aggregate_results.py
 ```
 
-Rows in a run file must match their folder (experiment, budget, seed). Comparison
+Rows in a run file must match their folder (experiment, budget, seed).
+
+The split is part of the file name, not a column: `metrics.csv` holds validation scores (and
+the training, removal and recovery bookkeeping of the run), `metrics_test.csv` the test scores.
+Scoring the test split never overwrites the validation rows. The aggregation adds a `split`
+column (`val`, `test`, or empty for `efficiency.csv`, comparisons and data rows), summarises the
+splits apart in `summary/by_arm.csv`, and builds the paper tables, figures, `numbers.tex` and
+the verdicts from the test split and the split-free rows only. Validation rows serve Gate 2, the
+choice of the best of E5/E6 and the student checks. Comparison rows are computed on the test
+split unless their run card says otherwise. Comparison
 rows use `experiment = "<A>_vs_<B>"` and metrics such as `diff:small_finding_recall`
 or `p:small_finding_recall`; they are computed where the per-image predictions live
 (the GPU session), because per-image outputs are never committed.

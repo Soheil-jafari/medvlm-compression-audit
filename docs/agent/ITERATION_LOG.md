@@ -639,3 +639,28 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: quantization stage (S08) and the pre-registration draft (S07); after RC-M1 and RC-S0 the
   image side, the G2 threshold and the training length.
 - Needs the team: tell Amir and Farzan about the amendment (Soheil); RC-D1 (Farzan); RC-M1 (Soheil).
+
+## Iteration 35: 2026-10-12 (interactive)
+- Stage / item: bug hunt across the pipeline (requested by Soheil), part 1: evaluation and
+  statistics.
+- Did: (1) **Validation and test rows overwrote each other.** The evaluation stage wrote both
+  splits to the same `metrics.csv` with the same metric names, so a test pass replaced the
+  validation rows that Gate 2 and the "best of E5/E6" choice are read from, and the aggregation
+  would have averaged the two. The test split now goes to `metrics_test.csv` and
+  `outcomes_test.npz` (`RUN_FILES_BY_SPLIT` in `evaluation/runner.py`); the aggregation adds a
+  `split` column from the file name, summarises the splits apart, and builds the paper tables,
+  figures, `numbers.tex` and the verdicts from test-split and split-free rows only
+  (`aggregate.paper_rows`). `results/README.md` documents it. (2) **Confidence intervals resampled
+  probes, not images.** Every image gives one probe per finding, so the probes of an image are
+  not independent and the intervals of accuracy, macro-F1, small-finding recall and the
+  lesion-mask effect were too narrow. The bootstrap functions now take `clusters` (the image of
+  each row) and draw whole images; the probe suites, the mask audit and `compare_arms` use it.
+  (3) **Memory:** the bootstrap built all resamples in one array (10 000 x number of probes);
+  for a full validation split that is gigabytes. Resamples are now drawn one at a time, with
+  the same random numbers as before (tested).
+- Verified: ruff check, ruff format, pytest (646 passed, 13 skipped: this session cannot install
+  torch, because the PyTorch download host is blocked by the network policy and the PyPI wheel
+  is the 2.5 GB GPU build; the torch tests run on Kaggle, see RC-M1).
+- Commit: see `git log` on `research-loop`.
+- Next: continue the bug hunt (data, training, pruning, budgets, recovery, efficiency).
+- Needs the team: nothing new.

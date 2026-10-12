@@ -1,1 +1,1 @@
-experiment,budget,metric,n_seeds,mean,sd,min,max,ci_low,ci_high
+experiment,budget,split,metric,n_seeds,mean,sd,min,max,ci_low,ci_high

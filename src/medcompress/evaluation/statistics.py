@@ -12,7 +12,7 @@ Analysis plan (pre-registered in docs/preregistration.md):
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -21,9 +21,41 @@ EXACT_MCNEMAR_MAX_DISCORDANT = 25
 """Below this many discordant pairs McNemar uses the exact binomial test."""
 
 
-def _resample_indices(n: int, n_resamples: int, seed: int) -> np.ndarray:
+def _cluster_groups(clusters: Sequence[object] | np.ndarray, n: int) -> list[np.ndarray]:
+    """Row indices of each cluster, clusters in order of first appearance."""
+    labels = np.asarray(clusters)
+    if labels.shape[0] != n:
+        raise ValueError(f"clusters has {labels.shape[0]} labels for {n} rows")
+    order: dict[object, list[int]] = {}
+    for i, label in enumerate(labels.tolist()):
+        order.setdefault(label, []).append(i)
+    return [np.asarray(rows, dtype=int) for rows in order.values()]
+
+
+def _resample_indices(
+    n: int,
+    n_resamples: int,
+    seed: int,
+    clusters: Sequence[object] | np.ndarray | None = None,
+) -> Iterator[np.ndarray]:
+    """Yield ``n_resamples`` row-index arrays, one resample at a time.
+
+    Without ``clusters`` each resample draws ``n`` rows with replacement. With ``clusters``
+    (one label per row, e.g. the image a probe was asked about) whole clusters are drawn
+    with replacement and all rows of a drawn cluster are kept, so rows of one image move
+    together: the bootstrap then resamples images, as pre-registered, even when an image
+    contributes several probes. Draws are generated lazily, so memory stays at one
+    resample however large ``n_resamples * n`` is.
+    """
     rng = np.random.default_rng(seed)
-    return rng.integers(0, n, size=(n_resamples, n))
+    if clusters is None:
+        for _ in range(n_resamples):
+            yield rng.integers(0, n, size=n)
+        return
+    groups = _cluster_groups(clusters, n)
+    k = len(groups)
+    for _ in range(n_resamples):
+        yield np.concatenate([groups[g] for g in rng.integers(0, k, size=k)])
 
 
 def _percentile_ci(samples: np.ndarray, alpha: float) -> tuple[float, float]:
@@ -42,6 +74,7 @@ def paired_bootstrap_ci(
     n_resamples: int = 10_000,
     alpha: float = 0.05,
     seed: int = 0,
+    clusters: Sequence[object] | np.ndarray | None = None,
 ) -> tuple[float, float, float]:
     """Return (difference, ci_low, ci_high) of metric(a) - metric(b), resampling images jointly.
 
@@ -50,7 +83,9 @@ def paired_bootstrap_ci(
     ``(n_images,)`` correctness or ``(n_images, 2)`` label/prediction pairs). The
     same resampled image indices are used for both models, so the CI reflects the
     paired design. Percentile interval; resamples where the metric is undefined
-    (NaN, e.g. a recall with no positives drawn) are dropped.
+    (NaN, e.g. a recall with no positives drawn) are dropped. When rows are probes and an
+    image has several, pass the image of each row as ``clusters`` (see
+    :func:`_resample_indices`).
 
     Used by: all comparisons; primary endpoints E7 vs best of E5/E6 at B2.
     """
@@ -63,7 +98,7 @@ def paired_bootstrap_ci(
     if not 0 < alpha < 1:
         raise ValueError("alpha must be in (0, 1).")
     observed = float(metric(a)) - float(metric(b))
-    indices = _resample_indices(a.shape[0], n_resamples, seed)
+    indices = _resample_indices(a.shape[0], n_resamples, seed, clusters)
     diffs = np.fromiter(
         (float(metric(a[idx])) - float(metric(b[idx])) for idx in indices),
         dtype=float,
@@ -81,11 +116,12 @@ def paired_bootstrap_test(
     n_resamples: int = 10_000,
     alpha: float = 0.05,
     seed: int = 0,
+    clusters: Sequence[object] | np.ndarray | None = None,
 ) -> tuple[float, float, float, float]:
     """Return (difference, ci_low, ci_high, p_value) for metric(a) - metric(b).
 
-    Same resampling as :func:`paired_bootstrap_ci`. The two-sided p-value is
-    ``min(1, 2 * min(P(d* <= 0), P(d* >= 0)))`` over the bootstrap differences
+    Same resampling as :func:`paired_bootstrap_ci` (including ``clusters``). The two-sided
+    p-value is ``min(1, 2 * min(P(d* <= 0), P(d* >= 0)))`` over the bootstrap differences
     ``d*`` (with the +1 correction so it is never exactly 0).
     """
     a = np.asarray(outcomes_a)
@@ -93,7 +129,7 @@ def paired_bootstrap_test(
     if a.shape[0] != b.shape[0] or a.shape[0] == 0:
         raise ValueError("Paired outcomes need the same, non-zero number of images.")
     observed = float(metric(a)) - float(metric(b))
-    indices = _resample_indices(a.shape[0], n_resamples, seed)
+    indices = _resample_indices(a.shape[0], n_resamples, seed, clusters)
     diffs = np.fromiter(
         (float(metric(a[idx])) - float(metric(b[idx])) for idx in indices), float, n_resamples
     )
@@ -114,13 +150,17 @@ def bootstrap_ci(
     n_resamples: int = 10_000,
     alpha: float = 0.05,
     seed: int = 0,
+    clusters: Sequence[object] | np.ndarray | None = None,
 ) -> tuple[float, float, float]:
-    """Return (value, ci_low, ci_high) of metric(outcomes) by resampling images."""
+    """Return (value, ci_low, ci_high) of metric(outcomes) by resampling images.
+
+    Rows are resampled one by one, or by cluster when ``clusters`` gives each row's image.
+    """
     data = np.asarray(outcomes)
     if data.shape[0] == 0:
         raise ValueError("Need at least one image.")
     observed = float(metric(data))
-    indices = _resample_indices(data.shape[0], n_resamples, seed)
+    indices = _resample_indices(data.shape[0], n_resamples, seed, clusters)
     values = np.fromiter((float(metric(data[idx])) for idx in indices), float, n_resamples)
     low, high = _percentile_ci(values, alpha)
     return observed, low, high
@@ -201,6 +241,7 @@ def bootstrap_kendall_tau(
     n_resamples: int = 2_000,
     alpha: float = 0.05,
     seed: int = 0,
+    clusters: Sequence[object] | np.ndarray | None = None,
 ) -> tuple[float, float, float]:
     """Return (tau, ci_low, ci_high) between arm rankings by two metrics (H4).
 
@@ -222,7 +263,7 @@ def bootstrap_kendall_tau(
         return kendall_tau(xs, ys)
 
     observed = tau_for(slice(None))
-    indices = _resample_indices(n, n_resamples, seed)
+    indices = _resample_indices(n, n_resamples, seed, clusters)
     taus = np.fromiter((tau_for(idx) for idx in indices), float, n_resamples)
     low, high = _percentile_ci(taus, alpha)
     return observed, low, high
@@ -240,7 +281,8 @@ def aggregate_results(
 
     Validates and collects every results CSV under ``results_root`` (runs,
     comparisons, selection, data summary), writes ``all_rows.csv`` and
-    ``by_arm.csv`` (seed means and SDs) to ``out_dir``, the paper tables and
+    ``by_arm.csv`` (seed means and SDs, per split) to ``out_dir``; then, from the test-split
+    rows and the rows not tied to a split only (never validation rows), the paper tables and
     ``numbers.tex`` to ``tables_dir`` (default ``paper/tables``), figures F1-F5 to
     ``figures_dir`` (default ``paper/figures``) and the H1-H4 verdicts to
     ``verdicts_path`` (default ``docs/results/VERDICTS.md``); defaults are relative
@@ -250,15 +292,21 @@ def aggregate_results(
     Used by: all experiments (final step).
     """
     from medcompress.config import repo_root
-    from medcompress.evaluation.aggregate import load_results, summarise_over_seeds, write_summary
+    from medcompress.evaluation.aggregate import (
+        load_results,
+        paper_rows,
+        summarise_over_seeds,
+        write_summary,
+    )
     from medcompress.evaluation.figures import write_figures
     from medcompress.evaluation.report import write_tables
     from medcompress.evaluation.verdicts import write_verdicts
 
     root = repo_root()
     rows = load_results(Path(results_root))
-    summary = summarise_over_seeds(rows)
     written = write_summary(rows, Path(out_dir))
+    rows = paper_rows(rows)  # the paper reports the test split, never validation rows
+    summary = summarise_over_seeds(rows)
     written += write_tables(rows, summary, Path(tables_dir or root / "paper" / "tables"))
     written += write_figures(summary, Path(figures_dir or root / "paper" / "figures"))
     written.append(

@@ -295,8 +295,9 @@ class MaskAuditResult:
         if n == 0:
             raise ValueError("The audit has no probes.")
         lesion, control = self.lesion_flip.astype(float), self.random_flip.astype(float)
+        images = np.asarray(self.sample_ids)  # probes of one image are resampled together
         effect, low, high = paired_bootstrap_ci(
-            np.mean, lesion, control, n_resamples=n_resamples, seed=seed
+            np.mean, lesion, control, n_resamples=n_resamples, seed=seed, clusters=images
         )
         margin_effect, m_low, m_high = paired_bootstrap_ci(
             np.mean,
@@ -304,6 +305,7 @@ class MaskAuditResult:
             self.random_margin_drop,
             n_resamples=n_resamples,
             seed=seed,
+            clusters=images,
         )
         return {
             "n_probes": float(n),

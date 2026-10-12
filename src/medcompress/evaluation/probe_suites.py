@@ -115,9 +115,10 @@ def clinical_metrics(
 ) -> list[Metric]:
     """Overall accuracy and macro-F1 (with bootstrap CIs) and per-finding sensitivity / specificity.
 
-    The overall accuracy is the fraction of probes answered correctly. Used by: all.
+    The overall accuracy is the fraction of probes answered correctly. The CIs resample
+    images: all probes of one image (one ``sample_id``) are drawn together. Used by: all.
     """
-    kwargs = _ci_kwargs(n_resamples, alpha, seed)
+    kwargs = {**_ci_kwargs(n_resamples, alpha, seed), "clusters": np.asarray(out.sample_ids)}
     accuracy = bootstrap_ci(lambda a: float(np.mean(a)), out.correct.astype(float), **kwargs)
     codes = np.stack(
         [out.finding_index(findings), out.truth.astype(int), out.yes.astype(int)], axis=1
@@ -173,7 +174,7 @@ def small_finding_metrics(
 
     Only findings in ``mask_findings`` (the ones the lesion masks delineate) count.
     Stratum 0 is the smallest; ``small_finding_recall`` is its recall with a bootstrap
-    CI over the positives. ``thresholds`` are the frozen area cut points.
+    CI over the images of the positives. ``thresholds`` are the frozen area cut points.
     Used by: all (primary endpoint at B2).
     """
     n_strata = len(thresholds) + 1
@@ -188,7 +189,10 @@ def small_finding_metrics(
         return float(codes[in_small, 0].mean()) if in_small.any() else math.nan
 
     codes = np.stack([detected.astype(int), strata], axis=1)
-    value, low, high = bootstrap_ci(stratum0_recall, codes, **_ci_kwargs(n_resamples, alpha, seed))
+    images = np.asarray(out.sample_ids)[keep]  # an image with two masked findings moves as one
+    value, low, high = bootstrap_ci(
+        stratum0_recall, codes, clusters=images, **_ci_kwargs(n_resamples, alpha, seed)
+    )
     metrics = [
         Metric("n_mask_positives", float(keep.sum())),
         Metric("small_finding_recall", value, low, high),

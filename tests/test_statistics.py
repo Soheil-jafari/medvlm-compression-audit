@@ -130,3 +130,39 @@ def test_bootstrap_kendall_tau_agreeing_metrics() -> None:
     arms = {f"arm{k}": (rng.random(400) < 0.5 + 0.1 * k).astype(float) for k in range(4)}
     tau, low, high = bootstrap_kendall_tau(_mean, _mean, arms, n_resamples=100)
     assert tau == pytest.approx(1.0) and low == pytest.approx(1.0) and high == pytest.approx(1.0)
+
+
+def test_cluster_bootstrap_resamples_whole_images() -> None:
+    from medcompress.evaluation.statistics import _resample_indices
+
+    # three images with 1, 2 and 3 probes: every resample keeps whole images
+    clusters = np.array(["a", "b", "b", "c", "c", "c"])
+    for idx in _resample_indices(6, 50, seed=1, clusters=clusters):
+        for label in "abc":
+            rows = np.flatnonzero(clusters == label)
+            taken = np.isin(idx, rows)
+            # an image is either absent or present with all its rows, the same number of times
+            counts = [int(np.sum(idx == r)) for r in rows]
+            assert taken.sum() == 0 or len(set(counts)) == 1
+    with pytest.raises(ValueError, match="labels"):
+        next(_resample_indices(6, 1, seed=0, clusters=["a", "b"]))
+
+
+def test_cluster_bootstrap_widens_the_interval_for_correlated_probes() -> None:
+    # 40 images x 10 probes; within an image all probes share the outcome (fully correlated)
+    rng = np.random.default_rng(0)
+    per_image = rng.random(40) < 0.5
+    outcomes = np.repeat(per_image, 10).astype(float)
+    clusters = np.repeat(np.arange(40), 10)
+    _, low, high = bootstrap_ci(np.mean, outcomes, n_resamples=2000, seed=0)
+    _, c_low, c_high = bootstrap_ci(np.mean, outcomes, n_resamples=2000, seed=0, clusters=clusters)
+    # resampling probes pretends there are 400 independent answers; images give the honest width
+    assert (c_high - c_low) > 2.5 * (high - low)
+
+
+def test_lazy_resampling_matches_the_old_batched_draws() -> None:
+    from medcompress.evaluation.statistics import _resample_indices
+
+    batched = np.random.default_rng(7).integers(0, 13, size=(20, 13))
+    lazy = np.stack(list(_resample_indices(13, 20, seed=7)))
+    assert np.array_equal(batched, lazy)

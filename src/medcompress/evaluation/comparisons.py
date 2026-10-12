@@ -52,12 +52,23 @@ def compare_arms(
     n_resamples: int = 10_000,
     alpha: float = 0.05,
     seed: int = 0,
+    clusters: Sequence[object] | np.ndarray | None = None,
 ) -> list[dict[str, object]]:
-    """Return ``diff:<metric>`` and ``p:<metric>`` rows for arm A minus arm B."""
+    """Return ``diff:<metric>`` and ``p:<metric>`` rows for arm A minus arm B.
+
+    When the rows are probes, pass each row's image (the ``probe_sample_ids`` array of
+    ``outcomes.npz``) as ``clusters`` so the bootstrap resamples images, not probes.
+    """
     rows: list[dict[str, object]] = []
     for metric_name, metric in metrics.items():
         diff, low, high, p_value = paired_bootstrap_test(
-            metric, outcomes_a, outcomes_b, n_resamples=n_resamples, alpha=alpha, seed=seed
+            metric,
+            outcomes_a,
+            outcomes_b,
+            n_resamples=n_resamples,
+            alpha=alpha,
+            seed=seed,
+            clusters=clusters,
         )
         rows.append(
             {

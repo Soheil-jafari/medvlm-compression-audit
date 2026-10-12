@@ -1,12 +1,15 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 34 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 35 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
+0. Bug hunt requested by Soheil (iteration 35 onwards): evaluation and statistics fixed (split
+   files, image-level bootstrap, bootstrap memory); data, training, pruning, budgets, recovery and
+   efficiency next. Then quantization (S08).
 1. Student: Qwen2.5-VL-3B chosen with checks (D05 amendment, 2026-10-12; fallback Qwen3-VL-2B).
    After RC-M1 and RC-S0, propose the image side, the G2 threshold and the training length from
    the measured speed, and pin the revision.

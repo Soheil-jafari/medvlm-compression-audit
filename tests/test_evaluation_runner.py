@@ -328,6 +328,29 @@ def test_stage_writes_every_suite_and_the_outcomes(dataset: tuple[Path, list[VQA
     assert outcomes["probe_findings"].dtype.kind == "U"
 
 
+def test_validation_and_test_scores_go_to_separate_files(
+    dataset: tuple[Path, list[VQASample]],
+) -> None:
+    root, samples = dataset
+    run = RunContext("E2", seed=0)
+    config = eval_config(root, suites=["clinical"])
+    run_evaluation(config, run, model=Detector(min_pixels=20), samples=samples)
+    test_config = eval_config(root, suites=["clinical"], split="test")
+    (root / "weights.yaml").write_text(  # eval_config re-locks the split; freeze it here
+        yaml.safe_dump({"preregistration": {"frozen_on": "2026-11-01"}})
+    )
+    run_evaluation(test_config, run, model=Detector(min_pixels=1), samples=samples)
+    folder = root / "results" / "E2" / "nobudget" / "seed0"
+    val = pd.read_csv(folder / "metrics.csv").set_index("metric")["value"]
+    test = pd.read_csv(folder / "metrics_test.csv").set_index("metric")["value"]
+    # the test pass (a better reader) did not overwrite the validation rows
+    assert val["sensitivity:polyp"] == pytest.approx(5 / 6)
+    assert test["sensitivity:polyp"] == 1.0
+    outputs = root / "outputs" / "E2" / "nobudget" / "seed0"
+    assert (outputs / "outcomes.npz").is_file() and (outputs / "outcomes_test.npz").is_file()
+    assert validate_results_tree(root / "results") == []
+
+
 def test_rerunning_replaces_rows_and_a_better_reader_scores_higher(
     dataset: tuple[Path, list[VQASample]],
 ) -> None:
