@@ -8,7 +8,7 @@ in `docs/agent/INBOX.md`; the agent then records the decision in
 |---|---|---|---|
 | D01 | Teacher / student pair | S01 | not written yet |
 | D02 | Datasets and their roles; first finding list | S01 | not written yet |
-| D03 | Code licence | S01 | not written yet |
+| [D03](D03_licence.md) | Code licence | S01 | written 2026-10-12, waiting on the team |
 | D04 | Gate 1 thresholds | S05 | not written yet |
 
 Memo layout: question; options; evidence for each option with verified sources

@@ -18,7 +18,7 @@ on verified evidence, and written into the configs.
   patient/procedure IDs, official splits, image-overlap risks between datasets, and
   which role it can fill (main QA, masks, rare findings, stress test, external test).
   End with a proposed role assignment and a first draft of the finding list.
-- [ ] [agent] **D03 memo** `docs/decisions/D03_licence.md`: short comparison of
+- [x] [agent] **D03 memo** `docs/decisions/D03_licence.md`: short comparison of
   code licences (MIT, Apache-2.0, BSD-3-Clause). The repository is already public,
   so this is urgent.
 - [ ] [team] Answer D01, D02 and D03 in `docs/agent/INBOX.md`.
