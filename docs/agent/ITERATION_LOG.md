@@ -333,3 +333,25 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S04 model loading for the teacher and the ten students (CPU tests on tiny
   random models), and the RC-M1 smoke-test card; S12 method and related-work drafts.
 - Needs the team: run RC-D1 (Farzan) and commit `results/data/summary.csv`.
+
+## Iteration 23: 2026-10-12 (interactive)
+- Stage / item: S04, unit enumeration and removal surgery; S12, method draft.
+- Did: new `compression/pruning/surgery.py` (find the language decoder stack,
+  remove layers with re-indexing, remove GQA groups, remove MLP channels, and the
+  matching ablation context managers for skipping a layer, zeroing a group and
+  zeroing channels). `units.py` now enumerates layers, GQA groups and MLP channel
+  groups with channel ranges, and `validate_removal_set` checks the removal rules.
+  `apply.py` removes units physically (groups and channels first, then layers) and
+  verifies the parameter drop. New `tests/test_surgery.py` on tiny random Qwen2,
+  Qwen3 and Qwen2.5-VL models: ablation gives the same logits as physical removal,
+  the parameter drop equals the sum of the unit sizes, and generation still works
+  after mixed removal. `heavy` pytest marker registered. `paper/sections/03_method.tex`
+  rewritten; appendix section on student selection added; bibliography entries for
+  successive halving, Hyperband and Wanda added from the arXiv abstract pages
+  (venue and page fields still marked TODO).
+- Verified: ruff check, ruff format --check, pytest (503 passed), latexmk -pdf with
+  no undefined references.
+- Commit: see `git log` on `research-loop`.
+- Next: S04 model loading (`models/loading.py`), the wrapper with yes/no scoring,
+  and the RC-M1 smoke-test card.
+- Needs the team: nothing new.

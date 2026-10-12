@@ -1,15 +1,16 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 22 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 23 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S03 (data pipeline); S02 done
+**Current stage:** S04 (model wrappers and unit surgery); S03 waiting on RC-D1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
 1. S04: model loading and yes/no scoring for the teacher and the ten student
    candidates, tested on CPU with tiny randomly initialised models; run card RC-M1.
-2. S12 work-ahead: method and related-work drafts.
+   (Unit enumeration and physical removal are done and tested.)
+2. S12 work-ahead: related-work draft with verified references.
 
 ## Waiting on the team
 
@@ -29,7 +30,7 @@
 | S01 | Decisions | done (dataset-access confirmations pending) | - |
 | S02 | CPU infrastructure | done | - |
 | S03 | Data pipeline | waiting on RC-D1 | team runs RC-D1 |
-| S04 | Model wrappers and unit surgery | not started | - (teacher decided) |
+| S04 | Model wrappers and unit surgery | in progress (surgery done; loading and wrapper left) | - |
 | S05 | Teacher: Gate 1, cache | not started | S03, S04 |
 | S05b | Student selection 10 -> 5 -> 3 -> 1 | pool fixed: 10 Qwen-family models | S03, S04; freeze after RC-S0 |
 | S06 | Students E1, E2, budget reference | not started | S05, S05b |

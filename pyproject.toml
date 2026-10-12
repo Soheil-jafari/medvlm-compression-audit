@@ -65,3 +65,6 @@ known-first-party = ["medcompress"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra"
+markers = [
+    "heavy: needs torch and transformers (tiny random models on CPU); skipped when they are not installed",
+]

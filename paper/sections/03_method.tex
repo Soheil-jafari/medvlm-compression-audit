@@ -2,15 +2,43 @@
 \label{sec:method}
 
 \subsection{Study design}
-% TODO: one teacher (E0), one student (E1, E2); every compression arm starts from E2
-% (or E7 for E8, E0 for E9); all arms are compared at the same MEASURED budget
-% (peak memory or latency as a fraction of E2), not parameter count.
-\todo{study design}
+We compress one generative medical vision-language model in several ways and
+compare the results at the same \emph{measured} footprint. A teacher
+(\expid{E0}) answers every training question once; its answers and top-$k$ token
+probabilities are cached. A smaller student that shares the teacher's tokenizer is
+trained on the ground-truth answers alone (\expid{E1}) or with offline distillation
+from the cached teacher outputs (\expid{E2}). \expid{E2} is the starting point of every
+compression arm, and its measured peak inference memory defines the budgets: B1, B2
+and B3 are fixed fractions of it, set in the pre-registration before any
+compression run. Budget-matched arms must land within a pre-registered tolerance of
+the target on both sides, measured on the same hardware with the same protocol;
+parameter counts are reported but never used for matching. Every training arm is
+run with three seeds. All decisions that could favour one arm (finding list, finding
+weights, lesion-size strata, budgets, statistical tests, the rule that picks the
+best generic pruning arm) are frozen before the first compression run.
+
+\paragraph{Choosing the student.}
+The student is chosen before any compression run, on the validation split only, by
+successive halving~\cite{jamieson2016successivehalving,li2018hyperband} over ten
+candidate architectures that share the teacher's tokenizer
+(Appendix~\ref{app:student-selection}). All ten receive the same short fine-tune and
+evaluation; the best five are retrained with the full student recipe, the best
+three with the exact \expid{E2} recipe and two seeds, and one is kept. The selection
+score weights finding-probe macro-F1, small-finding recall and image reliance
+(0.4 / 0.3 / 0.3), because a student that already misses small findings, or ignores
+the image, leaves compression nothing to remove.
 
 \subsection{Compression arms}
-% TODO: describe E3 (PTQ: W8, W4 via GPTQ/AWQ, W8A8), E4 (QAKD, GRACE-style),
-% E5 (magnitude, activation, Taylor), E6 (output-similarity layer pruning), E7 (ours),
-% E8 (E7 + 4-bit), E9 (teacher 4-bit).
+Table~\ref{tab:ladder} lists the arms. Post-training quantization (\expid{E3}) is
+applied to \expid{E2} at 8-bit and 4-bit weights and, where supported, 8-bit weights
+and activations; quantization-aware distillation (\expid{E4}) follows
+GRACE~\cite{chen_grace}. Generic structured pruning (\expid{E5}) ranks units by
+weight magnitude, activation-weighted magnitude~\cite{sun_wanda} or a first-order
+Taylor estimate; output-similarity pruning (\expid{E6}) removes the decoder layers
+whose removal changes the output least~\cite{khan_compression_medical_mllm}. \expid{E7} is our
+criterion, \expid{E8} adds 4-bit quantization to \expid{E7}, and \expid{E9} is the
+teacher at 4-bit (supplementary). \todo{quantization backends and settings once
+fixed}
 
 \begin{table}[t]
   \centering
@@ -36,20 +64,48 @@
   \end{tabular}
 \end{table}
 
+\subsection{Prunable units}
+Units are taken from the language model only; the vision encoder and the
+vision-language projector are kept. A unit is a whole decoder layer, an attention
+\emph{group} or an MLP channel group. Attention groups follow grouped-query
+attention: group $g$ is key-value head $g$ together with the query heads that share
+it, so removing a group never leaves a query head without its key and value. MLP
+channel groups are contiguous blocks of intermediate channels of a pre-registered
+size. A removal set is valid when every remaining layer keeps at least one attention
+group and one channel group, no unit is counted twice, and layers that inject
+visual features (where the architecture has them) are protected.
+
 \subsection{Clinically weighted pruning criterion}
-% TODO: units (layers, GQA-consistent head groups, MLP channel groups; projector kept),
-% probes, Delta variants, weights, procedure. Keep consistent with
-% src/medcompress/compression/pruning/criteria/clinical.py.
-For each candidate unit $j$ we compute
+Let $C$ be the pre-registered finding list and $X_{\mathrm{cal}}$ a calibration set
+of training images. For every finding $c$ and image $x$ we ask a fixed probe
+$q_c$ = ``Is there a $\langle c \rangle$ in this image? Answer yes or no.'' and read
+the log-probabilities of the two answers from a single forward pass (no
+generation). For each candidate unit $j$,
 \begin{equation}
   I_j = \sum_{c \in C} w_c \, \frac{1}{|X_{\mathrm{cal}}|} \sum_{x \in X_{\mathrm{cal}}} \Delta_j(c, x),
   \label{eq:importance}
 \end{equation}
-where $\Delta_j(c, x) = \log p_\theta(y_{c,x} \mid x, q_c) - \log p_{\theta \setminus j}(y_{c,x} \mid x, q_c)$
-is the drop in log-probability of the correct yes/no answer to the probe $q_c$ when
-unit $j$ is ablated, and $w_c = \min(1/\pi_c, \kappa)\, \tau(c)$ combines capped
-inverse prevalence and a pre-registered clinical importance tier.
-\todo{full definitions, KL variant, procedure}
+where
+\begin{equation}
+  \Delta_j(c, x) = \log p_\theta(y_{c,x} \mid x, q_c) - \log p_{\theta \setminus j}(y_{c,x} \mid x, q_c)
+\end{equation}
+is the drop in log-probability of the \emph{correct} answer $y_{c,x}$ when unit $j$
+is ablated (layer skipped, attention group or channel group zeroed). A variant
+(\expid{A5}) replaces $\Delta_j$ by the Kullback--Leibler divergence between the
+yes/no answer distributions before and after ablation, which measures change in
+prediction regardless of correctness. The finding weight is
+\begin{equation}
+  w_c = \min\!\left(\frac{1}{\pi_c}, \kappa\right) \tau(c),
+\end{equation}
+with $\pi_c$ the training-split prevalence, $\kappa$ a cap and $\tau(c)$ the
+multiplier of the finding's pre-registered clinical-importance tier; \expid{A1}
+sets $w_c = 1$ and \expid{A2} drops the tier. Units are removed in ascending order
+of $I_j$ (ties broken by unit identifier) until the measured budget is met. Because
+the footprint does not grow as more units are removed, the smallest sufficient
+removal prefix is found by bisection, which needs about $\log_2 |U| + 2$
+measurements. Ablation for scoring and physical removal are equivalent by
+construction: skipping a layer, or zeroing a group's inputs to the output
+projection, gives the same outputs as deleting the corresponding weights.
 
 \begin{figure}[t]
   \centering
@@ -61,10 +117,16 @@ inverse prevalence and a pre-registered clinical importance tier.
 \end{figure}
 
 \subsection{Shared recovery}
-% TODO: identical LoRA + offline KD recovery for all pruning arms (E5, E6, E7,
-% A1-A6): same data subset, steps and hyper-parameters; recovery config fingerprint.
-\todo{recovery}
+Every pruning arm (\expid{E5}, \expid{E6}, \expid{E7} and \expid{A1}--\expid{A6})
+is repaired with the same recovery: LoRA fine-tuning with offline distillation from
+the cached teacher outputs, on the same data subset, for the same number of steps
+and with the same hyper-parameters, checked by a configuration fingerprint.
+\todo{recovery hyper-parameters once fixed}
 
 \subsection{Mask audit}
-% TODO: lesion masked vs area-matched random region masked; lesion-mask effect.
-\todo{mask audit}
+To test whether a compressed model still looks at the lesion, we mask the lesion in
+images with a positive, mask-annotated finding and record how often the yes/no
+answer flips. As a control we mask a region of exactly the same shape and area,
+moved to a random position that does not overlap the lesion. The lesion-mask
+effect is the flip rate with the lesion masked minus the flip rate with the control
+region masked; a model that relies on the lesion has a large positive effect.
