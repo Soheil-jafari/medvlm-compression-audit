@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 3
+**Last updated:** 2026-10-12, iteration 4 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S01 (decisions), with S02 worked in parallel
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
@@ -26,7 +26,6 @@
 | 2 | Answer D03 (licence): memo `docs/decisions/D03_licence.md`; also confirm full names for the copyright line and any institutional licence or IP policy | team | 2026-10-12 |
 | 2b | CI on `main` is red (import error fixed on `research-loop` in a7ec704); merging `research-loop` into `main` turns it green | Soheil | 2026-10-12 |
 | 3 | Answer D01 (teacher) and D02 (datasets) once the memos are up | team | - |
-| 3b | Answer D05 (student selection): Q2 size rule and Q3 score weights now; Q1 tokenizer rule once D01 is decided | team | 2026-10-12 |
 | 4 | Each member confirms own access to the chosen datasets | all | - |
 
 ## Stages
@@ -39,7 +38,7 @@
 | S03 | Data pipeline | not started | S01 datasets |
 | S04 | Model wrappers and unit surgery | not started | S01 model pair |
 | S05 | Teacher: Gate 1, cache | not started | S03, S04 |
-| S05b | Student selection 10 -> 5 -> 3 -> 1 | protocol drafted (D05) | D01 teacher, D05 answers; S03, S04 |
+| S05b | Student selection 10 -> 5 -> 3 -> 1 | D05 answered (teacher family only, keep size, weights accepted) | D01 teacher fixes the pool; S03, S04 |
 | S06 | Students E1, E2, budget reference | not started | S05, S05b |
 | S07 | Pre-registration freeze | not started | S03, S06 |
 | S08 | Quantization E3, E4, E9 | not started | S07 |

@@ -63,3 +63,15 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: D01 teacher memo, then D02; S02 statistics in parallel.
 - Needs the team: answer D05 (Q2, Q3 now; Q1 after D01).
+
+## Iteration 4: 2026-10-12 (interactive)
+- Stage / item: inbox, D05 answers and run mode.
+- Did: recorded the D05 answers (students only from the teacher's family, keep
+  size, weights 0.4 / 0.3 / 0.3) in D05, `configs/student_selection.yaml`, the
+  inbox and the decisions log. The scheduled weekday run was removed at the team's
+  request; `docs/agent/PROTOCOL.md` now describes back-to-back interactive
+  iterations.
+- Verified: pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: D01 teacher memo; then fix the student pool from the teacher's family.
+- Needs the team: nothing new.

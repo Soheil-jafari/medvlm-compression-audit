@@ -7,6 +7,12 @@ decides, runs GPU jobs on its own dataset access, and merges.
 
 Target: `docs/FINAL_GOAL.md`. Live state: `docs/agent/STATUS.md`.
 
+**Run mode (since 2026-10-12):** iterations run back to back in an interactive
+session started by the team, until the team stops it. There is no scheduled run.
+When an iteration needs a team decision and a team member is present, the agent
+asks in the session and records the answer in the inbox; otherwise it moves on to
+the next doable item.
+
 ## Branches
 
 - The agent works only on the branch **`research-loop`**. It never pushes to

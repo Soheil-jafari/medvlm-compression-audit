@@ -7,10 +7,11 @@ student_selection:
   memo: docs/decisions/D05_student_selection.md
   frozen_on: TODO
   split: val
-  tokenizer_rule: TODO          # A (recommended): all 10 in R1, teacher-compatible only from R2
-                                # B: sequence-level distillation for all; C: compatible only from R1
+  tokenizer_rule: C             # decided 2026-10-12: teacher-family (same tokenizer) models only, in every round
+                                # (A: all in R1, compatible from R2; B: sequence-level distillation for all)
 
-  # Round 1 pool: one model per architecture family.
+  # Round 1 pool: one model per architecture. PROVISIONAL until D01 fixes the teacher;
+  # then only teacher-family models stay and the pool is topped up (D05 decision).
   candidates:
     - models/qwen2_5_vl_3b_student.yaml
     - models/qwen3_vl_2b_student.yaml

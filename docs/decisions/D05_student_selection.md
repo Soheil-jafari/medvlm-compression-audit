@@ -1,6 +1,21 @@
 # D05: Student selection (10 -> 5 -> 3 -> 1)
 
-**Status:** waiting on the team. Answer in `docs/agent/INBOX.md`.
+**Status:** answered 2026-10-12 (Soheil). Protocol freeze waits for the Round 0
+numbers (`train_examples`, `compute_unit_b`, G2 threshold, image side).
+
+## Decision (2026-10-12)
+
+- **Q1: teacher family only.** Only models from the teacher's family, i.e. sharing
+  its tokenizer, are candidates at all (stricter than option C below: no
+  other-family model runs in any round). With a Qwen teacher this keeps candidates
+  1, 2, 4, 5, 6 and 10; the pool is topped up to 10 with further verified
+  architectures from the same tokenizer family. If fewer than 10 exist, Round 1
+  starts with all of them and still keeps 5.
+- **Q2: keep the size.** Each Round 2 model is the Round 1 checkpoint retrained.
+- **Q3: weights accepted.** S = 0.4 probe macro-F1 + 0.3 small-finding recall +
+  0.3 image reliance.
+
+The final pool is fixed once D01 (teacher) is decided.
 **Stage:** S05b (`docs/stages/S05b_student_selection.md`). **Prepared:** 2026-10-12.
 **Depends on:** D01 (teacher) for the tokenizer rule; D02 (datasets) for the
 validation split; Gate 1 for Rounds 2-3.

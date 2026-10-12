@@ -19,6 +19,10 @@ must be logged here.
   5 rebuilt as new models, then top 3, then one. Protocol drafted in
   `docs/decisions/D05_student_selection.md` (answers pending); D01 now covers the
   teacher only.
+- **2026-10-12 (Soheil):** D05 answered: students only from the teacher's family
+  (same tokenizer), each winner keeps its size, score weights 0.4 / 0.3 / 0.3.
+- **2026-10-12 (Soheil):** no scheduled runs; the research loop runs back to back in
+  an interactive session until the team stops it.
 
 ## Open decisions
 
