@@ -1,6 +1,9 @@
 # D01: Teacher
 
-**Status:** waiting on the team. Answer in `docs/agent/INBOX.md` (or in the session).
+**Status:** decided 2026-10-12 (Soheil): **T1**, Qwen2.5-VL-7B-Instruct + SimulaMet
+Kvasir-VQA-x1 LoRA. Optional at the end, if budget remains: rerun the key comparison
+with a fine-tuned Qwen3-VL-8B teacher to show the conclusion does not depend on the
+teacher.
 **Stage:** S01. **Prepared:** 2026-10-12 (iteration 5).
 **Facts:** read from Hugging Face API records, `config.json`, `args.json` and model
 cards on 2026-10-12. Links in the tables.

@@ -21,6 +21,10 @@ must be logged here.
   teacher only.
 - **2026-10-12 (Soheil):** D05 answered: students only from the teacher's family
   (same tokenizer), each winner keeps its size, score weights 0.4 / 0.3 / 0.3.
+- **2026-10-12 (Soheil):** D01 decided: teacher = Qwen2.5-VL-7B-Instruct
+  (revision cc594898) + SimulaMet/Qwen2.5-VL-KvasirVQA-x1-ft LoRA (revision 79e77755).
+  Optional robustness check at the end: a fine-tuned Qwen3-VL-8B teacher.
+  Consequence (D05): the student pool is 10 Qwen-tokenizer models.
 - **2026-10-12 (Soheil):** no scheduled runs; the research loop runs back to back in
   an interactive session until the team stops it.
 
@@ -29,8 +33,7 @@ must be logged here.
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
 | Medical domain | GI endoscopy (lead) vs retinal fundus | team | TODO |
-| Teacher | Qwen2.5-VL-7B (+ published Kvasir-VQA-x1 adapter); Qwen3-VL-8B; MedGemma family (memo D01) | Soheil | TODO |
-| Student selection protocol | 10 candidates, 10 -> 5 -> 3 -> 1 on validation; tokenizer rule, size rule, score weights (memo D05) | team | TODO |
+| Student selection freeze | Set `train_examples`, `compute_unit_b`, G2 threshold and image side from RC-S0, then freeze (memo D05) | team | after RC-S0 |
 | Datasets | Kvasir-VQA-x1, Kvasir-SEG, ColonVQA/ColonEval, ColonPert, EndoBench; IDRiD, FGADR (retinal) | Farzan | TODO |
 | Finding list and weights | Pre-registered table, frozen before E7 | team | TODO |
 | Budgets and timing hardware | B1-B3 fractions, metric (memory vs latency), protocol, rented GPU type | Amir | TODO |

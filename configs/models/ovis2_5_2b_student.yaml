@@ -17,7 +17,7 @@ model:
     language_model: "Qwen3-1.7B, 28 layers, hidden 2048, 16 heads / 8 KV heads"
     tokenizer_family: qwen
     vocab_size: 151936
-  tokenizer_shared_with: TODO
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # same vocab.json; merges.txt differs only by a version header; runtime check in S04
   adapter: null
   flags:
     - "custom architecture name in config (remote code likely)"

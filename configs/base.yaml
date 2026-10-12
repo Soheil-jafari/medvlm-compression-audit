@@ -24,8 +24,8 @@ components:
   budgets: budgets.yaml
   finding_weights: preregistration/finding_weights.yaml
   candidate_model_pairs: models/candidate_pairs.yaml
-  teacher: TODO                           # one of configs/models/*_teacher.yaml
-  student: TODO                           # must share the teacher's tokenizer
+  teacher: models/qwen2_5_vl_7b_teacher.yaml   # decided 2026-10-12 (D01)
+  student: TODO                           # chosen by the selection in S05b (D05)
   datasets:
     train_qa: TODO                        # e.g. one of configs/data/*.yaml
     masks: TODO

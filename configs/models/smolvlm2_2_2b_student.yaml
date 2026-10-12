@@ -20,4 +20,4 @@ model:
   tokenizer_shared_with: TODO
   adapter: null
   flags: []
-  notes: "Selection candidate 7 (D05). Not tokenizer-compatible with any candidate teacher."
+  notes: "NOT ELIGIBLE since 2026-10-12 (D01 Qwen teacher + D05 teacher-family rule). Was selection candidate 7 (D05). Not tokenizer-compatible with any candidate teacher."

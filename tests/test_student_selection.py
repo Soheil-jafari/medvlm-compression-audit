@@ -49,7 +49,17 @@ def test_score_weights_sum_to_one() -> None:
 
 def test_reserves_present_and_distinct() -> None:
     reserves = SELECTION["reserves"]
-    assert len(reserves) == 5 and len(set(reserves)) == 5
+    assert len(reserves) >= 3 and len(set(reserves)) == len(reserves)
+
+
+@pytest.mark.parametrize("path", SELECTION["candidates"])
+def test_candidates_share_the_teacher_tokenizer_family(path: str) -> None:
+    teacher = load_config(CONFIG_ROOT / "models" / "qwen2_5_vl_7b_teacher.yaml")["model"]
+    student = load_config(CONFIG_ROOT / path)["model"]
+    assert SELECTION["tokenizer_rule"] == "C"
+    assert (
+        student["architecture"]["tokenizer_family"] == teacher["architecture"]["tokenizer_family"]
+    )
 
 
 @pytest.mark.parametrize("path", SELECTION["candidates"])

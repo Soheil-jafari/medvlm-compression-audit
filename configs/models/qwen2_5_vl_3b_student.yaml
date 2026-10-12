@@ -17,7 +17,7 @@ model:
     language_model: "Qwen2.5 decoder, 36 layers, hidden 2048, 16 heads / 2 KV heads"
     tokenizer_family: qwen
     vocab_size: 151936
-  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # TODO: verify the tokenizers are identical
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # tokenizer files byte-identical to the teacher's (hub blob hashes, 2026-10-12)
   adapter: null
   flags:
     - "research-only licence (qwen-research)"

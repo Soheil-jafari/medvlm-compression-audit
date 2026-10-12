@@ -17,7 +17,7 @@ model:
     language_model: "Qwen3 decoder, 28 layers, hidden 2048, 16 heads / 8 KV heads"
     tokenizer_family: qwen
     vocab_size: 151936
-  tokenizer_shared_with: models/qwen3_vl_8b_teacher.yaml   # TODO: verify the tokenizers are identical
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # same vocab.json and merges.txt as the teacher; extra special tokens; runtime check in S04
   adapter: null
   flags: []
   notes: "Selection candidate 2 (D05)."

@@ -17,7 +17,7 @@ model:
     language_model: "Qwen2-family decoder, 28 layers, hidden 1536, 12 heads / 2 KV heads"
     tokenizer_family: qwen
     vocab_size: 151936
-  tokenizer_shared_with: TODO
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # vocab.json and merges.txt byte-different (content TODO); runtime check in S04
   adapter: null
   flags:
     - "research-only licence (apple-amlr)"

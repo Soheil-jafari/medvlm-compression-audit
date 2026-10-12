@@ -87,3 +87,18 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: team decides D01; then fix the student pool from the teacher's family.
 - Needs the team: D01.
+
+## Iteration 6: 2026-10-12 (interactive)
+- Stage / item: S01, D01 decision and the final student pool.
+- Did: recorded D01 = T1 (Qwen2.5-VL-7B + Kvasir-VQA-x1 LoRA, revisions pinned; the
+  teacher config is `DECIDED`; optional Qwen3-VL-8B teacher check added to
+  FINAL_GOAL as not required). Applied the teacher-family rule: four candidates
+  dropped (other tokenizers), four Qwen-family architectures added after checking
+  their hub records and tokenizer hashes (LLaVA-OneVision-1.5-4B, MedVLM-R1,
+  SAIL-VL2-2B, LLaVA-OneVision-0.5B); reserves replaced with Qwen-family models.
+  Tests now allow `DECIDED` configs with provenance and a pinned revision, and
+  check that every candidate shares the teacher's tokenizer family.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: D02 datasets memo; then S02.
+- Needs the team: D03 (licence), D02 once written.

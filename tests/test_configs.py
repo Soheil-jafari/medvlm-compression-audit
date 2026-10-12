@@ -23,6 +23,7 @@ from medcompress.data.probes import format_probe_question
 from medcompress.registry import REGISTRY, SCORE_UNITS, TRAINING_SEEDS
 
 CONFIG_ROOT = config_root()
+DECIDED_STATUS = "DECIDED"
 ALL_YAML = sorted(CONFIG_ROOT.rglob("*.yaml"))
 
 
@@ -112,7 +113,10 @@ def test_candidate_configs_are_marked_and_not_guessed(path: Path) -> None:
         return
     section = config.get("model") or config.get("dataset")
     assert section is not None
-    assert section["status"] == CANDIDATE_STATUS
+    assert section["status"] in (CANDIDATE_STATUS, DECIDED_STATUS)
+    if section["status"] == DECIDED_STATUS:
+        assert section.get("verified_on") and section.get("verified_from")
+        assert not str(section.get("revision", "TODO")).startswith("TODO"), "pin a revision"
     verified = bool(section.get("verified_on")) and str(
         section.get("verified_from") or ""
     ).startswith("https://")

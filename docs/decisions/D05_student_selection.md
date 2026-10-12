@@ -7,15 +7,14 @@ numbers (`train_examples`, `compute_unit_b`, G2 threshold, image side).
 
 - **Q1: teacher family only.** Only models from the teacher's family, i.e. sharing
   its tokenizer, are candidates at all (stricter than option C below: no
-  other-family model runs in any round). With a Qwen teacher this keeps candidates
-  1, 2, 4, 5, 6 and 10; the pool is topped up to 10 with further verified
-  architectures from the same tokenizer family. If fewer than 10 exist, Round 1
+  other-family model runs in any round). With the Qwen teacher (D01) six of the first
+  ten stayed and four more Qwen-family architectures were added (table below). If fewer than 10 exist, Round 1
   starts with all of them and still keeps 5.
 - **Q2: keep the size.** Each Round 2 model is the Round 1 checkpoint retrained.
 - **Q3: weights accepted.** S = 0.4 probe macro-F1 + 0.3 small-finding recall +
   0.3 image reliance.
 
-The final pool is fixed once D01 (teacher) is decided.
+D01 was decided the same day (T1), and the pool below is final.
 **Stage:** S05b (`docs/stages/S05b_student_selection.md`). **Prepared:** 2026-10-12.
 **Depends on:** D01 (teacher) for the tokenizer rule; D02 (datasets) for the
 validation split; Gate 1 for Rounds 2-3.
@@ -46,50 +45,44 @@ common test, rebuild the top 5 as new models, keep the top 3, then pick one.
   2018): many cheap trials, then fewer and more expensive ones, with roughly equal
   compute per round.
 
-## Candidates
+## Candidates (final pool, fixed 2026-10-12 after D01)
 
-One model per architecture family, all at or below about 5B stored parameters so
-that LoRA training can fit one 16 GB T4 in fp16 (checked in Round 0).
+The teacher is Qwen2.5-VL-7B with the Kvasir-VQA-x1 LoRA (D01), and only
+teacher-family models may compete (decision above), so every candidate uses the
+Qwen tokenizer. One model per architecture, all at or below about 5B stored
+parameters so that LoRA training can fit one 16 GB T4 in fp16 (checked in Round 0).
+Tokenizer column: hub blob hashes of `vocab.json` / `merges.txt` compared with the
+teacher's (D01 has the full table); the runtime check is in S04.
 
-| # | Model (hub ID) | Stored params | Vision side | Connector / visual tokens | Language model | Tokenizer (vocab) | Licence (hub tag) | What it adds |
+| # | Model (hub ID) | Stored params | Vision side | Connector / visual tokens | Language model | Tokenizer vs teacher | Licence (hub tag) | What it adds |
 |---|---|---|---|---|---|---|---|---|
-| 1 | [Qwen2.5-VL-3B-Instruct](https://huggingface.co/api/models/Qwen/Qwen2.5-VL-3B-Instruct) | 3.75B | Qwen ViT, 32 layers x 1280, native resolution | MLP merger | Qwen2.5 decoder, 36 layers, 16 heads / 2 KV heads | Qwen (151,936 rows; the Qwen2.5-VL-7B teacher has 152,064, so ids must be aligned) | qwen-research | Same family as the lead teacher: the safe baseline |
-| 2 | [Qwen3-VL-2B-Instruct](https://huggingface.co/api/models/Qwen/Qwen3-VL-2B-Instruct) | 2.13B | Qwen3-VL ViT, 24 x 1024, patch 16 | DeepStack: features from ViT layers 5, 11, 17 fed into the LLM | Qwen3 decoder, 28 layers, 16 / 8 | Qwen (151,936) | apache-2.0 | Multi-level visual features (may help small lesions) |
-| 3 | [Qwen3.5-2B](https://huggingface.co/api/models/Qwen/Qwen3.5-2B) | 2.27B | ViT, 24 x 1024, patch 16 | Vision built in from pre-training (per release notes, TODO: verify) | Hybrid decoder, 24 layers: 18 linear-attention + 6 full-attention (every 4th) | New Qwen tokenizer (248,320) | apache-2.0 | Non-standard attention; newest Qwen |
-| 4 | [InternVL3.5-2B](https://huggingface.co/api/models/OpenGVLab/InternVL3_5-2B) | 2.35B | InternViT-300M, 24 x 1024, 448 px tiles | Pixel shuffle (0.5) + MLP | Qwen3-1.7B, 28 layers, 16 / 8 | Qwen (151,936) | apache-2.0 | High-resolution tiling |
-| 5 | [Ovis2.5-2B](https://huggingface.co/api/models/AIDC-AI/Ovis2.5-2B) | 2.57B | SigLIP2 NaViT (so400m, patch 16), native resolution | Visual embedding table (65,536 visual words) | Qwen3-1.7B, 28 layers, 16 / 8 | Qwen (151,936) | apache-2.0 | A different way of turning patches into tokens |
-| 6 | [FastVLM-1.5B](https://huggingface.co/api/models/apple/FastVLM-1.5B) | 1.91B | MobileCLIP-L 1024 (FastViTHD hybrid conv encoder) | 2-layer MLP; few visual tokens | Qwen2-family decoder, 28 layers, 12 / 2 | Qwen (151,936) | apple-amlr (research only) | Efficient encoder with few tokens: does it miss small lesions? |
-| 7 | [SmolVLM2-2.2B-Instruct](https://huggingface.co/api/models/HuggingFaceTB/SmolVLM2-2.2B-Instruct) | 2.25B | SigLIP, 27 layers, 384 px, patch 14 | Pixel shuffle x3 + MLP (strong token compression) | SmolLM2-1.7B, 24 layers | SmolLM2 (49,280) | apache-2.0 | Heavy visual-token compression, small vocabulary |
-| 8 | [LFM2.5-VL-1.6B](https://huggingface.co/api/models/LiquidAI/LFM2.5-VL-1.6B) | 1.60B | SigLIP2 NaFlex 400M, 27 layers, 512 px tiles + thumbnail | 2-layer MLP, downsample 2 | LFM2.5-1.2B hybrid, 16 layers: 10 short-convolution + 6 attention | LFM (65,536) | lfm1.0 (read the terms) | A language model that is not a plain transformer |
-| 9 | [MedGemma 1.5 4B-it](https://huggingface.co/api/models/google/medgemma-1.5-4b-it) | 4.30B | SigLIP pre-trained on medical images (per model card) | 256 tokens per image at 896 x 896 (per model card) | Gemma 3 4B decoder | Gemma (config is gated, TODO: verify) | Health AI Developer Foundations terms; gated | Medical pre-training, Gemma family |
-| 10 | [Hulu-Med-4B](https://huggingface.co/api/models/ZJU-AI4H/Hulu-Med-4B) | 4.83B | SigLIP-based encoder with 2D RoPE, 27 x 1152, patch 14 | 2-layer MLP; medical-aware visual-token reduction (per paper) | Qwen3-4B dimensions: 36 layers, 2560, 32 / 8 | Qwen (151,936) | apache-2.0; needs remote code | Medical pre-training **and** a Qwen tokenizer |
+| 1 | [Qwen2.5-VL-3B-Instruct](https://huggingface.co/api/models/Qwen/Qwen2.5-VL-3B-Instruct) | 3.75B | Qwen ViT, 32 layers x 1280, native resolution | MLP merger | Qwen2.5 decoder, 36 layers, 16 heads / 2 KV heads | identical files | qwen-research | The teacher's own smaller sibling: the safe baseline |
+| 2 | [Qwen3-VL-2B-Instruct](https://huggingface.co/api/models/Qwen/Qwen3-VL-2B-Instruct) | 2.13B | Qwen3-VL ViT, 24 x 1024, patch 16 | DeepStack: features from ViT layers 5, 11, 17 fed into the LLM | Qwen3 decoder, 28 layers, 16 / 8 | same vocab and merges; extra special tokens | apache-2.0 | Multi-level visual features (may help small lesions) |
+| 3 | [InternVL3.5-2B](https://huggingface.co/api/models/OpenGVLab/InternVL3_5-2B) | 2.35B | InternViT-300M, 24 x 1024, 448 px tiles | Pixel shuffle (0.5) + MLP | Qwen3-1.7B, 28 layers, 16 / 8 | same vocab; merges differ by a header line | apache-2.0 | High-resolution tiling |
+| 4 | [Ovis2.5-2B](https://huggingface.co/api/models/AIDC-AI/Ovis2.5-2B) | 2.57B | SigLIP2 NaViT (so400m, patch 16), native resolution | Visual embedding table (65,536 visual words) | Qwen3-1.7B, 28 layers, 16 / 8 | same vocab; merges differ by a header line | apache-2.0 | A different way of turning patches into tokens |
+| 5 | [FastVLM-1.5B](https://huggingface.co/api/models/apple/FastVLM-1.5B) | 1.91B | MobileCLIP-L 1024 (FastViTHD hybrid conv encoder) | 2-layer MLP; few visual tokens | Qwen2-family decoder, 28 layers, 12 / 2 | files byte-different (TODO: compare contents) | apple-amlr (research only) | Efficient encoder with few tokens: does it miss small lesions? |
+| 6 | [Hulu-Med-4B](https://huggingface.co/api/models/ZJU-AI4H/Hulu-Med-4B) | 4.83B | SigLIP-based encoder with 2D RoPE, 27 x 1152, patch 14 | 2-layer MLP; medical-aware visual-token reduction (per paper) | Qwen3-4B dimensions: 36 layers, 2560, 32 / 8 | vocab byte-different (TODO), merges as Qwen3 | apache-2.0; needs remote code | Medical pre-training |
+| 7 | [LLaVA-OneVision-1.5-4B-Instruct](https://huggingface.co/api/models/lmms-lab/LLaVA-OneVision-1.5-4B-Instruct) | 4.74B | RICE-ViT (region-aware), 24 x 1024, patch 14 | Spatial merge 2 | Qwen3-4B dimensions: 36 layers, 2560, 32 / 8 | same vocab; merges differ by a header line | apache-2.0; needs remote code | Region-aware encoder; fully open training data |
+| 8 | [MedVLM-R1](https://huggingface.co/api/models/JZPeterPan/MedVLM-R1) | 2.21B | Qwen2-VL ViT, native dynamic resolution | Qwen2-VL patch merger | Qwen2-family decoder, 28 layers, 12 / 2 | same vocab; merges differ by a header line | apache-2.0 | Medical reasoning learned by reinforcement learning (GRPO on MRI VQA, per card) |
+| 9 | [SAIL-VL2-2B](https://huggingface.co/api/models/BytedanceDouyinContent/SAIL-VL2-2B) | 2.73B | SAIL-ViT, 24 x 1536, 448 px | Pixel shuffle (0.5) + MLP | Qwen3-1.7B, 28 layers, 16 / 8 | same vocab; merges differ by a header line | apache-2.0 | Wider vision encoder than the other 2B models |
+| 10 | [LLaVA-OneVision-0.5B](https://huggingface.co/api/models/lmms-lab/llava-onevision-qwen2-0.5b-ov) | 0.89B | SigLIP so400m, 384 px | AnyRes tiling up to 9 crops + 2-layer MLP | Qwen2-0.5B, 24 layers, 14 / 2 | same vocab; merges differ by a header line | apache-2.0 | Smallest candidate, many tiles per image |
 
 **Reserves** (replace a candidate that fails Round 0, in this order):
-[PaliGemma 2 3B](https://huggingface.co/api/models/google/paligemma2-3b-pt-448)
-(3.03B, prefix-LM built for fine-tuning; gemma licence, gated),
-[Granite Vision 3.3 2B](https://huggingface.co/api/models/ibm-granite/granite-vision-3.3-2b)
-(2.98B, LLaVA-NeXT tiling; apache-2.0),
-[MiniCPM-V 4](https://huggingface.co/api/models/openbmb/MiniCPM-V-4) (4.06B;
-apache-2.0 tag), [Gemma 4 E2B-it](https://huggingface.co/api/models/google/gemma-4-E2B-it)
-(5.12B stored, the name refers to an effective 2B; also takes audio; apache-2.0;
-tight on a T4),
-[DeepSeek-VL2-Tiny](https://huggingface.co/api/models/deepseek-ai/deepseek-vl2-tiny)
-(3.37B mixture-of-experts; deepseek licence; experts make structured pruning harder).
+[InternVL3-2B](https://huggingface.co/api/models/OpenGVLab/InternVL3-2B) (2.09B,
+apache-2.0), [Qwen2-VL-2B-Instruct](https://huggingface.co/api/models/Qwen/Qwen2-VL-2B-Instruct)
+(2.21B, apache-2.0), [Qwen3-VL-4B-Instruct](https://huggingface.co/api/models/Qwen/Qwen3-VL-4B-Instruct)
+(4.44B, apache-2.0; other size of candidate 2),
+[Eagle2-2B](https://huggingface.co/api/models/nvidia/Eagle2-2B) (2.21B, cc-by-nc-4.0;
+tokenizer files byte-different). NVILA-Lite-2B was left out: its hub page has no
+model card or licence.
 
-Left out on purpose: other sizes of the same families (one size per family in
-Round 1; Round 2 may change size), and anything that cannot train on a T4.
+**Dropped by the teacher-family rule** (verified configs kept for the record, marked
+not eligible): Qwen3.5-2B (new 248k tokenizer), SmolVLM2-2.2B (SmolLM2 tokenizer),
+LFM2.5-VL-1.6B (LFM tokenizer), MedGemma 1.5 4B (Gemma tokenizer).
 
-### Tokenizer compatibility with the teacher
-
-Offline distillation in this project uses cached top-k teacher token
-probabilities, which needs the same tokenizer (`configs/models/candidate_pairs.yaml`).
-
-| Teacher (D01) | Candidates that can use logit distillation (pending a token-by-token check in S04) |
-|---|---|
-| Qwen2.5-VL-7B or another Qwen2.5 / Qwen3 family teacher | 1, 2, 4, 5, 6, 10 |
-| Qwen3.5 family teacher | 3 |
-| MedGemma (Gemma) teacher | 9 |
-| none | 7, 8 |
+Contamination flags for gate G5: Hulu-Med (trained on public data including
+endoscopy) and LLaVA-OneVision-1.5 (large open training mix) must be checked for
+Kvasir images before either can win.
 
 ## Options
 
@@ -138,7 +131,7 @@ GPU quota (TODO: check the current weekly quota per account).
 | G2 uses the image | R1 | Blank-image accuracy drop above a threshold fixed before R1 (a student that ignores the image has nothing for compression to forget) |
 | G3 can be compressed by our methods | R2 | Removing 25% of decoder layers (no recovery) and 4-bit PTQ both run, reduce measured memory, and change validation metrics measurably; used as pass/fail only, never as a ranking score, so the study does not pick a student that looks robust or fragile on purpose |
 | G4 licence | R0 | Research use and publication of results allowed (all 10 appear to be; qwen-research and apple-amlr limit commercial use and may limit releasing compressed weights) |
-| G5 no test exposure | R0 | No documented use of our test images in the model's training data. Hulu-Med's card says it was trained on public data that includes endoscopy, so Kvasir images may be in it; MedGemma's card lists radiology, pathology, ophthalmology and dermatology data and does not mention endoscopy. The team checks before either can win |
+| G5 no test exposure | R0 | No documented use of our test images in the model's training data. Hulu-Med's card says it was trained on public data that includes endoscopy, so Kvasir images may be in it; LLaVA-OneVision-1.5 was trained on a large open mix. The team checks both before either can win |
 
 ### Score S (proposal for Q3)
 
@@ -168,31 +161,34 @@ for every model, because T4s have no bf16.
 
 ## Recommendation
 
-1. Run the 10 -> 5 -> 3 -> 1 protocol with the 10 candidates and 5 reserves above.
-2. **Q1 = A**: all 10 in Round 1, only teacher-compatible models from Round 2 on.
-   With the lead teacher (Qwen2.5-VL-7B) that leaves six possible finalists
-   (1, 2, 4, 5, 6, 10).
-3. **Q2**: keep the Round 1 checkpoints.
-4. **Q3**: accept the score above, and fix the G2 threshold and `n1` from the R0
+(As written before the decision; the team chose Q1 = teacher family only, Q2 =
+keep, Q3 = accept.)
+
+1. Run the 10 -> 5 -> 3 -> 1 protocol with the 10 candidates and reserves above.
+2. Q1: originally A (all architectures in Round 1, compatible ones from Round 2).
+   The team chose the stricter rule, so all 10 candidates are now Qwen-family.
+3. Q2: keep the Round 1 checkpoints.
+4. Q3: accept the score above, and fix the G2 threshold and `n1` from the R0
    numbers before Round 1.
 5. Report all four rounds in the paper's appendix. The Round 1 table across 10
-   architectures is a small result in its own right: which design choices hold up
-   on small findings.
+   architectures that share one tokenizer is a small result in its own right: which
+   design choices hold up on small findings.
 
 ## Risks
 
-- **Engineering:** ten families means ten processors and chat templates. Four
+- **Engineering:** ten architectures means ten processors and chat templates. Seven
   probably need remote code because their configs name custom architectures
-  (InternVL3.5, Ovis2.5, FastVLM, Hulu-Med; Hulu-Med's card confirms it).
+  (InternVL3.5, Ovis2.5, FastVLM, Hulu-Med, LLaVA-OneVision-1.5, SAIL-VL2,
+  LLaVA-OneVision-0.5B; Hulu-Med's and LLaVA-OneVision-1.5's cards confirm it).
   Mitigation: a generic loader with per-family adapters for scoring and LoRA only;
   pruning surgery is written only for Round 2 models.
 - **Noise in Round 1:** short training can reorder close candidates. Keeping 5 of 10
   leaves margin; CIs are reported.
 - **Teacher exposure and contamination:** the medical candidates may have seen
   public endoscopy images (G5).
-- **Unusual layers:** if Qwen3.5 (linear attention) or LFM2.5 (convolution layers)
-  reach Round 2, our unit definitions for head and channel pruning must be extended.
-  G3 catches a model that cannot be compressed by our methods.
+- **Unusual parts:** Ovis2.5's visual embedding table and Qwen3-VL's DeepStack
+  links change what "a layer" is for pruning. G3 catches a model that cannot be
+  compressed by our methods.
 - **Time:** about three rounds of Kaggle runs before E1 and E2 can start. Round 1
   does not need the teacher, so it can run while S05 (Gate 1, teacher cache) runs.
 - **fp16 stability:** some families are trained in bf16 and may overflow in fp16

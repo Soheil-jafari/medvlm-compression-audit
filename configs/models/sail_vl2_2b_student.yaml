@@ -1,0 +1,24 @@
+_base_: _model_base.yaml
+
+model:
+  name: "SAIL-VL2-2B"
+  role: student
+  family: sail_vl2
+  size: "2B"
+  source: BytedanceDouyinContent/SAIL-VL2-2B
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/BytedanceDouyinContent/SAIL-VL2-2B
+  sha_seen: 3c8b3be75dd51ef77b55e5149e7dbdebd2bbe4c5  # pin as revision only once chosen
+  parameters_stored: 2730565120
+  architecture:
+    vision_encoder: "SAIL-ViT, 24 layers x 1536, 448 px, patch 14"
+    connector: "pixel shuffle (downsample 0.5) + MLP"
+    language_model: "Qwen3-1.7B, 28 layers, hidden 2048, 16 heads / 8 KV heads"
+    tokenizer_family: qwen
+    vocab_size: 151936
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # vocab.json identical to the teacher's (hub blob hash); runtime check in S04
+  adapter: null
+  flags:
+    - "custom architecture name in config (remote code likely)"
+  notes: "Selection candidate (D05, Qwen family). Wider vision encoder (1536) than the other 2B models."

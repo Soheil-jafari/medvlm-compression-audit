@@ -17,7 +17,7 @@ model:
     language_model: "Qwen3-4B dimensions: 36 layers, hidden 2560, 32 heads / 8 KV heads"
     tokenizer_family: qwen
     vocab_size: 151936
-  tokenizer_shared_with: TODO
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # vocab.json byte-different (content TODO); merges as Qwen3; runtime check in S04
   adapter: null
   flags:
     - "needs remote code (per model card)"

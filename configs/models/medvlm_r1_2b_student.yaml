@@ -1,0 +1,23 @@
+_base_: _model_base.yaml
+
+model:
+  name: "MedVLM-R1"
+  role: student
+  family: qwen2_vl
+  size: "2B"
+  source: JZPeterPan/MedVLM-R1
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/JZPeterPan/MedVLM-R1
+  sha_seen: d256f2cfdf98c6872c1dc9f20b7dd52f49374fe9  # pin as revision only once chosen
+  parameters_stored: 2208985600
+  architecture:
+    vision_encoder: "Qwen2-VL ViT, native dynamic resolution, patch 14"
+    connector: "Qwen2-VL patch merger"
+    language_model: "Qwen2-family decoder, 28 layers, hidden 1536, 12 heads / 2 KV heads"
+    tokenizer_family: qwen
+    vocab_size: 151936
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # vocab.json identical to the teacher's (hub blob hash); runtime check in S04
+  adapter: null
+  flags: []
+  notes: "Selection candidate (D05, Qwen family). Qwen2-VL-2B fine-tuned with GRPO on 600 MRI VQA samples (per model card): medical reasoning by reinforcement learning."

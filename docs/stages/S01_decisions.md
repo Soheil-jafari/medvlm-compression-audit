@@ -7,7 +7,7 @@ on verified evidence, and written into the configs.
 
 ## Tasks
 
-- [ ] [agent] **D01 memo** `docs/decisions/D01_teacher.md` (teacher only; the student
+- [x] [agent] **D01 memo** `docs/decisions/D01_teacher.md` (teacher only; the student
   is chosen by the selection in S05b, memo D05). For each candidate teacher in
   `configs/models/*_teacher.yaml`: verified hub IDs and revisions, licence terms,
   parameter counts, fp16 and 4-bit memory against Kaggle's 2x T4 (16 GB each),
@@ -24,8 +24,9 @@ on verified evidence, and written into the configs.
 - [x] [agent] **D03 memo** `docs/decisions/D03_licence.md`: short comparison of
   code licences (MIT, Apache-2.0, BSD-3-Clause). The repository is already public,
   so this is urgent.
-- [ ] [team] Answer D01, D02, D03 and D05 in `docs/agent/INBOX.md`. D05's tokenizer
-  rule (Q1) can only be settled once D01 is.
+- [x] [team] Answer D01 (T1) and D05 (teacher family only, keep size, weights
+  accepted), 2026-10-12.
+- [ ] [team] Answer D02 and D03.
 - [ ] [team:Amir] [team:Soheil] [team:Farzan] Each confirms in the inbox that they
   have their own access to the chosen datasets.
 - [ ] [agent] After the answers: fill the chosen configs (verified `source`,
