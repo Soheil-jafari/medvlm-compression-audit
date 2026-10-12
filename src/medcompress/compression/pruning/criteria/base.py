@@ -61,9 +61,13 @@ class PruningCriterion(ABC):
     def rank(self, scores: Mapping[str, float]) -> list[str]:
         """Return unit IDs from least to most important (removal order).
 
-        Tie-breaking must be deterministic (e.g. by unit ID) and documented.
+        Ties are broken by unit ID, so the order is deterministic. NaN scores are
+        rejected.
         """
-        raise NotImplementedError("TODO: deterministic ascending sort with tie-breaking.")
+        bad = [unit for unit, value in scores.items() if value != value]
+        if bad:
+            raise ValueError(f"NaN importance for units: {sorted(bad)}")
+        return [unit for unit, _ in sorted(scores.items(), key=lambda item: (item[1], item[0]))]
 
 
 def score_units_for_experiment(config: Mapping[str, Any], run: RunContext | None) -> None:

@@ -118,12 +118,12 @@ def test_public_functions_have_return_annotations(name: str) -> None:
 
 
 def test_stubs_raise_not_implemented_with_todo() -> None:
-    from medcompress.compression.pruning.criteria.clinical import aggregate_importance
+    from medcompress.compression.pruning.criteria.clinical import ClinicalCriterion
     from medcompress.evaluation.image_reliance import check_teacher_image_reliance
     from medcompress.evaluation.statistics import aggregate_results
 
     for call in (
-        lambda: aggregate_importance({}, {}),
+        lambda: ClinicalCriterion({}).ablate(None, None),
         lambda: aggregate_results(Path("results"), Path("results/summary")),
         lambda: check_teacher_image_reliance({}, None),
     ):

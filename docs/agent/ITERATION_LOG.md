@@ -196,3 +196,18 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: clinical-criterion pure parts (`load_finding_weights`, `compute_weights`,
   `delta`, `aggregate_importance`).
 - Needs the team: nothing new.
+
+## Iteration 14: 2026-10-12 (interactive)
+- Stage / item: S02, clinical-criterion arithmetic.
+- Did: `load_finding_weights` (refuses an unfrozen or incomplete table),
+  `load_tier_multipliers`, `compute_weights` (clinical / uniform / rarity-only,
+  recomputes and checks `final_weight` against the formula, optional `sum_to_n`
+  normalisation), `delta` (correct-answer log-probability drop; KL over the
+  renormalised yes/no pair), `aggregate_importance` (optional clipping of negative
+  Delta), and deterministic ascending `rank` with ties broken by unit ID. The three
+  open points of the criterion are now parameters to fix in the pre-registration.
+  New `tests/test_clinical_criterion.py`.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: `budgets.py` budget search.
+- Needs the team: nothing new.

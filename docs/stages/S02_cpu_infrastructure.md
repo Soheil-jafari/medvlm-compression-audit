@@ -26,7 +26,7 @@ All with unit tests on small synthetic inputs. Replace entries in
 - [x] [agent] `data/probes.build_probes`, `data/splits` (patient splits, nested
   calibration subsets, split fingerprint), `data/masks` pure functions on arrays,
   `data/dedup` distance logic (imaging libraries imported lazily).
-- [ ] [agent] `compression/pruning/criteria/clinical.py` pure parts:
+- [x] [agent] `compression/pruning/criteria/clinical.py` pure parts:
   `load_finding_weights`, `compute_weights`, `delta`, `aggregate_importance`.
 - [ ] [agent] `budgets.py`: budget search against a measured-footprint function
   (tested with a mock).

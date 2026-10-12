@@ -36,8 +36,8 @@ Delta variants (A5 compares them):
     "kl" (alternative):
         Delta_j(c, x) = KL( p_theta(. | x, q_c) || p_{theta\\j}(. | x, q_c) )
         i.e. change in prediction regardless of correctness.
-        TODO: decide whether the distribution is over {yes, no} renormalised or
-        over the full vocabulary at the answer position.
+        Implemented over {yes, no} renormalised, the only distribution the
+        ``YesNoScore`` interface exposes (proposal for the pre-registration).
 
 Weights (from ``configs/preregistration/finding_weights.yaml``, frozen before
 any E7 run):
@@ -45,10 +45,12 @@ any E7 run):
     prevalence_c: positive rate of finding c in the training split.
     cap:          upper bound on the inverse-prevalence factor (pre-registered).
     tier:         clinical importance tier of c (pre-registered table).
-    TODO: decide and pre-register whether weights are normalised (e.g. to sum to |C|).
+    Normalisation (``none`` or ``sum_to_n``) is a parameter of ``compute_weights``;
+    the choice is pre-registered.
 
 Higher I_j means more important. Units are removed in ascending order of I_j.
-TODO: decide whether negative Delta values (ablation helps) are kept or clipped at 0.
+Negative Delta values (ablation helps) are kept by default; clipping at 0 is a
+parameter of ``aggregate_importance`` and the choice is pre-registered.
 
 Procedure
 ---------
@@ -82,9 +84,10 @@ A6  ``units.types``                 -> [decoder_layer] vs
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from medcompress.compression.pruning.criteria.base import PruningCriterion, register_criterion
 
@@ -96,6 +99,7 @@ if TYPE_CHECKING:
 
 DELTA_VARIANTS: tuple[str, ...] = ("logprob_drop", "kl")
 WEIGHTING_SCHEMES: tuple[str, ...] = ("clinical", "uniform", "rarity_only")
+NORMALISATIONS: tuple[str, ...] = ("none", "sum_to_n")
 
 
 @dataclass(frozen=True)
@@ -109,21 +113,74 @@ class FindingWeight:
     final_weight: float
 
 
-def load_finding_weights(table: Mapping[str, object]) -> list[FindingWeight]:
+def _is_todo(value: Any) -> bool:
+    return value is None or str(value).strip().upper().startswith("TODO")
+
+
+def load_finding_weights(
+    table: Mapping[str, object], *, require_frozen: bool = True
+) -> list[FindingWeight]:
     """Parse ``configs/preregistration/finding_weights.yaml``.
 
-    Must refuse a table whose ``frozen_on`` is still ``TODO`` when running a
-    final (non-debug) experiment, so weights cannot be tuned after seeing results.
+    Refuses a table whose ``preregistration.frozen_on`` is still ``TODO`` unless
+    ``require_frozen=False`` (debug runs only), so weights cannot be tuned after
+    seeing results. Every row must have numeric ``prevalence`` in [0, 1],
+    positive ``cap`` and non-negative ``final_weight``.
 
     Used by: E7, E8, A2, A4-A6.
     """
-    raise NotImplementedError("TODO: parse and validate the frozen weight table.")
+    prereg = table.get("preregistration") or {}
+    if require_frozen and _is_todo(prereg.get("frozen_on")):  # type: ignore[union-attr]
+        raise ValueError("Finding weights are not frozen (preregistration.frozen_on is TODO).")
+    rows = table.get("findings") or []
+    weights: list[FindingWeight] = []
+    for row in rows:  # type: ignore[union-attr]
+        if any(
+            _is_todo(row.get(k))
+            for k in ("finding", "prevalence", "importance_tier", "cap", "final_weight")
+        ):
+            raise ValueError(f"Incomplete weight row: {row}")
+        weight = FindingWeight(
+            finding=str(row["finding"]),
+            prevalence=float(row["prevalence"]),
+            importance_tier=str(row["importance_tier"]),
+            cap=float(row["cap"]),
+            final_weight=float(row["final_weight"]),
+        )
+        if not 0.0 <= weight.prevalence <= 1.0 or weight.cap <= 0 or weight.final_weight < 0:
+            raise ValueError(f"Invalid weight row: {row}")
+        weights.append(weight)
+    if not weights:
+        raise ValueError("The weight table has no findings.")
+    if len({w.finding for w in weights}) != len(weights):
+        raise ValueError("Duplicate findings in the weight table.")
+    return weights
+
+
+def load_tier_multipliers(table: Mapping[str, object]) -> dict[str, float]:
+    """Return ``{tier: multiplier}`` from the ``weighting.tiers`` block of the table."""
+    tiers = (table.get("weighting") or {}).get("tiers") or []  # type: ignore[union-attr]
+    out: dict[str, float] = {}
+    for row in tiers:
+        if _is_todo(row.get("tier")) or _is_todo(row.get("multiplier")):
+            raise ValueError(f"Incomplete tier row: {row}")
+        out[str(row["tier"])] = float(row["multiplier"])
+    return out
+
+
+def rarity_factor(prevalence: float, cap: float) -> float:
+    """Return ``min(1 / prevalence, cap)``; a prevalence of 0 gives the cap."""
+    return cap if prevalence <= 0 else min(1.0 / prevalence, cap)
 
 
 def compute_weights(
     findings: Sequence[str],
     table: Sequence[FindingWeight],
     scheme: str = "clinical",
+    *,
+    tier_multipliers: Mapping[str, float] | None = None,
+    normalisation: str = "none",
+    rel_tol: float = 1e-6,
 ) -> dict[str, float]:
     """Return w_c per finding for a weighting scheme.
 
@@ -131,10 +188,51 @@ def compute_weights(
     ``uniform``:     1                                                      (A1)
     ``rarity_only``: min(1 / prevalence_c, cap)                             (A2)
 
-    Must check that the recomputed clinical weights match ``final_weight`` in the
-    frozen table.
+    For ``clinical`` the frozen ``final_weight`` is used; when ``tier_multipliers``
+    are given the weight is recomputed and must match ``final_weight`` (so the
+    table cannot drift from its formula). ``normalisation="sum_to_n"`` rescales the
+    weights to sum to the number of findings (pre-registered choice).
     """
-    raise NotImplementedError("TODO: compute w_c for clinical / uniform / rarity_only.")
+    if scheme not in WEIGHTING_SCHEMES:
+        raise ValueError(f"scheme must be one of {WEIGHTING_SCHEMES}")
+    if normalisation not in NORMALISATIONS:
+        raise ValueError(f"normalisation must be one of {NORMALISATIONS}")
+    rows = {w.finding: w for w in table}
+    missing = [f for f in findings if f not in rows]
+    if missing:
+        raise ValueError(f"Findings missing from the weight table: {missing}")
+    weights: dict[str, float] = {}
+    for finding in findings:
+        row = rows[finding]
+        if scheme == "uniform":
+            weights[finding] = 1.0
+        elif scheme == "rarity_only":
+            weights[finding] = rarity_factor(row.prevalence, row.cap)
+        else:
+            if tier_multipliers is not None:
+                if row.importance_tier not in tier_multipliers:
+                    raise ValueError(f"Unknown tier {row.importance_tier!r} for {finding}")
+                recomputed = (
+                    rarity_factor(row.prevalence, row.cap) * tier_multipliers[row.importance_tier]
+                )
+                if not math.isclose(recomputed, row.final_weight, rel_tol=rel_tol):
+                    raise ValueError(
+                        f"final_weight of {finding} ({row.final_weight}) does not match the "
+                        f"formula ({recomputed})"
+                    )
+            weights[finding] = row.final_weight
+    if normalisation == "sum_to_n":
+        total = sum(weights.values())
+        if total <= 0:
+            raise ValueError("Cannot normalise weights that sum to zero.")
+        weights = {f: w * len(weights) / total for f, w in weights.items()}
+    return weights
+
+
+def _log_softmax_pair(a: float, b: float) -> tuple[float, float]:
+    top = max(a, b)
+    log_norm = top + math.log(math.exp(a - top) + math.exp(b - top))
+    return a - log_norm, b - log_norm
 
 
 def delta(
@@ -145,17 +243,54 @@ def delta(
 ) -> dict[tuple[str, str], float]:
     """Return Delta_j(c, x) keyed by (finding, sample_id) for one ablated unit.
 
-    ``logprob_drop``: log p_theta(y) - log p_{theta\\j}(y) for the correct answer y.
-    ``kl``:           KL(p_theta || p_{theta\\j}) over the answer distribution (A5).
+    ``logprob_drop``: log p_theta(y) - log p_{theta\\j}(y) for the correct answer y,
+                      using the model's own answer log-probabilities.
+    ``kl``:           KL(p_theta || p_{theta\\j}) over the answer distribution
+                      renormalised over {yes, no} (A5). This resolves the open choice
+                      in the module docstring for the ``YesNoScore`` interface, which
+                      only exposes the two answer log-probabilities.
     """
-    raise NotImplementedError("TODO: Delta_j(c, x) for logprob_drop / kl (E7, A5).")
+    if variant not in DELTA_VARIANTS:
+        raise ValueError(f"variant must be one of {DELTA_VARIANTS}")
+    if not len(baseline) == len(ablated) == len(probes):
+        raise ValueError("baseline, ablated and probes must be aligned and of equal length.")
+    out: dict[tuple[str, str], float] = {}
+    for base, abl, probe in zip(baseline, ablated, probes, strict=True):
+        key = (probe.finding, probe.sample_id)
+        if key in out:
+            raise ValueError(f"Duplicate probe {key}")
+        if variant == "logprob_drop":
+            if probe.answer not in ("yes", "no"):
+                raise ValueError(f"Probe answer must be yes/no, got {probe.answer!r}")
+            if probe.answer == "yes":
+                out[key] = base.logp_yes - abl.logp_yes
+            else:
+                out[key] = base.logp_no - abl.logp_no
+        else:
+            p_yes, p_no = _log_softmax_pair(base.logp_yes, base.logp_no)
+            q_yes, q_no = _log_softmax_pair(abl.logp_yes, abl.logp_no)
+            out[key] = math.exp(p_yes) * (p_yes - q_yes) + math.exp(p_no) * (p_no - q_no)
+    return out
 
 
 def aggregate_importance(
-    deltas: Mapping[tuple[str, str], float], weights: Mapping[str, float]
+    deltas: Mapping[tuple[str, str], float],
+    weights: Mapping[str, float],
+    *,
+    clip_negative: bool = False,
 ) -> float:
-    """Return I_j = sum_c w_c * mean_x Delta_j(c, x) for one unit."""
-    raise NotImplementedError("TODO: weighted sum over findings of mean Delta over images.")
+    """Return I_j = sum_c w_c * mean_x Delta_j(c, x) for one unit.
+
+    Findings without probes contribute nothing. ``clip_negative=True`` clips
+    negative Delta values (ablation helps) at 0 before averaging; the choice is
+    pre-registered (open point in the module docstring).
+    """
+    per_finding: dict[str, list[float]] = {}
+    for (finding, _sample), value in deltas.items():
+        if finding not in weights:
+            raise ValueError(f"No weight for finding {finding!r}")
+        per_finding.setdefault(finding, []).append(max(value, 0.0) if clip_negative else value)
+    return float(sum(weights[f] * (sum(values) / len(values)) for f, values in per_finding.items()))
 
 
 @register_criterion("clinical")
