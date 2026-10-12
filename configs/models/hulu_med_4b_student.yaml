@@ -1,0 +1,25 @@
+_base_: _model_base.yaml
+
+model:
+  name: "Hulu-Med-4B"
+  role: student
+  family: hulu_med
+  size: "4B"
+  source: ZJU-AI4H/Hulu-Med-4B
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/ZJU-AI4H/Hulu-Med-4B
+  sha_seen: caec06b4421e6ede4a1927155c7c25ffb92f1a5c  # pin as revision only once chosen
+  parameters_stored: 4833079536
+  architecture:
+    vision_encoder: "SigLIP-based encoder with 2D RoPE, 27 layers x 1152, patch 14"
+    connector: "2-layer MLP; medical-aware visual-token reduction (per paper)"
+    language_model: "Qwen3-4B dimensions: 36 layers, hidden 2560, 32 heads / 8 KV heads"
+    tokenizer_family: qwen
+    vocab_size: 151936
+  tokenizer_shared_with: TODO
+  adapter: null
+  flags:
+    - "needs remote code (per model card)"
+    - "trained on public data including endoscopy (contamination check, gate G5)"
+  notes: "Selection candidate 10 (D05)."

@@ -4,11 +4,15 @@
 yes/no probes in one forward pass, and have units ablated (for scoring) or
 physically removed (for the final model).
 
-**Depends on.** S01 (model pair decided).
+**Depends on.** S01 (teacher decided). The student is chosen in S05b, so the
+loading and yes/no scoring parts must work for all 10 student candidates
+(`configs/student_selection.yaml`); pruning surgery is only needed for the
+Round 2 models and the final student.
 
 ## Tasks
 
-- [ ] [agent] `models/loading.py` and a `VLMWrapper` for the chosen family:
+- [ ] [agent] `models/loading.py` and a `VLMWrapper` for the teacher family and a
+  generic path for the 10 student candidates:
   `generate`, `score_yes_no` (log-probabilities of the answer tokens at the answer
   position, no free generation), `list_prunable_units` (decoder layers, attention
   head groups that respect grouped key-value heads, MLP channel groups; projector

@@ -3,7 +3,7 @@
 **Goal.** Train the student baselines (E1 supervised, E2 distilled) with 3 seeds and
 measure E2's footprint, which defines the absolute budgets B1-B3.
 
-**Depends on.** S05.
+**Depends on.** S05 and S05b (the student chosen by the selection).
 
 ## Tasks
 

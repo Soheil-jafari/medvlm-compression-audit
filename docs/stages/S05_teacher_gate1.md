@@ -9,7 +9,9 @@ cache its outputs once for all distillation and recovery runs.
 
 - [ ] [agent] Implement `evaluation/image_reliance.py` stage pieces
   (`build_stress_inputs`, `mask_audit`, `check_teacher_image_reliance`) and
-  `models/teacher_cache.py` (top-k probabilities, sharded files, manifest).
+  `models/teacher_cache.py` (top-k probabilities and the generated answer text,
+  sharded files, manifest). The answer text allows sequence-level distillation if
+  D05 chooses option B.
 - [ ] [agent] Gate 1 threshold proposal in `docs/decisions/D04_gate1.md` (for
   example: accuracy drop with a blank image, lesion-mask effect above zero with the
   CI excluding zero). Validation split only.

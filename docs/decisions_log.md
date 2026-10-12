@@ -14,13 +14,19 @@ must be logged here.
   `docs/FINAL_GOAL.md`, stages S00-S12 in `docs/stages/`, live state in
   `docs/agent/STATUS.md`. The loop works only on the `research-loop` branch; the
   team reviews it and merges into `main` through pull requests.
+- **2026-10-12 (Soheil):** the student will be chosen by a staged selection after the
+  teacher is fixed: 10 architectures compared in a simplified common screen, the top
+  5 rebuilt as new models, then top 3, then one. Protocol drafted in
+  `docs/decisions/D05_student_selection.md` (answers pending); D01 now covers the
+  teacher only.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
 | Medical domain | GI endoscopy (lead) vs retinal fundus | team | TODO |
-| Teacher / student | Qwen2.5-VL-7B (+ published Kvasir-VQA-x1 adapter) -> Qwen2.5-VL-3B; Qwen3-VL-8B -> Qwen3-VL-2B; MedGemma family. Must share a tokenizer. | Soheil | TODO |
+| Teacher | Qwen2.5-VL-7B (+ published Kvasir-VQA-x1 adapter); Qwen3-VL-8B; MedGemma family (memo D01) | Soheil | TODO |
+| Student selection protocol | 10 candidates, 10 -> 5 -> 3 -> 1 on validation; tokenizer rule, size rule, score weights (memo D05) | team | TODO |
 | Datasets | Kvasir-VQA-x1, Kvasir-SEG, ColonVQA/ColonEval, ColonPert, EndoBench; IDRiD, FGADR (retinal) | Farzan | TODO |
 | Finding list and weights | Pre-registered table, frozen before E7 | team | TODO |
 | Budgets and timing hardware | B1-B3 fractions, metric (memory vs latency), protocol, rented GPU type | Amir | TODO |

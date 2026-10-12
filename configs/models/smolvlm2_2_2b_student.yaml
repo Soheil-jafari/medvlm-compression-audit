@@ -1,0 +1,23 @@
+_base_: _model_base.yaml
+
+model:
+  name: "SmolVLM2-2.2B-Instruct"
+  role: student
+  family: smolvlm2
+  size: "2.2B"
+  source: HuggingFaceTB/SmolVLM2-2.2B-Instruct
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/HuggingFaceTB/SmolVLM2-2.2B-Instruct
+  sha_seen: 482adb537c021c86670beed01cd58990d01e72e4  # pin as revision only once chosen
+  parameters_stored: 2246784880
+  architecture:
+    vision_encoder: "SigLIP, 27 layers, 384 px, patch 14"
+    connector: "pixel shuffle x3 + MLP (strong token compression)"
+    language_model: "SmolLM2-1.7B, 24 layers, hidden 2048"
+    tokenizer_family: smollm2
+    vocab_size: 49280
+  tokenizer_shared_with: TODO
+  adapter: null
+  flags: []
+  notes: "Selection candidate 7 (D05). Not tokenizer-compatible with any candidate teacher."

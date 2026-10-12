@@ -1,0 +1,25 @@
+_base_: _model_base.yaml
+
+model:
+  name: "LFM2.5-VL-1.6B"
+  role: student
+  family: lfm2_5_vl
+  size: "1.6B"
+  source: LiquidAI/LFM2.5-VL-1.6B
+  licence: lfm1.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/LiquidAI/LFM2.5-VL-1.6B
+  sha_seen: 919fde3d022e3f90a4716006f993938ee8c2eb97  # pin as revision only once chosen
+  parameters_stored: 1596625904
+  architecture:
+    vision_encoder: "SigLIP2 NaFlex 400M, 27 layers, patch 16, 512 px tiles + thumbnail"
+    connector: "2-layer MLP, downsample 2"
+    language_model: "LFM2.5-1.2B hybrid, 16 layers (10 short-convolution, 6 attention), hidden 2048, 32 heads / 8 KV heads"
+    tokenizer_family: lfm
+    vocab_size: 65536
+  tokenizer_shared_with: TODO
+  adapter: null
+  flags:
+    - "licence lfm1.0: read the terms"
+    - "convolution layers need their own pruning-unit definitions"
+  notes: "Selection candidate 8 (D05). Not tokenizer-compatible with any candidate teacher."

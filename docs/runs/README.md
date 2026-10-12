@@ -13,6 +13,10 @@ results in its next iteration.
 | RC-M1 | S04 | GPU smoke test: load pair, score probes, remove one layer | Soheil | not written yet |
 | RC-E0a | S05 | Gate 1: teacher image-reliance checks (validation) | Soheil | not written yet |
 | RC-E0b | S05 | Teacher cache (train) and E0 validation metrics | Soheil | not written yet |
+| RC-S0 | S05b | Student candidates: feasibility of all 10 on one T4 | Soheil | not written yet |
+| RC-S1 | S05b | Round 1 screen, 10 candidates | all three | not written yet |
+| RC-S2 | S05b | Round 2, top 5 rebuilt with the full recipe | all three | not written yet |
+| RC-S3 | S05b | Round 3, top 3 with the E2 recipe, 2 seeds | all three | not written yet |
 | RC-E1 / RC-E2 | S06 | Student training, 3 seeds each | Soheil | not written yet |
 | RC-B0 | S06 | E2 reference footprint for the budgets | Amir | not written yet |
 | RC-E3 / RC-E4 / RC-E9 | S08 | Quantization arms | Soheil | not written yet |

@@ -1,10 +1,23 @@
 _base_: _model_base.yaml
 
 model:
-  name: "Qwen3-VL-2B"
+  name: "Qwen3-VL-2B-Instruct"
   role: student
   family: qwen3_vl
   size: "2B"
+  source: Qwen/Qwen3-VL-2B-Instruct
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/Qwen/Qwen3-VL-2B-Instruct
+  sha_seen: 89644892e4d85e24eaac8bacfd4f463576704203  # pin as revision only once chosen
+  parameters_stored: 2127532032
+  architecture:
+    vision_encoder: "Qwen3-VL ViT, 24 layers x 1024, patch 16"
+    connector: "DeepStack (ViT layers 5, 11, 17 fed into the LLM)"
+    language_model: "Qwen3 decoder, 28 layers, hidden 2048, 16 heads / 8 KV heads"
+    tokenizer_family: qwen
+    vocab_size: 151936
   tokenizer_shared_with: models/qwen3_vl_8b_teacher.yaml   # TODO: verify the tokenizers are identical
   adapter: null
-  notes: "Candidate student for the Qwen3-VL-8B teacher."
+  flags: []
+  notes: "Selection candidate 2 (D05)."

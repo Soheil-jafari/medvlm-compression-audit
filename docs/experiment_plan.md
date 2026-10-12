@@ -28,6 +28,21 @@ experiment's stages in order.
 "measured" = not budget-matched: the footprint is measured with the budget protocol
 and reported relative to B1-B3.
 
+## Student selection (before E1)
+
+The student is chosen by successive halving on the validation split
+(`docs/decisions/D05_student_selection.md`, `configs/student_selection.yaml`,
+stage S05b): R0 feasibility of 10 architectures on one T4; R1 the same short LoRA
+fine-tune for all 10, keep 5; R2 the top 5 rebuilt as new models with the full
+student recipe, keep 3; R3 the top 3 with the exact E2 recipe and 2 seeds, keep 1.
+Score: 0.4 probe macro-F1 + 0.3 small-finding recall + 0.3 image reliance (weights
+to be confirmed). Selection runs are not part of the E/A ladder; results go to
+`results/selection/` and the appendix.
+
+| Block | Runs |
+|---|---|
+| Student selection (R1: 10, R2: 5, R3: 3 x 2 seeds) | 21 (plus R0 smoke tests) |
+
 ## Criterion ablations (variants of E7, at B2)
 
 | ID | Change vs E7 | Config hook | Variants |

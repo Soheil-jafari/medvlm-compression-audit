@@ -1,19 +1,20 @@
 # Stages
 
-The project is split into 13 stages. Each stage file lists its goal, what it
-depends on, the tasks (tagged `[agent]` or `[team:<name>]`), its outputs and the
+The project is split into 14 stages (S00-S12 plus S05b). Each stage file lists its
+goal, what it depends on, the tasks (tagged `[agent]` or `[team:<name>]`), its outputs and the
 **exit gate** that must hold before the stage counts as done. Live status is in
 `docs/agent/STATUS.md`; the end target is `docs/FINAL_GOAL.md`.
 
 | Stage | Title | Depends on | Mostly done by |
 |---|---|---|---|
 | [S00](S00_repo_health.md) | Repository health and loop setup | - | agent |
-| [S01](S01_decisions.md) | Decisions: domain, model pair, datasets, licence | S00 | agent memos, team decides |
+| [S01](S01_decisions.md) | Decisions: domain, teacher, datasets, licence, selection protocol | S00 | agent memos, team decides |
 | [S02](S02_cpu_infrastructure.md) | CPU infrastructure: metrics, statistics, aggregation | S00 | agent |
 | [S03](S03_data_pipeline.md) | Data pipeline: readers, splits, masks, dedup, data cards | S01, S02 | agent code, team runs on real data |
 | [S04](S04_model_wrappers.md) | Model wrappers and unit surgery | S01 | agent code, team GPU smoke test |
 | [S05](S05_teacher_gate1.md) | Teacher (E0): Gate 1 and teacher cache | S03, S04 | team GPU runs, agent analysis |
-| [S06](S06_student_training.md) | Students E1, E2 and the budget reference | S05 | team GPU runs, agent code |
+| [S05b](S05b_student_selection.md) | Student selection, 10 -> 5 -> 3 -> 1 (memo D05) | S01, S03, S04 (R2-R3 also S05) | agent code, team GPU runs |
+| [S06](S06_student_training.md) | Students E1, E2 and the budget reference | S05, S05b | team GPU runs, agent code |
 | [S07](S07_preregistration.md) | Pre-registration freeze | S03, S06 | agent draft, team approves |
 | [S08](S08_quantization.md) | Quantization arms E3, E4, E9 | S07 | agent code, team GPU runs |
 | [S09](S09_pruning_gate2.md) | Pruning arms E5-E8 and Gate 2 | S07 | agent code, team GPU runs |

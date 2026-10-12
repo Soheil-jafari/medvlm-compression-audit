@@ -1,10 +1,25 @@
 _base_: _model_base.yaml
 
 model:
-  name: "MedGemma (student variant TODO)"
+  name: "MedGemma 1.5 4B-it"
   role: student
   family: medgemma
-  size: "TODO"
+  size: "4B"
+  source: google/medgemma-1.5-4b-it
+  licence: health-ai-developer-foundations
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/google/medgemma-1.5-4b-it
+  sha_seen: 91850547d9f0b2fdd21aa7c5f4f3d1a8a52c243b  # pin as revision only once chosen
+  parameters_stored: 4300079472
+  architecture:
+    vision_encoder: "SigLIP pre-trained on medical images (per model card)"
+    connector: "256 tokens per image at 896 x 896 (per model card)"
+    language_model: "Gemma 3 4B decoder"
+    tokenizer_family: gemma
+    vocab_size: TODO                          # config is gated; read after accepting the terms
   tokenizer_shared_with: models/medgemma_teacher.yaml   # TODO: verify the tokenizers are identical
   adapter: null
-  notes: "MedGemma family candidate; which variant is student is undecided."
+  flags:
+    - "gated: accept the Health AI Developer Foundations terms"
+    - "card lists radiology, pathology, ophthalmology, dermatology data; endoscopy not mentioned (gate G5)"
+  notes: "Selection candidate 9 (D05). Only compatible with a Gemma-family teacher."

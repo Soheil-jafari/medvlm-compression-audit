@@ -1,5 +1,7 @@
 # Template inherited by every candidate model config. Do not guess hub IDs,
-# paths or licence terms: leave TODO until verified by the owner.
+# paths or licence terms: leave TODO until verified. A candidate may carry a
+# source and licence only together with verified_on (date) and verified_from (the
+# primary page or API record they were read from); tests enforce this.
 model:
   status: "CANDIDATE - NOT DECIDED"
   name: TODO
@@ -12,5 +14,7 @@ model:
   tokenizer_shared_with: TODO             # teacher <-> student must share a tokenizer
   dtype: TODO
   licence: TODO                           # verify terms before use
+  verified_on: null                       # YYYY-MM-DD when source / licence were read
+  verified_from: null                     # URL of the primary record they were read from
   model_card: docs/model_cards/TEMPLATE.md
   notes: ""

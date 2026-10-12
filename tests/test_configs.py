@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -112,9 +113,16 @@ def test_candidate_configs_are_marked_and_not_guessed(path: Path) -> None:
     section = config.get("model") or config.get("dataset")
     assert section is not None
     assert section["status"] == CANDIDATE_STATUS
-    if section["status"] == CANDIDATE_STATUS:
+    verified = bool(section.get("verified_on")) and str(
+        section.get("verified_from") or ""
+    ).startswith("https://")
+    if not verified:
         assert str(section["source"]).startswith("TODO"), "do not guess hub IDs / URLs"
         assert str(section["licence"]).startswith("TODO"), "do not guess licence terms"
+    else:
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(section["verified_on"]))
+        assert not str(section["source"]).startswith("TODO")
+        assert not str(section["licence"]).startswith("TODO")
 
 
 @pytest.mark.parametrize("name", ["endoscopy", "retinal"])

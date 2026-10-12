@@ -1,0 +1,99 @@
+# Student selection protocol (memo docs/decisions/D05_student_selection.md,
+# stage docs/stages/S05b_student_selection.md).
+# Successive halving 10 -> 5 -> 3 -> 1 on the VALIDATION split only.
+# Every TODO is fixed, and frozen_on is set, before Round 1 runs.
+student_selection:
+  status: "CANDIDATE - NOT DECIDED"
+  memo: docs/decisions/D05_student_selection.md
+  frozen_on: TODO
+  split: val
+  tokenizer_rule: TODO          # A (recommended): all 10 in R1, teacher-compatible only from R2
+                                # B: sequence-level distillation for all; C: compatible only from R1
+
+  # Round 1 pool: one model per architecture family.
+  candidates:
+    - models/qwen2_5_vl_3b_student.yaml
+    - models/qwen3_vl_2b_student.yaml
+    - models/qwen3_5_2b_student.yaml
+    - models/internvl3_5_2b_student.yaml
+    - models/ovis2_5_2b_student.yaml
+    - models/fastvlm_1_5b_student.yaml
+    - models/smolvlm2_2_2b_student.yaml
+    - models/lfm2_5_vl_1_6b_student.yaml
+    - models/medgemma_student.yaml
+    - models/hulu_med_4b_student.yaml
+
+  # Replace a candidate that fails Round 0, in this order (hub IDs verified 2026-10-12).
+  reserves:
+    - google/paligemma2-3b-pt-448
+    - ibm-granite/granite-vision-3.3-2b
+    - openbmb/MiniCPM-V-4
+    - google/gemma-4-E2B-it
+    - deepseek-ai/deepseek-vl2-tiny
+
+  compute_unit_b: TODO          # training samples per candidate in R1, set from R0 throughput
+
+  rounds:
+    R0:
+      purpose: feasibility on one Kaggle T4, no training
+      keep: 10
+      training: none
+      compute_units: 0
+      seeds: 1
+      probes: 20
+    R1:
+      purpose: simplified screen, identical short LoRA fine-tune for every candidate
+      keep: 5
+      training: short_lora
+      zero_shot_first: true
+      train_examples: TODO      # n1, same examples and order for all candidates
+      validation_subset: TODO   # fixed list of validation sample IDs
+      compute_units: 1
+      seeds: 1
+    R2:
+      purpose: top-5 architectures retrained as new models with the full student recipe
+      keep: 3
+      training: full_student_recipe
+      size_rule: keep_checkpoint   # or same_family_resize, fixed before R2
+      compute_units: 2
+      seeds: 1
+    R3:
+      purpose: top 3 with the exact E2 recipe
+      keep: 1
+      training: e2_recipe
+      compute_units: 1.7
+      seeds: 2
+
+  score:
+    weights:
+      probe_macro_f1: 0.4
+      small_finding_recall: 0.3
+      image_reliance: 0.3
+    image_reliance_metric:
+      R1: blank_image_drop
+      R2: lesion_mask_effect
+      R3: lesion_mask_effect
+    scaling: min_max_within_round
+    ci: paired_bootstrap_95
+    tie_break:
+      - teacher_tokenizer_compatible
+      - lower_fp16_peak_memory
+      - simpler_licence
+
+  gates:
+    G1_hardware: {round: R0, rule: "loads, scores and trains one LoRA step on one T4 in fp16"}
+    G2_uses_image: {round: R1, rule: "blank-image accuracy drop above threshold", threshold: TODO}
+    G3_compressible: {round: R2, rule: "25% decoder-layer removal and 4-bit PTQ run, cut measured memory and change validation metrics; pass/fail only"}
+    G4_licence: {round: R0, rule: "research use and publication of results allowed"}
+    G5_no_test_exposure: {round: R0, rule: "no documented use of our test images in training"}
+
+  fairness:
+    image_longest_side: TODO    # 448 or 512 px; native visual-token counts recorded
+    lora_rank: TODO
+    lora_targets: [decoder_attention, decoder_mlp]
+    vision_encoder: frozen
+    precision: fp16             # T4 has no bf16
+    decoding: greedy
+    max_new_tokens: TODO
+    chat_template: per_model
+    yes_no_scoring: log_probability

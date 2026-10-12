@@ -45,3 +45,21 @@ Append-only, newest at the bottom. One entry per iteration:
   unreachable), then D02; S02 statistics in parallel.
 - Needs the team: answer D03; merge `research-loop` into `main` to fix CI there.
 
+
+## Iteration 3: 2026-10-12 (interactive session, requested by Soheil)
+- Stage / item: S01 and new stage S05b, student selection protocol.
+- Did: researched current small open vision-language models and verified 10
+  candidates plus 5 reserves from their Hugging Face API records and configs
+  (size, vision encoder, connector, language model, tokenizer, licence). Wrote
+  `docs/decisions/D05_student_selection.md` (10 -> 5 -> 3 -> 1 successive halving
+  on the validation split, gates, score, fairness controls, tokenizer rule options),
+  `docs/stages/S05b_student_selection.md`, `configs/student_selection.yaml`, verified
+  configs for the 10 candidates in `configs/models/`, and
+  `tests/test_student_selection.py`. Candidate configs may now carry a source and
+  licence when `verified_on` and `verified_from` are set (test updated). D01 is now
+  teacher only; S04, S05, S06, the run queue, FINAL_GOAL and the experiment plan
+  reference the selection.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: D01 teacher memo, then D02; S02 statistics in parallel.
+- Needs the team: answer D05 (Q2, Q3 now; Q1 after D01).

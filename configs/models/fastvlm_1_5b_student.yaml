@@ -1,0 +1,25 @@
+_base_: _model_base.yaml
+
+model:
+  name: "FastVLM-1.5B"
+  role: student
+  family: fastvlm
+  size: "1.5B"
+  source: apple/FastVLM-1.5B
+  licence: apple-amlr
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/apple/FastVLM-1.5B
+  sha_seen: dd6608dfa0e17b050e1dde2856c3437fcba197ac  # pin as revision only once chosen
+  parameters_stored: 1909278176
+  architecture:
+    vision_encoder: "MobileCLIP-L 1024 (FastViTHD hybrid convolutional encoder)"
+    connector: "2-layer MLP, few visual tokens"
+    language_model: "Qwen2-family decoder, 28 layers, hidden 1536, 12 heads / 2 KV heads"
+    tokenizer_family: qwen
+    vocab_size: 151936
+  tokenizer_shared_with: TODO
+  adapter: null
+  flags:
+    - "research-only licence (apple-amlr)"
+    - "custom architecture name in config (remote code likely)"
+  notes: "Selection candidate 6 (D05)."
