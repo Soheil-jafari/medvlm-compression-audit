@@ -47,14 +47,25 @@ must be logged here.
   probe batch 4. Open: how units are switched off while scored (cost question, waits for the
   RC-M1 speed) and the budgets. Soheil also asked that nothing heavy runs in the agent session:
   all GPU work stays in run cards for the team.
+- **2026-10-12 (Soheil):** D07 section 4 partly answered: the budget metric is peak GPU
+  memory during inference, the tolerance is 3 % of the target, and the protocol is batch 1,
+  3 warm-up and 5 timed passes, 32 validation images drawn by a fixed seed (the same for every
+  arm). Written to `configs/budgets.yaml`. Still open: the timing hardware, B1 to B3 (rule after
+  RC-B0), `max_new_tokens` (rule of D04) and the scoring method (not needed before E2 exists).
+- **2026-10-12 (Soheil):** asked whether the 10 -> 5 -> 3 -> 1 selection is needed, because the
+  paper asks what compression does to a student, not which student is best. Agreed that it is
+  not needed for the research question. The numbers 1 to 10 in D05 are the order of listing,
+  not a ranking: nothing has been measured. An amendment is proposed in D05 (Qwen2.5-VL-3B
+  with Round 0 and the image checks, Qwen3-VL-2B as the named fallback, no ranking); it is
+  applied only after Soheil confirms it and Amir and Farzan are told.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| Student selection freeze | Set `train_examples`, `compute_unit_b`, G2 threshold and image side from RC-S0, then freeze (memo D05) | team | after RC-S0 |
+| Student choice | Confirm the amendment in D05 (one student with checks) or keep the staged selection; then set the G2 threshold and image side from RC-S0 | Soheil | next |
 | EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |
 | Finding list and weights | Pre-registered table, frozen before E7 | team | TODO |
-| Budgets and timing hardware | B1-B3 fractions, metric (memory vs latency), protocol, rented GPU type | Amir | TODO |
+| Budgets and timing hardware | B1-B3 fractions (rule after RC-B0) and the rented GPU type; metric, tolerance and protocol are decided | Amir | TODO |
 | Quantization backends | GPTQ / AWQ / W8A8 tooling that runs on T4 and the timing GPU | Soheil | TODO |
 | Venue | e.g. MICCAI (Springer LNCS template) | team | TODO |

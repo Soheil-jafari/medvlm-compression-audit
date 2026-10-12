@@ -194,6 +194,44 @@ keep, Q3 = accept.)
 - **fp16 stability:** some families are trained in bf16 and may overflow in fp16
   on a T4; R0 checks this per model.
 
+## Proposed amendment (2026-10-12, waiting for Soheil's yes)
+
+**Status:** proposal only. Nothing below is applied; the protocol above stays in force until
+the answer is in `docs/agent/INBOX.md` and logged.
+
+Soheil's question: the paper asks what compression does to a student, not which student is
+best, so why compare ten candidates? The answer is that the comparison is not needed for the
+research question. The student only has to meet two conditions:
+
+1. **Something to lose.** It must load and train on one T4 in fp16, use the image (a
+   blank-image test), and not be at zero on small findings. Otherwise compression has nothing
+   to forget (floor effect).
+2. **A short, honest reason for the choice,** stated before any result.
+
+Proposal:
+
+- Student: **Qwen2.5-VL-3B-Instruct**. Reasons: the smaller sibling of the teacher, identical
+  tokenizer files (table above), loads in the library without downloaded model code, and the
+  unit surgery of stage 04 is tested on its structure.
+- Fallback, named now: **Qwen3-VL-2B-Instruct**, used only if the student fails condition 1.
+  Its DeepStack links change what a "layer" is for pruning, so it is the second choice, not
+  the first.
+- Checks: Round 0 of this memo for these two models only (run card RC-S0), plus the
+  blank-image gate G2 at the threshold that is fixed before the numbers are read. No score S,
+  no ranking.
+- Wording in the paper: "chosen because", never "the best student".
+- Kept in the repository, unused unless the team asks for it: the ranking code, the rounds
+  R1 to R3 and the run cards RC-S1 to RC-S3.
+- Optional later: a second student (Qwen3-VL-2B) to show whether the findings hold for more
+  than one student. That answers a reviewer better than a ten-model comparison and costs one
+  more set of E1/E2/pruning runs, so it is decided after the first student's budget is known.
+
+Not decided by this proposal: GPU hours. They are unmeasured until RC-S0 and RC-M1 report.
+
+Changes once confirmed: `configs/student_selection.yaml` (two candidates, no rounds R1 to R3),
+`docs/stages/S05b_student_selection.md`, run card RC-S0 (two candidates), the log, and a
+message to Amir and Farzan, who asked for the staged selection.
+
 ## What changes in the repository once decided
 
 - `configs/student_selection.yaml`: freeze date, weights, `n1`, `b`, G2 threshold,

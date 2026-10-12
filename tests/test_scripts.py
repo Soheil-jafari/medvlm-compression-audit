@@ -68,7 +68,11 @@ def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) 
         ("select_student.py", ["--rank", "R1"], "domain.small_findings.thresholds"),
         ("04_score_pruning_units.py", ["--exp", "E7"], "pruning.clinical.ablation_method"),
         ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "training.steps"),
-        ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "budgets.metric"),
+        (
+            "05_prune_and_recover.py",
+            ["--exp", "E7", "--budget", "B2"],
+            "budgets.levels.B2.target_fraction",
+        ),
         ("07_benchmark_efficiency.py", ["--exp", "E9"], "budgets.measurement.hardware"),
         (
             "04_score_pruning_units.py",

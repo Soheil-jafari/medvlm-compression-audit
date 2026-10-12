@@ -1,6 +1,6 @@
 # D07: Pruning settings, scoring cost and the budget protocol
 
-**Status:** partly answered 2026-10-12 (Soheil): sections 2 and 3 accepted as proposed (score per parameter; first 2 and last 1 layers protected for every arm; group 128, 128 calibration images, one shot, 1 negative per positive, signed effects, probe batch 4). Section 1 (how a unit is switched off while scored) is open: the cost question needs the T4 speed from RC-M1 first. Section 4 (budgets) is asked later. **Stage:** S09, S10.
+**Status:** partly answered 2026-10-12 (Soheil): sections 2 and 3 accepted as proposed (score per parameter; first 2 and last 1 layers protected for every arm; group 128, 128 calibration images, one shot, 1 negative per positive, signed effects, probe batch 4). In section 4 the metric (peak GPU memory), the tolerance (3 %) and the protocol (batch 1, 3 warm-up and 5 timed passes, 32 validation images drawn by a fixed seed) are accepted. Open: section 1 (how a unit is switched off while scored; the cost question waits for the T4 speed from RC-M1, and nothing needs it before E2 exists), the timing hardware, and B1 to B3 (set by the rule after RC-B0). **Stage:** S09, S10.
 **Depends on:** D02 (data and findings), D05 (student), D06 (recovery recipe).
 Every number below is fixed **before** the first pruning result, so none of it can be tuned
 to a result. After the team answers, the values go into `configs/pruning.yaml`,

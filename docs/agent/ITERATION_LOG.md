@@ -583,3 +583,19 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: ask the scoring-method question of D07 again in plain words, then the budget section;
   run cards RC-B0 and RC-G2.
 - Needs the team: D07 section 1 and section 4 (asked in the session).
+
+## Iteration 32: 2026-10-12 (interactive)
+- Stage / item: S09 budgets, S05b student choice.
+- Did: wrote the accepted budget settings to `configs/budgets.yaml` (metric `peak_memory`,
+  tolerance 0.03, batch 1, 3 warm-up and 5 timed passes, 32 validation images); the timing
+  hardware, `max_new_tokens` and B1 to B3 stay open. Answered Soheil's questions: the repo
+  has only been run on a tiny fake model on CPU, no real data or model was downloaded here;
+  the order 1 to 10 in D05 is a list order, not a ranking. After his question about whether the
+  ten-model selection is needed for a paper about compression, wrote a proposed amendment in
+  D05 (one student, Qwen2.5-VL-3B, Round 0 and image checks, Qwen3-VL-2B as the named fallback,
+  no ranking). It is a proposal until Soheil confirms it; no selection code was removed.
+  The stage and script tests expect the keys that are still open.
+- Verified: ruff check, ruff format, pytest (785 passed).
+- Commit: see `git log` on `research-loop`.
+- Next: apply the D05 amendment after the yes; run cards RC-B0 and RC-G2; quantization (S08).
+- Needs the team: confirm or reject the D05 amendment (Soheil); tell Amir and Farzan.
