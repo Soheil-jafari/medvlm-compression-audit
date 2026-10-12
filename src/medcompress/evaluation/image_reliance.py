@@ -43,15 +43,34 @@ def build_stress_inputs(
 
 
 def answer_flip_rate(original: Sequence[str], perturbed: Sequence[str]) -> float:
-    """Fraction of answers that change under a perturbation."""
-    raise NotImplementedError("TODO: fraction of changed answers.")
+    """Fraction of answers that change under a perturbation.
+
+    Answers are compared after stripping whitespace and lower-casing (they are
+    normally parsed "yes"/"no" probe answers).
+    """
+    if len(original) != len(perturbed):
+        raise ValueError("Need one perturbed answer per original answer.")
+    if not original:
+        raise ValueError("Need at least one answer.")
+    flips = sum(
+        a.strip().lower() != b.strip().lower() for a, b in zip(original, perturbed, strict=True)
+    )
+    return flips / len(original)
 
 
 def lesion_mask_effect(
     lesion_masked_flips: Sequence[bool], random_masked_flips: Sequence[bool]
 ) -> float:
-    """Return flip rate (lesion masked) - flip rate (random region masked). Primary endpoint."""
-    raise NotImplementedError("TODO: lesion-mask effect (primary endpoint).")
+    """Return flip rate (lesion masked) - flip rate (random region masked). Primary endpoint.
+
+    Inputs are per positive, mask-annotated probe: whether the answer flipped when
+    the lesion was masked, and when an area-matched random region was masked.
+    """
+    if not lesion_masked_flips or not random_masked_flips:
+        raise ValueError("Need at least one probe per condition.")
+    lesion = sum(bool(x) for x in lesion_masked_flips) / len(lesion_masked_flips)
+    control = sum(bool(x) for x in random_masked_flips) / len(random_masked_flips)
+    return lesion - control
 
 
 def mask_audit(

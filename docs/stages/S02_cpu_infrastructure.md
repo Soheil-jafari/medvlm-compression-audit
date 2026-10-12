@@ -14,12 +14,12 @@ All with unit tests on small synthetic inputs. Replace entries in
 
 - [x] [agent] `evaluation/statistics.py`: paired bootstrap CI, McNemar test, Holm
   correction, mean and SD over seeds, Kendall's tau with bootstrap CI (for H4).
-- [ ] [agent] `evaluation/clinical.py`: per-finding sensitivity and specificity,
+- [x] [agent] `evaluation/clinical.py`: per-finding sensitivity and specificity,
   macro-F1, overall accuracy.
-- [ ] [agent] `evaluation/small_findings.py` and `rare_findings.py`: recall by
+- [x] [agent] `evaluation/small_findings.py` and `rare_findings.py`: recall by
   lesion-size stratum and by prevalence group.
-- [ ] [agent] `evaluation/calibration.py`: ECE, Brier score, risk-coverage curve.
-- [ ] [agent] `evaluation/image_reliance.py`: `answer_flip_rate`,
+- [x] [agent] `evaluation/calibration.py`: ECE, Brier score, risk-coverage curve.
+- [x] [agent] `evaluation/image_reliance.py`: `answer_flip_rate`,
   `lesion_mask_effect` (the pure parts).
 - [ ] [agent] `evaluation/language.py` and `hallucination.py`: yes/no answer parsing
   and hallucination / omission / negation rates from parsed answers.

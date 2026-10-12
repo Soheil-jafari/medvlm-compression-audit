@@ -119,13 +119,13 @@ def test_public_functions_have_return_annotations(name: str) -> None:
 
 def test_stubs_raise_not_implemented_with_todo() -> None:
     from medcompress.compression.pruning.criteria.clinical import aggregate_importance
-    from medcompress.evaluation.small_findings import small_finding_recall
+    from medcompress.evaluation.image_reliance import check_teacher_image_reliance
     from medcompress.evaluation.statistics import aggregate_results
 
     for call in (
         lambda: aggregate_importance({}, {}),
         lambda: aggregate_results(Path("results"), Path("results/summary")),
-        lambda: small_finding_recall([True], [0]),
+        lambda: check_teacher_image_reliance({}, None),
     ):
         with pytest.raises(NotImplementedError, match="TODO"):
             call()

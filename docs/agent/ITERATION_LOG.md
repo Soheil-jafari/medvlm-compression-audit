@@ -141,3 +141,19 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: S02 metric modules (`clinical`, `small_findings`, `rare_findings`).
 - Needs the team: nothing new.
+
+## Iteration 10: 2026-10-12 (interactive)
+- Stage / item: S02, metric modules.
+- Did: implemented `evaluation/clinical.py` (yes/no parser: answer must start with the
+  word yes or no; per-finding sensitivity and specificity; macro-F1 leaving out
+  undefined findings; accuracy; unparseable answers count as errors),
+  `small_findings.py` (recall per lesion-size stratum, stratum 0 = primary
+  endpoint), `rare_findings.py` (pooled or mean-per-finding recall per prevalence
+  group), `calibration.py` (equal-width ECE, Brier, risk-coverage, discrete AURC) and
+  the pure parts of `image_reliance.py` (flip rate, lesion-mask effect). The parsing
+  and pooling rules are proposals for the pre-registration. New
+  `tests/test_metrics.py` (18 tests).
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: `evaluation/language.py` and `hallucination.py`.
+- Needs the team: nothing new.
