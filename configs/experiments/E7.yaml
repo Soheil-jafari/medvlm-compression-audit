@@ -19,9 +19,11 @@ experiment:
     - scripts/06_evaluate.py
     - scripts/07_benchmark_efficiency.py
   outputs:
-    - results/E7/<budget>/seed{0,1,2}/unit_scores.csv
+    - results/E7/nobudget/seed{0,1,2}/unit_scores.csv
     - results/E7/<budget>/seed{0,1,2}/metrics.csv
-    - results/E7/<budget>/seed{0,1,2}/mask_audit.csv
+    - results/E7/<budget>/seed{0,1,2}/removal.json
+    - results/E7/<budget>/seed{0,1,2}/budget_search.csv
+    - results/E7/<budget>/seed{0,1,2}/efficiency.csv
   status: planned
 
 pruning:
@@ -31,7 +33,7 @@ pruning:
     weighting: clinical                   # A1: uniform, A2: rarity_only
     weights_table: preregistration/finding_weights.yaml
     probe_template: from_domain           # configs/domain/<domain>.yaml probe.template
-    negatives_per_positive: TODO
-    negative_delta: TODO                  # keep or clip at 0
+    negatives_per_positive: 1             # D07 (2026-10-12)
+    negative_delta: keep                  # D07 (2026-10-12): signed effects
     ablation_method: TODO                 # how a unit is disabled during scoring
-    batch_size: TODO
+    batch_size: 4                         # D07 (2026-10-12)

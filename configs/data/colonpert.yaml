@@ -1,0 +1,7 @@
+_base_: _dataset_base.yaml
+
+dataset:
+  name: "ColonPert (Colon-X)"
+  domain: endoscopy
+  candidate_role: TODO  # stress_test candidate
+  notes: "Human-perturbation robustness set of Colon-X; size and terms not found yet. Not needed: we generate our own stress tests."

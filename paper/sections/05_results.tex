@@ -1,60 +1,72 @@
 \section{Results}
 \label{sec:results}
 
-% All numbers come from scripts/08_aggregate_results.py outputs in paper/tables/.
+% All numbers come from scripts/08_aggregate_results.py outputs: tables in
+% paper/tables/*.tex, figures in paper/figures/*.pdf, and number macros in
+% paper/tables/numbers.tex (e.g. \resESevenBTwoSmallFindingRecall).
+% Never type a result number in this file; tests/test_paper.py checks it.
 
 \subsection{Headline vs.\ hidden metrics}
-% TODO: average accuracy holds while hidden metrics drop.
+% TODO: average accuracy holds while hidden metrics drop (H1).
 \todo{headline vs hidden}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/headline_vs_hidden.pdf}
+  \caption{Headline vs.\ hidden damage: drop in accuracy against drop in
+  small-finding recall relative to \expid{E2}; points above the diagonal lose
+  more on small findings than on accuracy (H1).}
+  \label{fig:headline}
+\end{figure}
 
 \begin{table}[t]
   \centering
-  \caption{Main results: \expid{E3}/\expid{E5}/\expid{E6}/\expid{E7} at
-  \expid{B1}--\expid{B3}; accuracy and primary endpoints (small-finding recall,
-  lesion-mask effect), mean $\pm$ SD over 3 seeds with 95\% CIs.}
+  \caption{Main results: \expid{E2} reference, \expid{E3} (measured footprint) and
+  \expid{E5}--\expid{E8} at \expid{B1}--\expid{B3}; mean $\pm$ SD over 3 seeds.}
   \label{tab:main}
-  \begin{tabular}{lllll}
-    \toprule
-    Budget & Arm & Accuracy & Small-finding recall & Lesion-mask effect \\
-    \midrule
-    \expid{B1} & \expid{E3} / \expid{E5} / \expid{E6} / \expid{E7} & -- & -- & -- \\
-    \expid{B2} & \expid{E3} / \expid{E5} / \expid{E6} / \expid{E7} & -- & -- & -- \\
-    \expid{B3} & \expid{E3} / \expid{E5} / \expid{E6} / \expid{E7} & -- & -- & -- \\
-    \bottomrule
-  \end{tabular}
+  \resizebox{\linewidth}{!}{\input{tables/main}}
 \end{table}
 
 \subsection{Which compression family damages what}
-% TODO: per-metric change relative to E2 for E1, E3, E4, E5, E6, E7, E8, E9.
+% TODO: per-metric change relative to E2 (H2).
 \todo{family comparison}
 
 \begin{figure}[t]
   \centering
-  \fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}
-    Placeholder: change vs.\ \expid{E2} on each metric (rows) for \expid{E1},
-    \expid{E3}--\expid{E9} (columns).\vspace{3em}}}
-  \caption{Which family damages what. Fed by \expid{E1}--\expid{E9}.}
+  \includegraphics[width=\linewidth]{figures/family_damage.pdf}
+  \caption{Change vs.\ \expid{E2} on each metric (rows) for each compressed arm
+  (columns).}
   \label{fig:families}
 \end{figure}
 
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/budget_curves.pdf}
+  \caption{Small-finding recall against measured peak memory (fraction of
+  \expid{E2}).}
+  \label{fig:budgets}
+\end{figure}
+
 \subsection{Clinical vs.\ generic pruning criteria}
-% TODO: primary endpoints at B2, E7 vs best of E5 and E6 (Holm-corrected).
+% TODO: primary endpoints at B2, E7 vs best of E5 and E6 (H3, Holm-corrected).
 \todo{clinical vs generic}
 
 \begin{table}[t]
   \centering
-  \caption{Primary comparison at \expid{B2}: \expid{E7} vs.\ \expid{E5} (magnitude,
-  activation, Taylor) and \expid{E6}; paired differences with 95\% CIs and
+  \caption{Primary comparison at \expid{B2}: \expid{E7} minus the best of
+  \expid{E5}/\expid{E6} (chosen on validation); paired bootstrap 95\% CIs and
   Holm-adjusted $p$-values.}
   \label{tab:primary}
-  \begin{tabular}{llll}
-    \toprule
-    Comparison & $\Delta$ small-finding recall & $\Delta$ lesion-mask effect & $p_{\mathrm{Holm}}$ \\
-    \midrule
-    \expid{E7} vs.\ best of \expid{E5}/\expid{E6} & -- & -- & -- \\
-    \bottomrule
-  \end{tabular}
+  \resizebox{\linewidth}{!}{\input{tables/primary}}
 \end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/mask_audit.pdf}
+  \caption{Mask audit: answer flip rate when the lesion is masked vs.\ an
+  area-matched random region.}
+  \label{fig:mask}
+\end{figure}
 
 \subsection{Ablations}
 % TODO: A1-A6 at B2.
@@ -62,34 +74,37 @@
 
 \begin{table}[t]
   \centering
-  \caption{Criterion ablations at \expid{B2}: \expid{A1} unweighted, \expid{A2}
-  rarity-only, \expid{A3} random, \expid{A4} calibration size, \expid{A5} $\Delta$
-  definition, \expid{A6} unit granularity; compared with \expid{E7}.}
+  \caption{Criterion ablations at \expid{B2}.}
   \label{tab:ablations}
-  \begin{tabular}{lll}
-    \toprule
-    Ablation & Small-finding recall & Lesion-mask effect \\
-    \midrule
-    \expid{E7} & -- & -- \\
-    \expid{A1}--\expid{A6} & -- & -- \\
-    \bottomrule
-  \end{tabular}
+  \input{tables/ablations}
 \end{table}
 
-\subsection{Efficiency}
-% TODO: measured footprints; low-precision kernel check for E3, E4, E8, E9.
+\subsection{Is accuracy a reliable guide?}
+% TODO: H4.
+\todo{ranking}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/rank_order.pdf}
+  \caption{Rank of each compressed arm by accuracy vs.\ by small-finding recall
+  (H4).}
+  \label{fig:rank}
+\end{figure}
+
+\subsection{Efficiency and external test}
+% TODO: measured footprints; low-precision kernel check; external test.
 \todo{efficiency}
 
 \begin{table}[t]
   \centering
-  \caption{Efficiency on the timing GPU for \expid{E0}--\expid{E9}: parameters, file
-  size, peak memory, cold/warm latency, throughput, energy, kernel check.}
+  \caption{Efficiency on the timing GPU (budget-matched arms at \expid{B2}).}
   \label{tab:efficiency}
-  \begin{tabular}{llllll}
-    \toprule
-    Arm & Params & File size & Peak memory & Latency (cold/warm) & Kernels OK \\
-    \midrule
-    \expid{E0}--\expid{E9} & -- & -- & -- & -- & -- \\
-    \bottomrule
-  \end{tabular}
+  \resizebox{\linewidth}{!}{\input{tables/efficiency}}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \caption{External test (deduplicated against training images).}
+  \label{tab:external}
+  \input{tables/external}
 \end{table}

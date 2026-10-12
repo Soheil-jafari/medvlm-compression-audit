@@ -1,0 +1,8 @@
+_base_: _dataset_base.yaml
+
+dataset:
+  name: "EndoBench"
+  domain: endoscopy
+  candidate_role: external_test           # chosen 2026-10-12 (D02); stays CANDIDATE until licence and download are verified
+  reference: TODO                         # arXiv 2505.23601, NeurIPS 2025 Datasets and Benchmarks
+  notes: "6,832 VQA pairs from 21 datasets (paper). Licence and download location TODO; deduplicate against training images before use."

@@ -1,0 +1,117 @@
+# Student selection protocol (memo docs/decisions/D05_student_selection.md,
+# stage docs/stages/S05b_student_selection.md).
+# Successive halving 10 -> 5 -> 3 -> 1 on the VALIDATION split only.
+# Every TODO is fixed, and frozen_on is set, before Round 1 runs.
+#
+# AMENDED 2026-10-12 (Soheil, D05 amendment): the study uses ONE student, Qwen2.5-VL-3B
+# (configs/models/qwen2_5_vl_3b_student.yaml), with Round 0 and the image-use checks only;
+# Qwen3-VL-2B is the named fallback and the optional second student. Rounds R1-R3, the score S
+# and the ranking stay in the code and in this file for the full protocol, but are not run
+# unless the team asks for them.
+_base_: [base.yaml, training.yaml]   # paths, domain, evaluation settings and the training recipe
+
+student_selection:
+  status: "AMENDED - ONE STUDENT WITH CHECKS (D05 amendment, 2026-10-12); R1-R3 not run"
+  memo: docs/decisions/D05_student_selection.md
+  frozen_on: TODO
+  split: val
+  tokenizer_rule: C             # decided 2026-10-12: teacher-family (same tokenizer) models only, in every round
+                                # (A: all in R1, compatible from R2; B: sequence-level distillation for all)
+
+  # Round 1 pool: one model per architecture, all sharing the teacher's Qwen tokenizer
+  # (D01 = Qwen2.5-VL-7B + Kvasir LoRA; D05 = teacher family only). Fixed 2026-10-12.
+  candidates:
+    - models/qwen2_5_vl_3b_student.yaml
+    - models/qwen3_vl_2b_student.yaml
+    - models/internvl3_5_2b_student.yaml
+    - models/ovis2_5_2b_student.yaml
+    - models/fastvlm_1_5b_student.yaml
+    - models/hulu_med_4b_student.yaml
+    - models/llava_onevision_1_5_4b_student.yaml
+    - models/medvlm_r1_2b_student.yaml
+    - models/sail_vl2_2b_student.yaml
+    - models/llava_onevision_0_5b_student.yaml
+
+  # Replace a candidate that fails Round 0, in this order (Qwen tokenizer family;
+  # hub records read 2026-10-12).
+  reserves:
+    - OpenGVLab/InternVL3-2B          # apache-2.0, 2.09B
+    - Qwen/Qwen2-VL-2B-Instruct       # apache-2.0, 2.21B
+    - Qwen/Qwen3-VL-4B-Instruct       # apache-2.0, 4.44B (other size of candidate 2)
+    - nvidia/Eagle2-2B                # cc-by-nc-4.0, 2.21B; tokenizer files byte-different
+
+  compute_unit_b: TODO          # training samples per candidate in R1 (the unit b of the budget), set from R0 throughput;
+                                # R2 trains on compute_units x b samples
+  data_seed: 0                  # picks the same training rows for every candidate and round
+  manual_gate_failures: {}      # gates G4 and G5 are checked by the team: {candidate: [G5_no_test_exposure]}
+
+  rounds:
+    R0:
+      purpose: feasibility on one Kaggle T4, one LoRA step only
+      keep: 10
+      training: none
+      compute_units: 0
+      seeds: 1
+      probes: 20
+      lora_step:                # feasibility only; these numbers do not carry over to later rounds
+        rank: 16
+        alpha: 32
+        dropout: 0.0
+        learning_rate: 1.0e-4
+    R1:
+      purpose: simplified screen, identical short LoRA fine-tune for every candidate
+      keep: 5
+      training: short_lora
+      zero_shot_first: true
+      validation_subset:        # the same images for every candidate, drawn by seed (no list of names stored)
+        n_images: TODO
+        seed: 0
+      compute_units: 1
+      seeds: 1
+    R2:
+      purpose: top-5 architectures retrained as new models with the full student recipe
+      keep: 3
+      training: full_student_recipe
+      size_rule: keep_checkpoint   # or same_family_resize, fixed before R2
+      compute_units: 2
+      seeds: 1
+    R3:
+      purpose: top 3 with the exact E2 recipe
+      keep: 1
+      training: e2_recipe
+      compute_units: 1.7
+      seeds: 2
+
+  score:
+    weights:
+      probe_macro_f1: 0.4
+      small_finding_recall: 0.3
+      image_reliance: 0.3
+    image_reliance_metric:
+      R1: blank_image_drop
+      R2: lesion_mask_effect
+      R3: lesion_mask_effect
+    scaling: min_max_within_round
+    ci: paired_bootstrap_95
+    tie_break:
+      - teacher_tokenizer_compatible
+      - lower_fp16_peak_memory
+      - simpler_licence
+
+  gates:
+    G1_hardware: {round: R0, rule: "loads, scores and trains one LoRA step on one T4 in fp16"}
+    G2_uses_image: {round: R1, rule: "blank-image accuracy drop above threshold", threshold: TODO}
+    G3_compressible: {round: R2, rule: "25% decoder-layer removal and 4-bit PTQ run, cut measured memory and change validation metrics; pass/fail only"}
+    G4_licence: {round: R0, rule: "research use and publication of results allowed"}
+    G5_no_test_exposure: {round: R0, rule: "no documented use of our test images in training"}
+
+  fairness:
+    # Image size: inputs.image_longest_side (one value for the teacher and every student).
+    # LoRA settings, learning rate, batch size and KD weight: the training section (training.yaml),
+    # the same for every candidate; R1 only changes the number of examples and uses kd_weight 0.
+    lora_targets: [decoder_attention, decoder_mlp]
+    vision_encoder: frozen
+    precision: fp16             # T4 has no bf16
+    decoding: greedy
+    chat_template: per_model
+    yes_no_scoring: log_probability

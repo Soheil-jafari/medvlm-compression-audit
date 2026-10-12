@@ -1,7 +1,7 @@
 domain:
   name: endoscopy
   modality: GI endoscopy
-  status: "CANDIDATE - NOT DECIDED (lead candidate)"
+  status: "DECIDED"                     # 2026-10-12 (D01, D02)
   candidate_datasets:
     - data/kvasir_vqa_x1.yaml
     - data/kvasir_seg.yaml

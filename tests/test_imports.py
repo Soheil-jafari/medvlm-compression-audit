@@ -44,13 +44,20 @@ EXPECTED_MODULES = {
     "medcompress.compression.pruning.criteria.output_similarity",
     "medcompress.compression.pruning.criteria.random",
     "medcompress.compression.pruning.criteria.clinical",
+    "medcompress.compression.lora",
+    "medcompress.compression.distillation.batching",
     "medcompress.compression.distillation.losses",
     "medcompress.compression.distillation.offline_kd",
     "medcompress.compression.recovery",
+    "medcompress.selection.ranking",
+    "medcompress.selection.rounds",
+    "medcompress.selection.driver",
     "medcompress.evaluation.clinical",
     "medcompress.evaluation.small_findings",
     "medcompress.evaluation.rare_findings",
     "medcompress.evaluation.image_reliance",
+    "medcompress.evaluation.probe_suites",
+    "medcompress.evaluation.free_text",
     "medcompress.evaluation.calibration",
     "medcompress.evaluation.hallucination",
     "medcompress.evaluation.language",
@@ -118,15 +125,9 @@ def test_public_functions_have_return_annotations(name: str) -> None:
 
 
 def test_stubs_raise_not_implemented_with_todo() -> None:
-    from medcompress.compression.pruning.criteria.clinical import aggregate_importance
-    from medcompress.evaluation.small_findings import small_finding_recall
-    from medcompress.evaluation.statistics import holm_correction
+    from medcompress.data.base import load_dataset
 
-    for call in (
-        lambda: aggregate_importance({}, {}),
-        lambda: holm_correction([0.01, 0.02]),
-        lambda: small_finding_recall([True], [0]),
-    ):
+    for call in (lambda: load_dataset({}),):
         with pytest.raises(NotImplementedError, match="TODO"):
             call()
 

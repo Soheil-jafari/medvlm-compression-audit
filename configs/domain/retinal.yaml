@@ -1,7 +1,7 @@
 domain:
   name: retinal
   modality: retinal fundus photography
-  status: "CANDIDATE - NOT DECIDED (alternative)"
+  status: "CANDIDATE - NOT DECIDED (optional second domain, after the main results; D02)"
   candidate_datasets:
     - data/idrid.yaml
     - data/fgadr.yaml

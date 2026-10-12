@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from medcompress.compression.pruning.units import PrunableUnit
-    from medcompress.config import RunContext
     from medcompress.data.base import VQASample
     from medcompress.models.base import VLMWrapper
 
@@ -44,9 +44,25 @@ class PruningCriterion(ABC):
     """Base class: score units on calibration data; higher score = more important."""
 
     name: str = "base"
+    needs_calibration: bool = True
+    """False for a criterion that never looks at calibration data (no ``calibration.size``)."""
 
-    def __init__(self, config: Mapping[str, Any]) -> None:
+    def __init__(self, config: Mapping[str, Any], *, seed: int = 0) -> None:
         self.config = config
+        self.seed = seed
+
+    @classmethod
+    def check_settings(cls, config: Mapping[str, Any]) -> None:
+        """Raise :class:`ConfigError` for a setting of this criterion that is open or invalid.
+
+        Called by stage 04 before any model is loaded; the default has nothing to check.
+        """
+        return None
+
+    @property
+    def data_root(self) -> Path:
+        """``paths.data_root`` of the config (where the images live)."""
+        return Path(self.config["paths"]["data_root"])
 
     @abstractmethod
     def score(
@@ -61,18 +77,10 @@ class PruningCriterion(ABC):
     def rank(self, scores: Mapping[str, float]) -> list[str]:
         """Return unit IDs from least to most important (removal order).
 
-        Tie-breaking must be deterministic (e.g. by unit ID) and documented.
+        Ties are broken by unit ID, so the order is deterministic. NaN scores are
+        rejected.
         """
-        raise NotImplementedError("TODO: deterministic ascending sort with tie-breaking.")
-
-
-def score_units_for_experiment(config: Mapping[str, Any], run: RunContext | None) -> None:
-    """Stage entry point for ``scripts/04_score_pruning_units.py``.
-
-    Loads the parent model (E2), enumerates units, runs the configured criterion
-    (``pruning.criterion``, or the variant for E5) and writes
-    ``unit_scores.csv`` to the run directory.
-
-    Used by: E5, E6, E7, A1-A6.
-    """
-    raise NotImplementedError("TODO: wire config -> model -> units -> criterion -> scores CSV.")
+        bad = [unit for unit, value in scores.items() if value != value]
+        if bad:
+            raise ValueError(f"NaN importance for units: {sorted(bad)}")
+        return [unit for unit, _ in sorted(scores.items(), key=lambda item: (item[1], item[0]))]

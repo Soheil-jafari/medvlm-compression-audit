@@ -1,6 +1,21 @@
 \section{Additional Results and Details}
 \label{sec:appendix}
 
+\subsection{Student selection}
+\label{app:student-selection}
+The student is chosen by successive halving over ten candidate architectures that
+share the teacher's tokenizer, so that the cached teacher outputs can be reused
+without re-tokenisation. All stages use the validation split only; the test split
+is never touched. Stage 0 checks that a candidate fits one 16\,GB GPU and
+generates text; stage 1 gives all ten the same short fine-tune; stage 2 retrains
+the best five with the full student recipe; stage 3 retrains the best three with
+the exact \expid{E2} recipe and two seeds. One candidate is kept. A candidate is
+excluded at any stage if it fails one of five gates: it fits the hardware, it uses
+the image, it can be compressed (units can be enumerated and removed), its licence
+permits the study, and it has seen no test data.
+\todo{candidate table, per-stage scores and the selected student, filled from
+\texttt{results/} once the selection runs have finished}
+
 % TODO: per-finding sensitivity/specificity for every arm (E0-E9).
 % TODO: E9 (teacher 4-bit, matched memory) results.
 % TODO: A4 calibration-size curve (32/64/128/256).

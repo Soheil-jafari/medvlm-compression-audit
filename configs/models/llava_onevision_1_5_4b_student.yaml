@@ -1,0 +1,25 @@
+_base_: _model_base.yaml
+
+model:
+  name: "LLaVA-OneVision-1.5-4B-Instruct"
+  role: student
+  family: llava_onevision_1_5
+  size: "4B"
+  source: lmms-lab/LLaVA-OneVision-1.5-4B-Instruct
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/lmms-lab/LLaVA-OneVision-1.5-4B-Instruct
+  sha_seen: ae6819dedee37f667accb33cd4bed14a14eec147  # pin as revision only once chosen
+  parameters_stored: 4741610528
+  architecture:
+    vision_encoder: "RICE-ViT (base rice-vit-large-patch14-560), 24 layers x 1024, patch 14"
+    connector: "spatial merge 2 into the LLM"
+    language_model: "Qwen3-4B dimensions: 36 layers, hidden 2560, 32 heads / 8 KV heads"
+    tokenizer_family: qwen
+    vocab_size: 151936
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # vocab.json identical to the teacher's (hub blob hash); runtime check in S04
+  adapter: null
+  flags:
+    - "needs remote code (per model card)"
+    - "trained on large open data; check for endoscopy images (gate G5)"
+  notes: "Selection candidate (D05, Qwen family). Region-aware vision encoder; fully open training data."

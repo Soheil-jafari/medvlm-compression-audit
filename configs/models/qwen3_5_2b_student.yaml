@@ -1,0 +1,24 @@
+_base_: _model_base.yaml
+
+model:
+  name: "Qwen3.5-2B"
+  role: student
+  family: qwen3_5
+  size: "2B"
+  source: Qwen/Qwen3.5-2B
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/Qwen/Qwen3.5-2B
+  sha_seen: 15852e8c16360a2fea060d615a32b45270f8a8fc  # pin as revision only once chosen
+  parameters_stored: 2274069824
+  architecture:
+    vision_encoder: "ViT, 24 layers x 1024, patch 16"
+    connector: "vision built in from pre-training (per release notes, TODO: verify)"
+    language_model: "hybrid decoder, 24 layers (18 linear-attention, 6 full-attention every 4th), hidden 2048, 8 heads / 2 KV heads"
+    tokenizer_family: qwen3_5
+    vocab_size: 248320
+  tokenizer_shared_with: TODO
+  adapter: null
+  flags:
+    - "linear-attention layers need their own pruning-unit definitions"
+  notes: "NOT ELIGIBLE since 2026-10-12 (D01 Qwen teacher + D05 teacher-family rule). Was selection candidate 3 (D05). New tokenizer, not compatible with Qwen2.5 / Qwen3 teachers."

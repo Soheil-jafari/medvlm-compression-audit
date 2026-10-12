@@ -1,0 +1,24 @@
+_base_: _model_base.yaml
+
+model:
+  name: "LLaVA-OneVision-0.5B (ov)"
+  role: student
+  family: llava_onevision
+  size: "0.5B"
+  source: lmms-lab/llava-onevision-qwen2-0.5b-ov
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/lmms-lab/llava-onevision-qwen2-0.5b-ov
+  sha_seen: 381d9947148efb1e58a577f451c05705ceec666e  # pin as revision only once chosen
+  parameters_stored: 893618208
+  architecture:
+    vision_encoder: "SigLIP so400m, patch 14, 384 px"
+    connector: "AnyRes tiling up to 9 crops (384-2304 px grid) + 2-layer MLP, bilinear pooling"
+    language_model: "Qwen2-0.5B, 24 layers, hidden 896, 14 heads / 2 KV heads"
+    tokenizer_family: qwen
+    vocab_size: 151936
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # vocab.json identical to the teacher's (hub blob hash); runtime check in S04
+  adapter: null
+  flags:
+    - "custom architecture name in config (remote code or LLaVA code base likely)"
+  notes: "Selection candidate (D05, Qwen family). Smallest candidate; many tiles per image."

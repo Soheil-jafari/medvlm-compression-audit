@@ -8,13 +8,14 @@ version = "0.0.1"
 description = "What Compression Forgets: pruning vs. quantization vs. distillation in medical vision-language models (research scaffolding)."
 readme = "README.md"
 requires-python = ">=3.10"
-# TODO: choose a licence before the repository is made public.
+license = {text = "MIT"}
 authors = [
     { name = "Amir" },
     { name = "Soheil Jafari" },
     { name = "Farzan" },
 ]
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -29,14 +30,16 @@ dependencies = [
     "scipy>=1.10",
     "scikit-learn>=1.3",
     "matplotlib>=3.7",
+    "pillow>=9.1",
 ]
 
 [project.optional-dependencies]
 train = [
-    "torch>=2.1",
-    "transformers",  # TODO: pin once teacher/student pair is decided
-    "peft",
-    "accelerate",
+    "torch>=2.8",
+    "torchvision>=0.23",
+    "transformers==5.19.0",
+    "peft==0.21.2",
+    "accelerate>=1.0",
     "datasets",
 ]
 dev = [
@@ -63,3 +66,6 @@ known-first-party = ["medcompress"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra"
+markers = [
+    "heavy: needs torch and transformers (tiny random models on CPU); skipped when they are not installed",
+]

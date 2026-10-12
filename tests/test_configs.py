@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -22,6 +24,7 @@ from medcompress.data.probes import format_probe_question
 from medcompress.registry import REGISTRY, SCORE_UNITS, TRAINING_SEEDS
 
 CONFIG_ROOT = config_root()
+DECIDED_STATUS = "DECIDED"
 ALL_YAML = sorted(CONFIG_ROOT.rglob("*.yaml"))
 
 
@@ -111,16 +114,26 @@ def test_candidate_configs_are_marked_and_not_guessed(path: Path) -> None:
         return
     section = config.get("model") or config.get("dataset")
     assert section is not None
-    assert section["status"] == CANDIDATE_STATUS
-    if section["status"] == CANDIDATE_STATUS:
+    assert section["status"] in (CANDIDATE_STATUS, DECIDED_STATUS)
+    if section["status"] == DECIDED_STATUS:
+        assert section.get("verified_on") and section.get("verified_from")
+        assert not str(section.get("revision", "TODO")).startswith("TODO"), "pin a revision"
+    verified = bool(section.get("verified_on")) and str(
+        section.get("verified_from") or ""
+    ).startswith("https://")
+    if not verified:
         assert str(section["source"]).startswith("TODO"), "do not guess hub IDs / URLs"
         assert str(section["licence"]).startswith("TODO"), "do not guess licence terms"
+    else:
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(section["verified_on"]))
+        assert not str(section["source"]).startswith("TODO")
+        assert not str(section["licence"]).startswith("TODO")
 
 
 @pytest.mark.parametrize("name", ["endoscopy", "retinal"])
 def test_domain_configs(name: str) -> None:
     domain = load_config(CONFIG_ROOT / "domain" / f"{name}.yaml")["domain"]
-    assert domain["status"].startswith(CANDIDATE_STATUS)
+    assert domain["status"].startswith((CANDIDATE_STATUS, DECIDED_STATUS))
     for key in ("findings", "prevalence_groups", "probe", "small_findings"):
         assert key in domain
     assert set(domain["prevalence_groups"]) >= {"common", "medium", "rare"}
@@ -191,3 +204,49 @@ def test_deep_merge_does_not_mutate_inputs() -> None:
     merged = deep_merge(base, {"a": {"c": 2}})
     assert base == {"a": {"b": 1}}
     assert merged == {"a": {"b": 1, "c": 2}}
+
+
+def test_apply_variant_picks_the_entry_of_every_by_variant_table() -> None:
+    from medcompress.config import ConfigError, apply_variant
+
+    config = {
+        "pruning": {
+            "criterion": "by_variant",
+            "criterion_by_variant": {"a": "magnitude", "b": "taylor"},
+            "calibration": {"size_by_variant": {"a": 32, "b": 64}, "split": "train"},
+        },
+        "other": {"keep": 1},
+    }
+    chosen = apply_variant(config, "b")
+    assert chosen["pruning"] == {
+        "criterion": "taylor",
+        "calibration": {"size": 64, "split": "train"},
+    }
+    assert chosen["other"] == {"keep": 1}
+    assert "criterion_by_variant" in config["pruning"]  # the input is left alone
+    with pytest.raises(ConfigError, match="pruning.criterion_by_variant needs a variant"):
+        apply_variant(config, None)
+    with pytest.raises(ConfigError, match="no entry for variant 'c'"):
+        apply_variant(config, "c")
+    plain = {"x": {"y": 1}}
+    assert apply_variant(plain, None) == plain and apply_variant(plain, "anything") == plain
+
+
+def test_open_settings_of_several_readers_are_listed_in_one_error() -> None:
+    from medcompress.config import collect_open_settings
+
+    def reader(message: str) -> Callable[[], None]:
+        def read() -> None:
+            raise ConfigError(message)
+
+        return read
+
+    collect_open_settings(lambda: None)  # nothing open: no error
+    with pytest.raises(ConfigError) as caught:
+        collect_open_settings(
+            reader("settings still open: a.b, c"),
+            lambda: None,
+            reader("settings still open: c, d"),
+            reader("x must be positive"),
+        )
+    assert str(caught.value) == "settings still open: a.b, c, d; x must be positive"

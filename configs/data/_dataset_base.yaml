@@ -1,0 +1,21 @@
+# Template inherited by every candidate dataset config. Do not guess URLs, hub IDs,
+# sizes or licence terms: leave TODO until the owner has verified them.
+# Datasets are never stored in the repository (docs/data_policy.md).
+dataset:
+  status: "CANDIDATE - NOT DECIDED"
+  name: TODO
+  domain: TODO                            # endoscopy | retinal
+  candidate_role: TODO                    # main_qa | masks | rare_findings | stress_test | external_test
+  access: TODO                            # open | registration | restricted
+  source: TODO                            # verified URL / hub ID
+  revision: TODO                          # pinned version or commit once chosen
+  licence: TODO                           # verify terms before use
+  reference: TODO                         # key in paper/references.bib
+  local_dir: ${env:MEDCOMPRESS_DATA_ROOT,data}/TODO
+  has_masks: TODO
+  has_patient_ids: TODO
+  official_splits: TODO
+  label_mapping: TODO                     # dataset labels -> domain finding list
+  manifest: TODO                          # path outside git + manifest SHA-256
+  data_card: docs/data_cards/TEMPLATE.md
+  notes: ""

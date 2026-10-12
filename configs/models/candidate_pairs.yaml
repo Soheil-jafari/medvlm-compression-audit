@@ -1,6 +1,8 @@
 # Candidate teacher -> student pairs. Teacher and student MUST share a tokenizer
 # (offline distillation uses cached top-k token probabilities).
 status: "CANDIDATE - NOT DECIDED"
+# 2026-10-12: teacher decided (D01: qwen2_5_vl); the student is chosen among the
+# Qwen-family models in configs/student_selection.yaml (D05).
 candidate_pairs:
   - id: qwen2_5_vl
     teacher: models/qwen2_5_vl_7b_teacher.yaml

@@ -1,0 +1,24 @@
+_base_: _model_base.yaml
+
+model:
+  name: "InternVL3.5-2B"
+  role: student
+  family: internvl3_5
+  size: "2B"
+  source: OpenGVLab/InternVL3_5-2B
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/OpenGVLab/InternVL3_5-2B
+  sha_seen: 7d7bd7bcc35b77b391883ebd7f9686cfa0e25cc0  # pin as revision only once chosen
+  parameters_stored: 2348347392
+  architecture:
+    vision_encoder: "InternViT-300M, 24 layers x 1024, 448 px tiles, patch 14"
+    connector: "pixel shuffle (downsample 0.5) + MLP"
+    language_model: "Qwen3-1.7B, 28 layers, hidden 2048, 16 heads / 8 KV heads"
+    tokenizer_family: qwen
+    vocab_size: 151936
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # same vocab.json; merges.txt differs only by a version header; runtime check in S04
+  adapter: null
+  flags:
+    - "custom architecture name in config (remote code likely)"
+  notes: "Selection candidate 4 (D05)."

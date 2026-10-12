@@ -16,21 +16,25 @@ paths:
   checkpoint_root: ${env:MEDCOMPRESS_CHECKPOINT_ROOT,checkpoints}
   output_root: ${env:MEDCOMPRESS_OUTPUT_ROOT,outputs}
   results_root: ${env:MEDCOMPRESS_RESULTS_ROOT,results}
+  private_root: ${env:MEDCOMPRESS_PRIVATE_ROOT,private}   # splits and mask links from RC-D1; never in git
 
 # Which candidate configs are active. Nothing here is decided yet.
 components:
-  status: "CANDIDATE - NOT DECIDED"
+  status: "PARTLY DECIDED: domain, teacher, datasets, student (2026-10-12)"
   domain: domain/endoscopy.yaml          # lead candidate; alternative: domain/retinal.yaml
   budgets: budgets.yaml
   finding_weights: preregistration/finding_weights.yaml
   candidate_model_pairs: models/candidate_pairs.yaml
-  teacher: TODO                           # one of configs/models/*_teacher.yaml
-  student: TODO                           # must share the teacher's tokenizer
-  datasets:
-    train_qa: TODO                        # e.g. one of configs/data/*.yaml
-    masks: TODO
-    rare_findings: TODO
-    external_test: TODO
+  teacher: models/qwen2_5_vl_7b_teacher.yaml   # decided 2026-10-12 (D01)
+  student: models/qwen2_5_vl_3b_student.yaml   # chosen 2026-10-12 (D05 amendment: one student with checks); fallback models/qwen3_vl_2b_student.yaml
+  datasets:                               # decided 2026-10-12 (D02)
+    train_qa: data/kvasir_vqa_x1.yaml
+    masks: data/kvasir_seg.yaml           # matched to VQA images by fingerprint
+    rare_findings: data/kvasir_vqa_x1.yaml
+    external_test: data/endobench.yaml    # licence / download still to verify
+
+inputs:
+  image_longest_side: TODO                # px; one value for the teacher and every student, fixed at the S05b freeze
 
 seeds:
   training: [0, 1, 2]                     # 3 seeds for every training arm
@@ -58,9 +62,22 @@ evaluation:
     - calibration
     - hallucination
     - language
-  test_split: TODO
-  external_test: TODO
-  calibration_bins: TODO
-  bootstrap_resamples: TODO
+  split: val                              # split scored by scripts/06_evaluate.py; "test" is refused until the pre-registration is frozen
+  val_split: kvasir_vqa_x1 official test, half by img_id   # D02 Q1 = A
+  test_split: kvasir_vqa_x1 official test, other half
+  external_test: data/endobench.yaml
+  calibration_bins: 15                    # D06 (2026-10-12): equal-width bins
+  bootstrap_resamples: 10000              # D06 (2026-10-12)
+  rare_finding_pooling: pooled            # proposal: pool the positives of all findings in a prevalence group (pre-registration S07)
+  max_new_tokens: TODO                    # free-text suites; same rule as the teacher cache (D04): ceil(1.5 x p99 answer words) + 8
+  generation_samples: 1000                # D06 (2026-10-12): QA rows answered by free generation (null = all); same rows for every arm
   ci_level: 0.95
   multiple_testing: holm
+
+# Shared by the Gate 1 check (E0) and the lesion-mask audit of every arm.
+image_reliance_check:
+  tests: [blank_image, lesion_masked, random_region_masked, other_patient_image]
+  fill: 128                               # D04 decided 2026-10-12: flat mid-grey for the blank image and both mask conditions
+  mask_findings: TODO                     # finding ids the lesion masks delineate (polyp for Kvasir-SEG); must be in the frozen finding list
+  max_probes_per_finding: null            # null = all labelled images; cap only if time requires, same cap for every model
+  max_mask_probes: null

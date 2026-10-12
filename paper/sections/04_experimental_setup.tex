@@ -2,26 +2,21 @@
 \label{sec:setup}
 
 \subsection{Models}
-% TODO: teacher / student pair (shared tokenizer), adapters, precision. Undecided.
+% TODO: teacher Qwen2.5-VL-7B-Instruct + Kvasir-VQA-x1 LoRA (D01); student chosen by
+% the staged selection over ten Qwen-family models (D05, appendix); fp16 on T4.
 \todo{models}
 
 \subsection{Data}
-% TODO: datasets and roles, patient-level splits, masks, finding list, prevalence
-% groups, deduplication of the external test set. Undecided; candidates include
-% Colon-X \cite{colonx}.
+% TODO: Kvasir-VQA-x1 (main QA; validation and test = halves of its official test
+% split by image), Kvasir-SEG masks matched by fingerprint, EndoBench external test
+% (deduplicated), finding list and prevalence groups (D02).
 \todo{data}
 
 \begin{table}[t]
   \centering
-  \caption{Datasets, roles and split sizes. \todo{fill once datasets are decided}}
+  \caption{Data statistics (aggregate counts from the data-preparation run; generated).}
   \label{tab:data}
-  \begin{tabular}{llll}
-    \toprule
-    Dataset & Role & Images (train/val/test) & Masks \\
-    \midrule
-    -- & -- & -- & -- \\
-    \bottomrule
-  \end{tabular}
+  \input{tables/setup_data}
 \end{table}
 
 \subsection{Budgets}

@@ -31,12 +31,14 @@ model:
   start_from: pretrained
   precision: full
 
-image_reliance_check:
-  tests: [blank_image, lesion_masked, random_region_masked, other_patient_image]
-  go_no_go_threshold: TODO                # pre-registered
+image_reliance_check:                     # tests, fill, mask_findings and caps are in base.yaml
+  gate1:                                  # D04 decided 2026-10-12 (moderate rule)
+    min_original_balanced_accuracy: 0.65
+    min_blank_accuracy_drop: 0.10
+    min_lesion_mask_effect_ci_low: 0.0    # the CI of the lesion-mask effect must lie above zero
 
 teacher_cache:
-  splits: TODO
-  top_k: TODO
-  max_new_tokens: TODO
+  splits: [train]                         # S05: cache on the training split only
+  top_k: 20                               # D04 decided 2026-10-12
+  max_new_tokens: TODO                    # D04 rule: ceil(1.5 x p99 answer words) + 8, from the RC-D1 counts
   shard_size: 1000

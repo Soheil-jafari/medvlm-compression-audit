@@ -1,10 +1,14 @@
 # Heavy dependencies for training, compression and evaluation on GPU.
 # Install on Kaggle / Colab / rented GPU only, never needed for CI.
 -r base.txt
-torch>=2.1
-transformers          # TODO: pin a version once the teacher/student pair is decided
-peft
-accelerate
+# Versions below are the ones the model wrapper and the surgery tests were run with
+# (CPU, tiny models). On Kaggle this replaces the preinstalled torch; restart the
+# kernel after installing.
+torch>=2.8            # tested with 2.8.0
+torchvision>=0.23     # the Qwen image and video processors need it; 0.23 matches torch 2.8
+transformers==5.19.0  # the code relies on dtype= and logits_to_keep=
+peft==0.21.2
+accelerate>=1.0
 datasets
 
 # Optional quantization backends (E3, E4, E8, E9).

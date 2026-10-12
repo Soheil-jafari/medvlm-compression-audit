@@ -1,0 +1,24 @@
+_base_: _model_base.yaml
+
+model:
+  name: "Ovis2.5-2B"
+  role: student
+  family: ovis2_5
+  size: "2B"
+  source: AIDC-AI/Ovis2.5-2B
+  licence: apache-2.0
+  verified_on: "2026-10-12"
+  verified_from: https://huggingface.co/api/models/AIDC-AI/Ovis2.5-2B
+  sha_seen: 393c932b2a03e28eb9aaa503e3c4ab3ad384d958  # pin as revision only once chosen
+  parameters_stored: 2570429672
+  architecture:
+    vision_encoder: "SigLIP2 NaViT (so400m, patch 16), native resolution"
+    connector: "visual embedding table (65,536 visual words)"
+    language_model: "Qwen3-1.7B, 28 layers, hidden 2048, 16 heads / 8 KV heads"
+    tokenizer_family: qwen
+    vocab_size: 151936
+  tokenizer_shared_with: models/qwen2_5_vl_7b_teacher.yaml   # same vocab.json; merges.txt differs only by a version header; runtime check in S04
+  adapter: null
+  flags:
+    - "custom architecture name in config (remote code likely)"
+  notes: "Selection candidate 5 (D05)."

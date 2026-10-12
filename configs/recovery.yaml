@@ -1,18 +1,22 @@
 # Shared recovery recipe: IDENTICAL for every pruning arm (E5, E6, E7, A1-A6).
 # Do not override any key below in an experiment config. tests/test_configs.py
 # checks that the merged recovery section is the same for all pruning arms.
+# D06 (2026-10-12): the adapter, optimiser and loss of the E2 recipe; 25 % of its steps.
 recovery:
   method: lora_plus_offline_kd
   teacher_cache_from: E0
   lora:
-    rank: TODO
-    alpha: TODO
-    dropout: TODO
-    target_modules: TODO
-  steps: TODO
-  learning_rate: TODO
-  batch_size: TODO
-  grad_accumulation: TODO
-  kd_weight: TODO
-  kd_temperature: TODO
-  data_subset: TODO
+    rank: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules: [decoder_attention, decoder_mlp]
+  steps: TODO                             # 25 % of the E2 steps, set at the selection freeze
+  learning_rate: 1.0e-4
+  batch_size: 4
+  grad_accumulation: 4
+  kd_weight: 0.5
+  kd_temperature: 2.0
+  data_subset: TODO                       # 25 % of the E2 examples; drawn from the seed alone
+  warmup_steps: 20
+  lr_schedule: linear
+  max_grad_norm: 1.0

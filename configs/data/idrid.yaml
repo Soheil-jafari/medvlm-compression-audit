@@ -1,0 +1,16 @@
+_base_: _dataset_base.yaml
+
+dataset:
+  name: "IDRiD"
+  domain: retinal
+  candidate_role: masks
+  access: open
+  source: https://idrid.grand-challenge.org/Data/
+  licence: cc-by-4.0
+  verified_on: "2026-10-12"
+  verified_from: https://idrid.grand-challenge.org/Data/
+  reference: TODO                         # doi 10.3390/data3030025
+  size_images: 81                          # segmentation part
+  has_masks: true                          # MA 81, EX 81, HE 80, SE 40; optic disc 81
+  has_patient_ids: false
+  notes: "Only for the optional second-domain study (D02 Q5)."
