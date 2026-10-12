@@ -116,3 +116,16 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: team answers D02; then S02 statistics.
 - Needs the team: D02 (five questions), D03.
+
+## Iteration 8: 2026-10-12 (interactive)
+- Stage / item: S01, applying D02 and D03.
+- Did: recorded D02 (endoscopy; Kvasir-VQA-x1 main QA with validation and test from
+  the official test split; Kvasir-SEG masks; EndoBench external, terms to verify;
+  retinal later) and D03 (MIT). Added `LICENSE`, the licence in `pyproject.toml`,
+  `CITATION.cff` and `README.md`; set the endoscopy domain, Kvasir-VQA-x1 and
+  Kvasir-SEG configs to `DECIDED` and pointed `configs/base.yaml` at them.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: S02, starting with `evaluation/statistics.py`.
+- Needs the team: dataset-access confirmations; optional full names for the
+  copyright line.

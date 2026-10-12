@@ -1,6 +1,9 @@
 # D02: Datasets and their roles
 
-**Status:** waiting on the team. Answer in `docs/agent/INBOX.md` (or in the session).
+**Status:** decided 2026-10-12 (Soheil): Q1 = A (validation and test are the two
+halves of the official test split, by image), Q2 = match Kvasir-SEG by fingerprint
+(default), Q3 = EndoBench (licence and download still to verify), Q4 = Kvasir-VQA-x1
+classes only to start (default), Q5 = retinal kept for later.
 **Stage:** S01. **Prepared:** 2026-10-12 (iteration 7).
 **Facts:** read from Hugging Face dataset records, dataset pages, papers and READMEs
 on 2026-10-12 (links below). Unconfirmed facts are marked `TODO: verify`.

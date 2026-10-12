@@ -133,5 +133,6 @@ Roles are provisional. See `docs/team.md` for review rules.
 - Data: [docs/data_policy.md](docs/data_policy.md). No data, images, checkpoints or
   secrets are ever committed.
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
-- Licence: TODO. The repository is already public, so this is urgent (memo D03 in
-  `docs/decisions/`).
+- Licence: code under the [MIT License](LICENSE) (decided 2026-10-12, memo D03).
+  Datasets and model weights keep their own licences and are never in this
+  repository.

@@ -1,6 +1,7 @@
 _base_: _dataset_base.yaml
 
 dataset:
+  status: "DECIDED"                     # 2026-10-12 (D02): masks
   name: "Kvasir-SEG"
   domain: endoscopy
   candidate_role: masks
@@ -9,6 +10,7 @@ dataset:
   licence: "research and educational use only; no commercial use without written permission"
   verified_on: "2026-10-12"
   verified_from: https://datasets.simula.no/kvasir-seg/
+  revision: "unversioned website release, accessed 2026-10-12"
   reference: TODO                         # Kvasir-SEG paper; add to paper/references.bib
   size_images: 1000
   has_masks: true                         # polyp masks + bounding boxes (JSON)

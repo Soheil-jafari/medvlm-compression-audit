@@ -26,10 +26,10 @@ on verified evidence, and written into the configs.
   so this is urgent.
 - [x] [team] Answer D01 (T1) and D05 (teacher family only, keep size, weights
   accepted), 2026-10-12.
-- [ ] [team] Answer D02 and D03.
+- [x] [team] Answer D02 and D03 (2026-10-12).
 - [ ] [team:Amir] [team:Soheil] [team:Farzan] Each confirms in the inbox that they
   have their own access to the chosen datasets.
-- [ ] [agent] After the answers: fill the chosen configs (verified `source`,
+- [x] [agent] After the answers: fill the chosen configs (verified `source`,
   `revision`, `licence`), set their `status` to `DECIDED`, point
   `configs/base.yaml: components` at them, keep the others as candidates, and
   update `tests/test_configs.py` so decided configs must have non-TODO source and

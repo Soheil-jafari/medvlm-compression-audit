@@ -1,6 +1,7 @@
 # D03: Code licence
 
-**Status:** waiting on the team. Answer in `docs/agent/INBOX.md`.
+**Status:** decided 2026-10-12 (Soheil): **MIT**. `LICENSE` added with the copyright
+line "Amir, Soheil Jafari, Farzan" (update with full names if wanted).
 **Stage:** S01. **Prepared:** 2026-10-12 (iteration 2).
 **Urgency:** high. The repository is public but carries no licence, so by default
 nobody else may legally reuse, modify or redistribute the code.

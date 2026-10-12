@@ -132,7 +132,7 @@ def test_candidate_configs_are_marked_and_not_guessed(path: Path) -> None:
 @pytest.mark.parametrize("name", ["endoscopy", "retinal"])
 def test_domain_configs(name: str) -> None:
     domain = load_config(CONFIG_ROOT / "domain" / f"{name}.yaml")["domain"]
-    assert domain["status"].startswith(CANDIDATE_STATUS)
+    assert domain["status"].startswith((CANDIDATE_STATUS, DECIDED_STATUS))
     for key in ("findings", "prevalence_groups", "probe", "small_findings"):
         assert key in domain
     assert set(domain["prevalence_groups"]) >= {"common", "medium", "rare"}

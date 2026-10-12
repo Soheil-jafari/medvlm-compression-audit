@@ -8,13 +8,14 @@ version = "0.0.1"
 description = "What Compression Forgets: pruning vs. quantization vs. distillation in medical vision-language models (research scaffolding)."
 readme = "README.md"
 requires-python = ">=3.10"
-# TODO: choose a licence before the repository is made public.
+license = {text = "MIT"}
 authors = [
     { name = "Amir" },
     { name = "Soheil Jafari" },
     { name = "Farzan" },
 ]
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

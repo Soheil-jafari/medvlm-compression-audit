@@ -7,8 +7,8 @@ in `docs/agent/INBOX.md`; the agent then records the decision in
 | Memo | Decision | Stage | Status |
 |---|---|---|---|
 | [D01](D01_teacher.md) | Teacher (the student is chosen by D05) | S01 | decided 2026-10-12: T1, Qwen2.5-VL-7B + Kvasir-VQA-x1 LoRA |
-| [D02](D02_datasets.md) | Datasets and their roles; first finding list | S01 | written 2026-10-12, waiting on the team |
-| [D03](D03_licence.md) | Code licence | S01 | written 2026-10-12, waiting on the team |
+| [D02](D02_datasets.md) | Datasets and their roles; first finding list | S01 | decided 2026-10-12: Kvasir-VQA-x1, Kvasir-SEG, EndoBench; val/test from the official test split |
+| [D03](D03_licence.md) | Code licence | S01 | decided 2026-10-12: MIT |
 | D04 | Gate 1 thresholds | S05 | not written yet |
 | [D05](D05_student_selection.md) | Student selection protocol, 10 -> 5 -> 3 -> 1 | S05b | answered 2026-10-12: teacher family only, keep size, weights accepted |
 

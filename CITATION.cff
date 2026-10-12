@@ -1,10 +1,11 @@
-# Placeholder citation metadata. Update authors, licence and release date before
-# the first public release.
+# Citation metadata. Update authors' family names and the release date before the
+# first tagged release.
 cff-version: 1.2.0
 message: "Placeholder: citation details will be added when the paper is released."
 title: "What Compression Forgets: Pruning vs. Quantization vs. Distillation in Medical Vision-Language Models, and a Clinically Weighted Pruning Criterion for Preserving Small Findings"
 type: software
 version: 0.0.1
+license: MIT
 authors:
   - given-names: Amir
     family-names: TODO

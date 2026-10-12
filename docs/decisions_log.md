@@ -25,6 +25,12 @@ must be logged here.
   (revision cc594898) + SimulaMet/Qwen2.5-VL-KvasirVQA-x1-ft LoRA (revision 79e77755).
   Optional robustness check at the end: a fine-tuned Qwen3-VL-8B teacher.
   Consequence (D05): the student pool is 10 Qwen-tokenizer models.
+- **2026-10-12 (Soheil):** D02 decided: domain = GI endoscopy; main QA = Kvasir-VQA-x1
+  (revision 61e41148), validation and test = the two halves of its official test
+  split by image; masks = Kvasir-SEG matched by fingerprint; rare findings from
+  Kvasir-VQA-x1 classes; external test = EndoBench (licence to verify); retinal kept
+  as an optional later second domain.
+- **2026-10-12 (Soheil):** D03 decided: MIT licence for the code.
 - **2026-10-12 (Soheil):** no scheduled runs; the research loop runs back to back in
   an interactive session until the team stops it.
 
@@ -32,11 +38,9 @@ must be logged here.
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| Medical domain | GI endoscopy (lead) vs retinal fundus | team | TODO |
 | Student selection freeze | Set `train_examples`, `compute_unit_b`, G2 threshold and image side from RC-S0, then freeze (memo D05) | team | after RC-S0 |
-| Datasets | Kvasir-VQA-x1, Kvasir-SEG, ColonVQA/ColonEval, ColonPert, EndoBench; IDRiD, FGADR (retinal) | Farzan | TODO |
+| EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |
 | Finding list and weights | Pre-registered table, frozen before E7 | team | TODO |
 | Budgets and timing hardware | B1-B3 fractions, metric (memory vs latency), protocol, rented GPU type | Amir | TODO |
 | Quantization backends | GPTQ / AWQ / W8A8 tooling that runs on T4 and the timing GPU | Soheil | TODO |
 | Venue | e.g. MICCAI (Springer LNCS template) | team | TODO |
-| Licence | Repository is already public, so this is urgent (memo D03) | team | TODO |

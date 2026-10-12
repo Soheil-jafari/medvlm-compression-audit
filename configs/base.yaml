@@ -19,18 +19,18 @@ paths:
 
 # Which candidate configs are active. Nothing here is decided yet.
 components:
-  status: "CANDIDATE - NOT DECIDED"
+  status: "PARTLY DECIDED: domain, teacher, datasets (2026-10-12); student via S05b"
   domain: domain/endoscopy.yaml          # lead candidate; alternative: domain/retinal.yaml
   budgets: budgets.yaml
   finding_weights: preregistration/finding_weights.yaml
   candidate_model_pairs: models/candidate_pairs.yaml
   teacher: models/qwen2_5_vl_7b_teacher.yaml   # decided 2026-10-12 (D01)
   student: TODO                           # chosen by the selection in S05b (D05)
-  datasets:
-    train_qa: TODO                        # e.g. one of configs/data/*.yaml
-    masks: TODO
-    rare_findings: TODO
-    external_test: TODO
+  datasets:                               # decided 2026-10-12 (D02)
+    train_qa: data/kvasir_vqa_x1.yaml
+    masks: data/kvasir_seg.yaml           # matched to VQA images by fingerprint
+    rare_findings: data/kvasir_vqa_x1.yaml
+    external_test: data/endobench.yaml    # licence / download still to verify
 
 seeds:
   training: [0, 1, 2]                     # 3 seeds for every training arm
@@ -58,8 +58,9 @@ evaluation:
     - calibration
     - hallucination
     - language
-  test_split: TODO
-  external_test: TODO
+  val_split: kvasir_vqa_x1 official test, half by img_id   # D02 Q1 = A
+  test_split: kvasir_vqa_x1 official test, other half
+  external_test: data/endobench.yaml
   calibration_bins: TODO
   bootstrap_resamples: TODO
   ci_level: 0.95
