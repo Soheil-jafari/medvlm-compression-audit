@@ -223,3 +223,19 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: results-tree validation and `aggregate_results` (S02's last block).
 - Needs the team: nothing new.
+
+## Iteration 16: 2026-10-12 (interactive)
+- Stage / item: S02, results-tree reader and validation.
+- Did: new `evaluation/aggregate.py`: classifies every CSV under `results/` by its
+  path (runs, comparisons, selection rounds, data summary, smoke tests), checks the
+  schema, known experiment IDs and variants, budgets, seeds, CI order and that rows
+  match their folder; loads all rows and summarises them over seeds (mean, sample
+  SD, min, max; single-seed CIs carried over). `tests/test_results.py` validates the
+  committed tree (the check the run cards ask for) and synthetic good and bad trees.
+  `results/README.md` documents the extra folders and where paired comparisons are
+  computed. Budget-tolerance checking over results waits for frozen budgets.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: comparison step (paired differences and p-values from per-image outcomes)
+  and the LaTeX table writers.
+- Needs the team: nothing new.

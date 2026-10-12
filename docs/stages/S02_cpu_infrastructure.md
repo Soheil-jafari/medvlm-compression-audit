@@ -36,7 +36,7 @@ All with unit tests on small synthetic inputs. Replace entries in
   `paper/tables/numbers.tex` and `docs/results/VERDICTS.md`. End-to-end test on a
   synthetic results tree that lives only under `tests/fixtures/` and is labelled
   synthetic in every file.
-- [ ] [agent] Tests over the real `results/` tree: every CSV matches the schema;
+- [x] [agent] Tests over the real `results/` tree: every CSV matches the schema;
   budget-matched runs are within tolerance (active once budgets are frozen).
 - [ ] [agent] Test that `paper/sections/05_results.tex` and the abstract contain no
   hand-typed result numbers (only `\input` tables and `numbers.tex` macros).
