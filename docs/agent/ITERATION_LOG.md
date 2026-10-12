@@ -251,3 +251,19 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: LaTeX tables, `numbers.tex` and the `aggregate_results` entry point.
 - Needs the team: nothing new.
+
+## Iteration 18: 2026-10-12 (interactive)
+- Stage / item: S02, paper tables and the aggregation entry point.
+- Did: new `evaluation/report.py` writing T1 (data), T2 (main), T3 (primary), T4
+  (ablations), T5 (efficiency) and T6 (external) as booktabs tables with a
+  "generated, do not edit" header, `--` where results are missing, and
+  `numbers.tex` with a letters-only macro for every summarised number and CI bound.
+  `aggregate_results` now validates and loads `results/`, writes
+  `results/summary/{all_rows,by_arm}.csv` and the tables; `scripts/08_aggregate_results.py`
+  gained `--tables-dir` (default `paper/tables`, relative to the working directory).
+  New `tests/test_report.py`; the script test now checks real outputs.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: figures (F1-F5), the verdicts file, and wiring the paper to the generated
+  tables with a test against hand-typed numbers.
+- Needs the team: nothing new.

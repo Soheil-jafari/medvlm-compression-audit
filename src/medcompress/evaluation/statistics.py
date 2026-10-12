@@ -228,13 +228,29 @@ def bootstrap_kendall_tau(
     return observed, low, high
 
 
-def aggregate_results(results_root: Path, out_dir: Path) -> None:
+def aggregate_results(
+    results_root: Path,
+    out_dir: Path,
+    *,
+    tables_dir: Path | None = None,
+) -> list[Path]:
     """Stage entry point for ``scripts/08_aggregate_results.py``.
 
-    Collects every ``metrics.csv`` / ``efficiency.csv`` under ``results_root``,
-    computes seed means/SDs, CIs and Holm-corrected tests, and writes summary
-    CSVs plus LaTeX tables for ``paper/tables/``.
+    Validates and collects every results CSV under ``results_root`` (runs,
+    comparisons, selection, data summary), writes ``all_rows.csv`` and
+    ``by_arm.csv`` (seed means and SDs) to ``out_dir``, and writes the paper tables
+    and ``numbers.tex`` to ``tables_dir`` (default ``paper/tables``). Paired CIs and
+    Holm-corrected p-values come from the comparison rows (``evaluation/comparisons``).
+    Returns the paths written.
 
     Used by: all experiments (final step).
     """
-    raise NotImplementedError("TODO: aggregate per-run results into summary tables.")
+    from medcompress.config import repo_root
+    from medcompress.evaluation.aggregate import load_results, summarise_over_seeds, write_summary
+    from medcompress.evaluation.report import write_tables
+
+    rows = load_results(Path(results_root))
+    written = write_summary(rows, Path(out_dir))
+    target = Path(tables_dir) if tables_dir is not None else repo_root() / "paper" / "tables"
+    written += write_tables(rows, summarise_over_seeds(rows), target)
+    return written

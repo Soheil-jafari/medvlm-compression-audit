@@ -45,7 +45,6 @@ def test_help(script: Path, tmp_path: Path) -> None:
         ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"]),
         ("06_evaluate.py", ["--exp", "A4", "--budget", "B2", "--variant", "n64"]),
         ("07_benchmark_efficiency.py", ["--exp", "E9"]),
-        ("08_aggregate_results.py", []),
         ("run_experiment.py", ["--exp", "E7", "--budget", "B2", "--seed", "0"]),
     ],
 )
@@ -86,3 +85,11 @@ def test_run_experiment_list_and_plan(tmp_path: Path) -> None:
     plan = _run("run_experiment.py", "--exp", "E3", "--variant", "w4", "--plan-only", cwd=tmp_path)
     assert plan.returncode == 0
     assert "E3:w4" in plan.stdout
+
+
+def test_aggregate_script_writes_summary_and_tables(tmp_path: Path) -> None:
+    result = _run("08_aggregate_results.py", cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "results" / "summary" / "by_arm.csv").is_file()
+    for name in ("main.tex", "primary.tex", "numbers.tex", "setup_data.tex"):
+        assert (tmp_path / "paper" / "tables" / name).is_file(), name
