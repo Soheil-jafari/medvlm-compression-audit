@@ -27,4 +27,6 @@ quantization:
       activation_bits: 8
       group_size: null
   recipe: TODO                            # E3: the variant (w4 / w8 / w8a8); E8, E9: w4
+  kernel_class: TODO                      # GPTQModel module class for w4/w8 (dotted path), chosen
+                                          # by RC-Q0; "reference" = no kernel (tests only, fails the check)
   library_versions: TODO                  # gptqmodel and bitsandbytes, pinned after RC-Q0

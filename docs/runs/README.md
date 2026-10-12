@@ -20,7 +20,10 @@ results in its next iteration.
 | [RC-E1](RC-E1_student_answer_finetune.md) | S06 | Student on ground-truth answers, 3 seeds | Soheil | blocked (RC-S0 numbers for the training length, RC-D1, open settings) |
 | [RC-E2](RC-E2_student_offline_distillation.md) | S06 | Student with offline distillation, 3 seeds | Soheil | blocked (RC-E1 settings, RC-E0b) |
 | [RC-B0](RC-B0_e2_reference_footprint.md) | S06 | E2 reference footprint and byte split for the budgets | Amir | blocked (RC-E2 seed 0) |
-| RC-E3 / RC-E4 / RC-E9 | S08 | Quantization arms | Soheil | not written yet |
+| [RC-Q0](RC-Q0_quantization_smoke_test.md) | S08 | Quantization toolchain smoke test: kernel classes, GPTQ and LLM.int8 on the student, versions | Soheil | ready |
+| [RC-E3](RC-E3_ptq.md) | S08 | E3: GPTQ w4, w8 and LLM.int8 w8a8 of E2, 3 seeds | Soheil | blocked (RC-Q0, RC-E2, RC-D1, freeze) |
+| RC-E4 | S08 | E4: quantization-aware distillation (D08 option B) | Soheil | not written yet |
+| [RC-E9](RC-E9_teacher_ptq.md) | S08 | E9: the teacher at 4 bit (supplementary) | Soheil | blocked (RC-Q0, RC-D1, freeze) |
 | [RC-G2](RC-G2_gate2_pilot.md) | S09 | Gate 2 pilot at B2 (validation): E5 (3 criteria), E6, E7 | Amir | blocked (RC-E2, RC-B0, D07 scoring method, finding weights) |
 | RC-E5 ... RC-E8 | S09 | Pruning grid | Amir | not written yet |
 | RC-A1 ... RC-A6 | S10 | Ablations at B2 | Amir | not written yet |

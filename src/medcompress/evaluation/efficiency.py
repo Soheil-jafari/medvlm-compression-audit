@@ -383,15 +383,22 @@ def measure_footprint(
     )
 
 
-def check_low_precision_kernels(model: VLMWrapper) -> bool:
-    """Verify that quantized layers actually run low-precision kernels.
+QUANTIZED_ARMS: tuple[str, ...] = ("E3", "E4", "E8", "E9")
 
-    Must fail if a 4-bit/8-bit model silently dequantizes to fp16 for every
-    matmul, which would make memory/latency claims misleading.
+
+def check_low_precision_kernels(model: VLMWrapper) -> bool:
+    """True if every quantized decoder layer is a low-precision library module.
+
+    Fails (False) for a plain 16-bit ``Linear``, for the dequantizing reference module and
+    for a module without integer weights, so a 4-bit or 8-bit model that silently computes in
+    16 bit is never reported as quantized. Details:
+    :func:`medcompress.compression.quantization.kernels.kernel_report`.
 
     Used by: E3, E4, E8, E9.
     """
-    raise NotImplementedError("TODO: confirm low-precision kernels are used (quantization, S08).")
+    from medcompress.compression.quantization.kernels import kernel_report
+
+    return kernel_report(model).ok
 
 
 REPORT_METRICS: tuple[str, ...] = (
@@ -480,9 +487,21 @@ def run_efficiency_benchmark(
         }
         for metric, value in state_bytes_by_part(model).items()
     ]
+    setup: dict[str, Any] = {"hardware": report.hardware, "protocol": report.protocol}
+    if run.experiment_id in QUANTIZED_ARMS:
+        from medcompress.compression.quantization.kernels import kernel_report
+
+        kernels = kernel_report(model)
+        rows.append(
+            {
+                "experiment": run.experiment_tag,
+                "budget": run.budget or "",
+                "seed": run.seed,
+                "metric": "low_precision_kernels_ok",
+                "value": float(kernels.ok),
+            }
+        )
+        setup["kernels"] = {"classes": kernels.classes, "problems": list(kernels.problems)}
     upsert_results(rows, target)
-    write_json(
-        {"hardware": report.hardware, "protocol": report.protocol},
-        target.with_name("efficiency_setup.json"),
-    )
+    write_json(setup, target.with_name("efficiency_setup.json"))
     print(f"wrote {len(rows)} rows to {target}")

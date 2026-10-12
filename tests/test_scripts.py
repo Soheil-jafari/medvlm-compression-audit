@@ -34,18 +34,14 @@ def test_help(script: Path, tmp_path: Path) -> None:
     assert "usage" in result.stdout
 
 
-@pytest.mark.parametrize(
-    ("script", "args"),
-    [
-        ("03_quantize.py", ["--exp", "E3", "--variant", "w4"]),
-        ("run_experiment.py", ["--exp", "E3", "--variant", "w4", "--seed", "0"]),
-    ],
-)
-def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) -> None:
-    result = _run(script, *args, cwd=tmp_path)
-    assert result.returncode == NOT_IMPLEMENTED_EXIT_CODE, result.stderr
-    assert "not implemented yet" in result.stdout
-    assert "Traceback" not in result.stderr
+def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixture[str]) -> None:
+    from medcompress.cli import run_stage
+
+    def stub() -> None:
+        raise NotImplementedError("TODO: a later stage")
+
+    assert run_stage("XX", stub) == NOT_IMPLEMENTED_EXIT_CODE
+    assert "not implemented yet" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -74,6 +70,13 @@ def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) 
             "budgets.levels.B2.target_fraction",
         ),
         ("07_benchmark_efficiency.py", ["--exp", "E9"], "budgets.measurement.hardware"),
+        ("03_quantize.py", ["--exp", "E3", "--variant", "w4"], "inputs.image_longest_side"),
+        ("03_quantize.py", ["--exp", "E8", "--budget", "B2"], "inputs.image_longest_side"),
+        (
+            "run_experiment.py",
+            ["--exp", "E3", "--variant", "w4", "--seed", "0"],
+            "inputs.image_longest_side",
+        ),
         (
             "04_score_pruning_units.py",
             ["--exp", "E5", "--variant", "taylor"],

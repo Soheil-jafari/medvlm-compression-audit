@@ -704,3 +704,28 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: `compression/quantization/ptq.py`, the kernel check, the E3/E8/E9 stage and model
   loading, run cards RC-Q0, RC-E3, RC-E9; then E4 (`qakd.py`, RC-E4).
 - Needs the team: nothing new (RC-Q0 will be ready after the next iteration).
+
+## Iteration 38: 2026-10-12 (interactive)
+- Stage / item: S08, post-training quantization (E3, E8, E9) and the kernel check.
+- Did: GPTQModel quantizes models loaded from disk, but E8 starts from pruned E7 models whose
+  layers have different widths and cannot be reloaded that way. So GPTQ runs on the model in
+  memory: `grid.py` (symmetric group-wise grid, packing in the GPTQ word layout), `gptq.py`
+  (the GPTQ algorithm of Frantar et al., a float64 NumPy reference and the same steps in torch),
+  `ptq.py` (recipes from `configs/quantization.yaml`, calibration on the same 128 images as the
+  pruning criteria, sequential layer-by-layer GPTQ with the inputs of each layer coming from the
+  already rounded layers, our own checkpoint format of codes and scales plus a manifest, loading
+  that rebuilds the parent: E2, pruned E7 or the teacher), `kernels.py` (GPTQModel kernel
+  modules packed by GPTQModel itself from our codes and checked against our dequantized weights
+  on random inputs, LLM.int8 layers, a reference module that never counts as a kernel, and the
+  kernel report), `smoke.py` plus `scripts/smoke_quantization.py`. `check_low_precision_kernels`
+  is implemented and the benchmark writes `low_precision_kernels_ok` for E3, E4, E8, E9; the
+  runner loads E3/E8/E9. Run cards RC-Q0 (ready), RC-E3 and RC-E9 (blocked).
+- Verified: ruff check, ruff format, pytest (687 passed, 14 skipped without torch). The GPTQ
+  reference is tested here (equals plain rounding for uncorrelated inputs, beats it on correlated
+  ones, packing round trips); the torch tests (`tests/test_ptq_torch.py`: torch GPTQ against the
+  reference, the tiny model quantized, saved and reloaded, the stage files, and on a GPU the
+  GPTQModel and LLM.int8 modules) run on Kaggle in RC-M1 / RC-Q0.
+- Commit: see `git log` on `research-loop`.
+- Next: E4 (`qakd.py`: 4-bit learned-step-size quantization trained with LoRA and the
+  confidence-gated decoupled distillation), RC-E4.
+- Needs the team: run RC-Q0 (Soheil, one T4, about an hour as an estimate).
