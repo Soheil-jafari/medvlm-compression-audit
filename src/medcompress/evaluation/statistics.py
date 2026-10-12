@@ -73,6 +73,40 @@ def paired_bootstrap_ci(
     return observed, low, high
 
 
+def paired_bootstrap_test(
+    metric: Callable[[np.ndarray], float],
+    outcomes_a: np.ndarray,
+    outcomes_b: np.ndarray,
+    *,
+    n_resamples: int = 10_000,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> tuple[float, float, float, float]:
+    """Return (difference, ci_low, ci_high, p_value) for metric(a) - metric(b).
+
+    Same resampling as :func:`paired_bootstrap_ci`. The two-sided p-value is
+    ``min(1, 2 * min(P(d* <= 0), P(d* >= 0)))`` over the bootstrap differences
+    ``d*`` (with the +1 correction so it is never exactly 0).
+    """
+    a = np.asarray(outcomes_a)
+    b = np.asarray(outcomes_b)
+    if a.shape[0] != b.shape[0] or a.shape[0] == 0:
+        raise ValueError("Paired outcomes need the same, non-zero number of images.")
+    observed = float(metric(a)) - float(metric(b))
+    indices = _resample_indices(a.shape[0], n_resamples, seed)
+    diffs = np.fromiter(
+        (float(metric(a[idx])) - float(metric(b[idx])) for idx in indices), float, n_resamples
+    )
+    finite = diffs[np.isfinite(diffs)]
+    low, high = _percentile_ci(diffs, alpha)
+    if finite.size == 0:
+        return observed, low, high, math.nan
+    n = finite.size
+    below = (np.sum(finite <= 0) + 1) / (n + 1)
+    above = (np.sum(finite >= 0) + 1) / (n + 1)
+    return observed, low, high, float(min(1.0, 2 * min(below, above)))
+
+
 def bootstrap_ci(
     metric: Callable[[np.ndarray], float],
     outcomes: np.ndarray,

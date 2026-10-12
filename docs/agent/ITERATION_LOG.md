@@ -239,3 +239,15 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: comparison step (paired differences and p-values from per-image outcomes)
   and the LaTeX table writers.
 - Needs the team: nothing new.
+
+## Iteration 17: 2026-10-12 (interactive)
+- Stage / item: S02, paired comparisons.
+- Did: `paired_bootstrap_test` (difference, CI and a two-sided bootstrap p-value) in
+  `statistics.py`; new `evaluation/comparisons.py` with seed averaging of per-image
+  outcomes, the "best of E5/E6" pick on validation scores (ties by name), comparison
+  rows (`diff:<metric>`, `p:<metric>`) and Holm rows for the two primary endpoints.
+  The rows pass the results validator. New `tests/test_comparisons.py`.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: LaTeX tables, `numbers.tex` and the `aggregate_results` entry point.
+- Needs the team: nothing new.
