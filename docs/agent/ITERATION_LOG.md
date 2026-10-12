@@ -157,3 +157,14 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: `evaluation/language.py` and `hallucination.py`.
 - Needs the team: nothing new.
+
+## Iteration 11: 2026-10-12 (interactive)
+- Stage / item: S02, `evaluation/language.py` and `hallucination.py`.
+- Did: answer normalisation (multi-value answers compared as sorted lists), exact
+  match, token F1, answer length; rule-based finding polarity (whole-word mention,
+  negation cue within four words in the same clause) and hallucination / omission /
+  negation classification with per-type rates. New `tests/test_text_metrics.py`.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: data pure functions (`probes.build_probes`, `splits`, `masks`, `dedup`).
+- Needs the team: nothing new.

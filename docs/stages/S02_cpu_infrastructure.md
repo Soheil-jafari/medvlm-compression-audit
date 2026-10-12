@@ -21,7 +21,7 @@ All with unit tests on small synthetic inputs. Replace entries in
 - [x] [agent] `evaluation/calibration.py`: ECE, Brier score, risk-coverage curve.
 - [x] [agent] `evaluation/image_reliance.py`: `answer_flip_rate`,
   `lesion_mask_effect` (the pure parts).
-- [ ] [agent] `evaluation/language.py` and `hallucination.py`: yes/no answer parsing
+- [x] [agent] `evaluation/language.py` and `hallucination.py`: yes/no answer parsing
   and hallucination / omission / negation rates from parsed answers.
 - [ ] [agent] `data/probes.build_probes`, `data/splits` (patient splits, nested
   calibration subsets, split fingerprint), `data/masks` pure functions on arrays,
