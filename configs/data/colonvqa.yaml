@@ -1,0 +1,7 @@
+_base_: _dataset_base.yaml
+
+dataset:
+  name: "ColonVQA"
+  domain: endoscopy
+  candidate_role: TODO  # rare_findings or external_test
+  notes: "Candidate colonoscopy VQA set. Verify scope, access and overlap with the main QA set before assigning a role."

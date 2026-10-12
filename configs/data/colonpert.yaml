@@ -1,0 +1,7 @@
+_base_: _dataset_base.yaml
+
+dataset:
+  name: "ColonPert"
+  domain: endoscopy
+  candidate_role: TODO  # stress_test candidate
+  notes: "Candidate perturbation / robustness set. Verify what it contains before assigning a role."

@@ -1,5 +1,9 @@
 # ---- Data, models and run artefacts: never commit these ----
-data/
+# "/data/" is anchored to the repo root on purpose: an unanchored "data/" also
+# matched src/medcompress/data/ and configs/data/ and kept them out of git.
+/data/
+notebooks/data/
+scripts/data/
 datasets/
 checkpoints/
 cache/

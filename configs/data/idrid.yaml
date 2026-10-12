@@ -1,0 +1,7 @@
+_base_: _dataset_base.yaml
+
+dataset:
+  name: "IDRiD"
+  domain: retinal
+  candidate_role: masks
+  notes: "Alternative-domain candidate with lesion masks. Only used if the retinal domain is chosen."

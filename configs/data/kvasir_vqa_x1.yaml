@@ -1,0 +1,7 @@
+_base_: _dataset_base.yaml
+
+dataset:
+  name: "Kvasir-VQA-x1"
+  domain: endoscopy
+  candidate_role: main_qa
+  notes: "Lead candidate main QA set; a published teacher adapter was trained on it. Verify source, licence, size, splits and image overlap with Kvasir-SEG."

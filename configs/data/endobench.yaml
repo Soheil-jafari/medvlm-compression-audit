@@ -1,0 +1,7 @@
+_base_: _dataset_base.yaml
+
+dataset:
+  name: "EndoBench"
+  domain: endoscopy
+  candidate_role: TODO  # external_test candidate
+  notes: "Candidate external benchmark. Deduplicate against training images before reporting."
