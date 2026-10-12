@@ -12,7 +12,7 @@ where E3, E4 and E9 land relative to B1-B3.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from medcompress.models.base import VLMWrapper
 
 BUDGET_METRICS: tuple[str, ...] = ("peak_memory", "latency")
+_REPORT_FIELD = {"peak_memory": "peak_memory_bytes", "latency": "warm_latency_s"}
 
 
 @dataclass(frozen=True)
@@ -90,22 +91,82 @@ def measure_reference_footprint(model: VLMWrapper, protocol: Mapping[str, Any]) 
     )
 
 
+def metric_value(report: EfficiencyReport, metric: str) -> float:
+    """Return the budget metric from a report: peak memory (bytes) or warm latency (s)."""
+    if metric not in _REPORT_FIELD:
+        raise ValueError(f"Budget metric must be one of {BUDGET_METRICS}, got {metric!r}")
+    value = getattr(report, _REPORT_FIELD[metric])
+    if value is None:
+        raise ValueError(f"The report has no {_REPORT_FIELD[metric]}")
+    return float(value)
+
+
 def target_value(spec: BudgetSpec, reference: EfficiencyReport) -> float:
     """Return the absolute target (bytes or seconds) for a budget level.
 
-    Should refuse placeholder budgets (``spec.is_frozen`` is False) for final runs.
+    target = target_fraction * reference metric. Placeholder budgets
+    (``spec.is_frozen`` is False) are refused.
 
     Used by: E5-E8, A1-A6.
     """
-    raise NotImplementedError("TODO: target = target_fraction * reference metric (E5-E8, A1-A6).")
+    if spec.target_fraction is None:
+        raise ValueError(f"Budget {spec.id} is a placeholder; freeze it first.")
+    return spec.target_fraction * metric_value(reference, spec.metric)
 
 
 def within_budget(measured: EfficiencyReport, spec: BudgetSpec, target: float) -> bool:
     """Return True if a measured footprint meets the budget within tolerance.
 
+    Matched means close to the target from either side:
+    ``|measured - target| <= tolerance * target``. An arm far below the target is
+    not "matched" (it was compressed more than its comparators).
+
     Used by: E5-E8, A1-A6; reporting for E3, E4, E9.
     """
-    raise NotImplementedError("TODO: compare measured metric with target +/- tolerance.")
+    if spec.tolerance is None:
+        raise ValueError(f"Budget {spec.id} has no tolerance; freeze it first.")
+    value = metric_value(measured, spec.metric)
+    return abs(value - target) <= spec.tolerance * target
+
+
+def smallest_prefix_meeting_target(
+    n_units: int,
+    measure_prefix: Callable[[int], float],
+    target: float,
+    tolerance: float,
+) -> tuple[int, float]:
+    """Return (k, footprint) for the smallest k whose footprint is <= target * (1 + tolerance).
+
+    ``measure_prefix(k)`` removes the k lowest-ranked units and returns the
+    **measured** footprint. Assumes the footprint does not increase with k
+    (removing more never costs memory) and bisects over k in [0, n_units], so
+    about log2(n_units) + 2 measurements are needed. Raises if even removing every
+    unit does not reach the target. The caller checks the lower side of the
+    tolerance band with :func:`within_budget` (units are discrete, so the best
+    prefix can overshoot).
+    """
+    if n_units < 0 or tolerance < 0 or target <= 0:
+        raise ValueError("Need n_units >= 0, tolerance >= 0 and target > 0.")
+    ceiling = target * (1 + tolerance)
+    cache: dict[int, float] = {}
+
+    def measured(k: int) -> float:
+        if k not in cache:
+            cache[k] = float(measure_prefix(k))
+        return cache[k]
+
+    if measured(0) <= ceiling:
+        return 0, measured(0)
+    if measured(n_units) > ceiling:
+        raise ValueError("Removing every candidate unit does not reach the budget.")
+    low, high = 0, n_units  # measured(low) > ceiling >= measured(high)
+    while high - low > 1:
+        mid = (low + high) // 2
+        if measured(mid) <= ceiling:
+            high = mid
+        else:
+            low = mid
+    return high, measured(high)
 
 
 def search_matched_budget(

@@ -211,3 +211,15 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: `budgets.py` budget search.
 - Needs the team: nothing new.
+
+## Iteration 15: 2026-10-12 (interactive)
+- Stage / item: S02, `budgets.py`.
+- Did: budget metric lookup, absolute targets (placeholders refused), two-sided
+  tolerance check (an arm far below the target is not matched), and a bisection over
+  the removal prefix that needs about log2(n) + 2 real measurements. The model
+  plumbing of `search_matched_budget` stays for S04/S09. New `tests/test_budgets.py`
+  with mocked footprints.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: results-tree validation and `aggregate_results` (S02's last block).
+- Needs the team: nothing new.

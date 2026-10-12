@@ -28,7 +28,7 @@ All with unit tests on small synthetic inputs. Replace entries in
   `data/dedup` distance logic (imaging libraries imported lazily).
 - [x] [agent] `compression/pruning/criteria/clinical.py` pure parts:
   `load_finding_weights`, `compute_weights`, `delta`, `aggregate_importance`.
-- [ ] [agent] `budgets.py`: budget search against a measured-footprint function
+- [x] [agent] `budgets.py`: budget search against a measured-footprint function
   (tested with a mock).
 - [ ] [agent] `evaluation/statistics.aggregate_results` and
   `scripts/08_aggregate_results.py`: read `results/`, write `results/summary/`,
