@@ -90,6 +90,11 @@ def test_clinical_metrics_agree_with_the_reference_implementations() -> None:
         m = metrics[name]
         assert m.ci_low is not None and m.ci_low <= m.value <= m.ci_high
     assert metrics["n_probes_scored"].value == 120
+    from medcompress.evaluation.image_reliance import macro_balanced_accuracy
+
+    balanced = metrics["macro_balanced_accuracy"]
+    assert balanced.value == pytest.approx(macro_balanced_accuracy(findings, truth, yes))
+    assert balanced.ci_low <= balanced.value <= balanced.ci_high
     sens = [y for f, t, y in zip(findings, truth, yes, strict=True) if f == "polyp" and t]
     assert metrics["sensitivity:polyp"].value == pytest.approx(np.mean(sens))
     assert {"specificity:ulcer", "sensitivity:stool"} <= set(metrics)
@@ -422,3 +427,16 @@ def test_audit_rows_do_not_depend_on_the_run_seed(
     second = evaluate_model(Detector(20), samples, settings, root, seed=7).arrays
     assert first["audit_sample_ids"].tolist() == second["audit_sample_ids"].tolist()
     assert len(first["audit_sample_ids"]) == 4
+
+
+def test_a_model_that_says_no_keeps_its_accuracy_but_not_its_balanced_accuracy() -> None:
+    # 10 findings, each present on 1 of 10 images: answering "no" everywhere is 90 % accurate
+    findings = [f"f{k}" for k in range(10) for _ in range(10)]
+    truth = [i == 0 for _ in range(10) for i in range(10)]
+    out = _outcomes(findings, truth, [False] * 100)
+    metrics = {
+        m.name: m.value
+        for m in probe_suites.clinical_metrics(out, sorted(set(findings)), n_resamples=50)
+    }
+    assert metrics["overall_accuracy"] == pytest.approx(0.9)
+    assert metrics["macro_balanced_accuracy"] == pytest.approx(0.5)

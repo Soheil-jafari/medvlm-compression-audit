@@ -105,6 +105,24 @@ def _macro_f1_from_codes(codes: np.ndarray, n_findings: int) -> float:
     return float(np.mean(2 * tp[defined] / denominator[defined]))
 
 
+def _macro_balanced_accuracy_from_codes(codes: np.ndarray, n_findings: int) -> float:
+    """Mean over findings of (sensitivity + specificity) / 2; findings lacking a class are left out.
+
+    Rows are ``[finding_index, truth, predicted]``. Unlike the overall accuracy, every finding
+    counts once and its positives weigh as much as its negatives, so a model that drifts
+    towards "no" cannot hide a loss of recall behind the many absent findings.
+    """
+    finding, truth, pred = codes[:, 0], codes[:, 1].astype(bool), codes[:, 2].astype(bool)
+    tp = np.bincount(finding, weights=(truth & pred), minlength=n_findings)
+    pos = np.bincount(finding, weights=truth, minlength=n_findings)
+    tn = np.bincount(finding, weights=(~truth & ~pred), minlength=n_findings)
+    neg = np.bincount(finding, weights=~truth, minlength=n_findings)
+    both = (pos > 0) & (neg > 0)
+    if not both.any():
+        return math.nan
+    return float(np.mean((tp[both] / pos[both] + tn[both] / neg[both]) / 2))
+
+
 def clinical_metrics(
     out: ProbeOutcomes,
     findings: Sequence[str],
@@ -113,9 +131,12 @@ def clinical_metrics(
     alpha: float = 0.05,
     seed: int = 0,
 ) -> list[Metric]:
-    """Overall accuracy and macro-F1 (with bootstrap CIs) and per-finding sensitivity / specificity.
+    """Overall accuracy, macro-F1 and macro balanced accuracy (with bootstrap CIs), and
+    per-finding sensitivity / specificity.
 
-    The overall accuracy is the fraction of probes answered correctly. The CIs resample
+    The overall accuracy is the fraction of probes answered correctly; most probes ask about
+    absent findings, so it mostly measures specificity. The macro balanced accuracy weighs
+    every finding and both classes equally. The CIs resample
     images: all probes of one image (one ``sample_id``) are drawn together. Used by: all.
     """
     kwargs = {**_ci_kwargs(n_resamples, alpha, seed), "clusters": np.asarray(out.sample_ids)}
@@ -124,10 +145,14 @@ def clinical_metrics(
         [out.finding_index(findings), out.truth.astype(int), out.yes.astype(int)], axis=1
     )
     f1 = bootstrap_ci(lambda a: _macro_f1_from_codes(a, len(findings)), codes, **kwargs)
+    balanced = bootstrap_ci(
+        lambda a: _macro_balanced_accuracy_from_codes(a, len(findings)), codes, **kwargs
+    )
     metrics = [
         Metric("n_probes_scored", float(len(out.sample_ids))),
         Metric("overall_accuracy", *accuracy),
         Metric("macro_f1", *f1),
+        Metric("macro_balanced_accuracy", *balanced),
     ]
     truth = {f: [] for f in findings}
     pred: dict[str, list[bool]] = {f: [] for f in findings}

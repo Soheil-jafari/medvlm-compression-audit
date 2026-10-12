@@ -21,7 +21,9 @@ Blocked until all of these are true; the agent changes the status to `ready` whe
   `pruning.clinical.ablation_method` in `configs/experiments/E7.yaml` is set. If the mixed
   method is chosen, the agent adds the check of the estimate on 30 random channel groups to
   this card before setting it to `ready`.
-- The table of finding weights (`configs/preregistration/finding_weights.yaml`) is filled in.
+- The pre-registration is frozen (`preregistration.frozen_on` set): the pilot is a compression
+  run, and the stage scripts refuse compression runs before the freeze, so the finding weights
+  cannot be adjusted after seeing the pilot.
 - `training.steps` and `training.data_subset`, `evaluation.max_new_tokens`,
   `inputs.image_longest_side` and `budgets.measurement.hardware` are set.
 - RC-D1 done; RC-M1 passed.

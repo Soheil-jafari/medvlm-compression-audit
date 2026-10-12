@@ -71,8 +71,9 @@ compression run. E5-E8 run at every budget; ablations at B2.
 ## Primary endpoints (pre-registered)
 
 Small-finding recall and lesion-mask effect at **B2**, comparing **E7** against the
-**best of E5 and E6** (best chosen by a pre-registered rule, TODO: e.g. best headline
-accuracy on the validation split).
+**best of E5 and E6**, chosen by a pre-registered rule on the validation split (draft proposal:
+the generic arm with the highest validation small-finding recall at B2; see
+`docs/preregistration.md` section 5).
 
 ## Run count (for compute planning)
 

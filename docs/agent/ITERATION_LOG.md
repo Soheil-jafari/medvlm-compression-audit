@@ -751,3 +751,25 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: pre-registration draft (S07).
 - Needs the team: RC-Q0 (Soheil).
+
+## Iteration 40: 2026-10-12 (interactive)
+- Stage / item: S07, pre-registration draft, freeze guard, headline metric.
+- Did: rewrote `docs/preregistration.md` as a complete draft: decided items with their sources
+  (models and revisions, data and split seed, deduplication, budgets, training, recovery,
+  pruning, quantization), data-dependent items as rules filled from RC-D1 / RC-S0 / RC-B0, and
+  the team's questions as marked proposals (finding inclusion thresholds, prevalence cut points,
+  cap and tiers, the "best of E5/E6" comparator, the headline accuracy of H1/H4, the training
+  pool). The analysis plan now says the bootstrap resamples images (iteration 35). The weight
+  table carries the rules and proposals. **Freeze guard:** `cli.run_stage` refuses every stage
+  of E3-E9 and A1-A6 while `preregistration.frozen_on` is open (exit 4, "configuration
+  incomplete"); RC-G2 now requires the freeze (otherwise the weights could be adjusted after the
+  pilot). **Headline metric:** the overall probe accuracy mostly measures specificity (most
+  images lack most findings), so a model drifting to "no" keeps it while losing recall;
+  `macro_balanced_accuracy` (per finding mean of sensitivity and specificity, image-level CI)
+  is now computed by the clinical suite and proposed as the headline for H1 and H4.
+- Verified: ruff check, ruff format, pytest (698 passed, 15 skipped without torch), including a
+  test that answering "no" everywhere keeps 90 % accuracy but 50 % balanced accuracy, and the
+  guard on every compression script.
+- Commit: see `git log` on `research-loop`.
+- Next: pruning grid run cards RC-E5 to RC-E8 (S09), ablation code and cards (S10).
+- Needs the team: the draft's [team] items (open-decisions table).
