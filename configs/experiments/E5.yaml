@@ -21,6 +21,7 @@ experiment:
   outputs:
     - results/E5/<variant>/nobudget/seed{0,1,2}/unit_scores.csv
     - results/E5/<variant>/<budget>/seed{0,1,2}/metrics.csv
+    - results/E5/<variant>/<budget>/seed{0,1,2}/removal.json
   status: planned
 
 pruning:

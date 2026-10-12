@@ -244,7 +244,7 @@ def test_probe_steps_add_up_to_the_weighted_log_probability_of_the_right_answer(
     wrapper = _wrapper()
     steps = scoring.probe_objective_steps(wrapper, objective, tmp_path, batch_size=2)
     assert len(steps) == 3
-    total = sum(float(step()) for step in steps)
+    total = sum(float(step().detach()) for step in steps)
     scores = scoring.score_probe_images(wrapper, probes, tmp_path)
     expected = sum(
         c * (s.logp_yes if p.answer == "yes" else s.logp_no)

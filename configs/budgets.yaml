@@ -11,12 +11,12 @@ budgets:
       Parameter counts are reported but never used to match budgets.
     hardware: TODO                        # same GPU for every arm
     batch_size: TODO
-    image_resolution: TODO
-    prompt_length_tokens: TODO
     max_new_tokens: TODO
     warmup_runs: TODO
     repeats: TODO
-    samples: TODO                         # fixed list of sample IDs used for timing
+    samples: TODO                         # list of sample IDs, or a count drawn from validation with a fixed seed
+    # The image side is the global inputs.image_longest_side and the prompts are the real
+    # questions of these samples, so neither is a separate setting here.
   levels:
     B1:
       target_fraction: null               # placeholder, e.g. about 0.75 of E2 peak memory

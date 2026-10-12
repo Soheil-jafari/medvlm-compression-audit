@@ -12,9 +12,10 @@ reading.
   `random`, and the model-facing parts of `clinical` (`score`, `ablate`), with the scoring
   stage `scripts/04_score_pruning_units.py` (open settings: group size, calibration size,
   and for E7 the clinical keys; decided by the D07 memo).
-- [ ] [agent] Budget-matched removal (`budgets.search_matched_budget`,
+- [x] [agent] Budget-matched removal (`budgets.search_matched_budget`,
   `pruning/apply.py`) and the shared recovery (`compression/recovery.py`: LoRA +
-  offline KD, same subset and steps for every arm).
+  offline KD, same subset and steps for every arm), and the efficiency measurement
+  (`evaluation/efficiency.py`, stage 07). Open settings are named by the stages (exit 4).
 - [ ] [agent] Run card **RC-G2** first: E5 (3 criteria), E6 and E7 at B2, seed 0,
   scored on the **validation** split only.
 - [ ] [team:Amir] Execute RC-G2.

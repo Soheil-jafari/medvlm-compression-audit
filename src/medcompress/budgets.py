@@ -12,17 +12,20 @@ where E3, E4 and E9 land relative to B1-B3.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+import csv
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from medcompress.config import ConfigError
+from medcompress.config import ConfigError, find_todos
+from medcompress.evaluation.efficiency import EfficiencyReport
 from medcompress.registry import BUDGET_IDS
 
 if TYPE_CHECKING:
     from medcompress.compression.pruning.units import PrunableUnit
-    from medcompress.evaluation.efficiency import EfficiencyReport
+    from medcompress.data.base import VQASample
+    from medcompress.evaluation.efficiency import EfficiencyProtocol
     from medcompress.models.base import VLMWrapper
 
 BUDGET_METRICS: tuple[str, ...] = ("peak_memory", "latency")
@@ -76,19 +79,58 @@ def load_budget_specs(config: Mapping[str, Any]) -> dict[str, BudgetSpec]:
     return specs
 
 
-def measure_reference_footprint(model: VLMWrapper, protocol: Mapping[str, Any]) -> EfficiencyReport:
+def measure_reference_footprint(
+    model: VLMWrapper,
+    samples: Sequence[VQASample],
+    protocol: EfficiencyProtocol,
+    data_root: Path,
+    **options: Any,
+) -> EfficiencyReport:
     """Measure the E2 reference footprint that budgets are fractions of.
 
-    Must use exactly the measurement protocol in ``configs/budgets.yaml``
-    (hardware, batch size, image resolution, prompt length, max new tokens,
-    warm-up and repeat counts) and delegate the measurement itself to
-    :mod:`medcompress.evaluation.efficiency`.
+    Uses exactly the measurement protocol of ``configs/budgets.yaml`` (the same samples,
+    batch size, warm-up and repeats as every other arm); the measurement itself is
+    :func:`medcompress.evaluation.efficiency.measure_footprint`.
 
     Used by: E2 (reference), then E5-E8 and A1-A6 via :func:`search_matched_budget`.
     """
-    raise NotImplementedError(
-        "TODO: measure E2 peak memory / latency with the frozen protocol (E2 reference)."
+    from medcompress.evaluation.efficiency import measure_footprint
+
+    return measure_footprint(model, samples, protocol, data_root, **options)
+
+
+def read_efficiency_report(path: Path | str) -> EfficiencyReport:
+    """Rebuild a report from the ``efficiency.csv`` of the benchmark stage."""
+    values: dict[str, float] = {}
+    with Path(path).open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            values[row["metric"]] = float(row["value"])
+    return EfficiencyReport(
+        num_parameters=int(values["num_parameters"]) if "num_parameters" in values else None,
+        peak_memory_bytes=(
+            int(values["peak_memory_bytes"]) if "peak_memory_bytes" in values else None
+        ),
+        cold_latency_s=values.get("cold_latency_s"),
+        warm_latency_s=values.get("warm_latency_s"),
+        throughput_samples_per_s=values.get("throughput_samples_per_s"),
+        energy_joules_per_sample=values.get("energy_joules_per_sample"),
     )
+
+
+def reference_report(
+    results_root: Path | str, reference_experiment: str, *, seed: int = 0
+) -> EfficiencyReport:
+    """The measured footprint of the reference arm (E2) that the budgets are fractions of.
+
+    Every seed of E2 has the same architecture, so one seed (0) fixes the reference for all.
+    """
+    path = Path(results_root) / reference_experiment / "nobudget" / f"seed{seed}" / "efficiency.csv"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"no reference footprint at {path}; run scripts/07_benchmark_efficiency.py "
+            f"--exp {reference_experiment} --seed {seed} first"
+        )
+    return read_efficiency_report(path)
 
 
 def metric_value(report: EfficiencyReport, metric: str) -> float:
@@ -99,6 +141,15 @@ def metric_value(report: EfficiencyReport, metric: str) -> float:
     if value is None:
         raise ValueError(f"The report has no {_REPORT_FIELD[metric]}")
     return float(value)
+
+
+def report_for_metric(metric: str, value: float) -> EfficiencyReport:
+    """A report that holds only ``value`` as the budget metric (for a stored reference number)."""
+    if metric not in _REPORT_FIELD:
+        raise ValueError(f"Budget metric must be one of {BUDGET_METRICS}, got {metric!r}")
+    return EfficiencyReport(
+        **{_REPORT_FIELD[metric]: int(value) if metric == "peak_memory" else float(value)}
+    )
 
 
 def target_value(spec: BudgetSpec, reference: EfficiencyReport) -> float:
@@ -169,26 +220,140 @@ def smallest_prefix_meeting_target(
     return high, measured(high)
 
 
+@dataclass(frozen=True)
+class BudgetSearch:
+    """The outcome of the search for one budget."""
+
+    budget: str
+    target: float
+    tolerance: float
+    count: int
+    removal: tuple[PrunableUnit, ...]
+    footprint: float
+    within_tolerance: bool
+    trace: tuple[tuple[int, float], ...]
+
+    @property
+    def shortfall(self) -> float:
+        """Footprint relative to the target minus one (negative: compressed more than asked)."""
+        return self.footprint / self.target - 1.0
+
+
 def search_matched_budget(
-    model: VLMWrapper,
-    ranked_units: list[PrunableUnit],
+    units: Sequence[PrunableUnit],
+    ordered: Sequence[PrunableUnit],
     spec: BudgetSpec,
     target: float,
-    protocol: Mapping[str, Any],
+    measure_removal: Callable[[Sequence[PrunableUnit]], float],
     *,
-    workdir: Path | None = None,
-) -> list[PrunableUnit]:
+    protected_layers: Sequence[int] = (),
+) -> BudgetSearch:
     """Find the smallest removal set (lowest-ranked first) that meets the budget.
 
-    Removes units in ranked order (respecting GQA / structural constraints from
-    :func:`medcompress.compression.pruning.units.validate_removal_set`), measures
-    the real footprint after physical removal, and stops at the first set that is
-    within budget. Measurement-based, not parameter-count-based. A coarse
-    estimate followed by measured refinement (e.g. bisection over the prefix
-    length) is acceptable; document the choice in ``docs/decisions_log.md``.
+    ``ordered`` is the removal order of the criterion over ``units`` (all candidates). The
+    units that can be removed one after another without breaking the model are taken in that
+    order (:func:`~medcompress.compression.pruning.criteria.common.feasible_sequence`), and
+    the prefix length is bisected with the **measured** footprint of the model after the
+    physical removal (``measure_removal``), not with a parameter count. The result is the
+    shortest prefix at or below ``target * (1 + tolerance)``; units are discrete, so it can
+    land below the band, which ``within_tolerance`` reports (the footprint is then smaller
+    than the budget asks and the arm counts as outside the tolerance).
 
     Used by: E5, E6, E7 (every budget), A1-A6 (primary budget).
     """
-    raise NotImplementedError(
-        "TODO: remove lowest-ranked units until the MEASURED budget is met (E5-E7, A1-A6)."
+    from medcompress.compression.pruning.criteria.common import feasible_sequence, removal_set
+
+    if spec.tolerance is None:
+        raise ConfigError(f"budget {spec.id} has no tolerance yet")
+    accepted = feasible_sequence(units, ordered, protected_layers=protected_layers)
+    trace: dict[int, float] = {}
+
+    def measure_prefix(count: int) -> float:
+        value = float(measure_removal(removal_set(accepted, count)))
+        trace[count] = value
+        return value
+
+    count, footprint = smallest_prefix_meeting_target(
+        len(accepted), measure_prefix, target, spec.tolerance
     )
+    return BudgetSearch(
+        budget=spec.id,
+        target=target,
+        tolerance=spec.tolerance,
+        count=count,
+        removal=tuple(removal_set(accepted, count)),
+        footprint=footprint,
+        within_tolerance=abs(footprint - target) <= spec.tolerance * target,
+        trace=tuple(sorted(trace.items())),
+    )
+
+
+def budget_spec_for_run(config: Mapping[str, Any], budget: str) -> BudgetSpec:
+    """The frozen spec of ``budget`` (metric, target fraction and tolerance all set).
+
+    Raises:
+        ConfigError: a value is still ``TODO`` or ``null`` (all missing values are listed).
+    """
+    from medcompress.config import load_config
+
+    section = load_config(config["components"]["budgets"])
+    specs = load_budget_specs(section)
+    if budget not in specs:
+        raise ConfigError(f"unknown budget {budget!r}; known: {sorted(specs)}")
+    spec, block = specs[budget], section["budgets"]
+    open_keys = [
+        f"budgets.{key}"
+        for key in ("metric", "tolerance")
+        if block.get(key) is None or find_todos({"v": block.get(key)})
+    ]
+    if spec.target_fraction is None:
+        open_keys.append(f"budgets.levels.{budget}.target_fraction")
+    if open_keys:
+        raise ConfigError(f"settings still open: {', '.join(open_keys)}")
+    if spec.metric not in BUDGET_METRICS:
+        raise ConfigError(f"budgets.metric must be one of {BUDGET_METRICS}, got {spec.metric!r}")
+    if not 0.0 < spec.target_fraction < 1.0:
+        raise ConfigError(f"budgets.levels.{budget}.target_fraction must be in (0, 1)")
+    return spec
+
+
+def release_memory() -> None:
+    """Collect garbage and empty the CUDA cache (after the last reference to a model is gone)."""
+    import gc
+
+    gc.collect()
+    try:
+        import torch
+    except ImportError:  # pragma: no cover - torch is a hard requirement of the stage
+        return
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def make_removal_measurer(
+    fresh_model: Callable[[], VLMWrapper],
+    samples: Sequence[VQASample],
+    protocol: EfficiencyProtocol,
+    data_root: Path,
+    metric: str,
+    **options: Any,
+) -> Callable[[Sequence[PrunableUnit]], float]:
+    """A function that returns the measured budget metric of the model after removing a set.
+
+    Each call loads a fresh copy of the unpruned model (``fresh_model``), removes the units
+    physically, measures the footprint under ``protocol`` and frees the copy.
+    """
+    from medcompress.compression.pruning.apply import remove_units
+    from medcompress.evaluation.efficiency import measure_footprint
+
+    def measure(removal: Sequence[PrunableUnit]) -> float:
+        model = fresh_model()
+        try:
+            remove_units(model, list(removal))
+            report = measure_footprint(model, samples, protocol, data_root, **options)
+        finally:
+            del model
+            release_memory()
+        return metric_value(report, metric)
+
+    return measure

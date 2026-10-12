@@ -526,3 +526,33 @@ Append-only, newest at the bottom. One entry per iteration:
   then the D06 and D07 memos.
 - Needs the team: nothing new.
 
+## Iteration 30: 2026-10-12 (interactive)
+- Stage / item: S09, matched-budget search, shared recovery and efficiency measurement.
+- Did: `evaluation/efficiency.py` (measurement protocol from `budgets.measurement`, timing
+  samples as named ids or a seeded draw of validation images, one sweep that gives the cold
+  latency, the warm latency, the throughput, the peak memory and, where the GPU reports power,
+  the energy; parameters, state bytes and file size; stage 07 writes `efficiency.csv` and
+  `efficiency_setup.json`). `budgets.py` (`search_matched_budget`: the feasible prefix of the
+  removal order is bisected with the **measured** footprint of a freshly loaded model after
+  physical removal; `BudgetSearch` records the trace and whether the result is inside the
+  tolerance band; `budget_spec_for_run` refuses placeholders; the reference is read from the
+  efficiency file of E2). `compression/recovery.py` (`RemovalSettings`, `plan_removal` with the
+  protected layers, `run_recovery` = the shared LoRA + offline KD recipe with the data subset
+  drawn from the seed alone and the adapter merged afterwards, `run_prune_and_recover` which
+  saves the pruned model through the manifest format and writes `removal.json`,
+  `budget_search.csv` and the numbers of the run). `load_run_model` now reloads the pruned
+  arms (E5-E7, A1-A6) by loading E2 of the same seed and replaying the manifest.
+  Config: `budgets.measurement` lost `image_resolution` and `prompt_length_tokens` (the image
+  side is the global input and the prompts are the real questions of the timing samples); the
+  outputs of E5-E7 list what the stages write (the mask audit is part of stage 06, so the
+  `mask_audit.csv` entry of E7 was wrong and is gone).
+  Checks on the tiny model: the stage removes units until the measured parameter count meets a
+  fraction of the full model, recovers, saves, and the runner reloads it with the same
+  parameter count; a budget the units cannot reach is an error; a unit step that overshoots
+  the band is reported as outside the tolerance (the memo must size the tolerance to the
+  largest unit step); settings that are open are listed together.
+- Verified: ruff check, ruff format, pytest (780 passed).
+- Commit: see `git log` on `research-loop`.
+- Next: D06 and D07 memos (ask the team), then run card RC-G2.
+- Needs the team: nothing new yet (the memos will ask).
+

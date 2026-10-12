@@ -209,8 +209,9 @@ def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLM
     """Load the model that ``run`` evaluates.
 
     E0 is the teacher; E1 and E2 are the student with the adapter their training run
-    saved (merged into the weights, as the compression arms start from it). The
-    compressed arms are added with their stages.
+    saved (merged into the weights, as the compression arms start from it). The pruned
+    arms (E5-E7, A1-A6) reload E2 of the same seed and replay the removal that stage 05
+    saved. The quantized arms are added with their stage.
     """
     from medcompress.config import load_config
     from medcompress.models.loading import ModelSpec, load_model
@@ -220,9 +221,16 @@ def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLM
         return load_model(spec, image_longest_side=side)
     if run.experiment_id in ("E1", "E2"):
         return load_trained_student(config, run.experiment_tag, run.seed, side)
+    from medcompress.registry import SCORE_UNITS, get_experiment
+
+    if SCORE_UNITS in get_experiment(run.experiment_id).scripts:  # E5-E7, A1-A6
+        from medcompress.compression.pruning.checkpoint import load_pruned
+        from medcompress.compression.recovery import pruned_dir
+
+        base = load_trained_student(config, "E2", run.seed, side)
+        return load_pruned(base, pruned_dir(config, run))
     raise NotImplementedError(
-        f"loading the model of {run.experiment_id} arrives with its stage (E3/E4: S08, "
-        "E5-E8 and A1-A6: S09/S10)."
+        f"loading the model of {run.experiment_id} arrives with its stage (E3/E4/E8/E9: S08)."
     )
 
 
