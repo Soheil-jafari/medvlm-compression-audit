@@ -31,6 +31,8 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("paper/tables"),
         help="Where the LaTeX tables and numbers.tex go (relative to the working directory).",
     )
+    parser.add_argument("--figures-dir", type=Path, default=Path("paper/figures"))
+    parser.add_argument("--verdicts", type=Path, default=Path("docs/results/VERDICTS.md"))
     args = parser.parse_args(argv)
     config = resolve_config(args)
     results_root = args.results_root or Path(config["paths"]["results_root"])
@@ -40,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
         results_root=results_root,
         out_dir=args.out_dir,
         tables_dir=args.tables_dir,
+        figures_dir=args.figures_dir,
+        verdicts_path=args.verdicts,
     )
 
 

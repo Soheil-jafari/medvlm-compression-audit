@@ -93,3 +93,5 @@ def test_aggregate_script_writes_summary_and_tables(tmp_path: Path) -> None:
     assert (tmp_path / "results" / "summary" / "by_arm.csv").is_file()
     for name in ("main.tex", "primary.tex", "numbers.tex", "setup_data.tex"):
         assert (tmp_path / "paper" / "tables" / name).is_file(), name
+    assert (tmp_path / "paper" / "figures" / "headline_vs_hidden.pdf").is_file()
+    assert "pending" in (tmp_path / "docs" / "results" / "VERDICTS.md").read_text()

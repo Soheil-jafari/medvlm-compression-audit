@@ -267,3 +267,21 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: figures (F1-F5), the verdicts file, and wiring the paper to the generated
   tables with a test against hand-typed numbers.
 - Needs the team: nothing new.
+
+## Iteration 19: 2026-10-12 (interactive)
+- Stage / item: S02, figures F1-F5, verdicts, and the full aggregation step.
+- Did: new `evaluation/figures.py` (F1 headline vs hidden damage, F2 change vs E2
+  heatmap, F3 budget curves, F4 rank order, F5 mask audit; three family colours
+  checked with the palette validator for colour-blind separation, direct labels on
+  every point, diverging blue/red for F2, placeholders when results are missing) and
+  `evaluation/verdicts.py` (H1-H4 rules over comparison rows, written to
+  `docs/results/VERDICTS.md`; the rules are a proposal for the pre-registration).
+  `aggregate_results` and `scripts/08_aggregate_results.py` now write summaries,
+  tables, figures and verdicts. Rendered the figures from a synthetic summary and
+  checked them by eye (rank axes now use whole numbers). New
+  `tests/test_figures_verdicts.py`; fixed a test that wrote into the repository.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: wire `paper/sections/05_results.tex` to the generated files and add the
+  test against hand-typed numbers (last S02 item).
+- Needs the team: nothing new.

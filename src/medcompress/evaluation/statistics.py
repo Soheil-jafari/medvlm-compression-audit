@@ -233,24 +233,35 @@ def aggregate_results(
     out_dir: Path,
     *,
     tables_dir: Path | None = None,
+    figures_dir: Path | None = None,
+    verdicts_path: Path | None = None,
 ) -> list[Path]:
     """Stage entry point for ``scripts/08_aggregate_results.py``.
 
     Validates and collects every results CSV under ``results_root`` (runs,
     comparisons, selection, data summary), writes ``all_rows.csv`` and
-    ``by_arm.csv`` (seed means and SDs) to ``out_dir``, and writes the paper tables
-    and ``numbers.tex`` to ``tables_dir`` (default ``paper/tables``). Paired CIs and
-    Holm-corrected p-values come from the comparison rows (``evaluation/comparisons``).
-    Returns the paths written.
+    ``by_arm.csv`` (seed means and SDs) to ``out_dir``, the paper tables and
+    ``numbers.tex`` to ``tables_dir`` (default ``paper/tables``), figures F1-F5 to
+    ``figures_dir`` (default ``paper/figures``) and the H1-H4 verdicts to
+    ``verdicts_path`` (default ``docs/results/VERDICTS.md``); defaults are relative
+    to the repository. Paired CIs and Holm-corrected p-values come from the
+    comparison rows (``evaluation/comparisons``). Returns the paths written.
 
     Used by: all experiments (final step).
     """
     from medcompress.config import repo_root
     from medcompress.evaluation.aggregate import load_results, summarise_over_seeds, write_summary
+    from medcompress.evaluation.figures import write_figures
     from medcompress.evaluation.report import write_tables
+    from medcompress.evaluation.verdicts import write_verdicts
 
+    root = repo_root()
     rows = load_results(Path(results_root))
+    summary = summarise_over_seeds(rows)
     written = write_summary(rows, Path(out_dir))
-    target = Path(tables_dir) if tables_dir is not None else repo_root() / "paper" / "tables"
-    written += write_tables(rows, summarise_over_seeds(rows), target)
+    written += write_tables(rows, summary, Path(tables_dir or root / "paper" / "tables"))
+    written += write_figures(summary, Path(figures_dir or root / "paper" / "figures"))
+    written.append(
+        write_verdicts(summary, Path(verdicts_path or root / "docs" / "results" / "VERDICTS.md"))
+    )
     return written

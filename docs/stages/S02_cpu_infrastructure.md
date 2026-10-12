@@ -30,7 +30,7 @@ All with unit tests on small synthetic inputs. Replace entries in
   `load_finding_weights`, `compute_weights`, `delta`, `aggregate_importance`.
 - [x] [agent] `budgets.py`: budget search against a measured-footprint function
   (tested with a mock).
-- [ ] [agent] `evaluation/statistics.aggregate_results` and
+- [x] [agent] `evaluation/statistics.aggregate_results` and
   `scripts/08_aggregate_results.py`: read `results/`, write `results/summary/`,
   every table and figure listed in `docs/FINAL_GOAL.md` section 3,
   `paper/tables/numbers.tex` and `docs/results/VERDICTS.md`. End-to-end test on a

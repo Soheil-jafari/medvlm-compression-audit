@@ -88,8 +88,14 @@ def test_fmt_and_macro_names() -> None:
 def test_aggregate_results_end_to_end(tmp_path: Path) -> None:
     _tree(tmp_path / "results")
     written = aggregate_results(
-        tmp_path / "results", tmp_path / "summary", tables_dir=tmp_path / "tables"
+        tmp_path / "results",
+        tmp_path / "summary",
+        tables_dir=tmp_path / "tables",
+        figures_dir=tmp_path / "figures",
+        verdicts_path=tmp_path / "VERDICTS.md",
     )
     names = {p.name for p in written}
     assert {"by_arm.csv", "main.tex", "primary.tex", "ablations.tex", "numbers.tex"} <= names
     assert "0.720" in (tmp_path / "tables" / "main.tex").read_text()
+    assert (tmp_path / "figures" / "budget_curves.pdf").read_bytes().startswith(b"%PDF")
+    assert "## H3: pending" in (tmp_path / "VERDICTS.md").read_text()
