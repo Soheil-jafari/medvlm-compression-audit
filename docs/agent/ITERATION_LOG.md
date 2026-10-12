@@ -816,3 +816,35 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S11 aggregation and figures (the A4 curve, the comparisons step from `outcomes*.npz`),
   RC-X1 and RC-T1.
 - Needs the team: A3 ranking and the E7 reuse (pre-registration section 7).
+
+## Iteration 43: 2026-10-12 (interactive)
+- Stage / item: S11, the comparison step and the figure inputs.
+- Did: **comparison step** `scripts/09_compare_arms.py` (`evaluation/compare_stage.py`): reads
+  every run's `outcomes_test.npz`, checks that all runs asked the same probes, averages each
+  probe over the arm's seeds, draws one sequence of image-level resamples (seed 0) and computes
+  per arm and resample the headline accuracy, small-finding recall, rare-group recall and ECE.
+  From that one table: H1 drop gaps against E2 for every arm of E3-E8, H3 (E7 against the
+  comparator chosen on validation; lesion-mask effect bootstrapped over the audited probes;
+  Holm over the two endpoints), H2 (matched budget rule, proposal), H4 (Kendall's tau of the
+  headline order against three clinical orders), and McNemar per finding on the majority answer
+  with Holm across findings. An arm with a missing seed is left out and listed in
+  `results/comparisons/choices.json`. The metrics equal those of the evaluation stage and the
+  intervals equal `paired_bootstrap_test` on the same seed (tests). Speed: about 2 minutes for
+  a synthetic 750-image, 15-finding, 42-arm stand-in at 10,000 resamples on this session's CPU
+  (estimate for the real split). **Flaws fixed:** (1) F5 and the rare row of F2 read metric
+  names no stage writes (`flip_rate_lesion_masked`, `rare_finding_recall`), so they would have
+  stayed empty with real results; their test fixture used the same wrong names. A new test
+  checks every metric a table or figure reads against the names the stages write. (2) No card
+  evaluated E0, E1 and E2 on the test split (they run before the freeze), yet E2 is the
+  reference of H1 and of every table: new card RC-R1. (3) The results loader rejected
+  comparison names with a variant (`E5:taylor_vs_E2`). (4) The image-reliance probe subset
+  depended on the run seed when capped; now fixed like the mask audit. Outcome files now also
+  store `probe_has_mask` and `audit_findings`. Also: `evaluation.headline_accuracy`
+  (proposal: macro balanced accuracy) drives F1 and F4; T2 shows both accuracies; T5 shows
+  throughput. Card RC-C1 (CPU) runs steps 09 and 08; the quantization cards now keep their
+  outcome files for it.
+- Verified: ruff check, ruff format, pytest; paper tables regenerated.
+- Commit: see `git log` on `research-loop`.
+- Next: RC-T1 (final timing on the rented GPU, kept apart from the development numbers),
+  RC-X1 (external test), the A4 curve and the appendix tables.
+- Needs the team: H2 matching rule and McNemar on the majority answer (pre-registration).

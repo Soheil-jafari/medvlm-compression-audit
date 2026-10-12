@@ -358,6 +358,7 @@ def _image_reliance(
         samples,
         findings=list(settings.findings),
         max_per_finding=settings.max_per_finding,
+        subsample_seed=PROBE_SAMPLE_SEED,
         **_audit_kwargs(settings, data_root, seed),
     )
     audit_metrics, audit = _mask_audit(model, samples, settings, data_root, seed)
@@ -406,6 +407,7 @@ def evaluate_model(
             "probe_yes": out.yes,
             "probe_margin": out.margin,
             "probe_area": out.area,
+            "probe_has_mask": out.has_mask,
         }
         if out.yes_blank is not None:
             arrays["probe_yes_blank"] = out.yes_blank
@@ -440,6 +442,7 @@ def evaluate_model(
     if audit is not None:
         arrays |= {
             "audit_sample_ids": np.array(audit.sample_ids),
+            "audit_findings": np.array(audit.findings),
             "audit_original_yes": audit.original_yes,
             "audit_lesion_flip": audit.lesion_flip,
             "audit_random_flip": audit.random_flip,

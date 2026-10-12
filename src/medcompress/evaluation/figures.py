@@ -20,7 +20,13 @@ from typing import Any
 
 import pandas as pd
 
-from medcompress.evaluation.report import ACCURACY, MASK_EFFECT, SMALL_RECALL, arm_labels
+from medcompress.evaluation.report import (
+    ACCURACY,
+    BALANCED_ACCURACY,
+    MASK_EFFECT,
+    SMALL_RECALL,
+    arm_labels,
+)
 from medcompress.registry import BUDGET_IDS, PRIMARY_BUDGET
 
 INK = "#0b0b0b"
@@ -36,12 +42,13 @@ FAMILY_COLOURS: Mapping[str, str] = {
     "distillation only": MUTED,
 }
 DIVERGING = ("#2a78d6", "#f0efec", "#e34948")  # negative, zero, positive
-RARE_RECALL = "rare_finding_recall"
+RARE_RECALL = "rare_recall:rare"  # pooled recall of the rare prevalence group
 ECE = "ece"
 PEAK_MEMORY = "peak_memory_bytes"
-FLIP_LESION = "flip_rate_lesion_masked"
-FLIP_RANDOM = "flip_rate_random_masked"
+FLIP_LESION = "lesion_flip_rate"  # written by the lesion-mask audit (image_reliance.py)
+FLIP_RANDOM = "random_flip_rate"
 RANKING_COMPARISON = "accuracy_vs_clinical"
+HEADLINE_LABELS: Mapping[str, str] = {ACCURACY: "Accuracy", BALANCED_ACCURACY: "Balanced accuracy"}
 
 
 def family_of(arm: str) -> str:
@@ -127,13 +134,13 @@ def _family_legend(ax: Any, families: set[str]) -> None:
         ax.legend(handles=handles, frameon=False, fontsize=7, loc="best")
 
 
-def headline_vs_hidden(summary: pd.DataFrame, path: Path) -> Path:
-    """F1 (H1): drop in accuracy vs drop in small-finding recall, relative to E2."""
-    ref_acc = _mean(summary, "E2", "", ACCURACY)
+def headline_vs_hidden(summary: pd.DataFrame, path: Path, headline: str = ACCURACY) -> Path:
+    """F1 (H1): drop in the headline accuracy vs drop in small-finding recall, relative to E2."""
+    ref_acc = _mean(summary, "E2", "", headline)
     ref_small = _mean(summary, "E2", "", SMALL_RECALL)
     points = []
     for arm, budget in compressed_arms():
-        acc = _mean(summary, arm, budget, ACCURACY)
+        acc = _mean(summary, arm, budget, headline)
         small = _mean(summary, arm, budget, SMALL_RECALL)
         if not any(math.isnan(v) for v in (ref_acc, ref_small, acc, small)):
             points.append((arm, ref_acc - acc, ref_small - small))
@@ -156,7 +163,7 @@ def headline_vs_hidden(summary: pd.DataFrame, path: Path) -> Path:
         ax.annotate(
             arm, (x, y), xytext=(3, 3), textcoords="offset points", fontsize=6, color=INK_SECONDARY
         )
-    ax.set_xlabel("Accuracy drop vs E2")
+    ax.set_xlabel(f"{HEADLINE_LABELS[headline]} drop vs E2")
     ax.set_ylabel("Small-finding recall drop vs E2")
     _family_legend(ax, {family_of(a) for a, _, _ in points})
     return _save(fig, path)
@@ -260,11 +267,11 @@ def budget_curves(summary: pd.DataFrame, path: Path) -> Path:
     return _save(fig, path)
 
 
-def rank_order(summary: pd.DataFrame, path: Path) -> Path:
-    """F4 (H4): rank of each compressed arm by accuracy vs by small-finding recall."""
+def rank_order(summary: pd.DataFrame, path: Path, headline: str = ACCURACY) -> Path:
+    """F4 (H4): rank of each compressed arm by the headline accuracy vs by small-finding recall."""
     rows = []
     for arm, budget in compressed_arms():
-        acc = _mean(summary, arm, budget, ACCURACY)
+        acc = _mean(summary, arm, budget, headline)
         small = _mean(summary, arm, budget, SMALL_RECALL)
         if not (math.isnan(acc) or math.isnan(small)):
             rows.append((arm, acc, small))
@@ -291,7 +298,7 @@ def rank_order(summary: pd.DataFrame, path: Path) -> Path:
     tau = _mean(summary, RANKING_COMPARISON, "", f"tau:{SMALL_RECALL}")
     if not math.isnan(tau):
         ax.set_title(f"Kendall's tau = {tau:.2f}", fontsize=7, color=INK_SECONDARY)
-    ax.set_xlabel("Rank by accuracy")
+    ax.set_xlabel(f"Rank by {HEADLINE_LABELS[headline].lower()}")
     ax.set_ylabel("Rank by small-finding recall")
     from matplotlib.ticker import MaxNLocator
 
@@ -347,7 +354,23 @@ FIGURE_WRITERS = {
 }
 
 
-def write_figures(summary: pd.DataFrame, figures_dir: Path) -> list[Path]:
-    """Write F1-F5 as PDFs to ``figures_dir`` and return their paths."""
+USES_HEADLINE = frozenset({"headline_vs_hidden.pdf", "rank_order.pdf"})
+
+
+def write_figures(
+    summary: pd.DataFrame, figures_dir: Path, *, headline: str = ACCURACY
+) -> list[Path]:
+    """Write F1-F5 as PDFs to ``figures_dir`` and return their paths.
+
+    ``headline`` is the pre-registered headline accuracy (``evaluation.headline_accuracy``),
+    used by F1 and F4.
+    """
+    if headline not in HEADLINE_LABELS:
+        raise ValueError(f"headline must be one of {sorted(HEADLINE_LABELS)}")
     figures_dir = Path(figures_dir)
-    return [writer(summary, figures_dir / name) for name, writer in FIGURE_WRITERS.items()]
+    return [
+        writer(
+            summary, figures_dir / name, **({"headline": headline} if name in USES_HEADLINE else {})
+        )
+        for name, writer in FIGURE_WRITERS.items()
+    ]

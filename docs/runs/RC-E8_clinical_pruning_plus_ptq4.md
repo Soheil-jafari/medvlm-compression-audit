@@ -47,6 +47,9 @@ done
 python -m pytest -q tests/test_results.py                  # must pass before you commit
 ```
 
+Keep `outputs/` (the per-probe `outcomes*.npz` files) as a private dataset too: the paired
+comparisons (RC-C1) need the test-split ones. Write its name in section 6.
+
 ## 4. What to commit back
 
 - `results/E8/<budget>/seed<k>/metrics.csv`, `metrics_test.csv`, `efficiency.csv`,
@@ -68,3 +71,4 @@ python -m pytest -q tests/test_results.py                  # must pass before yo
 - Hardware and library versions:
 - Wall time and peak GPU memory per run:
 - Anything unusual:
+- Names of the private datasets with the checkpoints and `outcomes*.npz` files:

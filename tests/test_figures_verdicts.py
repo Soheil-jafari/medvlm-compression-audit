@@ -47,10 +47,10 @@ def synthetic_summary() -> pd.DataFrame:
             ("small_finding_recall", 0.70),
             ("lesion_mask_effect", 0.40),
             ("peak_memory_bytes", 1e9),
-            ("rare_finding_recall", 0.60),
+            ("rare_recall:rare", 0.60),
             ("ece", 0.05),
-            ("flip_rate_lesion_masked", 0.5),
-            ("flip_rate_random_masked", 0.1),
+            ("lesion_flip_rate", 0.5),
+            ("random_flip_rate", 0.1),
         ]
     ]
     for arm, budget, acc, small in [
@@ -64,8 +64,8 @@ def synthetic_summary() -> pd.DataFrame:
             _row(arm, budget, "overall_accuracy", acc),
             _row(arm, budget, "small_finding_recall", small),
             _row(arm, budget, "ece", 0.07),
-            _row(arm, budget, "flip_rate_lesion_masked", 0.4),
-            _row(arm, budget, "flip_rate_random_masked", 0.1),
+            _row(arm, budget, "lesion_flip_rate", 0.4),
+            _row(arm, budget, "random_flip_rate", 0.1),
         ]
     for budget, mem, small in [("B1", 0.75e9, 0.66), ("B2", 0.6e9, 0.62), ("B3", 0.5e9, 0.55)]:
         rows += [_row("E7", budget, "peak_memory_bytes", mem)]
@@ -127,3 +127,45 @@ def test_h1_h2_h4_rules() -> None:
     ]
     h1, h2, _, h4 = all_verdicts(pd.DataFrame(rows))
     assert (h1.verdict, h2.verdict, h4.verdict) == (SUPPORTED, SUPPORTED, SUPPORTED)
+
+
+def _written_metric_names() -> set[str]:
+    """Every metric name the evaluation and benchmark stages write, on synthetic outcomes."""
+    import numpy as np
+
+    from medcompress.evaluation import probe_suites as ps
+    from medcompress.evaluation.efficiency import REPORT_METRICS
+    from medcompress.evaluation.image_reliance import MaskAuditResult
+    from medcompress.evaluation.runner import metrics_from_summary
+
+    truth = np.array([True, False, True, False, True, False])
+    out = ps.ProbeOutcomes(
+        sample_ids=("a", "a", "b", "b", "c", "c"),
+        findings=("polyp", "bleeding") * 3,
+        truth=truth,
+        yes=np.array([True, False, False, True, True, False]),
+        margin=np.array([1.0, -1.0, -0.5, 0.5, 2.0, -2.0]),
+        area=np.array([0.004, np.nan, 0.02, np.nan, 0.01, np.nan]),
+        has_mask=truth,
+    )
+    metrics = ps.clinical_metrics(out, ["polyp", "bleeding"], n_resamples=5)
+    metrics += ps.small_finding_metrics(out, [0.006, 0.013, 0.018], ["polyp"], n_resamples=5)
+    metrics += ps.rare_finding_metrics(out, {"common": ["polyp"], "rare": ["bleeding"]})
+    metrics += ps.calibration_metrics(out, n_bins=5)
+    flips = np.array([True, False, True])
+    audit = MaskAuditResult(("a", "b", "c"), ("polyp",) * 3, flips, flips, ~flips,
+                            np.ones(3), np.zeros(3), np.zeros(3))  # fmt: skip
+    metrics += metrics_from_summary(audit.summary(n_resamples=5))
+    return {m.name for m in metrics} | set(REPORT_METRICS) | {"low_precision_kernels_ok"}
+
+
+def test_figures_and_tables_read_metrics_the_stages_write() -> None:
+    from medcompress.evaluation import figures, report
+
+    used = {
+        report.ACCURACY, report.BALANCED_ACCURACY, report.SMALL_RECALL, report.MASK_EFFECT,
+        *report.MAIN_METRICS, *(m for m, _ in report.EFFICIENCY_METRICS),
+        figures.RARE_RECALL, figures.ECE, figures.PEAK_MEMORY, figures.FLIP_LESION,
+        figures.FLIP_RANDOM,
+    }  # fmt: skip
+    assert used - _written_metric_names() == set()

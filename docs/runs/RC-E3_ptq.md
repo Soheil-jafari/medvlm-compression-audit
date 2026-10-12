@@ -59,6 +59,9 @@ is still open: do not fill it in yourself, tell the agent through the inbox. The
 codes go to `checkpoints/E3/<variant>/nobudget/seed<k>/quantized/` (never committed); keep them
 as a private dataset.
 
+Keep `outputs/` (the per-probe `outcomes*.npz` files) as a private dataset too: the paired
+comparisons (RC-C1) need the test-split ones. Write its name in section 6.
+
 ## 4. What to commit back
 
 For each variant `<v>` and seed `<k>`:
@@ -85,3 +88,4 @@ Check before committing: `git status` shows no images, checkpoints, caches or `o
 - Wall time per variant:
 - Pass criteria: all met / not met (list):
 - Anything unusual (errors, retries, changed settings):
+- Names of the private datasets with the checkpoints and `outcomes*.npz` files:

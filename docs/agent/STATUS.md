@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 42 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 43 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
@@ -16,7 +16,8 @@
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
    draft and freeze guard done (iteration 40). Pruning grid cards RC-E5 to RC-E8 done
    (iteration 41); ablation cards RC-A1 to RC-A6 done, A3 ranking and score reuse fixed
-   (iteration 42). Next: aggregation and figures, RC-X1, RC-T1 and the paper (S11, S12).
+   (iteration 42); comparison step, RC-C1 and RC-R1 done (iteration 43). Next: RC-T1, RC-X1,
+   the A4 curve and appendix tables (S11), then the paper (S12).
 3. D07 section 1 (how a unit is switched off while scored), the timing hardware and B1-B3 are
    asked later; none is needed before E2 exists.
 
@@ -34,7 +35,7 @@ cards for the team (decision of 2026-10-12).
 | 5 | Run RC-D1 (`docs/runs/RC-D1_data_preparation.md`) and commit `results/data/summary.csv` | Farzan | 2026-10-12 |
 | 7 | Tell Amir and Farzan that the staged selection was replaced by one student with checks (D05 amendment) | Soheil | 2026-10-12 |
 | 8 | Confirm the fixed training pool (one pool from `seeds.data_split` for E1, E2, E4 and the recoveries; the teacher cache holds only that pool) | Soheil | 2026-10-12 |
-| 10 | Answer the [team] items of the pre-registration draft (comparator rule, headline accuracy for H1/H4, finding thresholds, prevalence cut points, cap, tiers, training pool, A3 ranking, reuse of E7 for `A4:n128` and `A5:logprob_drop`) | all | 2026-10-12 |
+| 10 | Answer the [team] items of the pre-registration draft (comparator rule, headline accuracy for H1/H4, finding thresholds, prevalence cut points, cap, tiers, training pool, A3 ranking, reuse of E7 for `A4:n128` and `A5:logprob_drop`, H2 matching, McNemar on the majority answer) | all | 2026-10-12 |
 | 9 | Run RC-Q0 (`docs/runs/RC-Q0_quantization_smoke_test.md`, one T4, no data) and commit `results/smoke/RC-Q0.csv` | Soheil | 2026-10-12 |
 | 6 | Run RC-M1 (`docs/runs/RC-M1_model_smoke_test.md`, Kaggle 2 x T4) and commit `results/smoke/RC-M1.csv` | Soheil | 2026-10-12 |
 
@@ -54,7 +55,7 @@ cards for the team (decision of 2026-10-12).
 | S08 | Quantization E3, E4, E9 | code and run cards done (RC-Q0 ready; RC-E3, RC-E4, RC-E9 blocked) | RC-Q0, S07 freeze, E2 |
 | S09 | Pruning E5-E8, Gate 2 | code and run cards done (RC-G2, RC-E5 to RC-E8, all blocked) | D07 (scoring method, budgets), S07 freeze, E2 |
 | S10 | Ablations A1-A6 | run cards done (RC-A1 to RC-A6, blocked); team: A3 ranking, E7 reuse | S09, S07 freeze |
-| S11 | External test, timing, aggregation | not started | S08-S10 |
+| S11 | External test, timing, aggregation | comparison step and cards RC-R1, RC-C1 done; RC-T1, RC-X1 next | S08-S10 |
 | S12 | Paper and release | not started | S11 (method/related work can start early) |
 
 ## Gates

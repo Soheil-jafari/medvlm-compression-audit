@@ -32,7 +32,7 @@ def _cluster_groups(clusters: Sequence[object] | np.ndarray, n: int) -> list[np.
     return [np.asarray(rows, dtype=int) for rows in order.values()]
 
 
-def _resample_indices(
+def resample_indices(
     n: int,
     n_resamples: int,
     seed: int,
@@ -58,7 +58,8 @@ def _resample_indices(
         yield np.concatenate([groups[g] for g in rng.integers(0, k, size=k)])
 
 
-def _percentile_ci(samples: np.ndarray, alpha: float) -> tuple[float, float]:
+def percentile_ci(samples: np.ndarray, alpha: float) -> tuple[float, float]:
+    """The ``(alpha/2, 1 - alpha/2)`` percentiles of the finite bootstrap values (NaN if none)."""
     finite = samples[np.isfinite(samples)]
     if finite.size == 0:
         return math.nan, math.nan
@@ -85,7 +86,7 @@ def paired_bootstrap_ci(
     paired design. Percentile interval; resamples where the metric is undefined
     (NaN, e.g. a recall with no positives drawn) are dropped. When rows are probes and an
     image has several, pass the image of each row as ``clusters`` (see
-    :func:`_resample_indices`).
+    :func:`resample_indices`).
 
     Used by: all comparisons; primary endpoints E7 vs best of E5/E6 at B2.
     """
@@ -98,13 +99,13 @@ def paired_bootstrap_ci(
     if not 0 < alpha < 1:
         raise ValueError("alpha must be in (0, 1).")
     observed = float(metric(a)) - float(metric(b))
-    indices = _resample_indices(a.shape[0], n_resamples, seed, clusters)
+    indices = resample_indices(a.shape[0], n_resamples, seed, clusters)
     diffs = np.fromiter(
         (float(metric(a[idx])) - float(metric(b[idx])) for idx in indices),
         dtype=float,
         count=n_resamples,
     )
-    low, high = _percentile_ci(diffs, alpha)
+    low, high = percentile_ci(diffs, alpha)
     return observed, low, high
 
 
@@ -129,18 +130,28 @@ def paired_bootstrap_test(
     if a.shape[0] != b.shape[0] or a.shape[0] == 0:
         raise ValueError("Paired outcomes need the same, non-zero number of images.")
     observed = float(metric(a)) - float(metric(b))
-    indices = _resample_indices(a.shape[0], n_resamples, seed, clusters)
+    indices = resample_indices(a.shape[0], n_resamples, seed, clusters)
     diffs = np.fromiter(
         (float(metric(a[idx])) - float(metric(b[idx])) for idx in indices), float, n_resamples
     )
-    finite = diffs[np.isfinite(diffs)]
-    low, high = _percentile_ci(diffs, alpha)
+    low, high = percentile_ci(diffs, alpha)
+    return observed, low, high, bootstrap_p_value(diffs)
+
+
+def bootstrap_p_value(diffs: np.ndarray) -> float:
+    """Two-sided p-value of "no difference" from bootstrap differences ``d*``.
+
+    ``min(1, 2 * min(P(d* <= 0), P(d* >= 0)))`` with the +1 correction, so it is never exactly
+    0; undefined resamples (NaN) are dropped, and with none left the p-value is NaN.
+    """
+    finite = np.asarray(diffs, dtype=float)
+    finite = finite[np.isfinite(finite)]
     if finite.size == 0:
-        return observed, low, high, math.nan
+        return math.nan
     n = finite.size
     below = (np.sum(finite <= 0) + 1) / (n + 1)
     above = (np.sum(finite >= 0) + 1) / (n + 1)
-    return observed, low, high, float(min(1.0, 2 * min(below, above)))
+    return float(min(1.0, 2 * min(below, above)))
 
 
 def bootstrap_ci(
@@ -160,9 +171,9 @@ def bootstrap_ci(
     if data.shape[0] == 0:
         raise ValueError("Need at least one image.")
     observed = float(metric(data))
-    indices = _resample_indices(data.shape[0], n_resamples, seed, clusters)
+    indices = resample_indices(data.shape[0], n_resamples, seed, clusters)
     values = np.fromiter((float(metric(data[idx])) for idx in indices), float, n_resamples)
-    low, high = _percentile_ci(values, alpha)
+    low, high = percentile_ci(values, alpha)
     return observed, low, high
 
 
@@ -263,9 +274,9 @@ def bootstrap_kendall_tau(
         return kendall_tau(xs, ys)
 
     observed = tau_for(slice(None))
-    indices = _resample_indices(n, n_resamples, seed, clusters)
+    indices = resample_indices(n, n_resamples, seed, clusters)
     taus = np.fromiter((tau_for(idx) for idx in indices), float, n_resamples)
-    low, high = _percentile_ci(taus, alpha)
+    low, high = percentile_ci(taus, alpha)
     return observed, low, high
 
 
@@ -276,6 +287,7 @@ def aggregate_results(
     tables_dir: Path | None = None,
     figures_dir: Path | None = None,
     verdicts_path: Path | None = None,
+    headline: str = "overall_accuracy",
 ) -> list[Path]:
     """Stage entry point for ``scripts/08_aggregate_results.py``.
 
@@ -287,7 +299,8 @@ def aggregate_results(
     ``figures_dir`` (default ``paper/figures``) and the H1-H4 verdicts to
     ``verdicts_path`` (default ``docs/results/VERDICTS.md``); defaults are relative
     to the repository. Paired CIs and Holm-corrected p-values come from the
-    comparison rows (``evaluation/comparisons``). Returns the paths written.
+    comparison rows (``evaluation/compare_stage``). ``headline`` is the pre-registered headline
+    accuracy (F1, F4). Returns the paths written.
 
     Used by: all experiments (final step).
     """
@@ -308,7 +321,8 @@ def aggregate_results(
     rows = paper_rows(rows)  # the paper reports the test split, never validation rows
     summary = summarise_over_seeds(rows)
     written += write_tables(rows, summary, Path(tables_dir or root / "paper" / "tables"))
-    written += write_figures(summary, Path(figures_dir or root / "paper" / "figures"))
+    figures = Path(figures_dir or root / "paper" / "figures")
+    written += write_figures(summary, figures, headline=headline)
     written.append(
         write_verdicts(summary, Path(verdicts_path or root / "docs" / "results" / "VERDICTS.md"))
     )

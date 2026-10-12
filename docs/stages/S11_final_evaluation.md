@@ -7,6 +7,10 @@ statistics, and decide H1-H4.
 
 ## Tasks
 
+- [x] [agent] Comparison step `scripts/09_compare_arms.py` (H1-H4 evidence from the per-probe
+  test outcomes, seeds averaged, image-level bootstrap) and run card **RC-C1**; run card
+  **RC-R1** for the test-split evaluation of E0, E1 and E2 after the freeze.
+- [ ] [team:Soheil] Execute RC-R1 and, when every arm is evaluated, RC-C1.
 - [ ] [agent] Run card **RC-X1**: main arms on the deduplicated external test set
   (table T6).
 - [ ] [team:Farzan] Execute RC-X1.

@@ -44,6 +44,9 @@ python scripts/06_evaluate.py --exp E9 --seed 0 -o evaluation.split=test
 python -m pytest -q tests/test_results.py                  # must pass before you commit
 ```
 
+Keep `outputs/` (the per-probe `outcomes*.npz` files) as a private dataset too: the paired
+comparisons (RC-C1) need the test-split ones. Write its name in section 6.
+
 ## 4. What to commit back
 
 - `results/E9/nobudget/seed0/metrics.csv`, `metrics_test.csv`, `efficiency.csv` and `efficiency_setup.json`
@@ -64,3 +67,4 @@ python -m pytest -q tests/test_results.py                  # must pass before yo
 - Wall time and peak GPU memory:
 - Pass criteria: all met / not met (list):
 - Anything unusual:
+- Names of the private datasets with the checkpoints and `outcomes*.npz` files:

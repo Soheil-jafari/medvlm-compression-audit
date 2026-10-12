@@ -110,7 +110,7 @@ def _known_experiment(experiment: str, kind: str) -> bool:
     if kind == "selection":
         return base in SELECTION_ROUNDS and variant is not None
     if kind == "comparison":
-        return "_vs_" in base
+        return "_vs_" in experiment  # e.g. "E5:taylor_vs_E2", "best_pruning_vs_E3:w8"
     if kind in ("data", "smoke"):
         return True
     spec = REGISTRY.get(base)
