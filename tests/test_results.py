@@ -13,6 +13,7 @@ import pytest
 from medcompress.evaluation.aggregate import (
     classify_path,
     load_results,
+    paper_rows,
     summarise_over_seeds,
     validate_results_tree,
     write_summary,
@@ -112,8 +113,29 @@ def test_reader_catches_layout_and_schema_problems(tmp_path: Path) -> None:
         load_results(tmp_path)
 
 
+def test_validation_and_test_rows_are_summarised_apart(tmp_path: Path) -> None:
+    _run(tmp_path, "E7", "B2", 0, 0.70)
+    append_results(
+        [{"experiment": "E7", "budget": "B2", "seed": 0, "metric": "acc", "value": 0.60}],
+        tmp_path / "E7" / "B2" / "seed0" / "metrics_test.csv",
+    )
+    assert validate_results_tree(tmp_path) == []
+    rows = load_results(tmp_path)
+    assert sorted(rows["split"]) == ["test", "val"]
+    summary = summarise_over_seeds(rows).set_index(["experiment", "budget", "split", "metric"])
+    assert summary.loc[("E7", "B2", "val", "acc")]["mean"] == pytest.approx(0.70)
+    assert summary.loc[("E7", "B2", "test", "acc")]["mean"] == pytest.approx(0.60)
+    assert summary.loc[("E7", "B2", "test", "acc")]["n_seeds"] == 1
+    assert list(paper_rows(rows)["split"]) == ["test"]
+
+
 def test_classify_path(tmp_path: Path) -> None:
     run = classify_path(tmp_path / "A4" / "n64" / "B2" / "seed2" / "metrics.csv", tmp_path)
     assert run is not None and (run.experiment, run.budget, run.seed) == ("A4:n64", "B2", 2)
+    test = classify_path(tmp_path / "E7" / "B2" / "seed0" / "metrics_test.csv", tmp_path)
+    assert test is not None and (test.experiment, test.split) == ("E7", "test")
+    assert run.split == "val"
+    footprint = classify_path(tmp_path / "E7" / "B2" / "seed0" / "efficiency.csv", tmp_path)
+    assert footprint is not None and footprint.split == ""
     assert classify_path(tmp_path / "summary" / "by_arm.csv", tmp_path) is None
     assert classify_path(tmp_path / "README.md", tmp_path) is None

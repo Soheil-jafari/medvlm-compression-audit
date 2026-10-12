@@ -493,6 +493,7 @@ def _stage_setup(
         },
         "model": {"config": "fake/student.yaml"},
         "inputs": {"image_longest_side": 56},
+        "seeds": {"data_split": 0},
         "components": {"datasets": {"train_qa": "fake/data.yaml"}},
         "paths": {
             "data_root": str(data_root),

@@ -152,6 +152,52 @@ def select_subset(sample_ids: Sequence[str], n: int | None, seed: int) -> list[i
     return order if n is None else order[:n]
 
 
+def data_seed(config: Mapping[str, Any]) -> int:
+    """The pre-registered data seed (``seeds.data_split``) that fixes the training pool.
+
+    Raises:
+        ConfigError: the seed is missing or still ``TODO``.
+    """
+    from medcompress.config import ConfigError, find_todos
+
+    value = (config.get("seeds") or {}).get("data_split")
+    if value is None or find_todos({"v": value}):
+        raise ConfigError("seeds.data_split is still open (it fixes the training pool)")
+    return int(value)
+
+
+def training_pool(samples: Sequence[VQASample], n: int | str | None, seed: int) -> list[VQASample]:
+    """The training examples that every student run and every recovery draws from.
+
+    One seeded draw of ``n`` samples (all of them for ``None`` or ``"all"``) from the **whole**
+    training split, made with the data seed (``seeds.data_split``), not with the seed of the
+    run. Consequences:
+
+    * E1 and E2 train on the same examples; only the training signal differs (D06).
+    * The teacher cache needs only these examples (``teacher_cache.pool_size``), not the whole
+      split.
+    * A smaller draw is the first part of a larger one, so the recovery examples (25 % of the
+      E2 examples, D06) lie inside the E2 examples and are the same for every pruning arm.
+
+    The seed of a run changes only the order in which the pool is visited and the start of
+    the adapter.
+    """
+    count = None if n is None or n == "all" else int(n)
+    return [samples[i] for i in select_subset([s.sample_id for s in samples], count, seed)]
+
+
+def require_teacher_records(pool: Sequence[VQASample], examples: Sequence[TrainExample]) -> None:
+    """Raise if some examples of the training pool have no cached teacher answer."""
+    if len(examples) != len(pool):
+        have = {e.sample_id for e in examples}
+        missing = [s.sample_id for s in pool if s.sample_id not in have]
+        raise ValueError(
+            f"{len(missing)} of {len(pool)} examples of the training pool have no cached "
+            f"teacher answer (first: {missing[0]}); the teacher cache must hold the training "
+            "pool (teacher_cache.pool_size = training.data_subset, same seeds.data_split)"
+        )
+
+
 def examples_from_samples(
     samples: Sequence[VQASample],
     data_root: Path,
@@ -211,6 +257,36 @@ def forward_answer_logits(module: Any, batch: Batch) -> Any:
     return answer_logits(out.logits, batch.answer_length)
 
 
+KD_LOSSES: tuple[str, ...] = ("topk_kl", "gated_dkd")
+"""Distillation terms: ``topk_kl`` (E2, recovery) and ``gated_dkd`` (E4, D08 option B)."""
+
+
+def _kd_term(logits: Any, batch: Batch, cfg: TrainConfig) -> Any:
+    kind = cfg.extra.get("kd_loss", "topk_kl")
+    if kind == "topk_kl":
+        return topk_kl_loss(
+            logits,
+            batch.topk_ids,
+            batch.topk_logprobs,
+            batch.topk_mask,
+            temperature=cfg.kd_temperature,
+        )
+    if kind == "gated_dkd":
+        from medcompress.compression.quantization.qakd import gated_dkd_loss
+
+        return gated_dkd_loss(
+            logits,
+            batch.topk_ids,
+            batch.topk_logprobs,
+            batch.targets,  # the teacher's cached answer tokens (teacher-forced)
+            batch.topk_mask,
+            alpha=float(cfg.extra["dkd_alpha"]),
+            beta=float(cfg.extra["dkd_beta"]),
+            temperature=float(cfg.extra["dkd_temperature"]),
+        )
+    raise ValueError(f"kd_loss must be one of {KD_LOSSES}, got {kind!r}")
+
+
 def _step_loss(
     module: Any, gt: Batch, teacher: Batch | None, cfg: TrainConfig
 ) -> tuple[Any, float, float]:
@@ -218,18 +294,10 @@ def _step_loss(
     ce = answer_ce_loss(logits, gt.targets)
     if cfg.kd_weight <= 0:
         return ce, float(ce.detach()), 0.0
-    if teacher is None:
-        kl = topk_kl_loss(
-            logits, gt.topk_ids, gt.topk_logprobs, gt.topk_mask, temperature=cfg.kd_temperature
-        )
+    if teacher is None:  # the teacher's answer equals the ground truth: one pass serves both
+        kl = _kd_term(logits, gt, cfg)
     else:
-        kl = topk_kl_loss(
-            forward_answer_logits(module, teacher),
-            teacher.topk_ids,
-            teacher.topk_logprobs,
-            teacher.topk_mask,
-            temperature=cfg.kd_temperature,
-        )
+        kl = _kd_term(forward_answer_logits(module, teacher), teacher, cfg)
     return combined_kd_loss(ce, kl, kd_weight=cfg.kd_weight), float(ce.detach()), float(kl.detach())
 
 
@@ -243,9 +311,17 @@ def _learning_rate(cfg: TrainConfig, step: int) -> float:
 
 
 def train_lora(
-    student: HFVLMWrapper, examples: Sequence[TrainExample], cfg: TrainConfig, *, seed: int
+    student: HFVLMWrapper,
+    examples: Sequence[TrainExample],
+    cfg: TrainConfig,
+    *,
+    seed: int,
+    attach_adapter: bool = True,
 ) -> TrainResult:
     """Attach LoRA to the student (if not attached) and train it for ``cfg.steps`` optimizer steps.
+
+    With ``attach_adapter=False`` the trainable parameters are whatever already requires a
+    gradient (E4 installs its own quantizer with LoRA before calling this).
 
     One optimizer step uses ``batch_size * grad_accumulation`` examples taken in a
     seeded shuffled order (cycling if the data run out). Mixed precision is used when
@@ -260,7 +336,7 @@ def train_lora(
     if not examples:
         raise ValueError("no training examples")
     torch.manual_seed(seed)
-    if not isinstance(student.module, peft.PeftModel):
+    if attach_adapter and not isinstance(student.module, peft.PeftModel):
         attach_lora(student, cfg.lora)
     module = student.module
     if cfg.extra.get("gradient_checkpointing"):
@@ -350,15 +426,19 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
     """Stage entry point for ``scripts/02_train_student.py``.
 
     Dispatches on ``training.mode``: ``sft`` (E1) and ``offline_kd`` (E2) here;
-    ``qakd`` (E4) is part of the quantization stage. Writes the adapter under
-    ``paths.checkpoint_root`` and a few training numbers to the results CSV.
+    ``qakd`` (E4) in ``compression/quantization/qakd.py``. All modes train on the same
+    :func:`training_pool`. Writes the adapter under ``paths.checkpoint_root`` and a few
+    training numbers to the results CSV.
     """
     from medcompress.config import ConfigError, find_todos, load_config
     from medcompress.utils.io import upsert_results
 
     cfg = TrainConfig.from_config(config["training"])
     if cfg.mode == "qakd":
-        raise NotImplementedError("TODO: quantization-aware distillation is part of S08 (E4).")
+        from medcompress.compression.quantization.qakd import run_qakd_training
+
+        run_qakd_training(config, run)
+        return
     student_cfg = config.get("model", {}).get("config")
     side = config.get("inputs", {}).get("image_longest_side")
     open_keys = [
@@ -383,9 +463,10 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
         records = {
             r.sample_id: r for r in load_teacher_cache(Path(paths["cache_root"]) / "teacher")
         }
-    examples = examples_from_samples(train, Path(paths["data_root"]), records=records)
-    n = None if cfg.data_subset == "all" else int(cfg.data_subset)
-    examples = [examples[i] for i in select_subset([e.sample_id for e in examples], n, seed)]
+    pool = training_pool(train, cfg.data_subset, data_seed(config))
+    examples = examples_from_samples(pool, Path(paths["data_root"]), records=records)
+    if records is not None:
+        require_teacher_records(pool, examples)
     student = load_model(
         ModelSpec.from_config(load_config(student_cfg)),
         device_map={"": 0},

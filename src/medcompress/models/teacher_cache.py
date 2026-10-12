@@ -157,6 +157,7 @@ def cache_teacher_outputs(
         "shard_size": shard_size,
         "num_samples": len(ids),
         "sample_ids_sha256": sample_ids_hash(ids),
+        "image_longest_side": getattr(teacher, "image_longest_side", None),
     }
     meta_path = out / METADATA_NAME
     if meta_path.exists():
@@ -256,8 +257,12 @@ def run_teacher_caching(
     """Stage entry point for ``scripts/01_cache_teacher_outputs.py``.
 
     Loads the teacher from the config, reads the prepared splits, and calls
-    :func:`cache_teacher_outputs` for the configured splits. ``teacher`` and
-    ``samples`` can be passed in (tests do); otherwise they are built from the config.
+    :func:`cache_teacher_outputs` for the configured splits. With ``teacher_cache.pool_size``
+    only the training pool of that size is cached (the examples E2, E4 and the recoveries
+    train on, drawn with ``seeds.data_split``; see
+    :func:`~medcompress.compression.distillation.offline_kd.training_pool`), instead of the
+    whole split. ``teacher`` and ``samples`` can be passed in (tests do); otherwise they are
+    built from the config, and ``pool_size`` is applied to them either way.
 
     Used by: E0.
     """
@@ -281,6 +286,13 @@ def run_teacher_caching(
             Path(paths["private_root"]),
         )
         samples = [s for name in needed["splits"] for s in splits[name]]
+    if "pool_size" in section:
+        from medcompress.compression.distillation.offline_kd import data_seed, training_pool
+
+        size = section["pool_size"]
+        if size is None or find_todos({"pool_size": size}):
+            raise ConfigError("teacher_cache.pool_size is still open (= training.data_subset)")
+        samples = training_pool(samples, size, data_seed(config))
     if teacher is None:
         from medcompress.config import load_config
         from medcompress.models.loading import ModelSpec, load_model

@@ -59,6 +59,15 @@ class PruningCriterion(ABC):
         """
         return None
 
+    @classmethod
+    def settings_fingerprint(cls, config: Mapping[str, Any]) -> dict[str, Any]:
+        """Everything besides the units, the data and the model that changes the scores.
+
+        Stage 04 stores it next to ``unit_scores.csv`` and reuses the file only when it is
+        unchanged. The default is the criterion's own section ``pruning.<name>``.
+        """
+        return {"section": (config.get("pruning") or {}).get(cls.name)}
+
     @property
     def data_root(self) -> Path:
         """``paths.data_root`` of the config (where the images live)."""

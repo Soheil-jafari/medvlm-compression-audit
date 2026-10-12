@@ -126,24 +126,21 @@ def run_recovery(
 ) -> TrainResult:
     """Run the shared LoRA + offline-KD recovery on a pruned model and merge the adapter.
 
-    ``examples`` are the training examples with their cached teacher records; the data
-    subset of the recipe is drawn here, from the seed alone, so it is the same for every arm.
+    ``examples`` are the recovery examples with their cached teacher records: the
+    :func:`~medcompress.compression.distillation.offline_kd.training_pool` of size
+    ``recovery.data_subset``, drawn by the caller with the data seed, so they are the same for
+    every arm and every seed and lie inside the E2 examples. ``seed`` sets the order and the
+    adapter's start.
 
     Used by: E5, E6, E7, A1-A6 (3 seeds each).
     """
-    from medcompress.compression.distillation.offline_kd import (
-        TrainConfig,
-        select_subset,
-        train_offline_kd,
-    )
+    from medcompress.compression.distillation.offline_kd import TrainConfig, train_offline_kd
     from medcompress.compression.lora import merge_adapter
 
     if recovery_config.get("method") not in (None, "lora_plus_offline_kd"):
         raise ConfigError(f"unknown recovery method {recovery_config.get('method')!r}")
     cfg = TrainConfig.from_config({**recovery_config, "mode": "offline_kd"})
-    n = None if cfg.data_subset == "all" else int(cfg.data_subset)
-    chosen = [examples[i] for i in select_subset([e.sample_id for e in examples], n, seed)]
-    result = train_offline_kd(pruned, chosen, cfg, seed=seed)
+    result = train_offline_kd(pruned, examples, cfg, seed=seed)
     merge_adapter(pruned)
     return result
 
@@ -219,7 +216,12 @@ def run_prune_and_recover(
     Used by: E5, E6, E7, A1-A6.
     """
     from medcompress.budgets import report_for_metric, search_matched_budget, target_value
-    from medcompress.compression.distillation.offline_kd import examples_from_samples
+    from medcompress.compression.distillation.offline_kd import (
+        data_seed,
+        examples_from_samples,
+        require_teacher_records,
+        training_pool,
+    )
     from medcompress.compression.pruning.apply import remove_units, verify_physical_removal
     from medcompress.compression.pruning.checkpoint import save_pruned
     from medcompress.compression.pruning.criteria.common import read_unit_scores
@@ -230,6 +232,7 @@ def run_prune_and_recover(
     if run is None or run.budget is None:
         raise ConfigError("--exp and --budget are required")
     settings = read_prune_settings(config, run, need_protocol=measure is None)
+    pool_seed = data_seed(config)  # checked before any slow step
     scoring, spec = settings.scoring, settings.spec
     paths = config["paths"]
     scores_file = scores_path(config, run)
@@ -281,8 +284,10 @@ def run_prune_and_recover(
 
         cache = Path(paths["cache_root"]) / "teacher"
         records = {r.sample_id: r for r in load_teacher_cache(cache)}
-    examples = examples_from_samples(train, data_root, records=records)
     recovery = dict(config.get("recovery") or {})
+    pool = training_pool(train, recovery.get("data_subset"), pool_seed)
+    examples = examples_from_samples(pool, data_root, records=records)
+    require_teacher_records(pool, examples)
     result = run_recovery(model, examples, recovery, seed=run.seed)  # type: ignore[arg-type]
     directory = save_pruned(
         model,

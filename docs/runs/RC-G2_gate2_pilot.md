@@ -21,7 +21,9 @@ Blocked until all of these are true; the agent changes the status to `ready` whe
   `pruning.clinical.ablation_method` in `configs/experiments/E7.yaml` is set. If the mixed
   method is chosen, the agent adds the check of the estimate on 30 random channel groups to
   this card before setting it to `ready`.
-- The table of finding weights (`configs/preregistration/finding_weights.yaml`) is filled in.
+- The pre-registration is frozen (`preregistration.frozen_on` set): the pilot is a compression
+  run, and the stage scripts refuse compression runs before the freeze, so the finding weights
+  cannot be adjusted after seeing the pilot.
 - `training.steps` and `training.data_subset`, `evaluation.max_new_tokens`,
   `inputs.image_longest_side` and `budgets.measurement.hardware` are set.
 - RC-D1 done; RC-M1 passed.
@@ -74,7 +76,9 @@ For each of the five runs (`<run>` is `E5/<variant>`, `E6` or `E7`):
 
 - `results/<run>/B2/seed0/metrics.csv` and `efficiency.csv`
 - `results/<run>/B2/seed0/removal.json` and `budget_search.csv`
-- `results/<run>/nobudget/seed0/unit_scores.csv` (numbers per unit, no images)
+- `results/<run>/nobudget/seed0/unit_scores.csv`, `unit_scores.settings.json` and
+  `metrics.csv` (numbers per unit and the scoring settings, no images; a later run reuses the
+  scores only when the settings file matches)
 - This card with section 6 filled.
 
 Check before committing: `git status` shows no images, adapters, caches or `outcomes.npz`.

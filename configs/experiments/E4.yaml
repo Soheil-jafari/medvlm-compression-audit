@@ -1,4 +1,4 @@
-_base_: [../base.yaml, ../training.yaml]
+_base_: [../base.yaml, ../training.yaml, ../quantization.yaml]
 
 experiment:
   id: E4
@@ -24,8 +24,18 @@ experiment:
 
 training:
   mode: qakd
+  gradient_checkpointing: true            # memory only: the 4-bit forward is recomputed in the
+                                          # backward pass layer by layer (same maths as E2)
 
-quantization:
-  weight_bits: TODO
-  group_size: TODO
-  objective: TODO                         # write down the GRACE-style objective before implementing
+quantization:                             # D08 option B (answered 2026-10-12)
+  recipe: w4                              # the E3 w4 grid (4 bit, groups of 128); E4 is exported in
+                                          # the same format and runs the same kernel as E3 w4
+  qat:
+    quantizer: lsq                        # learned step size per group; starts at the scales of
+                                          # plain rounding (grid.symmetric_scales)
+    adapter: lora_through_quantizer       # forward uses quantize(W + B A): the export is exact
+  distillation:
+    loss: gated_dkd                       # GRACE's confidence-gated decoupled distillation on the
+    alpha: 1.0                            # cached top-20 (grace_modules.py defaults: alpha 1,
+    beta: 4.0                             # beta 4, temperature 2)
+    temperature: 2.0

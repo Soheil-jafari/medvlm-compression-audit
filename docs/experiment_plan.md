@@ -58,8 +58,10 @@ to be confirmed). Selection runs are not part of the E/A ladder; results go to
 | A5 | Delta: correct-answer drop vs prediction change (KL) | `pruning.clinical.delta_by_variant` | `logprob_drop`, `kl` |
 | A6 | Layers only vs heads + channel groups | `pruning.units.types_by_variant` | `layers_only`, `heads_channels` |
 
-TODO: decide whether ablation variants identical to the E7 default (e.g.
-`A5:logprob_drop`) reuse the E7 B2 runs instead of re-running.
+`A4:n128` and `A5:logprob_drop` have exactly E7's settings (checked by
+`tests/test_pruning_ablations.py`). Proposal (team decision in the pre-registration): report
+E7's B2 runs for them instead of running them again (`registry.SAME_AS_E7`). A3 ranks its
+random scores without dividing by the unit size (otherwise whole layers go first).
 
 ## Budgets
 
@@ -71,8 +73,9 @@ compression run. E5-E8 run at every budget; ablations at B2.
 ## Primary endpoints (pre-registered)
 
 Small-finding recall and lesion-mask effect at **B2**, comparing **E7** against the
-**best of E5 and E6** (best chosen by a pre-registered rule, TODO: e.g. best headline
-accuracy on the validation split).
+**best of E5 and E6**, chosen by a pre-registered rule on the validation split (draft proposal:
+the generic arm with the highest validation small-finding recall at B2; see
+`docs/preregistration.md` section 5).
 
 ## Run count (for compute planning)
 
@@ -81,7 +84,7 @@ accuracy on the validation split).
 | Student training (E1, E2, E4) | 3 x 3 = 9 |
 | PTQ (E3: 3 variants x 3 seeds; E8: 3 budgets x 3 seeds; E9: 1) | 9 + 9 + 1 = 19 |
 | Pruning + recovery (E5: 3 x 3 x 3; E6, E7: 3 x 3 each) | 27 + 9 + 9 = 45 |
-| Ablations (A1-A3: 3 each; A4: 12; A5: 6; A6: 6) | 33 |
+| Ablations (A1-A3: 3 each; A4: 12; A5: 6; A6: 6; 6 fewer if `A4:n128` and `A5:logprob_drop` reuse E7) | 33 (27) |
 
 Every run is followed by evaluation (06) and benchmarking (07).
 

@@ -108,10 +108,48 @@ def scores_path(config: Mapping[str, Any], run: RunContext) -> Path:
     return scores_run(run).run_dir(config["paths"]["results_root"]) / SCORES_FILE
 
 
-def _fingerprint(settings: ScoringSettings, run: RunContext) -> dict[str, Any]:
-    """The settings as JSON would read them back (tuples as lists)."""
-    values = {**asdict(settings), "seed": run.seed, "variant": run.variant}
-    return json.loads(json.dumps(values))
+PARENT = "E2"
+"""The training run whose merged adapter every pruning arm starts from."""
+
+
+def parent_adapter_digest(config: Mapping[str, Any], seed: int) -> str | None:
+    """SHA-256 over the files of the E2 adapter of ``seed`` (None when it is not there).
+
+    Part of the scores fingerprint, so scores of an older E2 are not reused after E2 was
+    trained again.
+    """
+    import hashlib
+
+    folder = Path(config["paths"]["checkpoint_root"]) / PARENT / f"seed{seed}" / "adapter"
+    if not folder.is_dir():
+        return None
+    digest = hashlib.sha256()
+    for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+        digest.update(path.relative_to(folder).as_posix().encode("utf-8") + b"\0")
+        with path.open("rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+    return digest.hexdigest()
+
+
+def _fingerprint(
+    effective: Mapping[str, Any], settings: ScoringSettings, run: RunContext
+) -> dict[str, Any]:
+    """What the scores depend on, as JSON would read it back (tuples as lists).
+
+    ``effective`` is the config with the run's variant applied: the criterion adds its own
+    settings (:meth:`PruningCriterion.settings_fingerprint`) and the E2 adapter is hashed.
+    """
+    from medcompress.compression.pruning.criteria import CRITERIA
+
+    values = {
+        **asdict(settings),
+        "seed": run.seed,
+        "variant": run.variant,
+        "criterion_settings": CRITERIA[settings.criterion].settings_fingerprint(effective),
+        "parent_adapter": parent_adapter_digest(effective, run.seed),
+    }
+    return json.loads(json.dumps(values, sort_keys=True, default=str))
 
 
 def _reusable(target: Path, fingerprint: Mapping[str, Any]) -> bool:
@@ -146,7 +184,7 @@ def run_scoring(
     effective = apply_variant(config, run.variant)
     settings = ScoringSettings.from_config(config, run.variant)
     target = scores_path(config, run)
-    fingerprint = _fingerprint(settings, run)
+    fingerprint = _fingerprint(effective, settings, run)
     if not force and _reusable(target, fingerprint):
         print(f"reusing {target} (same settings)")
         return target
@@ -274,7 +312,8 @@ def score_units_for_experiment(
         """True when the scores of these settings exist and no model has to be loaded."""
         if model is not None or force or "settings" not in holder:
             return False
-        return _reusable(scores_path(config, run), _fingerprint(holder["settings"], run))
+        effective = apply_variant(config, run.variant)
+        return _reusable(scores_path(config, run), _fingerprint(effective, holder["settings"], run))
 
     collect_open_settings(  # fail early, before any model is loaded, with everything that is open
         lambda: holder.update(settings=ScoringSettings.from_config(config, run.variant)),

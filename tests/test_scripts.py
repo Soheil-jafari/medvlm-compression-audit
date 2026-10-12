@@ -12,6 +12,7 @@ import pytest
 from medcompress.cli import NOT_IMPLEMENTED_EXIT_CODE
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+COMPRESSION = {"E3", "E4", "E5", "E6", "E7", "E8", "E9", "A1", "A2", "A3", "A4", "A5", "A6"}
 SCRIPTS = sorted((REPO_ROOT / "scripts").glob("*.py"))
 
 
@@ -34,18 +35,14 @@ def test_help(script: Path, tmp_path: Path) -> None:
     assert "usage" in result.stdout
 
 
-@pytest.mark.parametrize(
-    ("script", "args"),
-    [
-        ("03_quantize.py", ["--exp", "E3", "--variant", "w4"]),
-        ("run_experiment.py", ["--exp", "E3", "--variant", "w4", "--seed", "0"]),
-    ],
-)
-def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) -> None:
-    result = _run(script, *args, cwd=tmp_path)
-    assert result.returncode == NOT_IMPLEMENTED_EXIT_CODE, result.stderr
-    assert "not implemented yet" in result.stdout
-    assert "Traceback" not in result.stderr
+def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixture[str]) -> None:
+    from medcompress.cli import run_stage
+
+    def stub() -> None:
+        raise NotImplementedError("TODO: a later stage")
+
+    assert run_stage("XX", stub) == NOT_IMPLEMENTED_EXIT_CODE
+    assert "not implemented yet" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -74,6 +71,13 @@ def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) 
             "budgets.levels.B2.target_fraction",
         ),
         ("07_benchmark_efficiency.py", ["--exp", "E9"], "budgets.measurement.hardware"),
+        ("03_quantize.py", ["--exp", "E3", "--variant", "w4"], "inputs.image_longest_side"),
+        ("03_quantize.py", ["--exp", "E8", "--budget", "B2"], "inputs.image_longest_side"),
+        (
+            "run_experiment.py",
+            ["--exp", "E3", "--variant", "w4", "--seed", "0"],
+            "inputs.image_longest_side",
+        ),
         (
             "04_score_pruning_units.py",
             ["--exp", "E5", "--variant", "taylor"],
@@ -85,12 +89,39 @@ def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) 
 def test_implemented_stages_stop_cleanly_while_settings_are_open(
     script: str, args: list[str], open_setting: str, tmp_path: Path
 ) -> None:
-    """Implemented stages whose settings wait for a team decision exit with code 4."""
+    """Implemented stages whose settings wait for a team decision exit with code 4.
+
+    Compression arms are checked against a frozen copy of the weight table, so the setting
+    they name is the next open one after the freeze.
+    """
+    from medcompress.cli import CONFIG_INCOMPLETE_EXIT_CODE
+
+    frozen = tmp_path / "frozen_weights.yaml"
+    frozen.write_text("preregistration:\n  frozen_on: 2026-11-01\n")
+    if "--exp" in args and args[args.index("--exp") + 1] in COMPRESSION:
+        args = [*args, "-o", f"components.finding_weights={frozen}"]
+    result = _run(script, *args, cwd=tmp_path)
+    assert result.returncode == CONFIG_INCOMPLETE_EXIT_CODE, result.stderr
+    assert "configuration incomplete" in result.stdout and open_setting in result.stdout
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("script", "args"),
+    [
+        ("03_quantize.py", ["--exp", "E3", "--variant", "w4"]),
+        ("04_score_pruning_units.py", ["--exp", "E7"]),
+        ("05_prune_and_recover.py", ["--exp", "E5", "--variant", "taylor", "--budget", "B2"]),
+        ("06_evaluate.py", ["--exp", "A1", "--budget", "B2"]),
+        ("run_experiment.py", ["--exp", "E9", "--seed", "0"]),
+    ],
+)
+def test_compression_runs_wait_for_the_freeze(script: str, args: list[str], tmp_path: Path) -> None:
     from medcompress.cli import CONFIG_INCOMPLETE_EXIT_CODE
 
     result = _run(script, *args, cwd=tmp_path)
     assert result.returncode == CONFIG_INCOMPLETE_EXIT_CODE, result.stderr
-    assert "configuration incomplete" in result.stdout and open_setting in result.stdout
+    assert "preregistration.frozen_on" in result.stdout
     assert "Traceback" not in result.stderr
 
 
@@ -153,3 +184,20 @@ def test_select_student_writes_the_report_from_committed_results(tmp_path: Path)
     assert result.returncode == 0, result.stderr
     text = target.read_text()
     assert text.startswith("# Student selection (D05)") and "Not run yet." in text
+
+
+def test_the_freeze_guard_reads_the_weight_table(tmp_path: Path) -> None:
+    from medcompress.cli import require_frozen_preregistration
+    from medcompress.config import ConfigError
+
+    table = tmp_path / "w.yaml"
+    for frozen, ok in (("TODO", False), ("null", False), ("2026-11-01", True)):
+        table.write_text(f"preregistration:\n  frozen_on: {frozen}\n")
+        config = {"components": {"finding_weights": str(table)}}
+        if ok:
+            require_frozen_preregistration(config)
+        else:
+            with pytest.raises(ConfigError, match="frozen_on"):
+                require_frozen_preregistration(config)
+    with pytest.raises(ConfigError, match="finding_weights"):
+        require_frozen_preregistration({})

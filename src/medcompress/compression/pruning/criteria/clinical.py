@@ -414,6 +414,25 @@ class ClinicalCriterion(PruningCriterion):
         """The clinical settings must be complete and consistent (see :class:`ClinicalSettings`)."""
         ClinicalSettings.from_config(config)
 
+    @classmethod
+    def settings_fingerprint(cls, config: Mapping[str, Any]) -> dict[str, Any]:
+        """The ``pruning.clinical`` section, the domain's findings and probe, and the weights.
+
+        The weight table is read only for the schemes that use it (``uniform`` does not).
+        """
+        from medcompress.config import load_config
+
+        out = super().settings_fingerprint(config)
+        components = config.get("components") or {}
+        if "domain" in components:
+            domain = load_config(components["domain"])["domain"]
+            out["findings"] = domain.get("findings")
+            out["probe"] = domain.get("probe")
+        weighting = ((config.get("pruning") or {}).get("clinical") or {}).get("weighting")
+        if weighting != "uniform" and "finding_weights" in components:
+            out["weights"] = load_config(components["finding_weights"])
+        return out
+
     def score(
         self,
         model: VLMWrapper,

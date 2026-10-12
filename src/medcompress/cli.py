@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -149,13 +149,42 @@ def report_todos(config: dict[str, Any], limit: int = 10) -> None:
         print(f"  - {path}")
 
 
+COMPRESSION_ARMS: tuple[str, ...] = (
+    "E3", "E4", "E5", "E6", "E7", "E8", "E9", "A1", "A2", "A3", "A4", "A5", "A6",
+)  # fmt: skip
+"""Experiments that compress the student or the teacher: they run only after the freeze."""
+
+
+def require_frozen_preregistration(config: Mapping[str, Any]) -> None:
+    """Raise :class:`ConfigError` while ``preregistration.frozen_on`` is still open.
+
+    Every compression run (E3-E9, A1-A6) comes after the pre-registration freeze
+    (``docs/FINAL_GOAL.md`` section 4), so nothing that could be tuned to a result is still
+    open when the first result exists.
+    """
+    path = (config.get("components") or {}).get("finding_weights")
+    if path is None:
+        raise ConfigError("components.finding_weights is missing (the pre-registration table)")
+    frozen = (load_config(path).get("preregistration") or {}).get("frozen_on")
+    if frozen is None or find_todos({"v": frozen}):
+        raise ConfigError(
+            "preregistration.frozen_on is still open: compression runs (E3-E9, A1-A6) start "
+            "only after the pre-registration freeze"
+        )
+
+
 def run_stage(stage: str, func: Callable[..., Any], /, **kwargs: Any) -> int:
     """Call a stage function and turn expected stops into clean messages.
 
     Returns 0 on success, :data:`NOT_IMPLEMENTED_EXIT_CODE` if the stage is a stub and
-    :data:`CONFIG_INCOMPLETE_EXIT_CODE` if a setting it needs is still open.
+    :data:`CONFIG_INCOMPLETE_EXIT_CODE` if a setting it needs is still open. A stage of a
+    compression arm (:data:`COMPRESSION_ARMS`) first checks that the pre-registration is
+    frozen (:func:`require_frozen_preregistration`).
     """
     try:
+        run, config = kwargs.get("run"), kwargs.get("config")
+        if config is not None and getattr(run, "experiment_id", None) in COMPRESSION_ARMS:
+            require_frozen_preregistration(config)
         func(**kwargs)
     except NotImplementedError as exc:
         print(f"[{stage}] not implemented yet: {exc}")

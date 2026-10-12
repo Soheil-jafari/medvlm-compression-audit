@@ -20,10 +20,21 @@ results in its next iteration.
 | [RC-E1](RC-E1_student_answer_finetune.md) | S06 | Student on ground-truth answers, 3 seeds | Soheil | blocked (RC-S0 numbers for the training length, RC-D1, open settings) |
 | [RC-E2](RC-E2_student_offline_distillation.md) | S06 | Student with offline distillation, 3 seeds | Soheil | blocked (RC-E1 settings, RC-E0b) |
 | [RC-B0](RC-B0_e2_reference_footprint.md) | S06 | E2 reference footprint and byte split for the budgets | Amir | blocked (RC-E2 seed 0) |
-| RC-E3 / RC-E4 / RC-E9 | S08 | Quantization arms | Soheil | not written yet |
+| [RC-Q0](RC-Q0_quantization_smoke_test.md) | S08 | Quantization toolchain smoke test: kernel classes, GPTQ and LLM.int8 on the student, versions | Soheil | ready |
+| [RC-E3](RC-E3_ptq.md) | S08 | E3: GPTQ w4, w8 and LLM.int8 w8a8 of E2, 3 seeds | Soheil | blocked (RC-Q0, RC-E2, RC-D1, freeze) |
+| [RC-E4](RC-E4_qakd.md) | S08 | E4: quantization-aware distillation (D08 option B), 3 seeds | Soheil | blocked (RC-Q0, RC-E0b, E2 settings, freeze) |
+| [RC-E9](RC-E9_teacher_ptq.md) | S08 | E9: the teacher at 4 bit (supplementary) | Soheil | blocked (RC-Q0, RC-D1, freeze) |
 | [RC-G2](RC-G2_gate2_pilot.md) | S09 | Gate 2 pilot at B2 (validation): E5 (3 criteria), E6, E7 | Amir | blocked (RC-E2, RC-B0, D07 scoring method, finding weights) |
-| RC-E5 ... RC-E8 | S09 | Pruning grid | Amir | not written yet |
-| RC-A1 ... RC-A6 | S10 | Ablations at B2 | Amir | not written yet |
+| [RC-E5](RC-E5_generic_pruning_grid.md) | S09 | E5: magnitude, activation, Taylor x B1-B3 x 3 seeds (27 runs) | Amir | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-G2) |
+| [RC-E6](RC-E6_output_similarity_grid.md) | S09 | E6: output-similarity layer pruning x B1-B3 x 3 seeds (9 runs) | Amir | blocked (as RC-E5) |
+| [RC-E7](RC-E7_clinical_pruning_grid.md) | S09 | E7: clinical criterion x B1-B3 x 3 seeds (9 runs) | Amir | blocked (as RC-E5, weights frozen) |
+| [RC-E8](RC-E8_clinical_pruning_plus_ptq4.md) | S09 | E8: E7 + 4-bit GPTQ x B1-B3 x 3 seeds (9 runs) | Amir | blocked (RC-E7, RC-Q0, freeze) |
+| [RC-A1](RC-A1_unweighted_criterion.md) | S10 | A1: unweighted clinical criterion, B2 x 3 seeds | Amir | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-E7 at B2) |
+| [RC-A2](RC-A2_rarity_only_weights.md) | S10 | A2: rarity-only weights, B2 x 3 seeds | Amir | blocked (as RC-A1) |
+| [RC-A3](RC-A3_random_removal.md) | S10 | A3: random removal, B2 x 3 seeds | Amir | blocked (as RC-A1) |
+| [RC-A4](RC-A4_calibration_size.md) | S10 | A4: 32 / 64 / 256 calibration images, B2 x 3 seeds (128 = E7) | Amir | blocked (as RC-A1) |
+| [RC-A5](RC-A5_delta_definition.md) | S10 | A5: KL effect, B2 x 3 seeds (log-prob drop = E7) | Amir | blocked (as RC-A1; unit set depends on D07 section 1) |
+| [RC-A6](RC-A6_unit_granularity.md) | S10 | A6: layers only / heads and channel groups, B2 x 3 seeds | Amir | blocked (as RC-A1) |
 | RC-X1 | S11 | External test | Farzan | not written yet |
 | RC-T1 | S11 | Final timing on the rented GPU | Amir | not written yet |
 

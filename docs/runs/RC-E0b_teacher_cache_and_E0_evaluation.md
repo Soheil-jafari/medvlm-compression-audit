@@ -22,7 +22,9 @@ they are:
 - The open settings of `configs/base.yaml` filled from the RC-D1 counts and the team's
   recipe decisions: `evaluation.bootstrap_resamples`, `evaluation.calibration_bins`,
   `evaluation.max_new_tokens`, `evaluation.generation_samples`,
-  `teacher_cache.max_new_tokens`, and `inputs.image_longest_side`.
+  `teacher_cache.max_new_tokens`, `teacher_cache.pool_size` (= `training.data_subset`, set
+  from the RC-S0 speed), and `inputs.image_longest_side`. Part (a) caches only that training
+  pool (drawn with `seeds.data_split`), not all 143,594 training rows.
 - RC-M1 passed (gives the generation speed that decides how many sessions part (a) needs).
 
 Platform: Kaggle notebook, **2 x T4**, Internet **on**. Dataset access: your own copy of

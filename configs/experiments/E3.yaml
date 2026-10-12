@@ -1,11 +1,11 @@
-_base_: ../base.yaml
+_base_: [../base.yaml, ../quantization.yaml]
 
 experiment:
   id: E3
   name: ptq
   description: >-
-    E2 + post-training quantization: weight-only 8-bit and 4-bit (GPTQ/AWQ), and
-    W8A8 where supported. Footprint is measured and placed relative to B1-B3.
+    E2 + post-training quantization: weight-only 8-bit and 4-bit with GPTQ, and 8-bit weights
+    and activations with LLM.int8 (D08). Footprint is measured and placed relative to B1-B3.
   kind: main
   parent: E2
   variant_of: null
@@ -27,22 +27,4 @@ model:
   start_from: E2
 
 quantization:
-  method: ptq
-  calibration_size: TODO
-  quantize_vision_encoder: TODO
-  variants:
-    w8:
-      backend: TODO                       # gptq | awq
-      weight_bits: 8
-      activation_bits: null
-      group_size: TODO
-    w4:
-      backend: TODO                       # gptq | awq
-      weight_bits: 4
-      activation_bits: null
-      group_size: TODO
-    w8a8:
-      backend: TODO
-      weight_bits: 8
-      activation_bits: 8
-      only_if_supported: true
+  recipe: by_variant                      # the variant names the recipe in configs/quantization.yaml

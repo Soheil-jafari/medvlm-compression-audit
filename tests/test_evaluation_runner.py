@@ -90,6 +90,11 @@ def test_clinical_metrics_agree_with_the_reference_implementations() -> None:
         m = metrics[name]
         assert m.ci_low is not None and m.ci_low <= m.value <= m.ci_high
     assert metrics["n_probes_scored"].value == 120
+    from medcompress.evaluation.image_reliance import macro_balanced_accuracy
+
+    balanced = metrics["macro_balanced_accuracy"]
+    assert balanced.value == pytest.approx(macro_balanced_accuracy(findings, truth, yes))
+    assert balanced.ci_low <= balanced.value <= balanced.ci_high
     sens = [y for f, t, y in zip(findings, truth, yes, strict=True) if f == "polyp" and t]
     assert metrics["sensitivity:polyp"].value == pytest.approx(np.mean(sens))
     assert {"specificity:ulcer", "sensitivity:stool"} <= set(metrics)
@@ -328,6 +333,29 @@ def test_stage_writes_every_suite_and_the_outcomes(dataset: tuple[Path, list[VQA
     assert outcomes["probe_findings"].dtype.kind == "U"
 
 
+def test_validation_and_test_scores_go_to_separate_files(
+    dataset: tuple[Path, list[VQASample]],
+) -> None:
+    root, samples = dataset
+    run = RunContext("E2", seed=0)
+    config = eval_config(root, suites=["clinical"])
+    run_evaluation(config, run, model=Detector(min_pixels=20), samples=samples)
+    test_config = eval_config(root, suites=["clinical"], split="test")
+    (root / "weights.yaml").write_text(  # eval_config re-locks the split; freeze it here
+        yaml.safe_dump({"preregistration": {"frozen_on": "2026-11-01"}})
+    )
+    run_evaluation(test_config, run, model=Detector(min_pixels=1), samples=samples)
+    folder = root / "results" / "E2" / "nobudget" / "seed0"
+    val = pd.read_csv(folder / "metrics.csv").set_index("metric")["value"]
+    test = pd.read_csv(folder / "metrics_test.csv").set_index("metric")["value"]
+    # the test pass (a better reader) did not overwrite the validation rows
+    assert val["sensitivity:polyp"] == pytest.approx(5 / 6)
+    assert test["sensitivity:polyp"] == 1.0
+    outputs = root / "outputs" / "E2" / "nobudget" / "seed0"
+    assert (outputs / "outcomes.npz").is_file() and (outputs / "outcomes_test.npz").is_file()
+    assert validate_results_tree(root / "results") == []
+
+
 def test_rerunning_replaces_rows_and_a_better_reader_scores_higher(
     dataset: tuple[Path, list[VQASample]],
 ) -> None:
@@ -363,8 +391,10 @@ def test_stage_needs_a_run_and_a_loadable_model(dataset: tuple[Path, list[VQASam
         load_run_model(eval_config(root), RunContext("E2", seed=0), 448)
     with pytest.raises(ConfigError, match="model.config"):  # a pruned arm starts from E2
         load_run_model(eval_config(root), RunContext("E7", seed=0, budget="B2"), 448)
-    with pytest.raises(NotImplementedError, match="E3"):
+    with pytest.raises(ConfigError, match="model.config"):  # E3 starts from E2
         load_run_model(eval_config(root), RunContext("E3", seed=0, variant="w4"), 448)
+    with pytest.raises(ConfigError, match="model.config"):  # E4 starts from the student
+        load_run_model(eval_config(root), RunContext("E4", seed=0), 448)
 
 
 def test_blank_image_and_mask_audit_suites_run_on_their_own(
@@ -397,3 +427,16 @@ def test_audit_rows_do_not_depend_on_the_run_seed(
     second = evaluate_model(Detector(20), samples, settings, root, seed=7).arrays
     assert first["audit_sample_ids"].tolist() == second["audit_sample_ids"].tolist()
     assert len(first["audit_sample_ids"]) == 4
+
+
+def test_a_model_that_says_no_keeps_its_accuracy_but_not_its_balanced_accuracy() -> None:
+    # 10 findings, each present on 1 of 10 images: answering "no" everywhere is 90 % accurate
+    findings = [f"f{k}" for k in range(10) for _ in range(10)]
+    truth = [i == 0 for _ in range(10) for i in range(10)]
+    out = _outcomes(findings, truth, [False] * 100)
+    metrics = {
+        m.name: m.value
+        for m in probe_suites.clinical_metrics(out, sorted(set(findings)), n_resamples=50)
+    }
+    assert metrics["overall_accuracy"] == pytest.approx(0.9)
+    assert metrics["macro_balanced_accuracy"] == pytest.approx(0.5)

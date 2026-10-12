@@ -639,3 +639,180 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: quantization stage (S08) and the pre-registration draft (S07); after RC-M1 and RC-S0 the
   image side, the G2 threshold and the training length.
 - Needs the team: tell Amir and Farzan about the amendment (Soheil); RC-D1 (Farzan); RC-M1 (Soheil).
+
+## Iteration 35: 2026-10-12 (interactive)
+- Stage / item: bug hunt across the pipeline (requested by Soheil), part 1: evaluation and
+  statistics.
+- Did: (1) **Validation and test rows overwrote each other.** The evaluation stage wrote both
+  splits to the same `metrics.csv` with the same metric names, so a test pass replaced the
+  validation rows that Gate 2 and the "best of E5/E6" choice are read from, and the aggregation
+  would have averaged the two. The test split now goes to `metrics_test.csv` and
+  `outcomes_test.npz` (`RUN_FILES_BY_SPLIT` in `evaluation/runner.py`); the aggregation adds a
+  `split` column from the file name, summarises the splits apart, and builds the paper tables,
+  figures, `numbers.tex` and the verdicts from test-split and split-free rows only
+  (`aggregate.paper_rows`). `results/README.md` documents it. (2) **Confidence intervals resampled
+  probes, not images.** Every image gives one probe per finding, so the probes of an image are
+  not independent and the intervals of accuracy, macro-F1, small-finding recall and the
+  lesion-mask effect were too narrow. The bootstrap functions now take `clusters` (the image of
+  each row) and draw whole images; the probe suites, the mask audit and `compare_arms` use it.
+  (3) **Memory:** the bootstrap built all resamples in one array (10 000 x number of probes);
+  for a full validation split that is gigabytes. Resamples are now drawn one at a time, with
+  the same random numbers as before (tested).
+- Verified: ruff check, ruff format, pytest (646 passed, 13 skipped: this session cannot install
+  torch, because the PyTorch download host is blocked by the network policy and the PyPI wheel
+  is the 2.5 GB GPU build; the torch tests run on Kaggle, see RC-M1).
+- Commit: see `git log` on `research-loop`.
+- Next: continue the bug hunt (data, training, pruning, budgets, recovery, efficiency).
+- Needs the team: nothing new.
+
+## Iteration 36: 2026-10-12 (interactive)
+- Stage / item: bug hunt, part 2: training data and the teacher cache.
+- Did: **The teacher cache covered all 143,594 training rows** while every student run and
+  recovery trains on `training.data_subset` rows; generating that cache with the 7B teacher is
+  the most expensive job of the project. And **E1 and E2 drew different examples** whenever the
+  cache did not cover the whole split (E2 drew only from cached rows, E1 from all rows), and
+  every seed drew a different subset. New: `offline_kd.training_pool` draws one pool from the
+  whole training split with `seeds.data_split`; E1, E2 (`run_student_training`), the recovery
+  (`run_prune_and_recover`, its first 25 %, so inside the E2 pool) and the teacher cache
+  (`teacher_cache.pool_size`, new in `configs/experiments/E0.yaml`) all use it, and training
+  stops with a clear error if a pool example has no cached teacher answer. `seeds.data_split`
+  set to 20261012, the seed RC-D1 already uses. The cache metadata now records the image size,
+  so a resumed cache cannot mix shards made at two sizes. Tests: pool nesting and seed
+  independence, the cached pool, the image-size check, and a config test that
+  `teacher_cache.pool_size` equals `training.data_subset`. RC-E0b names the new setting; RC-M1
+  now runs the whole test suite on Kaggle (the torch tests cannot run in this session).
+- Verified: ruff check, ruff format, pytest (651 passed, 13 skipped without torch).
+- Commit: see `git log` on `research-loop`.
+- Next: bug hunt part 3 (pruning, budgets, efficiency), then quantization (S08).
+- Needs the team: confirm the fixed training pool (open-decisions table; Soheil).
+
+## Iteration 37: 2026-10-12 (interactive)
+- Stage / item: S08, D08 memo (quantization tools and settings) and the answer.
+- Did: wrote `docs/decisions/D08_quantization.md` from primary sources read 2026-10-12
+  (`transformers` quantization overview and compressed-tensors docs, GPTQModel README 7.5.0,
+  bitsandbytes README 0.50.0, the AutoAWQ deprecation notice, the llm-compressor README, the
+  LLM.int8 paper, GRACE's paper record, README and `grace_modules.py`). Key facts: AutoAWQ is
+  archived; `transformers` runs int8 W8A8 checkpoints decompressed (no int8 kernel) and fp8 only
+  on SM89+; GPTQModel lists Qwen2.5-VL and Turing kernels. Soheil answered: GPTQ 4/8 bit
+  (GPTQModel, group 128) and LLM.int8 for `w8a8`; E4 option B (4-bit learned-step-size
+  quantization trained with LoRA and GRACE's confidence-gated decoupled distillation on the
+  cached top-20); 128 calibration images shared with pruning; `w8a8` kept. Applied:
+  `configs/quantization.yaml` (shared recipes), E3/E8/E9 inherit it, E4 carries the option-B
+  settings, E9 names the teacher config; decisions log, D08 status, memo index, inbox.
+- Verified: ruff check, ruff format, pytest (all passed without torch).
+- Commit: see `git log` on `research-loop`.
+- Next: `compression/quantization/ptq.py`, the kernel check, the E3/E8/E9 stage and model
+  loading, run cards RC-Q0, RC-E3, RC-E9; then E4 (`qakd.py`, RC-E4).
+- Needs the team: nothing new (RC-Q0 will be ready after the next iteration).
+
+## Iteration 38: 2026-10-12 (interactive)
+- Stage / item: S08, post-training quantization (E3, E8, E9) and the kernel check.
+- Did: GPTQModel quantizes models loaded from disk, but E8 starts from pruned E7 models whose
+  layers have different widths and cannot be reloaded that way. So GPTQ runs on the model in
+  memory: `grid.py` (symmetric group-wise grid, packing in the GPTQ word layout), `gptq.py`
+  (the GPTQ algorithm of Frantar et al., a float64 NumPy reference and the same steps in torch),
+  `ptq.py` (recipes from `configs/quantization.yaml`, calibration on the same 128 images as the
+  pruning criteria, sequential layer-by-layer GPTQ with the inputs of each layer coming from the
+  already rounded layers, our own checkpoint format of codes and scales plus a manifest, loading
+  that rebuilds the parent: E2, pruned E7 or the teacher), `kernels.py` (GPTQModel kernel
+  modules packed by GPTQModel itself from our codes and checked against our dequantized weights
+  on random inputs, LLM.int8 layers, a reference module that never counts as a kernel, and the
+  kernel report), `smoke.py` plus `scripts/smoke_quantization.py`. `check_low_precision_kernels`
+  is implemented and the benchmark writes `low_precision_kernels_ok` for E3, E4, E8, E9; the
+  runner loads E3/E8/E9. Run cards RC-Q0 (ready), RC-E3 and RC-E9 (blocked).
+- Verified: ruff check, ruff format, pytest (687 passed, 14 skipped without torch). The GPTQ
+  reference is tested here (equals plain rounding for uncorrelated inputs, beats it on correlated
+  ones, packing round trips); the torch tests (`tests/test_ptq_torch.py`: torch GPTQ against the
+  reference, the tiny model quantized, saved and reloaded, the stage files, and on a GPU the
+  GPTQModel and LLM.int8 modules) run on Kaggle in RC-M1 / RC-Q0.
+- Commit: see `git log` on `research-loop`.
+- Next: E4 (`qakd.py`: 4-bit learned-step-size quantization trained with LoRA and the
+  confidence-gated decoupled distillation), RC-E4.
+- Needs the team: run RC-Q0 (Soheil, one T4, about an hour as an estimate).
+
+## Iteration 39: 2026-10-12 (interactive)
+- Stage / item: S08, E4 (quantization-aware distillation, D08 option B) and RC-E4.
+- Did: `compression/quantization/qakd.py`: 4-bit symmetric group-wise quantization with a
+  learned step size per group (LSQ gradient, start at the plain-rounding scales); LoRA trained
+  *through* the rounding (`QATLinear` uses `quantize(W + B A)`), so the exported codes are
+  exactly the trained model; GRACE's confidence-gated decoupled distillation computed on the
+  cached top-20 (formula from GRACE's `grace_modules.py`: alpha 1, beta 4, temperature 2, gate
+  `exp(-H / log V)` with the mass outside the top 20 as one outcome); a NumPy reference for the
+  gate, the loss and the quantizer. The shared trainer gained `kd_loss` (`topk_kl` default,
+  `gated_dkd` for E4) and `attach_adapter`; `training.mode: qakd` runs the E4 stage on the E2
+  training pool; the export uses the E3 `w4` checkpoint format, and the runner loads E4 on the
+  pretrained student. E4 config inherits `configs/quantization.yaml` and sets gradient
+  checkpointing (memory only). Run card RC-E4 (blocked).
+- Verified: ruff check, ruff format, pytest (691 passed, 15 skipped without torch). Here: the
+  decoupled terms add up to the KL divergence (TCKD + (1 - p_t) NCKD), the gate, masking and
+  the LSQ gradient values. On Kaggle (`tests/test_qakd_torch.py`): the torch loss and quantizer
+  against the references, the exact export, and the E4 stage on the tiny model reloaded with the
+  same answers.
+- Commit: see `git log` on `research-loop`.
+- Next: pre-registration draft (S07).
+- Needs the team: RC-Q0 (Soheil).
+
+## Iteration 40: 2026-10-12 (interactive)
+- Stage / item: S07, pre-registration draft, freeze guard, headline metric.
+- Did: rewrote `docs/preregistration.md` as a complete draft: decided items with their sources
+  (models and revisions, data and split seed, deduplication, budgets, training, recovery,
+  pruning, quantization), data-dependent items as rules filled from RC-D1 / RC-S0 / RC-B0, and
+  the team's questions as marked proposals (finding inclusion thresholds, prevalence cut points,
+  cap and tiers, the "best of E5/E6" comparator, the headline accuracy of H1/H4, the training
+  pool). The analysis plan now says the bootstrap resamples images (iteration 35). The weight
+  table carries the rules and proposals. **Freeze guard:** `cli.run_stage` refuses every stage
+  of E3-E9 and A1-A6 while `preregistration.frozen_on` is open (exit 4, "configuration
+  incomplete"); RC-G2 now requires the freeze (otherwise the weights could be adjusted after the
+  pilot). **Headline metric:** the overall probe accuracy mostly measures specificity (most
+  images lack most findings), so a model drifting to "no" keeps it while losing recall;
+  `macro_balanced_accuracy` (per finding mean of sensitivity and specificity, image-level CI)
+  is now computed by the clinical suite and proposed as the headline for H1 and H4.
+- Verified: ruff check, ruff format, pytest (698 passed, 15 skipped without torch), including a
+  test that answering "no" everywhere keeps 90 % accuracy but 50 % balanced accuracy, and the
+  guard on every compression script.
+- Commit: see `git log` on `research-loop`.
+- Next: pruning grid run cards RC-E5 to RC-E8 (S09), ablation code and cards (S10).
+- Needs the team: the draft's [team] items (open-decisions table).
+
+## Iteration 41: 2026-10-12 (interactive)
+- Stage / item: S09, run cards for the full pruning grid.
+- Did: wrote RC-E5 (magnitude, activation, Taylor x B1-B3 x 3 seeds, 27 runs), RC-E6 (9 runs),
+  RC-E7 (9 runs, keeps the pruned models) and RC-E8 (the E7 models + the `w4` GPTQ recipe,
+  9 runs). Each run is evaluated on validation (stage 06 inside `run_experiment.py`) and then
+  on test (`06_evaluate.py -o evaluation.split=test`, written to `metrics_test.csv`). Pass
+  criteria fixed in advance: footprint inside the 3 % band (a miss is reported and marked, never
+  re-tuned), parameters really removed, the same recovery fingerprint in every run, protected
+  layers kept; for E8 also the kernel check, 128 calibration images and the number of quantized
+  matrices. RC-E3, RC-E4 and RC-E9 got the same test-split evaluation line. All four cards are
+  blocked until the freeze, RC-E2, RC-B0 (B1-B3) and D07 section 1; the runtime estimate is
+  filled in from the RC-M1 and RC-E2 speeds when a card is set to `ready`.
+- Verified: ruff check, ruff format, pytest; the commands in the cards use only existing
+  scripts and flags; `outcomes*.npz` and `outputs/` are git-ignored.
+- Commit: see `git log` on `research-loop`.
+- Next: ablations A1-A6 (S10): check the variant wiring and write RC-A1 to RC-A6.
+- Needs the team: nothing new.
+
+## Iteration 42: 2026-10-12 (interactive)
+- Stage / item: S10, ablation wiring and run cards RC-A1 to RC-A6; two pipeline flaws.
+- Did: checked that every ablation setting reaches the code (weighting, criterion, calibration
+  size, effect definition, unit types). **Flaw 1 (A3):** every arm ranks units by score per
+  parameter (D07); for random scores this sends whole layers first (a layer is about 100 times
+  a channel group), so A3 tested random *layer* removal (estimate on the student's unit sizes:
+  about 98 % of the removed parameters at a 30 % cut). A3 now ranks without the division
+  (`score_normalisation: none`); proposal for the team. **Flaw 2 (score reuse):** stage 04
+  reused saved scores when only the unit set, calibration size and seed matched, so a changed
+  `pruning.clinical` setting (for example the scoring method of D07 section 1, decided after
+  the RC-G2 pilot) or a retrained E2 would have silently reused old scores. The fingerprint now
+  holds the criterion's own settings (clinical: also the domain's findings, the probe and the
+  weight table) and a hash of the E2 adapter. **E7 reuse:** `A4:n128` and `A5:logprob_drop` have
+  exactly E7's settings (test); proposal: report E7's B2 runs for them
+  (`registry.SAME_AS_E7`, the ablation table falls back to E7 only when the arm has no runs).
+  Wrote RC-A1 to RC-A6 (27 runs, 33 without the reuse), all blocked like the pruning grid; RC-A5
+  states that the KL effect needs exact scoring, so the unit set of A5 follows D07 section 1. The
+  pruning cards now also commit the scoring settings file, so a later session can reuse scores.
+- Verified: ruff check, ruff format, pytest (new light tests: A3 order, fingerprint, identity
+  of the reused arms, table fallback); paper tables regenerated.
+- Commit: see `git log` on `research-loop`.
+- Next: S11 aggregation and figures (the A4 curve, the comparisons step from `outcomes*.npz`),
+  RC-X1 and RC-T1.
+- Needs the team: A3 ranking and the E7 reuse (pre-registration section 7).

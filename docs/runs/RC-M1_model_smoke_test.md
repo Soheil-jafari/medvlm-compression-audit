@@ -36,6 +36,9 @@ pip install -q -r requirements/base.txt -r requirements/train.txt && pip install
 # restart the kernel here if pip replaced torch, then continue:
 
 python -m pytest -q tests/test_models.py tests/test_surgery.py    # CPU tests; must pass first
+python -m pytest -q 2>&1 | tail -3   # the whole suite with torch installed: write the last line
+                                     # in section 5 (the agent session has no torch, so the
+                                     # torch tests only run here)
 python scripts/smoke_models.py \
     --teacher-config configs/models/qwen2_5_vl_7b_teacher.yaml \
     --student-config configs/models/qwen2_5_vl_3b_student.yaml \

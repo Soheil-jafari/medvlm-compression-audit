@@ -52,6 +52,13 @@ PROBE_SUITES = frozenset(
 )
 FREE_TEXT_SUITES = frozenset({"hallucination", "language"})
 SPLITS = ("val", "test")
+RUN_FILES_BY_SPLIT: Mapping[str, tuple[str, str]] = {
+    "val": ("metrics.csv", "outcomes.npz"),
+    "test": ("metrics_test.csv", "outcomes_test.npz"),
+}
+"""(results file, per-probe outcomes file) of each split. The test split has its own files, so
+scoring it never overwrites the validation rows that Gate 2 and "best of E5/E6" are read from,
+and the aggregation can keep the two splits apart (the metric names are the same)."""
 PROBE_SAMPLE_SEED = 0
 """Fixed seed for capping probes per finding, so every arm and seed scores the same probes."""
 _CHUNK = 32
@@ -211,7 +218,8 @@ def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLM
     E0 is the teacher; E1 and E2 are the student with the adapter their training run
     saved (merged into the weights, as the compression arms start from it). The pruned
     arms (E5-E7, A1-A6) reload E2 of the same seed and replay the removal that stage 05
-    saved. The quantized arms are added with their stage.
+    saved. The post-training quantized arms (E3, E8, E9) reload their parent and swap in the
+    kernel modules of the saved codes (``compression/quantization/ptq.py``).
     """
     from medcompress.config import load_config
     from medcompress.models.loading import ModelSpec, load_model
@@ -229,9 +237,11 @@ def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLM
 
         base = load_trained_student(config, "E2", run.seed, side)
         return load_pruned(base, pruned_dir(config, run))
-    raise NotImplementedError(
-        f"loading the model of {run.experiment_id} arrives with its stage (E3/E4/E8/E9: S08)."
-    )
+    if run.experiment_id in ("E3", "E4", "E8", "E9"):
+        from medcompress.compression.quantization.ptq import load_run_quantized
+
+        return load_run_quantized(config, run, side)
+    raise NotImplementedError(f"no model loader for {run.experiment_id}")
 
 
 # ------------------------------------------------------------------- probes
@@ -486,10 +496,11 @@ def run_evaluation(
     """Stage entry point for ``scripts/06_evaluate.py``.
 
     Loads the model for ``run``, scores the enabled suites on ``evaluation.split`` of
-    the prepared data and upserts the rows into ``<results_root>/<run dir>/metrics.csv``.
-    The per-probe outcomes (needed for paired comparisons) are written to
-    ``<output_root>/<run dir>/outcomes.npz``. The external test set (EndoBench) is
-    added in the final-evaluation stage.
+    the prepared data and upserts the rows into ``<results_root>/<run dir>/metrics.csv``
+    (validation) or ``metrics_test.csv`` (test; :data:`RUN_FILES_BY_SPLIT`). The per-probe
+    outcomes (needed for paired comparisons) are written to ``<output_root>/<run dir>/``
+    ``outcomes.npz`` or ``outcomes_test.npz``. The external test set (EndoBench) is added in
+    the final-evaluation stage.
 
     Used by: all experiments (E0-E9, A1-A6).
     """
@@ -517,9 +528,10 @@ def run_evaluation(
     budget = run.budget or ""
     rows = to_rows(metrics, run.experiment_tag, budget, seed)
     undefined = sorted(m.name for m in metrics if math.isnan(m.value))
-    target = run.run_dir(paths["results_root"]) / "metrics.csv"
+    metrics_name, outcomes_name = RUN_FILES_BY_SPLIT[settings.split]
+    target = run.run_dir(paths["results_root"]) / metrics_name
     upsert_results(rows, target)
-    outcomes = run.run_dir(paths["output_root"]) / "outcomes.npz"
+    outcomes = run.run_dir(paths["output_root"]) / outcomes_name
     if arrays:
         outcomes.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(outcomes, **arrays)

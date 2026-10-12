@@ -1,23 +1,35 @@
 # PRE-REGISTERED finding weights for the clinical pruning criterion (E7, E8, A2, A4-A6).
-# Fill in, review as a team, then set frozen_on / frozen_by / commit BEFORE any E7 run.
+# DRAFT (2026-10-12): rules are written down; the values follow from the RC-D1 counts and the
+# team's decisions (docs/preregistration.md sections 2 and 3). Set frozen_on / frozen_by /
+# commit only at the freeze; until then every compression run is refused.
 # After freezing, changes require a dated entry in docs/decisions_log.md.
 preregistration:
   document: docs/preregistration.md
   frozen_on: TODO
   frozen_by: TODO
   commit: TODO
-  domain: TODO
+  domain: endoscopy                       # D02
 
 weighting:
   formula: "w_c = min(1 / prevalence_c, cap) * tier_multiplier(importance_tier_c)"
-  prevalence_source: TODO                 # training-split manifest file + hash
-  normalisation: TODO                     # e.g. none, or rescale to sum to |C|
-  tiers:
-    - tier: TODO
-      multiplier: TODO
-      definition: TODO                    # clinical rationale for the tier
+  prevalence_source: "results/data/summary.csv, metric prevalence:<finding> (RC-D1, training images)"
+  cap: TODO                               # team; proposal 20 (every finding below 5 % prevalence
+                                          # gets the same rarity factor)
+  normalisation: TODO                     # team; proposal none (a common factor does not change
+                                          # the removal order; reports also show weights rescaled
+                                          # to sum to the number of findings)
+  tiers:                                  # team; proposal below, multipliers to be confirmed
+    - tier: TODO                          # proposal "action": calls for action at the same examination
+      multiplier: TODO                    # proposal 2.0
+      definition: TODO
+    - tier: TODO                          # proposal "follow_up": changes follow-up
+      multiplier: TODO                    # proposal 1.5
+      definition: TODO
+    - tier: TODO                          # proposal "other"
+      multiplier: TODO                    # proposal 1.0
+      definition: TODO
 
-# One row per finding in the domain finding list C.
+# One row per finding in the frozen finding list C (rule: docs/preregistration.md section 2).
 findings:
   - finding: TODO
     prevalence: TODO

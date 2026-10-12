@@ -192,8 +192,41 @@ def test_sizes_and_rows(tmp_path: Path) -> None:
         "warm_latency_s": 0.5,
     }
     assert {(r["experiment"], r["budget"], r["seed"]) for r in rows} == {("E7", "B2", 1)}
-    with pytest.raises(NotImplementedError, match="TODO"):
-        eff.check_low_precision_kernels(None)  # type: ignore[arg-type]
+
+
+def test_the_kernel_check_rejects_16_bit_and_reference_modules() -> None:
+    from medcompress.compression.quantization.kernels import KernelReport, classify_module
+
+    class Tensor:
+        def __init__(self, dtype: str) -> None:
+            self.dtype = dtype
+
+    Linear = type("Linear", (), {"__module__": "torch.nn.modules.linear"})
+    plain = Linear()
+    plain.weight = Tensor("torch.float16")
+    assert classify_module(plain)[1] == "plain 16-bit Linear"
+
+    Reference = type("ReferenceQuantLinear", (), {"REFERENCE_ONLY": True})
+    assert "reference" in str(classify_module(Reference())[1])
+
+    Kernel = type("TorchLinear", (), {"__module__": "gptqmodel.nn_modules.qlinear.torch"})
+    kernel = Kernel()
+    kernel.qweight = Tensor("torch.int32")
+    path, problem = classify_module(kernel)
+    assert problem is None and path == "gptqmodel.nn_modules.qlinear.torch.TorchLinear"
+
+    Int8 = type("Linear8bitLt", (), {"__module__": "bitsandbytes.nn.modules"})
+    int8 = Int8()
+    int8.weight = Tensor("torch.int8")
+    assert classify_module(int8)[1] is None
+
+    Odd = type("Odd", (), {})
+    odd = Odd()
+    odd.weight = Tensor("torch.float16")
+    assert "no integer weight" in str(classify_module(odd)[1])
+
+    assert KernelReport(3, {"x": 3}).ok and not KernelReport(3, {}, ("bad",)).ok
+    assert not KernelReport(0).ok
 
 
 # ------------------------------------------------------------------ the tiny model

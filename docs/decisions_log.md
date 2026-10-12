@@ -63,14 +63,24 @@ must be logged here.
   and the optional second student. Rounds R1 to R3 are not run. Applied to the base and
   training configs; the training length and the image size follow from the RC-S0 numbers. Amir
   and Farzan are to be told.
+- **2026-10-12 (Soheil):** D08 answered: engine `transformers` for every arm; E3 `w4` and `w8`
+  with GPTQ (GPTQModel, group size 128), `w8a8` with bitsandbytes LLM.int8 (reported as 8-bit
+  with 16-bit outliers); only the decoder's linear layers are quantized; calibration = the same
+  128 images as the pruning criteria; E8 and E9 use the `w4` recipe; E4 = option B (4-bit
+  learned-step-size quantization trained with LoRA and GRACE's confidence-gated decoupled
+  distillation on the cached top-20). A smoke test (RC-Q0) pins the library versions first.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
 | Student checks | Run RC-S0 for the two models, then set the image side, the G2 threshold and the training length from its numbers; tell Amir and Farzan about the amendment | Soheil | after RC-M1 |
+| Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
 | EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |
-| Finding list and weights | Pre-registered table, frozen before E7 | team | TODO |
+| Finding list and weights | Pre-registered table, frozen before E7. Draft rules (iteration 40): a finding enters C with at least 20 positive training images and 10 in each of validation and test; groups common >= 10 %, rare < 2 %; cap 20; three tiers with multipliers 2.0 / 1.5 / 1.0 assigned from the finding names | team | after RC-D1 |
+| Comparator "best of E5/E6" (draft proposal) | the generic arm with the highest validation small-finding recall at B2 (mean of 3 seeds), the same for both primary endpoints | team | before the freeze |
+| Headline accuracy for H1 and H4 (draft proposal) | macro balanced accuracy instead of the overall probe accuracy, which mostly measures specificity; overall accuracy still reported | team | before the freeze |
+| A3 ranking (agent proposal, iteration 42) | A3 orders its random scores without dividing by the unit size (`score_normalisation: none`). Divided by size, a random score sends whole layers first (estimate: about 98 % of the removed parameters at a 30 % cut), so A3 would test random layer removal, not random choice of units. D07's per-parameter rule stays for every other arm | team | before the freeze |
+| Reuse of E7 for identical ablation arms (agent proposal) | `A4:n128` and `A5:logprob_drop` have exactly E7's settings (test), so E7's B2 runs are reported for them (27 ablation runs instead of 33). If D07 section 1 uses the first-order estimate for some units, A5 moves to the exactly scored units and `A5:logprob_drop` is run | team | before the freeze |
 | Budgets and timing hardware | B1-B3 fractions (rule after RC-B0) and the rented GPU type; metric, tolerance and protocol are decided | Amir | TODO |
-| Quantization backends | GPTQ / AWQ / W8A8 tooling that runs on T4 and the timing GPU | Soheil | TODO |
 | Venue | e.g. MICCAI (Springer LNCS template) | team | TODO |

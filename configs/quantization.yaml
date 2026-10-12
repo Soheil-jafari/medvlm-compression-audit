@@ -1,0 +1,32 @@
+# Shared post-training quantization settings for E3, E8 and E9 (D08, answered 2026-10-12).
+# Every quantized arm runs in transformers, like every other arm, so the evaluation and the
+# timing code are the same. Only the decoder's linear layers are quantized; the vision encoder,
+# the projector, the embeddings and the output head stay at 16 bit (pruning touches the same
+# part of the model).
+quantization:
+  method: ptq
+  engine: transformers
+  targets: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]  # decoder layers only
+  calibration:
+    split: train
+    size: 128                             # D08: the same nested 128 images as the pruning criteria (D07)
+  recipes:
+    w4:
+      backend: gptq                       # GPTQModel
+      weight_bits: 4
+      activation_bits: null
+      group_size: 128
+    w8:
+      backend: gptq                       # GPTQModel
+      weight_bits: 8
+      activation_bits: null
+      group_size: 128
+    w8a8:
+      backend: llm_int8                   # bitsandbytes LLM.int8(): 8-bit weights and activations,
+      weight_bits: 8                      # 16-bit outlier features (reported as such)
+      activation_bits: 8
+      group_size: null
+  recipe: TODO                            # E3: the variant (w4 / w8 / w8a8); E8, E9: w4
+  kernel_class: TODO                      # GPTQModel module class for w4/w8 (dotted path), chosen
+                                          # by RC-Q0; "reference" = no kernel (tests only, fails the check)
+  library_versions: TODO                  # gptqmodel and bitsandbytes, pinned after RC-Q0

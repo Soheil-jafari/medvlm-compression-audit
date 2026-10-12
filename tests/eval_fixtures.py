@@ -62,6 +62,7 @@ def eval_config(root: Path, *, domain: dict | None = None, **evaluation: object)
     (root / "domain.yaml").write_text(yaml.safe_dump({"domain": domain_section}))
     (root / "weights.yaml").write_text(yaml.safe_dump({"preregistration": {"frozen_on": "TODO"}}))
     return {
+        "seeds": {"data_split": 0},
         "paths": {
             "data_root": str(root),
             "results_root": str(root / "results"),

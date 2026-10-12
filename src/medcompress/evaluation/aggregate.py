@@ -2,7 +2,8 @@
 
 Layout (``results/README.md``)::
 
-    results/<ID>[/<variant>]/<budget|nobudget>/seed<k>/metrics.csv | efficiency.csv
+    results/<ID>[/<variant>]/<budget|nobudget>/seed<k>/metrics.csv | metrics_test.csv
+                                                     | efficiency.csv
     results/comparisons/<name>/<budget|nobudget>/comparison.csv
     results/selection/<round>/<candidate>/metrics.csv          (student selection, D05)
     results/data/summary.csv                                    (aggregate data statistics)
@@ -11,6 +12,11 @@ Layout (``results/README.md``)::
 
 Every CSV uses the long schema ``medcompress.utils.io.RESULTS_COLUMNS``. This
 module never estimates numbers: it only reads committed CSVs and summarises them.
+
+The split a row was scored on is not a CSV column; it follows from the file name
+(``metrics.csv`` = validation, ``metrics_test.csv`` = test, see :data:`SPLIT_OF_RUN_FILE`)
+and is added as a ``split`` column when the rows are loaded, so the summary never averages
+validation and test numbers of the same metric together.
 """
 
 from __future__ import annotations
@@ -26,7 +32,14 @@ import pandas as pd
 from medcompress.registry import BUDGET_IDS, REGISTRY
 from medcompress.utils.io import RESULTS_COLUMNS
 
-RUN_FILES: tuple[str, ...] = ("metrics.csv", "efficiency.csv")
+RUN_FILES: tuple[str, ...] = ("metrics.csv", "metrics_test.csv", "efficiency.csv")
+SPLIT_OF_RUN_FILE: dict[str, str] = {
+    "metrics.csv": "val",
+    "metrics_test.csv": "test",
+    "efficiency.csv": "",
+}
+"""Split of the rows in each run file; ``""`` = not tied to a split (footprints, training)."""
+SUMMARY_KEYS: tuple[str, ...] = ("experiment", "budget", "split", "metric")
 SPECIAL_DIRS: tuple[str, ...] = ("comparisons", "selection", "data", "smoke", "summary")
 SELECTION_ROUNDS: tuple[str, ...] = ("R0", "R1", "R2", "R3")
 _SEED_DIR = re.compile(r"^seed(\d+)$")
@@ -41,6 +54,7 @@ class ResultFile:
     experiment: str | None = None
     budget: str | None = None
     seed: int | None = None
+    split: str = ""
 
 
 def split_experiment(experiment: str) -> tuple[str, str | None]:
@@ -59,15 +73,16 @@ def classify_path(path: Path, root: Path) -> ResultFile | None:
         budget = parts[2] if len(parts) == 4 else None
         return ResultFile(path, "comparison", budget=None if budget == "nobudget" else budget)
     if parts[0] == "selection":
-        return ResultFile(path, "selection")
+        return ResultFile(path, "selection", split="val")
     if parts[0] in ("data", "smoke"):
         return ResultFile(path, parts[0])
     if path.name not in RUN_FILES:
         return None
     # <ID>[/<variant>]/<budget|nobudget>/seed<k>/<file>
+    split = SPLIT_OF_RUN_FILE[path.name]
     match = _SEED_DIR.match(parts[-2]) if len(parts) >= 4 else None
     if match is None:
-        return ResultFile(path, "run")
+        return ResultFile(path, "run", split=split)
     budget_dir = parts[-3]
     id_parts = parts[:-3]
     experiment = ":".join(id_parts)
@@ -77,6 +92,7 @@ def classify_path(path: Path, root: Path) -> ResultFile | None:
         experiment=experiment,
         budget="" if budget_dir == "nobudget" else budget_dir,
         seed=int(match.group(1)),
+        split=split,
     )
 
 
@@ -104,16 +120,16 @@ def _known_experiment(experiment: str, kind: str) -> bool:
 
 
 def read_result_file(result: ResultFile) -> tuple[pd.DataFrame, list[str]]:
-    """Read one CSV and return (rows, problems). Rows get a ``source`` column."""
+    """Read one CSV and return (rows, problems). Rows get ``source`` and ``split`` columns."""
     problems: list[str] = []
     name = str(result.path)
     try:
         frame = pd.read_csv(result.path, dtype={"experiment": str, "budget": str, "metric": str})
     except Exception as exc:  # noqa: BLE001 - report any parse failure as a problem
-        return pd.DataFrame(columns=[*RESULTS_COLUMNS, "source"]), [f"{name}: unreadable ({exc})"]
+        return _empty(), [f"{name}: unreadable ({exc})"]
     if tuple(frame.columns) != RESULTS_COLUMNS:
         problems.append(f"{name}: columns {tuple(frame.columns)} != {RESULTS_COLUMNS}")
-        return pd.DataFrame(columns=[*RESULTS_COLUMNS, "source"]), problems
+        return _empty(), problems
     frame["budget"] = frame["budget"].fillna("")
     for column in ("value", "ci_low", "ci_high"):
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
@@ -146,7 +162,12 @@ def read_result_file(result: ResultFile) -> tuple[pd.DataFrame, list[str]]:
     if result.kind == "run" and result.experiment is None:
         problems.append(f"{name}: path does not follow <ID>[/<variant>]/<budget>/seed<k>/<file>")
     frame["source"] = str(result.path)
+    frame["split"] = result.split
     return frame, problems
+
+
+def _empty() -> pd.DataFrame:
+    return pd.DataFrame(columns=[*RESULTS_COLUMNS, "source", "split"])
 
 
 def validate_results_tree(root: Path) -> list[str]:
@@ -168,29 +189,31 @@ def load_results(root: Path) -> pd.DataFrame:
     if problems:
         raise ValueError("Invalid results:\n" + "\n".join(problems))
     if not frames:
-        return pd.DataFrame(columns=[*RESULTS_COLUMNS, "source"])
+        return _empty()
     data = pd.concat(frames, ignore_index=True)
     data["seed"] = data["seed"].astype(int)
     return data
 
 
 def summarise_over_seeds(rows: pd.DataFrame) -> pd.DataFrame:
-    """Return one row per (experiment, budget, metric) with n_seeds, mean, sd, min, max.
+    """Return one row per (experiment, budget, split, metric) with n_seeds, mean, sd, min, max.
 
     SD is the sample SD (ddof=1) and NaN for a single seed; ``ci_low`` / ``ci_high``
     are carried over only when there is a single seed (multi-seed CIs come from the
-    comparison step, as pre-registered).
+    comparison step, as pre-registered). Rows without a ``split`` column count as ``""``.
     """
-    columns = ["experiment", "budget", "metric", "n_seeds", "mean", "sd", "min", "max"]
+    keys = list(SUMMARY_KEYS)
+    columns = [*keys, "n_seeds", "mean", "sd", "min", "max"]
     if rows.empty:
         return pd.DataFrame(columns=[*columns, "ci_low", "ci_high"])
-    grouped = rows.groupby(["experiment", "budget", "metric"], sort=True)
+    rows = rows.assign(split=rows["split"].fillna("") if "split" in rows else "")
+    grouped = rows.groupby(keys, sort=True)
     summary = grouped["value"].agg(
         n_seeds="count", mean="mean", sd=lambda v: v.std(ddof=1), min="min", max="max"
     )
     summary = summary.reset_index()
     single = grouped.agg(ci_low=("ci_low", "first"), ci_high=("ci_high", "first")).reset_index()
-    summary = summary.merge(single, on=["experiment", "budget", "metric"])
+    summary = summary.merge(single, on=keys)
     multi = summary["n_seeds"] > 1
     summary.loc[multi, ["ci_low", "ci_high"]] = math.nan
     return summary
@@ -204,6 +227,17 @@ def write_summary(rows: pd.DataFrame, out_dir: Path) -> list[Path]:
     rows.to_csv(paths[0], index=False)
     summarise_over_seeds(rows).to_csv(paths[1], index=False)
     return paths
+
+
+def paper_rows(frame: pd.DataFrame) -> pd.DataFrame:
+    """Rows the paper reports: the test split plus rows not tied to a split.
+
+    Validation rows (``split == "val"``) serve Gate 2, the choice of the best of E5/E6 and the
+    student checks; they never reach the paper tables, figures or verdicts.
+    """
+    if frame.empty or "split" not in frame:
+        return frame
+    return frame[frame["split"].fillna("") != "val"]
 
 
 def metric_names(rows: pd.DataFrame) -> list[str]:

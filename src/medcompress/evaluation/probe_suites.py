@@ -105,6 +105,24 @@ def _macro_f1_from_codes(codes: np.ndarray, n_findings: int) -> float:
     return float(np.mean(2 * tp[defined] / denominator[defined]))
 
 
+def _macro_balanced_accuracy_from_codes(codes: np.ndarray, n_findings: int) -> float:
+    """Mean over findings of (sensitivity + specificity) / 2; findings lacking a class are left out.
+
+    Rows are ``[finding_index, truth, predicted]``. Unlike the overall accuracy, every finding
+    counts once and its positives weigh as much as its negatives, so a model that drifts
+    towards "no" cannot hide a loss of recall behind the many absent findings.
+    """
+    finding, truth, pred = codes[:, 0], codes[:, 1].astype(bool), codes[:, 2].astype(bool)
+    tp = np.bincount(finding, weights=(truth & pred), minlength=n_findings)
+    pos = np.bincount(finding, weights=truth, minlength=n_findings)
+    tn = np.bincount(finding, weights=(~truth & ~pred), minlength=n_findings)
+    neg = np.bincount(finding, weights=~truth, minlength=n_findings)
+    both = (pos > 0) & (neg > 0)
+    if not both.any():
+        return math.nan
+    return float(np.mean((tp[both] / pos[both] + tn[both] / neg[both]) / 2))
+
+
 def clinical_metrics(
     out: ProbeOutcomes,
     findings: Sequence[str],
@@ -113,20 +131,28 @@ def clinical_metrics(
     alpha: float = 0.05,
     seed: int = 0,
 ) -> list[Metric]:
-    """Overall accuracy and macro-F1 (with bootstrap CIs) and per-finding sensitivity / specificity.
+    """Overall accuracy, macro-F1 and macro balanced accuracy (with bootstrap CIs), and
+    per-finding sensitivity / specificity.
 
-    The overall accuracy is the fraction of probes answered correctly. Used by: all.
+    The overall accuracy is the fraction of probes answered correctly; most probes ask about
+    absent findings, so it mostly measures specificity. The macro balanced accuracy weighs
+    every finding and both classes equally. The CIs resample
+    images: all probes of one image (one ``sample_id``) are drawn together. Used by: all.
     """
-    kwargs = _ci_kwargs(n_resamples, alpha, seed)
+    kwargs = {**_ci_kwargs(n_resamples, alpha, seed), "clusters": np.asarray(out.sample_ids)}
     accuracy = bootstrap_ci(lambda a: float(np.mean(a)), out.correct.astype(float), **kwargs)
     codes = np.stack(
         [out.finding_index(findings), out.truth.astype(int), out.yes.astype(int)], axis=1
     )
     f1 = bootstrap_ci(lambda a: _macro_f1_from_codes(a, len(findings)), codes, **kwargs)
+    balanced = bootstrap_ci(
+        lambda a: _macro_balanced_accuracy_from_codes(a, len(findings)), codes, **kwargs
+    )
     metrics = [
         Metric("n_probes_scored", float(len(out.sample_ids))),
         Metric("overall_accuracy", *accuracy),
         Metric("macro_f1", *f1),
+        Metric("macro_balanced_accuracy", *balanced),
     ]
     truth = {f: [] for f in findings}
     pred: dict[str, list[bool]] = {f: [] for f in findings}
@@ -173,7 +199,7 @@ def small_finding_metrics(
 
     Only findings in ``mask_findings`` (the ones the lesion masks delineate) count.
     Stratum 0 is the smallest; ``small_finding_recall`` is its recall with a bootstrap
-    CI over the positives. ``thresholds`` are the frozen area cut points.
+    CI over the images of the positives. ``thresholds`` are the frozen area cut points.
     Used by: all (primary endpoint at B2).
     """
     n_strata = len(thresholds) + 1
@@ -188,7 +214,10 @@ def small_finding_metrics(
         return float(codes[in_small, 0].mean()) if in_small.any() else math.nan
 
     codes = np.stack([detected.astype(int), strata], axis=1)
-    value, low, high = bootstrap_ci(stratum0_recall, codes, **_ci_kwargs(n_resamples, alpha, seed))
+    images = np.asarray(out.sample_ids)[keep]  # an image with two masked findings moves as one
+    value, low, high = bootstrap_ci(
+        stratum0_recall, codes, clusters=images, **_ci_kwargs(n_resamples, alpha, seed)
+    )
     metrics = [
         Metric("n_mask_positives", float(keep.sum())),
         Metric("small_finding_recall", value, low, high),

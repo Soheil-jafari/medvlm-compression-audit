@@ -292,6 +292,13 @@ _SPECS: tuple[ExperimentSpec, ...] = (
 
 REGISTRY: dict[str, ExperimentSpec] = {spec.id: spec for spec in _SPECS}
 
+# Ablation arms whose settings, once the variant is applied, are exactly E7's (a test checks
+# this): the same criterion, calibration images, probes and removal at B2 with the same seeds.
+# Proposal (iteration 42, [team] decision in the pre-registration): report E7's B2 runs for
+# them instead of training the same models again (6 runs fewer). The ablation table falls
+# back to E7 only for an arm that has no runs of its own.
+SAME_AS_E7: tuple[str, ...] = ("A4:n128", "A5:logprob_drop")
+
 # Pre-registered primary endpoints (see docs/preregistration.md).
 PRIMARY_ENDPOINTS: tuple[str, ...] = ("small_finding_recall", "lesion_mask_effect")
 PRIMARY_COMPARISON = {"ours": "E7", "against_best_of": ("E5", "E6"), "budget": PRIMARY_BUDGET}
