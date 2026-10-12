@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 20 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 21 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S03 (data pipeline); S02 done
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)

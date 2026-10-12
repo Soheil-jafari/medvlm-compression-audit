@@ -301,3 +301,18 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S03 data pipeline (Kvasir-VQA-x1 and Kvasir-SEG readers, preparation
   script, run card RC-D1).
 - Needs the team: nothing new.
+
+## Iteration 21: 2026-10-12 (interactive)
+- Stage / item: S03, dataset readers.
+- Did: new `data/kvasir.py`: the local layout (images by `img_id` plus train/test
+  JSONL, as the dataset card describes the join with Kvasir-VQA), a Kvasir-VQA-x1
+  reader producing `VQASample` records with stable sample IDs and per-image finding
+  labels derived from the source questions by configurable rules, a Kvasir-SEG
+  reader, and fingerprint linking of Kvasir-SEG masks to VQA images (ties reported
+  as ambiguous). `load_dataset` dispatches to the reader. The label-rule values in
+  `configs/data/kvasir_vqa_x1.yaml` stay empty until RC-D1 reports the answer counts.
+  New `tests/test_kvasir.py` on a synthetic layout.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: `scripts/prepare_data.py` and run card RC-D1.
+- Needs the team: nothing new.

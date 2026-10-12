@@ -8,10 +8,10 @@ machines, with only aggregate statistics coming back to the repository.
 
 ## Tasks
 
-- [ ] [agent] One `VQADataset` reader per chosen dataset, mapping its labels to the
+- [x] [agent] One `VQADataset` reader per chosen dataset, mapping its labels to the
   domain finding list. Tests use tiny synthetic directory fixtures that copy the
   documented layout (file names and fields only; generated blank images).
-- [ ] [agent] Manifest builder and verifier (`data/manifests.py`).
+- [x] [agent] Manifest builder and verifier (`data/manifests.py`).
 - [ ] [agent] A data-preparation entry point (for example `scripts/prepare_data.py`)
   that writes manifests and splits **outside** the repository and writes only
   aggregate statistics to `results/data/summary.csv`: counts per split, patients

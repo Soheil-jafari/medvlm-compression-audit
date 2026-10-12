@@ -70,9 +70,19 @@ class VQADataset:
         return iter(self.load())
 
 
-def load_dataset(config: Mapping[str, Any]) -> VQADataset:
-    """Return the reader for a dataset config (dispatch on ``dataset.name``).
+def load_dataset(config: Mapping[str, Any], *, data_root: Any = None) -> VQADataset:
+    """Return the reader for a dataset config section (dispatch on ``name``).
+
+    ``config`` is the ``dataset:`` section of a ``configs/data/*.yaml`` file;
+    ``data_root`` defaults to ``paths.data_root`` resolved by the caller.
 
     Used by: every stage that reads data (scripts 00-07).
     """
-    raise NotImplementedError("TODO: registry of dataset readers keyed by dataset.name.")
+    from pathlib import Path
+
+    name = str(config.get("name", ""))
+    if name == "Kvasir-VQA-x1":
+        from medcompress.data.kvasir import KvasirVQAx1
+
+        return KvasirVQAx1(config, data_root=Path(data_root or "data"))
+    raise NotImplementedError(f"TODO: no reader for dataset {name!r} yet.")
