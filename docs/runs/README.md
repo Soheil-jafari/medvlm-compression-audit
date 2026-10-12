@@ -9,7 +9,7 @@ results in its next iteration.
 
 | Card | Stage | What | Who | Status |
 |---|---|---|---|---|
-| RC-D1 | S03 | Data preparation: manifests, patient-level splits, aggregate statistics | Farzan | not written yet |
+| [RC-D1](RC-D1_data_preparation.md) | S03 | Data preparation: download, val/test halves, dedup, mask links, aggregate counts | Farzan | ready |
 | RC-M1 | S04 | GPU smoke test: load pair, score probes, remove one layer | Soheil | not written yet |
 | RC-E0a | S05 | Gate 1: teacher image-reliance checks (validation) | Soheil | not written yet |
 | RC-E0b | S05 | Teacher cache (train) and E0 validation metrics | Soheil | not written yet |

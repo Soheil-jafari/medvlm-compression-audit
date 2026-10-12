@@ -316,3 +316,20 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: `scripts/prepare_data.py` and run card RC-D1.
 - Needs the team: nothing new.
+
+## Iteration 22: 2026-10-12 (interactive)
+- Stage / item: S03, data preparation and RC-D1.
+- Did: new `data/prepare.py` and `scripts/prepare_data.py` (`export` downloads the
+  Kvasir-VQA images and Kvasir-VQA-x1 rows as the dataset card describes; `prepare`
+  halves the official test split by image, drops near-duplicates of training images,
+  links Kvasir-SEG masks, computes the size-stratum thresholds on training images
+  and writes splits, exclusions, mask links and manifests outside the repository,
+  plus only aggregate counts to `results/data/summary.csv`, including answer-value
+  counts to fill the label rules). Run card `docs/runs/RC-D1_data_preparation.md`
+  (CPU Kaggle session; proposed split seed and thresholds). End-to-end test on a
+  synthetic layout.
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: S04 model loading for the teacher and the ten students (CPU tests on tiny
+  random models), and the RC-M1 smoke-test card; S12 method and related-work drafts.
+- Needs the team: run RC-D1 (Farzan) and commit `results/data/summary.csv`.

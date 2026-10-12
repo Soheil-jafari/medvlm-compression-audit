@@ -23,7 +23,8 @@ dataset:
   label_mapping:                          # per-image finding labels from the source Kvasir-VQA questions
     status: TODO                          # values filled from the RC-D1 answer counts, then pre-registered
     rules:
-      - question_contains: "are there any abnormalities in the image"
+      - name: abnormalities
+        question_contains: "are there any abnormalities in the image"
         mode: multi_label
         values: {}                        # answer value -> finding id, e.g. "polyp": polyp
         none_values: ["none", "no"]

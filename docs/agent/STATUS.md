@@ -1,16 +1,15 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 21 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 22 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S03 (data pipeline); S02 done
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
-S03: Kvasir-VQA-x1 and Kvasir-SEG readers (synthetic fixtures copying the documented
-layouts), a data-preparation script that writes manifests and splits outside the
-repository and only aggregate counts to `results/data/summary.csv`, and run card
-RC-D1.
+1. S04: model loading and yes/no scoring for the teacher and the ten student
+   candidates, tested on CPU with tiny randomly initialised models; run card RC-M1.
+2. S12 work-ahead: method and related-work drafts.
 
 ## Waiting on the team
 
@@ -20,6 +19,7 @@ RC-D1.
 | 2 | Optional: full names for the copyright line in `LICENSE` and `CITATION.cff` | team | 2026-10-12 |
 | 2b | CI on `main` is red (import error fixed on `research-loop` in a7ec704); merging `research-loop` into `main` turns it green | Soheil | 2026-10-12 |
 | 4 | Each member confirms own access to Kvasir-VQA-x1 and Kvasir-SEG (inbox) | all | 2026-10-12 |
+| 5 | Run RC-D1 (`docs/runs/RC-D1_data_preparation.md`) and commit `results/data/summary.csv` | Farzan | 2026-10-12 |
 
 ## Stages
 
@@ -28,7 +28,7 @@ RC-D1.
 | S00 | Repository health and loop setup | done, pending PR merge | team review |
 | S01 | Decisions | done (dataset-access confirmations pending) | - |
 | S02 | CPU infrastructure | done | - |
-| S03 | Data pipeline | in progress | - |
+| S03 | Data pipeline | waiting on RC-D1 | team runs RC-D1 |
 | S04 | Model wrappers and unit surgery | not started | - (teacher decided) |
 | S05 | Teacher: Gate 1, cache | not started | S03, S04 |
 | S05b | Student selection 10 -> 5 -> 3 -> 1 | pool fixed: 10 Qwen-family models | S03, S04; freeze after RC-S0 |

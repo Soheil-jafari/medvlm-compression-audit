@@ -129,3 +129,46 @@ def test_repository_config_has_label_rules_section() -> None:
     dataset = load_config(config_root() / "data" / "kvasir_vqa_x1.yaml")["dataset"]
     rules = parse_label_rules(dataset["label_mapping"])
     assert rules and rules[0].values == {}  # values come from RC-D1, then pre-registration
+
+
+def test_prepare_end_to_end(tmp_path: Path) -> None:
+    from medcompress.data.prepare import prepare, write_private_outputs
+    from medcompress.evaluation.aggregate import validate_results_tree
+    from medcompress.utils.io import append_results
+
+    data = tmp_path / "data"
+    _layout(data)
+    # a near-duplicate of a training image in the official test split must be dropped
+    _image(data / "kvasir_vqa_x1" / "images" / "a4.jpg", seed=0)
+    test_rows = (data / "kvasir_vqa_x1" / "test.jsonl").read_text()
+    extra = {
+        "img_id": "a4",
+        "question": "Dup?",
+        "answer": "no",
+        "complexity": 1,
+        "question_class": [],
+        "original": "[]",
+    }
+    (data / "kvasir_vqa_x1" / "test.jsonl").write_text(test_rows + json.dumps(extra) + "\n")
+    prepared = prepare(
+        data,
+        {"name": "Kvasir-VQA-x1", "label_mapping": RULES},
+        split_seed=1,
+        dedup_threshold=4,
+        mask_threshold=4,
+    )
+    assert "kvasir_vqa_x1/images/a4.jpg" in prepared.excluded
+    assert set(prepared.splits) == {"train", "val", "test"}
+    assert all(
+        s.image_path != "kvasir_vqa_x1/images/a4.jpg"
+        for s in prepared.splits["val"] + prepared.splits["test"]
+    )
+    metrics = {r["metric"]: r["value"] for r in prepared.rows}
+    assert metrics["qa_rows:train"] == 2 and metrics["masks:linked"] >= 1
+    assert metrics["prevalence:polyp"] == 0.5
+    assert metrics["answer_count:abnormalities:polyp"] == 2
+    hashes = write_private_outputs(prepared, tmp_path / "private", data)
+    assert {"split_sha256", "manifest_kvasir_vqa_x1", "manifest_kvasir_seg"} <= set(hashes)
+    assert (tmp_path / "private" / "splits.json").is_file()
+    append_results(prepared.rows, tmp_path / "results" / "data" / "summary.csv")
+    assert validate_results_tree(tmp_path / "results") == []

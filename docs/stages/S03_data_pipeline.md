@@ -12,12 +12,12 @@ machines, with only aggregate statistics coming back to the repository.
   domain finding list. Tests use tiny synthetic directory fixtures that copy the
   documented layout (file names and fields only; generated blank images).
 - [x] [agent] Manifest builder and verifier (`data/manifests.py`).
-- [ ] [agent] A data-preparation entry point (for example `scripts/prepare_data.py`)
+- [x] [agent] A data-preparation entry point (for example `scripts/prepare_data.py`)
   that writes manifests and splits **outside** the repository and writes only
   aggregate statistics to `results/data/summary.csv`: counts per split, patients
   per split, prevalence per finding, lesion-area quantiles, duplicate counts,
   manifest and split hashes. No per-image rows.
-- [ ] [agent] Run card **RC-D1** in `docs/runs/` for the preparation run.
+- [x] [agent] Run card **RC-D1** in `docs/runs/` for the preparation run.
 - [ ] [team:Farzan] Execute RC-D1 on own dataset access; commit
   `results/data/summary.csv` and the completed run card.
 - [ ] [agent] Data cards in `docs/data_cards/` from the verified documentation and
