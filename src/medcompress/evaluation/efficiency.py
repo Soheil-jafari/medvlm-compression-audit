@@ -32,6 +32,50 @@ if TYPE_CHECKING:
 TIMING_SEED = 0
 """Seed of the draw of the timing samples (fixed, so every arm is timed on the same ones)."""
 POWER_INTERVAL_S = 0.05
+TIMING_ROLES: tuple[str, ...] = ("development", "final")
+FINAL_PREFIX = "final:"
+"""Metric prefix of the final timing rows (the rented GPU, RC-T1)."""
+
+
+@dataclass(frozen=True)
+class TimingTarget:
+    """Where a benchmark run writes: development numbers or the final timing (RC-T1).
+
+    Development runs (Kaggle T4, also used for the budget search) write ``efficiency.csv``.
+    The final timing on the rented GPU (``hardware.timing_role: final``) writes
+    ``efficiency_final.csv`` with ``final:`` metric names, so the two never overwrite or mix.
+    """
+
+    role: str
+    rows_file: str
+    setup_file: str
+    prefix: str
+
+
+def timing_target(config: Mapping[str, Any]) -> tuple[TimingTarget, Mapping[str, Any]]:
+    """The target of this run and the measurement block (hardware label set for the role).
+
+    Raises:
+        ConfigError: unknown ``hardware.timing_role``, or a final run without
+            ``hardware.final_timing``.
+    """
+    from medcompress.config import load_config
+
+    hardware = config.get("hardware") or {}
+    role = str(hardware.get("timing_role", "development"))
+    if role not in TIMING_ROLES:
+        raise ConfigError(f"hardware.timing_role must be one of {TIMING_ROLES}, got {role!r}")
+    measurement = dict(
+        load_config(config["components"]["budgets"])["budgets"].get("measurement") or {}
+    )
+    if role == "development":
+        return TimingTarget(role, "efficiency.csv", "efficiency_setup.json", ""), measurement
+    gpu = hardware.get("final_timing")
+    if gpu is None or find_todos({"v": gpu}):
+        raise ConfigError("settings still open: hardware.final_timing (the rented GPU type)")
+    measurement["hardware"] = gpu
+    target = TimingTarget(role, "efficiency_final.csv", "efficiency_final_setup.json", FINAL_PREFIX)
+    return target, measurement
 
 
 @dataclass(frozen=True)
@@ -442,7 +486,9 @@ def run_efficiency_benchmark(
 
     Measures the run's model under the protocol of ``configs/budgets.yaml`` on the same
     validation samples for every arm and writes ``efficiency.csv`` (results schema) and
-    ``efficiency_setup.json`` (hardware and protocol) to the run directory.
+    ``efficiency_setup.json`` (hardware and protocol) to the run directory; with
+    ``hardware.timing_role: final`` (RC-T1) ``efficiency_final.csv`` and
+    ``efficiency_final_setup.json`` instead (:func:`timing_target`).
 
     Used by: all experiments.
     """
@@ -451,9 +497,8 @@ def run_efficiency_benchmark(
 
     if run is None:
         raise ConfigError("--exp is required")
-    protocol = EfficiencyProtocol.from_config(
-        load_config(config["components"]["budgets"])["budgets"].get("measurement") or {}
-    )
+    timing, measurement = timing_target(config)
+    protocol = EfficiencyProtocol.from_config(measurement)
     paths = config["paths"]
     side = config.get("inputs", {}).get("image_longest_side")
     if model is None:
@@ -475,7 +520,7 @@ def run_efficiency_benchmark(
         Path(paths["data_root"]),
         power_read=gpu_power_reader(),
     )
-    target = run.run_dir(paths["results_root"]) / "efficiency.csv"
+    target = run.run_dir(paths["results_root"]) / timing.rows_file
     rows = report_rows(report, run, state=state_bytes(model))
     rows += [
         {
@@ -502,6 +547,8 @@ def run_efficiency_benchmark(
             }
         )
         setup["kernels"] = {"classes": kernels.classes, "problems": list(kernels.problems)}
+    rows = [{**row, "metric": timing.prefix + str(row["metric"])} for row in rows]
+    setup["timing_role"] = timing.role
     upsert_results(rows, target)
-    write_json(setup, target.with_name("efficiency_setup.json"))
+    write_json(setup, target.with_name(timing.setup_file))
     print(f"wrote {len(rows)} rows to {target}")

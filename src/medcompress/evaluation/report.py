@@ -36,6 +36,7 @@ EFFICIENCY_METRICS: tuple[tuple[str, str], ...] = (
     ("low_precision_kernels_ok", "Kernels OK"),
 )
 PRIMARY_COMPARISON_NAME = "E7_vs_best"
+FINAL_TIMING = "final:"  # metric prefix of the RC-T1 rows (efficiency.FINAL_PREFIX)
 ABLATION_IDS: tuple[str, ...] = ("A1", "A2", "A3", "A4", "A5", "A6")
 
 
@@ -158,7 +159,10 @@ def ablation_table(summary: pd.DataFrame) -> str:
 
 
 def efficiency_table(summary: pd.DataFrame) -> str:
-    """T5: measured footprint per arm (budget-matched arms at B2)."""
+    """T5: footprint per arm on the final timing GPU (budget-matched arms at B2).
+
+    Reads the ``final:`` rows of RC-T1 only; the development numbers (Kaggle T4) never enter it.
+    """
     look = _lookup(summary)
     rows = []
     for exp in ("E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9"):
@@ -166,7 +170,10 @@ def efficiency_table(summary: pd.DataFrame) -> str:
         for arm in arm_labels(exp):
             rows.append(
                 [latex_escape(arm)]
-                + [fmt_mean_sd(look.get((arm, budget, m)), digits=3) for m, _ in EFFICIENCY_METRICS]
+                + [
+                    fmt_mean_sd(look.get((arm, budget, f"{FINAL_TIMING}{m}")), digits=3)
+                    for m, _ in EFFICIENCY_METRICS
+                ]
             )
     return tabular(["Arm", *[label for _, label in EFFICIENCY_METRICS]], rows)
 

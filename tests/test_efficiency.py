@@ -327,3 +327,45 @@ def test_the_removal_measurer_removes_the_units_measures_and_frees_the_copy(
     assert eff.count_parameters(built[0]) > eff.count_parameters(built[1])  # copies are separate
     with pytest.raises(ValueError, match="no peak_memory_bytes"):
         make_removal_measurer(factory, samples, protocol, tmp_path, "peak_memory")([])
+
+
+def test_the_final_timing_has_its_own_file_names_and_gpu(tmp_path: Path) -> None:
+    import yaml
+
+    (tmp_path / "budgets.yaml").write_text(
+        yaml.safe_dump({"budgets": {"measurement": MEASUREMENT}})
+    )
+    config: dict[str, Any] = {"components": {"budgets": str(tmp_path / "budgets.yaml")}}
+    target, measurement = eff.timing_target(config)  # development is the default
+    assert (target.rows_file, target.setup_file, target.prefix) == (
+        "efficiency.csv",
+        "efficiency_setup.json",
+        "",
+    )
+    assert measurement["hardware"] == "T4"
+    config["hardware"] = {"timing_role": "final", "final_timing": "TODO"}
+    with pytest.raises(ConfigError, match="hardware.final_timing"):
+        eff.timing_target(config)
+    config["hardware"]["final_timing"] = "rented GPU"
+    target, measurement = eff.timing_target(config)
+    assert (target.rows_file, target.prefix) == ("efficiency_final.csv", "final:")
+    assert measurement["hardware"] == "rented GPU"
+    config["hardware"]["timing_role"] = "both"
+    with pytest.raises(ConfigError, match="timing_role"):
+        eff.timing_target(config)
+
+
+def test_the_efficiency_table_reads_only_the_final_timing() -> None:
+    import pandas as pd
+
+    from medcompress.evaluation.report import efficiency_table
+
+    def row(metric: str, mean: float) -> dict[str, Any]:
+        return {"experiment": "E2", "budget": "", "split": "", "metric": metric, "mean": mean,
+                "sd": float("nan"), "ci_low": float("nan"), "ci_high": float("nan")}  # fmt: skip
+
+    development = pd.DataFrame([row("peak_memory_bytes", 111.0)])
+    assert "111" not in efficiency_table(development)
+    final = pd.DataFrame([row("peak_memory_bytes", 111.0), row("final:peak_memory_bytes", 222.0)])
+    line = next(r for r in efficiency_table(final).splitlines() if r.startswith("E2 "))
+    assert "222.000" in line and "111" not in line

@@ -169,3 +169,28 @@ def test_figures_and_tables_read_metrics_the_stages_write() -> None:
         figures.FLIP_RANDOM,
     }  # fmt: skip
     assert used - _written_metric_names() == set()
+
+
+def test_the_a4_curve_uses_e7_for_the_size_identical_to_e7(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from medcompress.evaluation import figures
+
+    rows = [_row("A4:n32", "B2", "small_finding_recall", 0.5),
+            _row("A4:n64", "B2", "small_finding_recall", 0.55),
+            _row("E7", "B2", "small_finding_recall", 0.62),
+            _row("A4:n256", "B2", "small_finding_recall", 0.63)]  # fmt: skip
+    path = figures.calibration_size_curve(pd.DataFrame(rows), tmp_path / "a4.pdf")
+    assert path.read_bytes().startswith(b"%PDF")
+    drawn: list[tuple] = []
+    original = figures._new_figure
+
+    def spying(*args: object, **kwargs: object) -> tuple:
+        fig, axes = original(*args, **kwargs)
+        for ax in axes:
+            ax.errorbar = lambda xs, ys, **_: drawn.append((xs, ys))
+        return fig, axes
+
+    monkeypatch.setattr(figures, "_new_figure", spying)
+    figures.calibration_size_curve(pd.DataFrame(rows), tmp_path / "a4b.pdf")
+    assert drawn[0] == ((32, 64, 128, 256), (0.5, 0.55, 0.62, 0.63))

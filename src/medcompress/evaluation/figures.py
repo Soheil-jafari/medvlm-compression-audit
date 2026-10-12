@@ -92,16 +92,18 @@ def _style(ax: Any) -> None:
     ax.set_axisbelow(True)
 
 
-def _new_figure(width: float = 3.4, height: float = 2.6) -> tuple[Any, Any]:
+def _new_figure(width: float = 3.4, height: float = 2.6, ncols: int = 1) -> tuple[Any, Any]:
+    """A styled figure with one axes, or a row of ``ncols`` axes (returned as an array)."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     plt.rcParams.update({"font.family": "sans-serif", "font.size": 8, "text.color": INK})
-    fig, ax = plt.subplots(figsize=(width, height))
+    fig, ax = plt.subplots(1, ncols, figsize=(width, height))
     fig.patch.set_facecolor(SURFACE)
-    _style(ax)
+    for each in ax if ncols > 1 else [ax]:
+        _style(each)
     return fig, ax
 
 
@@ -345,12 +347,66 @@ def mask_audit(summary: pd.DataFrame, path: Path) -> Path:
     return _save(fig, path)
 
 
+A4_SIZES: tuple[tuple[str, int], ...] = (("n32", 32), ("n64", 64), ("n128", 128), ("n256", 256))
+
+
+def _sd(summary: pd.DataFrame, experiment: str, budget: str, metric: str) -> float:
+    if summary.empty:
+        return math.nan
+    hit = summary[
+        (summary["experiment"] == experiment)
+        & (summary["budget"].fillna("") == budget)
+        & (summary["metric"] == metric)
+    ]
+    return float(hit["sd"].iloc[0]) if len(hit) else math.nan
+
+
+def calibration_size_curve(summary: pd.DataFrame, path: Path) -> Path:
+    """Appendix (A4): primary endpoints at B2 against the number of calibration images.
+
+    An A4 size without runs of its own that is identical to E7 (``registry.SAME_AS_E7``) shows
+    E7's B2 numbers. Error bars are the SD over seeds.
+    """
+    from medcompress.registry import SAME_AS_E7
+
+    panels = []
+    for metric, label in (
+        (SMALL_RECALL, "Small-finding recall"),
+        (MASK_EFFECT, "Lesion-mask effect"),
+    ):
+        points = []
+        for variant, size in A4_SIZES:
+            arm = f"A4:{variant}"
+            if math.isnan(_mean(summary, arm, PRIMARY_BUDGET, metric)) and arm in SAME_AS_E7:
+                arm = "E7"
+            mean = _mean(summary, arm, PRIMARY_BUDGET, metric)
+            if not math.isnan(mean):
+                points.append((size, mean, _sd(summary, arm, PRIMARY_BUDGET, metric)))
+        panels.append((label, points))
+    if not any(points for _, points in panels):
+        return _placeholder(path, "A4 calibration-set size")
+    fig, axes = _new_figure(width=5.0, height=2.2, ncols=2)
+    colour = FAMILY_COLOURS["clinical (ours)"]
+    for ax, (label, points) in zip(axes, panels, strict=True):
+        if points:
+            xs, ys, sds = zip(*points, strict=True)
+            errors = [0.0 if math.isnan(s) else s for s in sds]
+            ax.errorbar(xs, ys, yerr=errors, color=colour, marker="o", markersize=4,
+                        linewidth=2, capsize=2)  # fmt: skip
+        ax.set_xscale("log", base=2)
+        ax.set_xticks([size for _, size in A4_SIZES], [str(size) for _, size in A4_SIZES])
+        ax.set_xlabel("Calibration images")
+        ax.set_ylabel(label)
+    return _save(fig, path)
+
+
 FIGURE_WRITERS = {
     "headline_vs_hidden.pdf": headline_vs_hidden,
     "family_damage.pdf": family_damage,
     "budget_curves.pdf": budget_curves,
     "rank_order.pdf": rank_order,
     "mask_audit.pdf": mask_audit,
+    "appendix_a4_calibration_size.pdf": calibration_size_curve,
 }
 
 

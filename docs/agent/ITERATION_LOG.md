@@ -848,3 +848,24 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: RC-T1 (final timing on the rented GPU, kept apart from the development numbers),
   RC-X1 (external test), the A4 curve and the appendix tables.
 - Needs the team: H2 matching rule and McNemar on the majority answer (pre-registration).
+
+## Iteration 44: 2026-10-12 (interactive)
+- Stage / item: S11, final timing, external test (part A), A4 curve.
+- Did: **flaw fixed:** the final timing on the rented GPU would have rerun stage 07 into the
+  same `efficiency.csv` as the Kaggle T4 development numbers, overwriting them run by run and
+  mixing two GPUs in T5. With `hardware.timing_role: final` stage 07 now writes
+  `efficiency_final.csv` (metrics `final:<name>`, the rented GPU from `hardware.final_timing`)
+  and T5 reads only those rows. Run card **RC-T1** (14 runs at seed 0, seeds 1-2 if the credits
+  allow; runtime estimate from RC-B0 when it is set to ready). **RC-X1 part A** (Farzan, no GPU):
+  verify EndoBench's terms (stop if unclear), record its format, and count with the new
+  `scripts/prepare_data.py overlap` how many of its images are near-copies of our train,
+  validation and test images (counts only). The loader and part B come after part A, because
+  the format and licence are not verified (nothing invented). Data card
+  `docs/data_cards/endobench.md` with the D02 facts and the open items. Appendix figure for A4
+  (both primary endpoints against 32 / 64 / 128 / 256 calibration images; 128 falls back to
+  E7's B2 runs, as in T4).
+- Verified: ruff check, ruff format, pytest; figures regenerated.
+- Commit: see `git log` on `research-loop`.
+- Next: the remaining appendix outputs (per-finding table, reliability and risk-coverage, E9,
+  free-text rates, hyper-parameters and compute, student selection), then S12.
+- Needs the team: the timing GPU and precision; RC-X1 part A.

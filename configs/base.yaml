@@ -50,6 +50,8 @@ logging:
 hardware:
   development: "Kaggle (2x T4, 16 GB each) and Google Colab"
   final_timing: TODO                      # rented GPU type for final efficiency numbers
+  timing_role: development                # stage 07 writes efficiency.csv; RC-T1 sets "final" on the
+                                          # rented GPU: efficiency_final.csv, "final:" metric names
   precision: TODO                         # fp16 vs bf16, depends on the GPU
   device_map: auto
   num_workers: 2

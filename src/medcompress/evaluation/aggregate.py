@@ -32,11 +32,17 @@ import pandas as pd
 from medcompress.registry import BUDGET_IDS, REGISTRY
 from medcompress.utils.io import RESULTS_COLUMNS
 
-RUN_FILES: tuple[str, ...] = ("metrics.csv", "metrics_test.csv", "efficiency.csv")
+RUN_FILES: tuple[str, ...] = (
+    "metrics.csv",
+    "metrics_test.csv",
+    "efficiency.csv",
+    "efficiency_final.csv",
+)
 SPLIT_OF_RUN_FILE: dict[str, str] = {
     "metrics.csv": "val",
     "metrics_test.csv": "test",
     "efficiency.csv": "",
+    "efficiency_final.csv": "",  # the final timing (RC-T1), metric names prefixed "final:"
 }
 """Split of the rows in each run file; ``""`` = not tied to a split (footprints, training)."""
 SUMMARY_KEYS: tuple[str, ...] = ("experiment", "budget", "split", "metric")
