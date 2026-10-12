@@ -181,3 +181,18 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: `data/masks.py`, `data/dedup.py`, `data/manifests.py`.
 - Needs the team: nothing new.
+
+## Iteration 13: 2026-10-12 (interactive)
+- Stage / item: S02, `data/masks.py`, `data/dedup.py`, `data/manifests.py`.
+- Did: mask loading, lesion area, frozen quartile strata, area-matched control region
+  (the lesion's own shape moved to a non-overlapping place, least-overlap fallback);
+  64-bit dHash fingerprints with vectorised Hamming search for near-duplicates
+  (also used to link Kvasir-SEG masks to Kvasir-VQA-x1 images); SHA-256 manifests
+  that refuse to be written inside the repository and verify files later. Pillow
+  added to the light requirements (it was already installed through matplotlib).
+  New `tests/test_masks_dedup_manifests.py` (synthetic images in a temp dir).
+- Verified: ruff check, ruff format --check, pytest (all passed).
+- Commit: see `git log` on `research-loop`.
+- Next: clinical-criterion pure parts (`load_finding_weights`, `compute_weights`,
+  `delta`, `aggregate_importance`).
+- Needs the team: nothing new.

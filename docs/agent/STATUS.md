@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 12 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 13 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S02 (CPU infrastructure); S01 done except dataset-access confirmations
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
@@ -26,7 +26,7 @@ data pure functions, then the clinical-criterion pure parts, then aggregation.
 |---|---|---|---|
 | S00 | Repository health and loop setup | done, pending PR merge | team review |
 | S01 | Decisions | done (dataset-access confirmations pending) | - |
-| S02 | CPU infrastructure | in progress (statistics, metrics done) | - |
+| S02 | CPU infrastructure | in progress (statistics, metrics, data functions done) | - |
 | S03 | Data pipeline | not started | - (datasets decided) |
 | S04 | Model wrappers and unit surgery | not started | - (teacher decided) |
 | S05 | Teacher: Gate 1, cache | not started | S03, S04 |

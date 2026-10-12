@@ -23,7 +23,7 @@ All with unit tests on small synthetic inputs. Replace entries in
   `lesion_mask_effect` (the pure parts).
 - [x] [agent] `evaluation/language.py` and `hallucination.py`: yes/no answer parsing
   and hallucination / omission / negation rates from parsed answers.
-- [ ] [agent] `data/probes.build_probes`, `data/splits` (patient splits, nested
+- [x] [agent] `data/probes.build_probes`, `data/splits` (patient splits, nested
   calibration subsets, split fingerprint), `data/masks` pure functions on arrays,
   `data/dedup` distance logic (imaging libraries imported lazily).
 - [ ] [agent] `compression/pruning/criteria/clinical.py` pure parts:
