@@ -282,12 +282,14 @@ def calibration_metrics(out: ProbeOutcomes, *, n_bins: int) -> list[Metric]:
     """ECE (on the confidence of the predicted answer), Brier score and AURC.
 
     The confidence of an answer is the larger of P(yes) and P(no); the Brier score
-    compares P(yes) with the label.
+    compares P(yes) with the label. The points of the reliability diagram
+    (``reliability_*:<bin>``, non-empty bins) and of the risk-coverage curve
+    (``risk_at_coverage:<percent>``) are written too, for the appendix plots.
     """
     p_yes = out.p_yes
     confidence = np.maximum(p_yes, 1.0 - p_yes)
     coverage, risk = calibration.risk_coverage_curve(confidence, out.correct)
-    return [
+    metrics = [
         Metric(
             "ece", calibration.expected_calibration_error(confidence, out.correct, n_bins=n_bins)
         ),
@@ -295,3 +297,14 @@ def calibration_metrics(out: ProbeOutcomes, *, n_bins: int) -> list[Metric]:
         Metric("aurc", calibration.area_under_risk_coverage(coverage, risk)),
         Metric("mean_confidence", float(confidence.mean())),
     ]
+    for b, share, accuracy, mean in calibration.reliability_bins(
+        confidence, out.correct, n_bins=n_bins
+    ):
+        metrics += [
+            Metric(f"reliability_share:{b}", share),
+            Metric(f"reliability_accuracy:{b}", accuracy),
+            Metric(f"reliability_confidence:{b}", mean),
+        ]
+    for level, value in calibration.risk_at_coverage(confidence, out.correct).items():
+        metrics.append(Metric(f"risk_at_coverage:{level}", value))
+    return metrics

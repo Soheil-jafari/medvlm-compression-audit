@@ -92,7 +92,7 @@ def _style(ax: Any) -> None:
     ax.set_axisbelow(True)
 
 
-def _new_figure(width: float = 3.4, height: float = 2.6, ncols: int = 1) -> tuple[Any, Any]:
+def new_figure(width: float = 3.4, height: float = 2.6, ncols: int = 1) -> tuple[Any, Any]:
     """A styled figure with one axes, or a row of ``ncols`` axes (returned as an array)."""
     import matplotlib
 
@@ -107,7 +107,8 @@ def _new_figure(width: float = 3.4, height: float = 2.6, ncols: int = 1) -> tupl
     return fig, ax
 
 
-def _save(fig: Any, path: Path) -> Path:
+def save_figure(fig: Any, path: Path) -> Path:
+    """Write ``fig`` as a PDF without a creation date (so the file is reproducible)."""
     import matplotlib.pyplot as plt
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -117,11 +118,12 @@ def _save(fig: Any, path: Path) -> Path:
     return path
 
 
-def _placeholder(path: Path, title: str) -> Path:
-    fig, ax = _new_figure()
+def placeholder(path: Path, title: str) -> Path:
+    """A labelled empty figure, so the paper compiles before there are results."""
+    fig, ax = new_figure()
     ax.axis("off")
     ax.text(0.5, 0.5, f"{title}\n(no results yet)", ha="center", va="center", color=MUTED)
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def _family_legend(ax: Any, families: set[str]) -> None:
@@ -147,8 +149,8 @@ def headline_vs_hidden(summary: pd.DataFrame, path: Path, headline: str = ACCURA
         if not any(math.isnan(v) for v in (ref_acc, ref_small, acc, small)):
             points.append((arm, ref_acc - acc, ref_small - small))
     if not points:
-        return _placeholder(path, "F1 headline vs hidden damage")
-    fig, ax = _new_figure()
+        return placeholder(path, "F1 headline vs hidden damage")
+    fig, ax = new_figure()
     low = min(0.0, *[min(x, y) for _, x, y in points])
     high = max(0.0, *[max(x, y) for _, x, y in points])
     ax.plot([low, high], [low, high], color=MUTED, linewidth=1, linestyle="--")
@@ -168,7 +170,7 @@ def headline_vs_hidden(summary: pd.DataFrame, path: Path, headline: str = ACCURA
     ax.set_xlabel(f"{HEADLINE_LABELS[headline]} drop vs E2")
     ax.set_ylabel("Small-finding recall drop vs E2")
     _family_legend(ax, {family_of(a) for a, _, _ in points})
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def family_damage(summary: pd.DataFrame, path: Path) -> Path:
@@ -182,12 +184,12 @@ def family_damage(summary: pd.DataFrame, path: Path) -> Path:
     frame = pd.DataFrame(grid, index=metrics, columns=[a for a, _ in arms])
     frame = frame.dropna(axis=1, how="all").dropna(axis=0, how="all")
     if frame.empty:
-        return _placeholder(path, "F2 change vs E2 by method")
+        return placeholder(path, "F2 change vs E2 by method")
     from matplotlib.colors import LinearSegmentedColormap
 
     cmap = LinearSegmentedColormap.from_list("diverging", list(DIVERGING))
     limit = float(frame.abs().max().max()) or 1.0
-    fig, ax = _new_figure(width=max(3.4, 0.4 * frame.shape[1] + 1.5), height=2.2)
+    fig, ax = new_figure(width=max(3.4, 0.4 * frame.shape[1] + 1.5), height=2.2)
     ax.grid(False)
     image = ax.imshow(
         frame.to_numpy(dtype=float), cmap=cmap, vmin=-limit, vmax=limit, aspect="auto"
@@ -200,13 +202,13 @@ def family_damage(summary: pd.DataFrame, path: Path) -> Path:
             if not math.isnan(value):
                 ax.text(j, i, f"{value:+.2f}", ha="center", va="center", fontsize=5, color=INK)
     fig.colorbar(image, ax=ax, shrink=0.8).ax.tick_params(labelsize=6)
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def budget_curves(summary: pd.DataFrame, path: Path) -> Path:
     """F3: small-finding recall against measured peak memory (fraction of E2)."""
     ref = _mean(summary, "E2", "", PEAK_MEMORY)
-    fig, ax = _new_figure()
+    fig, ax = new_figure()
     drawn = set()
     for exp, dashed in (("E5", False), ("E6", False), ("E7", False), ("E8", True)):
         for arm in arm_labels(exp):
@@ -262,11 +264,11 @@ def budget_curves(summary: pd.DataFrame, path: Path) -> Path:
         import matplotlib.pyplot as plt
 
         plt.close(fig)
-        return _placeholder(path, "F3 budget curves")
+        return placeholder(path, "F3 budget curves")
     ax.set_xlabel("Peak memory (fraction of E2)")
     ax.set_ylabel("Small-finding recall")
     _family_legend(ax, drawn)
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def rank_order(summary: pd.DataFrame, path: Path, headline: str = ACCURACY) -> Path:
@@ -278,11 +280,11 @@ def rank_order(summary: pd.DataFrame, path: Path, headline: str = ACCURACY) -> P
         if not (math.isnan(acc) or math.isnan(small)):
             rows.append((arm, acc, small))
     if len(rows) < 2:
-        return _placeholder(path, "F4 ranking by accuracy vs clinical metrics")
+        return placeholder(path, "F4 ranking by accuracy vs clinical metrics")
     frame = pd.DataFrame(rows, columns=["arm", "acc", "small"])
     frame["rank_acc"] = frame["acc"].rank(ascending=False, method="min")
     frame["rank_small"] = frame["small"].rank(ascending=False, method="min")
-    fig, ax = _new_figure()
+    fig, ax = new_figure()
     top = float(len(frame))
     ax.plot([1, top], [1, top], color=MUTED, linewidth=1, linestyle="--")
     for r in frame.itertuples():
@@ -309,7 +311,7 @@ def rank_order(summary: pd.DataFrame, path: Path, headline: str = ACCURACY) -> P
     ax.invert_xaxis()
     ax.invert_yaxis()
     _family_legend(ax, {family_of(a) for a in frame["arm"]})
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def mask_audit(summary: pd.DataFrame, path: Path) -> Path:
@@ -323,8 +325,8 @@ def mask_audit(summary: pd.DataFrame, path: Path) -> Path:
     ]
     data = [d for d in data if not (math.isnan(d[1]) or math.isnan(d[2]))]
     if not data:
-        return _placeholder(path, "F5 mask audit")
-    fig, ax = _new_figure()
+        return placeholder(path, "F5 mask audit")
+    fig, ax = new_figure()
     width = 0.38
     xs = range(len(data))
     ax.bar(
@@ -344,7 +346,7 @@ def mask_audit(summary: pd.DataFrame, path: Path) -> Path:
     ax.set_xticks(list(xs), [d[0] for d in data], rotation=45, ha="right", fontsize=6)
     ax.set_ylabel("Answer flip rate")
     ax.legend(frameon=False, fontsize=7)
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 A4_SIZES: tuple[tuple[str, int], ...] = (("n32", 32), ("n64", 64), ("n128", 128), ("n256", 256))
@@ -384,8 +386,8 @@ def calibration_size_curve(summary: pd.DataFrame, path: Path) -> Path:
                 points.append((size, mean, _sd(summary, arm, PRIMARY_BUDGET, metric)))
         panels.append((label, points))
     if not any(points for _, points in panels):
-        return _placeholder(path, "A4 calibration-set size")
-    fig, axes = _new_figure(width=5.0, height=2.2, ncols=2)
+        return placeholder(path, "A4 calibration-set size")
+    fig, axes = new_figure(width=5.0, height=2.2, ncols=2)
     colour = FAMILY_COLOURS["clinical (ours)"]
     for ax, (label, points) in zip(axes, panels, strict=True):
         if points:
@@ -397,7 +399,7 @@ def calibration_size_curve(summary: pd.DataFrame, path: Path) -> Path:
         ax.set_xticks([size for _, size in A4_SIZES], [str(size) for _, size in A4_SIZES])
         ax.set_xlabel("Calibration images")
         ax.set_ylabel(label)
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 FIGURE_WRITERS = {

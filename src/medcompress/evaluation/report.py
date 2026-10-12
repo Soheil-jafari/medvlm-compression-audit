@@ -46,7 +46,8 @@ def arm_labels(experiment_id: str) -> list[str]:
     return [f"{experiment_id}:{v}" for v in spec.variants] if spec.variants else [experiment_id]
 
 
-def _lookup(summary: pd.DataFrame) -> dict[tuple[str, str, str], Mapping[str, float]]:
+def lookup_summary(summary: pd.DataFrame) -> dict[tuple[str, str, str], Mapping[str, float]]:
+    """Summary rows keyed by ``(experiment, budget, metric)`` (empty budget = no budget)."""
     if summary.empty:
         return {}
     return {
@@ -104,7 +105,7 @@ def tabular(columns: Sequence[str], rows: Iterable[Sequence[str]], align: str | 
 
 def main_table(summary: pd.DataFrame) -> str:
     """T2: accuracy, balanced accuracy, small-finding recall and lesion-mask effect per arm."""
-    look = _lookup(summary)
+    look = lookup_summary(summary)
     rows = []
 
     def cells(arm: str, budget: str) -> list[str]:
@@ -121,7 +122,7 @@ def main_table(summary: pd.DataFrame) -> str:
 
 def primary_table(summary: pd.DataFrame, name: str = PRIMARY_COMPARISON_NAME) -> str:
     """T3: E7 minus the best of E5/E6 at B2, with CIs and Holm-adjusted p-values."""
-    look = _lookup(summary)
+    look = lookup_summary(summary)
     cells = []
     for metric in (SMALL_RECALL, MASK_EFFECT):
         diff = look.get((name, PRIMARY_BUDGET, f"diff:{metric}"))
@@ -146,7 +147,7 @@ def ablation_table(summary: pd.DataFrame) -> str:
 
     An arm of ``SAME_AS_E7`` without runs of its own shows E7's numbers, labelled ``(= E7)``.
     """
-    look = _lookup(summary)
+    look = lookup_summary(summary)
     metrics = (SMALL_RECALL, MASK_EFFECT)
     rows = []
     for arm in ["E7", *[a for exp in ABLATION_IDS for a in arm_labels(exp)]]:
@@ -163,7 +164,7 @@ def efficiency_table(summary: pd.DataFrame) -> str:
 
     Reads the ``final:`` rows of RC-T1 only; the development numbers (Kaggle T4) never enter it.
     """
-    look = _lookup(summary)
+    look = lookup_summary(summary)
     rows = []
     for exp in ("E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9"):
         budget = PRIMARY_BUDGET if REGISTRY[exp].budgets else ""
@@ -180,7 +181,7 @@ def efficiency_table(summary: pd.DataFrame) -> str:
 
 def external_table(summary: pd.DataFrame) -> str:
     """T6: headline metrics on the deduplicated external test set (``external:`` metrics)."""
-    look = _lookup(summary)
+    look = lookup_summary(summary)
     rows = []
     for arm, budget in [
         ("E0", ""),

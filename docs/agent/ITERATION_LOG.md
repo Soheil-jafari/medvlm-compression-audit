@@ -869,3 +869,27 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: the remaining appendix outputs (per-finding table, reliability and risk-coverage, E9,
   free-text rates, hyper-parameters and compute, student selection), then S12.
 - Needs the team: the timing GPU and precision; RC-X1 part A.
+
+## Iteration 45: 2026-10-12 (interactive)
+- Stage / item: S11, appendix outputs.
+- Did: `evaluation/appendix.py`, called by step 08, writes `appendix_sensitivity`,
+  `appendix_specificity`, `appendix_calibration`, `appendix_free_text`, `appendix_e9`,
+  `appendix_compute`, `appendix_student_selection` and `appendix_hyperparameters` (read from the
+  experiment configs, open values `--`) and the reliability and risk-coverage plots. The
+  calibration suite now also writes the reliability-diagram points and the risk at 10 % ... 100 %
+  coverage. **Gap fixed:** the compute-used table had nothing to read for the teacher cache,
+  the evaluations and the benchmarks; those stages now record `teacher_cache_seconds` (summed
+  over the resumed sessions), `evaluation_seconds` and `benchmark_seconds`. The compute and
+  selection tables read every committed row (bookkeeping tied to no split); all result tables
+  read the test split only. Step 08 takes the headline accuracy from `configs/base.yaml` by
+  default, so the test and the script draw the same figures. The paper appendix inputs every
+  generated table and figure; its student-selection paragraph still described the dropped
+  10-5-3-1 rounds and now describes the one-student checks (D05 amendment). Shared report and
+  figure helpers are public now (no private imports across modules).
+- Verified: ruff check, ruff format, pytest; tables and figures regenerated. LaTeX is not
+  installed in this session, so the paper was not compiled; `tests/test_paper.py` checks that
+  every input and figure exists.
+- Commit: see `git log` on `research-loop`.
+- Next: S12 (paper text: method, setup and related work from verified sources; results only
+  through generated macros), while the run cards wait for the team.
+- Needs the team: nothing new.

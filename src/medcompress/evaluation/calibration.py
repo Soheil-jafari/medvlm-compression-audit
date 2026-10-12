@@ -40,6 +40,38 @@ def expected_calibration_error(
     return float(ece)
 
 
+def reliability_bins(
+    confidences: Sequence[float], correct: Sequence[bool], *, n_bins: int = 15
+) -> list[tuple[int, float, float, float]]:
+    """``(bin, share of answers, accuracy, mean confidence)`` of every non-empty bin.
+
+    The bins are those of :func:`expected_calibration_error` (the points of a reliability
+    diagram). Used by: the appendix reliability plot.
+    """
+    conf, ok = _check(confidences, correct)
+    bins = np.minimum((conf * n_bins).astype(int), n_bins - 1)
+    return [
+        (b, float((bins == b).mean()), float(ok[bins == b].mean()), float(conf[bins == b].mean()))
+        for b in range(n_bins)
+        if (bins == b).any()
+    ]
+
+
+RISK_COVERAGE_LEVELS: tuple[int, ...] = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
+"""Coverage levels (percent) at which the risk-coverage curve is reported."""
+
+
+def risk_at_coverage(
+    confidences: Sequence[float],
+    correct: Sequence[bool],
+    levels: Sequence[int] = RISK_COVERAGE_LEVELS,
+) -> dict[int, float]:
+    """Error rate among the most confident ``level`` percent of answers, for each level."""
+    coverage, risk = risk_coverage_curve(confidences, correct)
+    n = len(risk)
+    return {level: risk[max(1, math.ceil(n * level / 100)) - 1] for level in levels}
+
+
 def brier_score(prob_positive: Sequence[float], labels: Sequence[bool]) -> float:
     """Mean squared error between predicted P(yes) and the label. Used by: all."""
     p, y = _check(prob_positive, labels)

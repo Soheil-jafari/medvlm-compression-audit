@@ -287,7 +287,7 @@ def aggregate_results(
     tables_dir: Path | None = None,
     figures_dir: Path | None = None,
     verdicts_path: Path | None = None,
-    headline: str = "overall_accuracy",
+    headline: str | None = None,
 ) -> list[Path]:
     """Stage entry point for ``scripts/08_aggregate_results.py``.
 
@@ -315,14 +315,25 @@ def aggregate_results(
     from medcompress.evaluation.report import write_tables
     from medcompress.evaluation.verdicts import write_verdicts
 
+    if headline is None:  # the pre-registered value from configs/base.yaml
+        from medcompress.config import load_config
+        from medcompress.evaluation.compare_stage import headline_metric
+
+        headline = headline_metric(load_config("base.yaml"))
+
+    from medcompress.evaluation.appendix import write_appendix
+
     root = repo_root()
-    rows = load_results(Path(results_root))
-    written = write_summary(rows, Path(out_dir))
-    rows = paper_rows(rows)  # the paper reports the test split, never validation rows
+    everything = load_results(Path(results_root))
+    written = write_summary(everything, Path(out_dir))
+    rows = paper_rows(everything)  # the paper reports the test split, never validation rows
     summary = summarise_over_seeds(rows)
-    written += write_tables(rows, summary, Path(tables_dir or root / "paper" / "tables"))
+    tables = Path(tables_dir or root / "paper" / "tables")
     figures = Path(figures_dir or root / "paper" / "figures")
+    written += write_tables(rows, summary, tables)
     written += write_figures(summary, figures, headline=headline)
+    # compute used and the student checks are bookkeeping of every run, tied to no split
+    written += write_appendix(everything, summary, tables, figures)
     written.append(
         write_verdicts(summary, Path(verdicts_path or root / "docs" / "results" / "VERDICTS.md"))
     )

@@ -10,6 +10,7 @@ comparisons between arms need them; the summary rows go to ``metrics.csv``.
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -526,8 +527,10 @@ def run_evaluation(
     if model is None:
         model = load_run_model(config, run, int(side))
     seed = run.seed
+    started = time.perf_counter()
     result = evaluate_model(model, samples, settings, data_root, seed)
-    metrics, arrays = result.metrics, result.arrays
+    seconds = time.perf_counter() - started  # compute used (appendix)
+    metrics, arrays = [*result.metrics, Metric("evaluation_seconds", seconds)], result.arrays
     budget = run.budget or ""
     rows = to_rows(metrics, run.experiment_tag, budget, seed)
     undefined = sorted(m.name for m in metrics if math.isnan(m.value))

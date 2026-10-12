@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 44 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 45 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
@@ -17,7 +17,8 @@
    draft and freeze guard done (iteration 40). Pruning grid cards RC-E5 to RC-E8 done
    (iteration 41); ablation cards RC-A1 to RC-A6 done, A3 ranking and score reuse fixed
    (iteration 42); comparison step, RC-C1 and RC-R1 done (iteration 43); RC-T1, RC-X1 part A
-   and the A4 curve done (iteration 44). Next: the appendix tables (S11), then the paper (S12).
+   and the A4 curve done (iteration 44); appendix outputs done (iteration 45). Next: the paper
+   text (S12) while the run cards wait; the EndoBench loader after RC-X1 part A.
 3. D07 section 1 (how a unit is switched off while scored), the timing hardware and B1-B3 are
    asked later; none is needed before E2 exists.
 
@@ -57,7 +58,7 @@ cards for the team (decision of 2026-10-12).
 | S08 | Quantization E3, E4, E9 | code and run cards done (RC-Q0 ready; RC-E3, RC-E4, RC-E9 blocked) | RC-Q0, S07 freeze, E2 |
 | S09 | Pruning E5-E8, Gate 2 | code and run cards done (RC-G2, RC-E5 to RC-E8, all blocked) | D07 (scoring method, budgets), S07 freeze, E2 |
 | S10 | Ablations A1-A6 | run cards done (RC-A1 to RC-A6, blocked); team: A3 ranking, E7 reuse | S09, S07 freeze |
-| S11 | External test, timing, aggregation | comparison step; cards RC-R1, RC-C1, RC-T1, RC-X1 part A; appendix outputs next | S08-S10; RC-X1 part A for the EndoBench loader |
+| S11 | External test, timing, aggregation | code and cards done (comparison step, appendix; RC-R1, RC-C1, RC-T1, RC-X1 part A); waiting for results | S08-S10; RC-X1 part A for the EndoBench loader |
 | S12 | Paper and release | not started | S11 (method/related work can start early) |
 
 ## Gates

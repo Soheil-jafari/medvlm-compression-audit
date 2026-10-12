@@ -183,7 +183,7 @@ def test_the_a4_curve_uses_e7_for_the_size_identical_to_e7(
     path = figures.calibration_size_curve(pd.DataFrame(rows), tmp_path / "a4.pdf")
     assert path.read_bytes().startswith(b"%PDF")
     drawn: list[tuple] = []
-    original = figures._new_figure
+    original = figures.new_figure
 
     def spying(*args: object, **kwargs: object) -> tuple:
         fig, axes = original(*args, **kwargs)
@@ -191,6 +191,6 @@ def test_the_a4_curve_uses_e7_for_the_size_identical_to_e7(
             ax.errorbar = lambda xs, ys, **_: drawn.append((xs, ys))
         return fig, axes
 
-    monkeypatch.setattr(figures, "_new_figure", spying)
+    monkeypatch.setattr(figures, "new_figure", spying)
     figures.calibration_size_curve(pd.DataFrame(rows), tmp_path / "a4b.pdf")
     assert drawn[0] == ((32, 64, 128, 256), (0.5, 0.55, 0.62, 0.63))

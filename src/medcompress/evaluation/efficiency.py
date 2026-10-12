@@ -513,6 +513,7 @@ def run_efficiency_benchmark(
         dataset = load_config(config["components"]["datasets"]["train_qa"])["dataset"]
         pool = load_prepared(Path(paths["data_root"]), dataset, Path(paths["private_root"]))["val"]
     samples = timing_samples(pool, protocol)
+    started = time.perf_counter()
     report = measure_footprint(
         model,
         samples,
@@ -522,6 +523,15 @@ def run_efficiency_benchmark(
     )
     target = run.run_dir(paths["results_root"]) / timing.rows_file
     rows = report_rows(report, run, state=state_bytes(model))
+    rows.append(
+        {
+            "experiment": run.experiment_tag,
+            "budget": run.budget or "",
+            "seed": run.seed,
+            "metric": "benchmark_seconds",  # compute used (appendix)
+            "value": time.perf_counter() - started,
+        }
+    )
     rows += [
         {
             "experiment": run.experiment_tag,
