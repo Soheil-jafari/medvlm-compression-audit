@@ -40,12 +40,13 @@ export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
 export MEDCOMPRESS_RESULTS_ROOT=$PWD/results
 
 python scripts/run_experiment.py --exp E9 --seed 0
+python scripts/06_evaluate.py --exp E9 --seed 0 -o evaluation.split=test
 python -m pytest -q tests/test_results.py                  # must pass before you commit
 ```
 
 ## 4. What to commit back
 
-- `results/E9/nobudget/seed0/metrics.csv`, `efficiency.csv` and `efficiency_setup.json`
+- `results/E9/nobudget/seed0/metrics.csv`, `metrics_test.csv`, `efficiency.csv` and `efficiency_setup.json`
 - This card with section 6 filled.
 
 ## 5. Pass criteria (decided before the run)

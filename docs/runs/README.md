@@ -25,7 +25,10 @@ results in its next iteration.
 | [RC-E4](RC-E4_qakd.md) | S08 | E4: quantization-aware distillation (D08 option B), 3 seeds | Soheil | blocked (RC-Q0, RC-E0b, E2 settings, freeze) |
 | [RC-E9](RC-E9_teacher_ptq.md) | S08 | E9: the teacher at 4 bit (supplementary) | Soheil | blocked (RC-Q0, RC-D1, freeze) |
 | [RC-G2](RC-G2_gate2_pilot.md) | S09 | Gate 2 pilot at B2 (validation): E5 (3 criteria), E6, E7 | Amir | blocked (RC-E2, RC-B0, D07 scoring method, finding weights) |
-| RC-E5 ... RC-E8 | S09 | Pruning grid | Amir | not written yet |
+| [RC-E5](RC-E5_generic_pruning_grid.md) | S09 | E5: magnitude, activation, Taylor x B1-B3 x 3 seeds (27 runs) | Amir | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-G2) |
+| [RC-E6](RC-E6_output_similarity_grid.md) | S09 | E6: output-similarity layer pruning x B1-B3 x 3 seeds (9 runs) | Amir | blocked (as RC-E5) |
+| [RC-E7](RC-E7_clinical_pruning_grid.md) | S09 | E7: clinical criterion x B1-B3 x 3 seeds (9 runs) | Amir | blocked (as RC-E5, weights frozen) |
+| [RC-E8](RC-E8_clinical_pruning_plus_ptq4.md) | S09 | E8: E7 + 4-bit GPTQ x B1-B3 x 3 seeds (9 runs) | Amir | blocked (RC-E7, RC-Q0, freeze) |
 | RC-A1 ... RC-A6 | S10 | Ablations at B2 | Amir | not written yet |
 | RC-X1 | S11 | External test | Farzan | not written yet |
 | RC-T1 | S11 | Final timing on the rented GPU | Amir | not written yet |

@@ -48,6 +48,7 @@ export CUDA_VISIBLE_DEVICES=0
 SEED=0   # 0, 1 or 2
 for v in w4 w8 w8a8; do
   python scripts/run_experiment.py --exp E3 --variant $v --seed $SEED
+  python scripts/06_evaluate.py --exp E3 --variant $v --seed $SEED -o evaluation.split=test
 done
 python -m pytest -q tests/test_results.py                  # must pass before you commit
 ```
@@ -62,7 +63,7 @@ as a private dataset.
 
 For each variant `<v>` and seed `<k>`:
 
-- `results/E3/<v>/nobudget/seed<k>/metrics.csv` and `efficiency.csv`
+- `results/E3/<v>/nobudget/seed<k>/metrics.csv`, `metrics_test.csv` and `efficiency.csv`
 - `results/E3/<v>/nobudget/seed<k>/efficiency_setup.json` (hardware, protocol, kernel classes)
 - This card with section 6 filled.
 

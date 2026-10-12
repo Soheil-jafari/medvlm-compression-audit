@@ -49,6 +49,7 @@ export CUDA_VISIBLE_DEVICES=0
 python -m pytest -q tests/test_qakd.py tests/test_qakd_torch.py        # must pass first
 SEED=0   # 0, 1 or 2
 python scripts/run_experiment.py --exp E4 --seed $SEED
+python scripts/06_evaluate.py --exp E4 --seed $SEED -o evaluation.split=test
 python -m pytest -q tests/test_results.py                  # must pass before you commit
 ```
 
@@ -58,7 +59,7 @@ private dataset.
 
 ## 4. What to commit back
 
-- `results/E4/nobudget/seed<k>/metrics.csv`, `efficiency.csv`, `efficiency_setup.json`
+- `results/E4/nobudget/seed<k>/metrics.csv`, `metrics_test.csv`, `efficiency.csv`, `efficiency_setup.json`
 - This card with section 6 filled.
 
 Check before committing: `git status` shows no images, checkpoints, caches or `outcomes*.npz`.

@@ -23,8 +23,9 @@ reading.
 - [ ] [agent] Gate 2 note in `docs/results/GATE2.md`: E7 vs best of E5/E6 on
   validation, and the implied paper shape (A or B). Gate 2 does not stop any run.
 - [ ] [team] Record the Gate 2 reading in `docs/decisions_log.md`.
-- [ ] [agent] Run cards for the full grid: E5 (3 criteria x 3 budgets x 3 seeds),
-  E6 (3 x 3), E7 (3 x 3), E8 (3 x 3), each evaluated on validation and test.
+- [x] [agent] Run cards for the full grid: E5 (3 criteria x 3 budgets x 3 seeds),
+  E6 (3 x 3), E7 (3 x 3), E8 (3 x 3), each evaluated on validation and test
+  (RC-E5, RC-E6, RC-E7, RC-E8; blocked until the freeze, RC-E2, RC-B0 and D07 section 1).
 - [ ] [team:Amir] Execute the grid.
 - [ ] [agent] `docs/results/E5.md` ... `E8.md`; check every footprint is within the
   pre-registered tolerance.

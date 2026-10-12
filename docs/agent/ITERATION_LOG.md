@@ -773,3 +773,21 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: pruning grid run cards RC-E5 to RC-E8 (S09), ablation code and cards (S10).
 - Needs the team: the draft's [team] items (open-decisions table).
+
+## Iteration 41: 2026-10-12 (interactive)
+- Stage / item: S09, run cards for the full pruning grid.
+- Did: wrote RC-E5 (magnitude, activation, Taylor x B1-B3 x 3 seeds, 27 runs), RC-E6 (9 runs),
+  RC-E7 (9 runs, keeps the pruned models) and RC-E8 (the E7 models + the `w4` GPTQ recipe,
+  9 runs). Each run is evaluated on validation (stage 06 inside `run_experiment.py`) and then
+  on test (`06_evaluate.py -o evaluation.split=test`, written to `metrics_test.csv`). Pass
+  criteria fixed in advance: footprint inside the 3 % band (a miss is reported and marked, never
+  re-tuned), parameters really removed, the same recovery fingerprint in every run, protected
+  layers kept; for E8 also the kernel check, 128 calibration images and the number of quantized
+  matrices. RC-E3, RC-E4 and RC-E9 got the same test-split evaluation line. All four cards are
+  blocked until the freeze, RC-E2, RC-B0 (B1-B3) and D07 section 1; the runtime estimate is
+  filled in from the RC-M1 and RC-E2 speeds when a card is set to `ready`.
+- Verified: ruff check, ruff format, pytest; the commands in the cards use only existing
+  scripts and flags; `outcomes*.npz` and `outputs/` are git-ignored.
+- Commit: see `git log` on `research-loop`.
+- Next: ablations A1-A6 (S10): check the variant wiring and write RC-A1 to RC-A6.
+- Needs the team: nothing new.
