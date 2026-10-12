@@ -409,6 +409,11 @@ class ClinicalCriterion(PruningCriterion):
     Used by: E7 (all budgets), E8 (via E7), A1, A2, A4, A5, A6.
     """
 
+    @classmethod
+    def check_settings(cls, config: Mapping[str, Any]) -> None:
+        """The clinical settings must be complete and consistent (see :class:`ClinicalSettings`)."""
+        ClinicalSettings.from_config(config)
+
     def score(
         self,
         model: VLMWrapper,

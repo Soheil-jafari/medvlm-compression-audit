@@ -556,3 +556,30 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: D06 and D07 memos (ask the team), then run card RC-G2.
 - Needs the team: nothing new yet (the memos will ask).
 
+
+## Iteration 31: 2026-10-12 (interactive)
+- Stage / item: S09, D06 and D07 memos; applying the answered settings.
+- Did: D06 (training recipe, recovery recipe, evaluation numbers) answered by Soheil with every
+  recommendation accepted and written to `configs/training.yaml`, `configs/recovery.yaml` and
+  `configs/base.yaml` (`steps` and `data_subset` stay open until the selection freeze, because
+  they follow from the speed that RC-S0 measures). D07 (pruning settings) is partly answered:
+  score per parameter, protected layers (first 2, last 1, every arm), channel groups of 128,
+  128 calibration images, one-shot removal then recovery, one negative per positive, signed
+  effects, probe batch 4 are in `configs/pruning.yaml` and `configs/experiments/E7.yaml`. Still
+  open: how a unit is switched off while it is scored (waits for the T4 speed from RC-M1) and
+  the budget section. The user asked what is run where and what it costs; the answer (nothing
+  heavy in the agent session, all GPU work as run cards for the team) is in
+  `docs/decisions_log.md`.
+  Code: `config.collect_open_settings` merges the "settings still open" messages of several
+  readers; criteria have a `check_settings` hook (clinical probe settings, the embedder and the
+  token budget of output similarity); stage 04 now checks settings, criterion and image side
+  together before any model is loaded (the image side is not needed when the scores of the same
+  settings exist and are reused); recovery uses the shared helper.
+  Tests: the stage and script tests expect the keys that are really still open
+  (`pruning.clinical.ablation_method`, `inputs.image_longest_side`, `evaluation.max_new_tokens`
+  for E6, the budget and training-length keys for stage 05).
+- Verified: ruff check, ruff format, pytest (785 passed).
+- Commit: see `git log` on `research-loop`.
+- Next: ask the scoring-method question of D07 again in plain words, then the budget section;
+  run cards RC-B0 and RC-G2.
+- Needs the team: D07 section 1 and section 4 (asked in the session).

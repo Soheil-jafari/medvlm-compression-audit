@@ -51,6 +51,14 @@ class PruningCriterion(ABC):
         self.config = config
         self.seed = seed
 
+    @classmethod
+    def check_settings(cls, config: Mapping[str, Any]) -> None:
+        """Raise :class:`ConfigError` for a setting of this criterion that is open or invalid.
+
+        Called by stage 04 before any model is loaded; the default has nothing to check.
+        """
+        return None
+
     @property
     def data_root(self) -> Path:
         """``paths.data_root`` of the config (where the images live)."""

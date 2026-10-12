@@ -18,7 +18,12 @@ from eval_fixtures import eval_config, write_dataset  # noqa: E402
 from medcompress.compression.pruning import stage  # noqa: E402
 from medcompress.compression.pruning.criteria import CRITERIA, common  # noqa: E402
 from medcompress.compression.pruning.criteria.base import PruningCriterion  # noqa: E402
-from medcompress.config import ConfigError, RunContext, load_experiment  # noqa: E402
+from medcompress.config import (  # noqa: E402
+    ConfigError,
+    RunContext,
+    collect_open_settings,
+    load_experiment,
+)
 from medcompress.utils.io import read_json  # noqa: E402
 
 TYPES = ["decoder_layer", "attention_head", "mlp_channel_group"]
@@ -46,13 +51,26 @@ def _run(variant: str | None = None, seed: int = 0, budget: str | None = None) -
 
 
 def test_the_real_configs_name_every_open_setting() -> None:
-    config, _ = load_experiment("E7")
-    with pytest.raises(ConfigError) as caught:
-        stage.ScoringSettings.from_config(config)
-    message = str(caught.value)
-    assert "pruning.units.mlp_channel_group_size" in message
-    assert "pruning.calibration.size" in message
-    assert "pruning.criterion" not in message  # E7 sets it
+    """The grid and calibration sizes are decided (D07); what is left is named in one error."""
+    expected = {
+        "E5": ("taylor", ["inputs.image_longest_side"]),
+        "E6": (None, ["evaluation.max_new_tokens", "inputs.image_longest_side"]),
+        "E7": (None, ["pruning.clinical.ablation_method", "inputs.image_longest_side"]),
+    }
+    for experiment, (variant, keys) in expected.items():
+        config, _ = load_experiment(experiment)
+        settings = stage.ScoringSettings.from_config(config, variant)
+        assert settings.calibration_size in (None, 128)
+        run = RunContext(experiment, seed=0, variant=variant)
+        with pytest.raises(ConfigError) as caught:
+            collect_open_settings(
+                lambda config=config, variant=variant: stage.ScoringSettings.from_config(
+                    config, variant
+                ),
+                lambda config=config, run=run: stage._check_criterion(config, run),
+                lambda config=config: stage._check_side(config, None),
+            )
+        assert str(caught.value) == f"settings still open: {', '.join(keys)}"
 
 
 def test_variants_resolve_the_criterion_the_sizes_and_the_unit_types() -> None:

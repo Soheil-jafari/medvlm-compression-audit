@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from medcompress.config import ConfigError, RunContext, find_todos
+from medcompress.config import ConfigError, RunContext, collect_open_settings, find_todos
 
 if TYPE_CHECKING:
     from medcompress.compression.distillation.batching import TrainExample
@@ -148,25 +148,6 @@ def run_recovery(
     return result
 
 
-def _open_settings(*readers: Callable[[], object]) -> None:
-    """Run the settings readers and raise one error that lists every open value."""
-    marker = "settings still open: "
-    open_keys: list[str] = []
-    other: list[str] = []
-    for read in readers:
-        try:
-            read()
-        except ConfigError as exc:
-            text = str(exc)
-            if marker in text:
-                open_keys += [k.strip() for k in text.split(marker, 1)[1].split(",")]
-            else:
-                other.append(text)
-    if open_keys or other:
-        parts = [marker + ", ".join(dict.fromkeys(open_keys))] if open_keys else []
-        raise ConfigError("; ".join([*parts, *other]))
-
-
 @dataclass(frozen=True)
 class PruneSettings:
     """Everything the stage needs from the config, read together so open values show at once."""
@@ -198,7 +179,7 @@ def read_prune_settings(
         if need_protocol:
             held["protocol"] = EfficiencyProtocol.from_config(budgets.get("measurement") or {})
 
-    _open_settings(
+    collect_open_settings(
         lambda: held.update(removal=RemovalSettings.from_config(config)),
         lambda: held.update(scoring=ScoringSettings.from_config(config, run.variant)),
         lambda: held.update(spec=budget_spec_for_run(config, run.budget or "")),

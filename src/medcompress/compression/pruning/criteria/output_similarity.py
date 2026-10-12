@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -78,18 +78,27 @@ class OutputSimilarityCriterion(PruningCriterion):
         super().__init__(config, seed=seed)
         self._embedder = embedder
 
+    @classmethod
+    def check_settings(cls, config: Mapping[str, Any]) -> None:
+        """The encoder (source and revision) and the generation length must be set."""
+        embedder = ((config.get("pruning") or {}).get("output_similarity") or {}).get(
+            "embedder"
+        ) or {}
+        wanted = {
+            **{
+                f"pruning.output_similarity.embedder.{k}": embedder.get(k)
+                for k in ("source", "revision")
+            },
+            "evaluation.max_new_tokens": (config.get("evaluation") or {}).get("max_new_tokens"),
+        }
+        open_keys = [k for k, v in wanted.items() if v is None or find_todos({"v": v})]
+        if open_keys:
+            raise ConfigError(f"settings still open: {', '.join(open_keys)}")
+
     def _embed(self) -> Embedder:
         if self._embedder is None:
-            settings = (self.config.get("pruning", {}).get("output_similarity") or {}).get(
-                "embedder"
-            ) or {}
-            open_keys = [
-                f"pruning.output_similarity.embedder.{k}"
-                for k in ("source", "revision")
-                if settings.get(k) is None or find_todos({"v": settings.get(k)})
-            ]
-            if open_keys:
-                raise ConfigError(f"settings still open: {', '.join(open_keys)}")
+            self.check_settings(self.config)
+            settings = self.config["pruning"]["output_similarity"]["embedder"]
             self._embedder = SentenceEmbedder(settings["source"], settings["revision"])
         return self._embedder
 

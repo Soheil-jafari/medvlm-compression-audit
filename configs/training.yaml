@@ -8,16 +8,19 @@ model:
 training:
   mode: TODO                              # sft (E1) | offline_kd (E2) | qakd (E4)
   method: lora
-  lora:
-    rank: TODO
-    alpha: TODO
-    dropout: TODO
-    target_modules: TODO
-  steps: TODO
-  learning_rate: TODO
-  batch_size: TODO
-  grad_accumulation: TODO
-  kd_weight: TODO
-  kd_temperature: TODO
-  data_subset: TODO
+  lora:                                   # D06 (2026-10-12): all decoder projections, vision encoder frozen
+    rank: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules: [decoder_attention, decoder_mlp]
+  steps: TODO                             # ceil(data_subset / 16), set at the selection freeze (D06)
+  learning_rate: 1.0e-4
+  batch_size: 4                           # micro-batch; 4 x 4 accumulation = 16 examples per update
+  grad_accumulation: 4
+  kd_weight: 0.5                          # E1 sets 0 (answers only)
+  kd_temperature: 2.0
+  data_subset: TODO                       # Round 3 size of the selection, set at the freeze (D06)
+  warmup_steps: 20
+  lr_schedule: linear
+  max_grad_norm: 1.0
   teacher_cache_from: E0

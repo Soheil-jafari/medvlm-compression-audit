@@ -11,18 +11,18 @@ pruning:
     include_vision_blocks: false          # optional
     keep_projector: true                  # the projector is never pruned
     respect_gqa: true                     # heads removed in grouped-KV-consistent groups
-    mlp_channel_group_size: TODO
+    mlp_channel_group_size: 128           # D07 (2026-10-12)
   calibration:
     split: train
-    size: TODO                            # E7 default; A4 sweeps 32/64/128/256
+    size: 128                             # D07 (2026-10-12): E7 default; A4 sweeps 32/64/128/256
   removal:
     physical: true                        # weights are deleted, not masked
     stop_when: measured_budget_met
-    schedule: TODO                        # one-shot vs iterative
-    score_normalisation: TODO             # none | per_parameter: rank by the raw score or by the score per weight
+    schedule: one_shot                    # D07 (2026-10-12): remove all at once, then recover
+    score_normalisation: per_parameter    # D07 (2026-10-12): rank by the score per weight
     protected_layers:                     # whole decoder layers that are never removed (same rule for every arm)
-      first: TODO
-      last: TODO
+      first: 2                            # D07 (2026-10-12)
+      last: 1
 
 mask_audit:
   enabled: true

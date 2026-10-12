@@ -1,16 +1,19 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 30 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 31 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
-1. D06 memo (training recipe, calibration bins, bootstrap resamples, image size, token
-   budget) and D07 memo (pruning settings, budget protocol) for the team to confirm.
+1. D07 section 1 (how a unit is switched off while scored) and section 4 (budgets): ask the
+   team again in plain words; the cost question waits for the T4 speed from RC-M1.
 2. Run cards: RC-B0 (E1/E2 and the E2 footprint), RC-G2 (Gate 2 at B2).
 3. S12 work-ahead (related work with verified references); quantization (S08).
+
+Nothing heavy runs in the agent session: training, scoring and measurements are written as run
+cards for the team (decision of 2026-10-12).
 
 ## Waiting on the team
 
@@ -37,7 +40,7 @@
 | S06 | Students E1, E2, budget reference | trainer done; recipe memo and run cards next | S05, S05b |
 | S07 | Pre-registration freeze | not started | S03, S06 |
 | S08 | Quantization E3, E4, E9 | not started | S07 |
-| S09 | Pruning E5-E8, Gate 2 | code done (criteria, scoring, budget search, recovery, efficiency); settings and run cards next | D06/D07, S07 |
+| S09 | Pruning E5-E8, Gate 2 | code done (criteria, scoring, budget search, recovery, efficiency); D06 decided, D07 partly decided; run cards next | D07 (scoring method, budgets), S07 |
 | S10 | Ablations A1-A6 | not started | S09 |
 | S11 | External test, timing, aggregation | not started | S08-S10 |
 | S12 | Paper and release | not started | S11 (method/related work can start early) |

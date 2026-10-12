@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -229,3 +230,23 @@ def test_apply_variant_picks_the_entry_of_every_by_variant_table() -> None:
         apply_variant(config, "c")
     plain = {"x": {"y": 1}}
     assert apply_variant(plain, None) == plain and apply_variant(plain, "anything") == plain
+
+
+def test_open_settings_of_several_readers_are_listed_in_one_error() -> None:
+    from medcompress.config import collect_open_settings
+
+    def reader(message: str) -> Callable[[], None]:
+        def read() -> None:
+            raise ConfigError(message)
+
+        return read
+
+    collect_open_settings(lambda: None)  # nothing open: no error
+    with pytest.raises(ConfigError) as caught:
+        collect_open_settings(
+            reader("settings still open: a.b, c"),
+            lambda: None,
+            reader("settings still open: c, d"),
+            reader("x must be positive"),
+        )
+    assert str(caught.value) == "settings still open: a.b, c, d; x must be positive"

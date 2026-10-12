@@ -16,7 +16,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from medcompress.compression.pruning.units import UnitType
-from medcompress.config import ConfigError, RunContext, apply_variant, find_todos
+from medcompress.config import (
+    ConfigError,
+    RunContext,
+    apply_variant,
+    collect_open_settings,
+    find_todos,
+)
 
 if TYPE_CHECKING:
     from medcompress.compression.pruning.criteria.base import PruningCriterion
@@ -206,6 +212,22 @@ def _reset_peak_memory() -> Any:
     return lambda: int(torch.cuda.max_memory_allocated())
 
 
+def _check_criterion(config: Mapping[str, Any], run: RunContext) -> None:
+    """Let the criterion check its own settings (needs the criterion name to be valid)."""
+    from medcompress.compression.pruning.criteria import CRITERIA
+
+    effective = apply_variant(config, run.variant)
+    name = (effective.get("pruning") or {}).get("criterion")
+    if name in CRITERIA:
+        CRITERIA[str(name)].check_settings(effective)
+
+
+def _check_side(config: Mapping[str, Any], model: Any) -> None:
+    """The image side is needed to load the student (not when a model is passed in)."""
+    if model is None and _open(config.get("inputs", {}).get("image_longest_side")):
+        raise ConfigError("settings still open: inputs.image_longest_side")
+
+
 def load_scoring_model(config: Mapping[str, Any], run: RunContext) -> VLMWrapper:
     """The E2 student of the run's seed, adapter merged (the parent of every pruning arm)."""
     from medcompress.evaluation.runner import load_trained_student
@@ -246,9 +268,22 @@ def score_units_for_experiment(
     """
     if run is None:
         raise ConfigError("--exp is required")
-    settings = ScoringSettings.from_config(config, run.variant)  # fail early on open settings
+    holder: dict[str, ScoringSettings] = {}
+
+    def reusable() -> bool:
+        """True when the scores of these settings exist and no model has to be loaded."""
+        if model is not None or force or "settings" not in holder:
+            return False
+        return _reusable(scores_path(config, run), _fingerprint(holder["settings"], run))
+
+    collect_open_settings(  # fail early, before any model is loaded, with everything that is open
+        lambda: holder.update(settings=ScoringSettings.from_config(config, run.variant)),
+        lambda: _check_criterion(config, run),
+        lambda: None if reusable() else _check_side(config, model),
+    )
+    settings = holder["settings"]
     target = scores_path(config, run)
-    if model is None and not force and _reusable(target, _fingerprint(settings, run)):
+    if reusable():
         print(f"reusing {target} (same settings)")
         return  # nothing to load: the scores of these settings exist already
     if model is None:

@@ -37,6 +37,16 @@ must be logged here.
   the RC-D1 answer lengths are known.
 - **2026-10-12 (Soheil):** no scheduled runs; the research loop runs back to back in
   an interactive session until the team stops it.
+- **2026-10-12 (Soheil):** D06 answered, all recommendations: LoRA rank 16 / alpha 32 /
+  dropout 0.05; AdamW lr 1e-4, linear decay, warm-up 20, micro-batch 4 x 4, KD weight 0.5,
+  temperature 2; recovery = 25 % of the E2 steps; 10 000 bootstrap resamples, 15 ECE bins,
+  1 000 free-generation rows. `steps` and `data_subset` follow at the selection freeze.
+- **2026-10-12 (Soheil):** D07 partly answered: rank by score per parameter for every
+  criterion; first 2 and last 1 decoder layers protected for every arm; MLP channel groups of
+  128, 128 calibration images, one-shot removal, 1 negative per positive, signed effects,
+  probe batch 4. Open: how units are switched off while scored (cost question, waits for the
+  RC-M1 speed) and the budgets. Soheil also asked that nothing heavy runs in the agent session:
+  all GPU work stays in run cards for the team.
 
 ## Open decisions
 

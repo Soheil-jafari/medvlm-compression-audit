@@ -66,11 +66,11 @@ evaluation:
   val_split: kvasir_vqa_x1 official test, half by img_id   # D02 Q1 = A
   test_split: kvasir_vqa_x1 official test, other half
   external_test: data/endobench.yaml
-  calibration_bins: TODO
-  bootstrap_resamples: TODO
+  calibration_bins: 15                    # D06 (2026-10-12): equal-width bins
+  bootstrap_resamples: 10000              # D06 (2026-10-12)
   rare_finding_pooling: pooled            # proposal: pool the positives of all findings in a prevalence group (pre-registration S07)
   max_new_tokens: TODO                    # free-text suites; same rule as the teacher cache (D04): ceil(1.5 x p99 answer words) + 8
-  generation_samples: TODO                # QA rows answered by free generation (null = all); same rows for every arm
+  generation_samples: 1000                # D06 (2026-10-12): QA rows answered by free generation (null = all); same rows for every arm
   ci_level: 0.95
   multiple_testing: holm
 

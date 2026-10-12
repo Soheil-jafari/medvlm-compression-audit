@@ -19,7 +19,7 @@ from __future__ import annotations
 import copy
 import os
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -247,6 +247,30 @@ def apply_variant(config: Mapping[str, Any], variant: str | None) -> dict[str, A
 
     walk(result, "")
     return result
+
+
+def collect_open_settings(*readers: Callable[[], object]) -> None:
+    """Call each settings reader and raise ONE :class:`ConfigError` that lists every open value.
+
+    A reader raises ``ConfigError("settings still open: a, b")`` (or another message for an
+    invalid value). The open names of all readers are merged, so one run of a stage shows
+    everything that still has to be decided.
+    """
+    marker = "settings still open: "
+    open_keys: list[str] = []
+    other: list[str] = []
+    for read in readers:
+        try:
+            read()
+        except ConfigError as exc:
+            text = str(exc)
+            if marker in text:
+                open_keys += [k.strip() for k in text.split(marker, 1)[1].split(",")]
+            else:
+                other.append(text)
+    if open_keys or other:
+        parts = [marker + ", ".join(dict.fromkeys(open_keys))] if open_keys else []
+        raise ConfigError("; ".join([*parts, *other]))
 
 
 def get_by_path(config: Mapping[str, Any], dotted: str, default: Any = None) -> Any:

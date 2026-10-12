@@ -53,7 +53,7 @@ def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) 
     [
         ("01_cache_teacher_outputs.py", [], "max_new_tokens"),
         ("00_check_teacher_image_reliance.py", [], "domain.findings"),
-        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "training.learning_rate"),
+        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "training.steps"),
         (
             "06_evaluate.py",
             ["--exp", "A4", "--budget", "B2", "--variant", "n64"],
@@ -65,12 +65,16 @@ def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) 
             ["--round", "R0", "--candidate", "qwen3_vl_2b"],
             "image_longest_side",
         ),
-        ("select_student.py", ["--rank", "R1"], "evaluation.bootstrap_resamples"),
-        ("04_score_pruning_units.py", ["--exp", "E7"], "pruning.calibration.size"),
-        ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "pruning.removal.schedule"),
+        ("select_student.py", ["--rank", "R1"], "domain.small_findings.thresholds"),
+        ("04_score_pruning_units.py", ["--exp", "E7"], "pruning.clinical.ablation_method"),
+        ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "training.steps"),
         ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "budgets.metric"),
         ("07_benchmark_efficiency.py", ["--exp", "E9"], "budgets.measurement.hardware"),
-        ("04_score_pruning_units.py", ["--exp", "E5", "--variant", "taylor"], "pruning.units"),
+        (
+            "04_score_pruning_units.py",
+            ["--exp", "E5", "--variant", "taylor"],
+            "inputs.image_longest_side",
+        ),
         ("run_experiment.py", ["--exp", "E7", "--budget", "B2", "--seed", "0"], "pruning"),
     ],
 )
