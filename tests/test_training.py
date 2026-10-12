@@ -43,11 +43,7 @@ LORA = LoRAConfig(rank=4, alpha=8, dropout=0.0, target_modules=("decoder_attenti
 
 
 def _wrapper(seed: int = 0) -> HFVLMWrapper:
-    processor = tiny_vlm.tiny_processor()
-    model = tiny_vlm.tiny_model(processor, seed)
-    with torch.no_grad():  # random logits are almost flat; widen them so the loss can fall
-        model.lm_head.weight.mul_(20.0)
-    return HFVLMWrapper(model, processor, batch_size=2, mlp_channel_group_size=16)
+    return tiny_vlm.tiny_wrapper(seed)
 
 
 def _original_name(name: str) -> str:

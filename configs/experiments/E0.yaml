@@ -31,12 +31,7 @@ model:
   start_from: pretrained
   precision: full
 
-image_reliance_check:
-  tests: [blank_image, lesion_masked, random_region_masked, other_patient_image]
-  fill: 128                               # D04 decided 2026-10-12: flat mid-grey for the blank image and both mask conditions
-  mask_findings: TODO                     # finding ids the lesion masks delineate (polyp for Kvasir-SEG); must be in the frozen finding list
-  max_probes_per_finding: null            # null = all labelled images; cap only if time requires, same cap for every model
-  max_mask_probes: null
+image_reliance_check:                     # tests, fill, mask_findings and caps are in base.yaml
   gate1:                                  # D04 decided 2026-10-12 (moderate rule)
     min_original_balanced_accuracy: 0.65
     min_blank_accuracy_drop: 0.10

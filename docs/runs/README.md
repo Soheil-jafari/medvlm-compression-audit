@@ -12,7 +12,7 @@ results in its next iteration.
 | [RC-D1](RC-D1_data_preparation.md) | S03 | Data preparation: download, val/test halves, dedup, mask links, aggregate counts | Farzan | ready |
 | [RC-M1](RC-M1_model_smoke_test.md) | S04 | GPU smoke test: load pair, score probes, remove one layer | Soheil | ready |
 | [RC-E0a](RC-E0a_gate1_teacher_image_reliance.md) | S05 | Gate 1: teacher image-reliance checks (validation) | Soheil | blocked (D04, RC-D1, RC-M1, image size) |
-| RC-E0b | S05 | Teacher cache (train) and E0 validation metrics | Soheil | not written yet |
+| [RC-E0b](RC-E0b_teacher_cache_and_E0_evaluation.md) | S05 | Teacher cache (train) and E0 validation metrics | Soheil | blocked (Gate 1 verdict, RC-D1, open settings) |
 | RC-S0 | S05b | Student candidates: feasibility of all 10 on one T4 | Soheil | not written yet |
 | RC-S1 | S05b | Round 1 screen, 10 candidates | all three | not written yet |
 | RC-S2 | S05b | Round 2, top 5 rebuilt with the full recipe | all three | not written yet |

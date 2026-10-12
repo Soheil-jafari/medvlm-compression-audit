@@ -95,3 +95,16 @@ def tiny_image(seed: int, size: tuple[int, int] = (84, 56)) -> object:
     gen = torch.Generator().manual_seed(seed)
     array = (torch.rand(size[1], size[0], 3, generator=gen) * 255).to(torch.uint8).numpy()
     return PIL_Image.fromarray(array)
+
+
+def tiny_wrapper(seed: int = 0, *, widen_logits: bool = True) -> object:
+    """A wrapper around a fresh tiny model; ``widen_logits`` scales the output layer so that
+    training can lower the loss (random logits are almost flat)."""
+    from medcompress.models.hf import HFVLMWrapper
+
+    processor = tiny_processor()
+    model = tiny_model(processor, seed)
+    if widen_logits:
+        with torch.no_grad():
+            model.lm_head.weight.mul_(20.0)
+    return HFVLMWrapper(model, processor, batch_size=2, mlp_channel_group_size=16)

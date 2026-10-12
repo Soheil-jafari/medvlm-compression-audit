@@ -7,16 +7,18 @@ cache its outputs once for all distillation and recovery runs.
 
 ## Tasks
 
-- [ ] [agent] Implement `evaluation/image_reliance.py` stage pieces
+- [x] [agent] Implement `evaluation/image_reliance.py` stage pieces
   (`build_stress_inputs`, `mask_audit`, `check_teacher_image_reliance`) and
   `models/teacher_cache.py` (top-k probabilities and the generated answer text,
   sharded files, manifest). The answer text allows sequence-level distillation if
   D05 chooses option B.
-- [ ] [agent] Gate 1 threshold proposal in `docs/decisions/D04_gate1.md` (for
+- [x] [agent] Gate 1 threshold proposal in `docs/decisions/D04_gate1.md` (for
   example: accuracy drop with a blank image, lesion-mask effect above zero with the
   CI excluding zero). Validation split only.
-- [ ] [team] Approve the Gate 1 thresholds in the inbox **before** RC-E0a runs.
-- [ ] [agent] Run cards **RC-E0a** (Gate 1 checks on the validation split) and
+- [x] [team] Approve the Gate 1 thresholds in the inbox **before** RC-E0a runs (D04 answered 2026-10-12).
+- [x] [agent] Evaluation runner (`evaluation/runner.py`, `probe_suites.py`, `free_text.py`; used by
+  `scripts/06_evaluate.py` for every experiment) with tests on fake and tiny models.
+- [x] [agent] Run cards **RC-E0a** (Gate 1 checks on the validation split) and
   **RC-E0b** (teacher cache on the training split, E0 evaluation on validation).
 - [ ] [team:Soheil] Execute RC-E0a; execute RC-E0b only if Gate 1 passes.
 - [ ] [agent] `docs/results/E0.md` from the committed CSVs, with a Gate 1 verdict

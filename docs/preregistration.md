@@ -63,6 +63,31 @@ Brier score, risk-coverage, hallucination / omission / negation rates, efficienc
 - Answer parsing rules and handling of unparseable answers: TODO.
 - Exclusion criteria (e.g. failed runs, kernels not running): TODO.
 
+**Metric definitions as implemented (proposals until frozen).** The evaluation stage
+(`evaluation/runner.py`, `evaluation/probe_suites.py`) computes the following; the
+freeze either accepts them or replaces them before the first compression run.
+
+- Probe set: one yes/no probe per labelled (image, finding) pair of the split; an image
+  with several QA rows counts once per finding. Scored by one forward pass (log
+  probability of "yes" against "no"); answers are never unparseable. The same probe set
+  is used for every arm and seed (optional cap per finding, same for all).
+- Overall accuracy: fraction of probes answered correctly. Macro-F1: unweighted mean of
+  per-finding F1 (undefined F1 left out). Sensitivity and specificity per finding.
+- Small-finding recall: recall of positive probes of the findings that have lesion masks
+  (`image_reliance_check.mask_findings`), in the smallest lesion-area stratum; area cut
+  points taken from the training split and frozen in `configs/domain/endoscopy.yaml`.
+- Rare-finding recall: positives pooled within each prevalence group
+  (`evaluation.rare_finding_pooling`).
+- Calibration: confidence is the larger of P(yes) and P(no) renormalised over the two
+  answers; ECE with equal-width bins (`evaluation.calibration_bins`), Brier score on
+  P(yes), AURC from the risk-coverage curve by confidence.
+- Confidence intervals: percentile bootstrap over probes (`evaluation.bootstrap_resamples`
+  resamples, level `evaluation.ci_level`); an interval that does not contain its point
+  estimate is widened to contain it.
+- Free-text suites: a seeded sample of the split's QA rows (`evaluation.generation_samples`,
+  the same rows for every arm), greedy generation with `evaluation.max_new_tokens`.
+- Test split: `evaluation.split=test` is refused until `preregistration.frozen_on` is set.
+
 ## 7. Deviations
 
 List any deviation from this document after the freeze, with date and reason.

@@ -287,7 +287,7 @@ def run_teacher_caching(
 
         spec = ModelSpec.from_config(load_config(config["components"]["teacher"]))
         teacher = load_model(spec, image_longest_side=int(side))
-    cache_teacher_outputs(
+    out = cache_teacher_outputs(
         teacher,
         samples,
         Path(paths["cache_root"]) / "teacher",
@@ -296,6 +296,7 @@ def run_teacher_caching(
         shard_size=int(needed["shard_size"]),
         data_root=Path(paths["data_root"]),
     )
+    print(f"teacher cache complete: {len(samples)} samples, manifest {cache_manifest_hash(out)}")
 
 
 def _dataset_section(config: Mapping[str, Any]) -> Mapping[str, Any]:

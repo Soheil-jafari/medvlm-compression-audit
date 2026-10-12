@@ -431,3 +431,29 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: evaluation runner and run card RC-E0b (S05), then the student-selection runner
   (S05b).
 - Needs the team: nothing new.
+
+## Iteration 27: 2026-10-12 (interactive)
+- Stage / item: S05, evaluation runner and run card RC-E0b.
+- Did: `evaluation/probe_suites.py` (overall accuracy, macro-F1 and per-finding
+  sensitivity / specificity with bootstrap CIs, recall by lesion-size stratum, rare-finding
+  recall by prevalence group, ECE / Brier / AURC from the yes/no scores),
+  `evaluation/free_text.py` (seeded QA-row sample, language metrics, hallucination /
+  omission / negation rates) and `evaluation/runner.py` (`run_evaluation`: settings
+  check that names every open value per enabled suite, model loading for E0 and E1/E2,
+  per-probe outcomes saved under `output_root` for paired comparisons, rows upserted
+  into `metrics.csv`; the test split is refused until the pre-registration is frozen).
+  `scripts/06_evaluate.py` now stops with exit code 4 while settings are open. Shared
+  Gate 1 / audit settings moved from `E0.yaml` to `base.yaml`; new evaluation keys
+  (`split`, `max_new_tokens`, `generation_samples`, `rare_finding_pooling`). The metric
+  definitions as implemented are listed in `docs/preregistration.md` section 6 as
+  proposals. Run card RC-E0b (teacher cache on the training split, resumable over
+  several sessions, plus E0 validation metrics) written and blocked. The caching stage
+  now prints the cache manifest hash.
+  Problems found by the tests: the clinical suite and the mask audit both wrote a metric
+  called `n_probes` (renamed, and writing the same name twice now raises an error), and
+  my first hand-computed expectations for recall by group were wrong (the code was right).
+- Verified: ruff check, ruff format, pytest (643 passed).
+- Commit: see `git log` on `research-loop`.
+- Next: S05b student-selection runner and ranking (`scripts/select_student.py`), run
+  cards RC-S0 to RC-S3.
+- Needs the team: nothing new.

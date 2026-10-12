@@ -1,15 +1,14 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 26 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 27 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
-1. S05: evaluation runner for the E0 validation metrics and run card RC-E0b.
-2. S05b: student-selection runner and ranking code; run cards RC-S0 to RC-S3.
-3. S12 work-ahead: related-work draft with verified references.
+1. S05b: student-selection runner and ranking code; run cards RC-S0 to RC-S3.
+2. S12 work-ahead: related-work draft with verified references.
 
 ## Waiting on the team
 
@@ -31,7 +30,7 @@
 | S02 | CPU infrastructure | done | - |
 | S03 | Data pipeline | waiting on RC-D1 | team runs RC-D1 |
 | S04 | Model wrappers and unit surgery | code done; waiting on RC-M1 | team runs RC-M1 |
-| S05 | Teacher: Gate 1, cache | tooling done (D04 decided); evaluation runner next | RC-D1, RC-M1 |
+| S05 | Teacher: Gate 1, cache | code and run cards done (RC-E0a, RC-E0b blocked) | RC-D1, RC-M1, open settings |
 | S05b | Student selection 10 -> 5 -> 3 -> 1 | pool fixed: 10 Qwen-family models | S03, S04; freeze after RC-S0 |
 | S06 | Students E1, E2, budget reference | trainer done; recipe memo and run cards next | S05, S05b |
 | S07 | Pre-registration freeze | not started | S03, S06 |

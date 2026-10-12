@@ -53,6 +53,8 @@ EXPECTED_MODULES = {
     "medcompress.evaluation.small_findings",
     "medcompress.evaluation.rare_findings",
     "medcompress.evaluation.image_reliance",
+    "medcompress.evaluation.probe_suites",
+    "medcompress.evaluation.free_text",
     "medcompress.evaluation.calibration",
     "medcompress.evaluation.hallucination",
     "medcompress.evaluation.language",
