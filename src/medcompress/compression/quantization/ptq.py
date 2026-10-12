@@ -439,7 +439,10 @@ def load_quantized(model: VLMWrapper | Any, directory: Path | str, *, kernel_cla
 
 
 def parent_of(run: RunContext) -> dict[str, Any]:
-    """The model a quantized run starts from: E3 <- E2, E8 <- E7 (same budget), E9 <- E0."""
+    """The model a quantized run starts from: E3 <- E2, E8 <- E7 (same budget), E9 <- E0,
+    E4 <- the pretrained student (its codes come from quantization-aware training)."""
+    if run.experiment_id == "E4":
+        return {"experiment": "pretrained", "budget": None, "seed": run.seed}
     if run.experiment_id == "E3":
         return {"experiment": "E2", "budget": None, "seed": run.seed}
     if run.experiment_id == "E8":
@@ -458,6 +461,14 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
     from medcompress.evaluation.runner import load_trained_student
 
     parent = parent_of(run)
+    if parent["experiment"] == "pretrained":
+        from medcompress.models.loading import ModelSpec, load_model
+
+        student = config.get("model", {}).get("config")
+        if _open(student):
+            raise ConfigError("settings still open: model.config (the student)")
+        spec = ModelSpec.from_config(load_config(student))
+        return load_model(spec, allow_candidate=True, image_longest_side=side)
     if parent["experiment"] == "E0":
         from medcompress.models.loading import ModelSpec, load_model
 

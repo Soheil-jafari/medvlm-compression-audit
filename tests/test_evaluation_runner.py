@@ -388,7 +388,7 @@ def test_stage_needs_a_run_and_a_loadable_model(dataset: tuple[Path, list[VQASam
         load_run_model(eval_config(root), RunContext("E7", seed=0, budget="B2"), 448)
     with pytest.raises(ConfigError, match="model.config"):  # E3 starts from E2
         load_run_model(eval_config(root), RunContext("E3", seed=0, variant="w4"), 448)
-    with pytest.raises(NotImplementedError, match="E4"):
+    with pytest.raises(ConfigError, match="model.config"):  # E4 starts from the student
         load_run_model(eval_config(root), RunContext("E4", seed=0), 448)
 
 

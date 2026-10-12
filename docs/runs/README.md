@@ -22,7 +22,7 @@ results in its next iteration.
 | [RC-B0](RC-B0_e2_reference_footprint.md) | S06 | E2 reference footprint and byte split for the budgets | Amir | blocked (RC-E2 seed 0) |
 | [RC-Q0](RC-Q0_quantization_smoke_test.md) | S08 | Quantization toolchain smoke test: kernel classes, GPTQ and LLM.int8 on the student, versions | Soheil | ready |
 | [RC-E3](RC-E3_ptq.md) | S08 | E3: GPTQ w4, w8 and LLM.int8 w8a8 of E2, 3 seeds | Soheil | blocked (RC-Q0, RC-E2, RC-D1, freeze) |
-| RC-E4 | S08 | E4: quantization-aware distillation (D08 option B) | Soheil | not written yet |
+| [RC-E4](RC-E4_qakd.md) | S08 | E4: quantization-aware distillation (D08 option B), 3 seeds | Soheil | blocked (RC-Q0, RC-E0b, E2 settings, freeze) |
 | [RC-E9](RC-E9_teacher_ptq.md) | S08 | E9: the teacher at 4 bit (supplementary) | Soheil | blocked (RC-Q0, RC-D1, freeze) |
 | [RC-G2](RC-G2_gate2_pilot.md) | S09 | Gate 2 pilot at B2 (validation): E5 (3 criteria), E6, E7 | Amir | blocked (RC-E2, RC-B0, D07 scoring method, finding weights) |
 | RC-E5 ... RC-E8 | S09 | Pruning grid | Amir | not written yet |

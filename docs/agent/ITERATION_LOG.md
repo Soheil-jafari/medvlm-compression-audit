@@ -729,3 +729,25 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: E4 (`qakd.py`: 4-bit learned-step-size quantization trained with LoRA and the
   confidence-gated decoupled distillation), RC-E4.
 - Needs the team: run RC-Q0 (Soheil, one T4, about an hour as an estimate).
+
+## Iteration 39: 2026-10-12 (interactive)
+- Stage / item: S08, E4 (quantization-aware distillation, D08 option B) and RC-E4.
+- Did: `compression/quantization/qakd.py`: 4-bit symmetric group-wise quantization with a
+  learned step size per group (LSQ gradient, start at the plain-rounding scales); LoRA trained
+  *through* the rounding (`QATLinear` uses `quantize(W + B A)`), so the exported codes are
+  exactly the trained model; GRACE's confidence-gated decoupled distillation computed on the
+  cached top-20 (formula from GRACE's `grace_modules.py`: alpha 1, beta 4, temperature 2, gate
+  `exp(-H / log V)` with the mass outside the top 20 as one outcome); a NumPy reference for the
+  gate, the loss and the quantizer. The shared trainer gained `kd_loss` (`topk_kl` default,
+  `gated_dkd` for E4) and `attach_adapter`; `training.mode: qakd` runs the E4 stage on the E2
+  training pool; the export uses the E3 `w4` checkpoint format, and the runner loads E4 on the
+  pretrained student. E4 config inherits `configs/quantization.yaml` and sets gradient
+  checkpointing (memory only). Run card RC-E4 (blocked).
+- Verified: ruff check, ruff format, pytest (691 passed, 15 skipped without torch). Here: the
+  decoupled terms add up to the KL divergence (TCKD + (1 - p_t) NCKD), the gate, masking and
+  the LSQ gradient values. On Kaggle (`tests/test_qakd_torch.py`): the torch loss and quantizer
+  against the references, the exact export, and the E4 stage on the tiny model reloaded with the
+  same answers.
+- Commit: see `git log` on `research-loop`.
+- Next: pre-registration draft (S07).
+- Needs the team: RC-Q0 (Soheil).

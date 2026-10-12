@@ -16,7 +16,9 @@
   E3/E8/E9 stage (`scripts/03_quantize.py`) and model loading in the runner.
 - [x] [agent] Run cards **RC-Q0** (toolchain smoke test, ready), **RC-E3** (3 variants x 3
   seeds) and **RC-E9** (1 run), both blocked on RC-Q0, the data and the freeze.
-- [ ] [agent] `compression/quantization/qakd.py` (D08 option B) and run card **RC-E4**.
+- [x] [agent] `compression/quantization/qakd.py` (D08 option B: learned step-size 4-bit
+  quantization with LoRA trained through the rounding, GRACE's confidence-gated decoupled
+  distillation on the cached top-20, exact export in the E3 `w4` format) and run card **RC-E4**.
 - [ ] [agent] After RC-Q0: set `quantization.kernel_class` and the library versions, pin them in
   `requirements/train.txt`.
 - [ ] [team:Soheil] Execute the run cards.

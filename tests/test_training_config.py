@@ -150,6 +150,10 @@ def test_stage_entry_stops_on_open_settings(tmp_path: Path) -> None:
     assert "model.config" in str(info.value) and "inputs.image_longest_side" in str(info.value)
 
 
-def test_qakd_belongs_to_the_quantization_stage() -> None:
-    with pytest.raises(NotImplementedError, match="S08"):
+def test_qakd_runs_the_e4_stage_which_names_what_is_open() -> None:
+    from medcompress.config import ConfigError, RunContext
+
+    with pytest.raises(ConfigError, match="--exp"):
         run_student_training({"training": _section(mode="qakd")}, None)
+    with pytest.raises(ConfigError, match="quantization.recipe"):
+        run_student_training({"training": _section(mode="qakd")}, RunContext("E4", seed=0))

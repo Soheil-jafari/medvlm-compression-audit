@@ -257,6 +257,36 @@ def forward_answer_logits(module: Any, batch: Batch) -> Any:
     return answer_logits(out.logits, batch.answer_length)
 
 
+KD_LOSSES: tuple[str, ...] = ("topk_kl", "gated_dkd")
+"""Distillation terms: ``topk_kl`` (E2, recovery) and ``gated_dkd`` (E4, D08 option B)."""
+
+
+def _kd_term(logits: Any, batch: Batch, cfg: TrainConfig) -> Any:
+    kind = cfg.extra.get("kd_loss", "topk_kl")
+    if kind == "topk_kl":
+        return topk_kl_loss(
+            logits,
+            batch.topk_ids,
+            batch.topk_logprobs,
+            batch.topk_mask,
+            temperature=cfg.kd_temperature,
+        )
+    if kind == "gated_dkd":
+        from medcompress.compression.quantization.qakd import gated_dkd_loss
+
+        return gated_dkd_loss(
+            logits,
+            batch.topk_ids,
+            batch.topk_logprobs,
+            batch.targets,  # the teacher's cached answer tokens (teacher-forced)
+            batch.topk_mask,
+            alpha=float(cfg.extra["dkd_alpha"]),
+            beta=float(cfg.extra["dkd_beta"]),
+            temperature=float(cfg.extra["dkd_temperature"]),
+        )
+    raise ValueError(f"kd_loss must be one of {KD_LOSSES}, got {kind!r}")
+
+
 def _step_loss(
     module: Any, gt: Batch, teacher: Batch | None, cfg: TrainConfig
 ) -> tuple[Any, float, float]:
@@ -264,18 +294,10 @@ def _step_loss(
     ce = answer_ce_loss(logits, gt.targets)
     if cfg.kd_weight <= 0:
         return ce, float(ce.detach()), 0.0
-    if teacher is None:
-        kl = topk_kl_loss(
-            logits, gt.topk_ids, gt.topk_logprobs, gt.topk_mask, temperature=cfg.kd_temperature
-        )
+    if teacher is None:  # the teacher's answer equals the ground truth: one pass serves both
+        kl = _kd_term(logits, gt, cfg)
     else:
-        kl = topk_kl_loss(
-            forward_answer_logits(module, teacher),
-            teacher.topk_ids,
-            teacher.topk_logprobs,
-            teacher.topk_mask,
-            temperature=cfg.kd_temperature,
-        )
+        kl = _kd_term(forward_answer_logits(module, teacher), teacher, cfg)
     return combined_kd_loss(ce, kl, kd_weight=cfg.kd_weight), float(ce.detach()), float(kl.detach())
 
 
@@ -289,9 +311,17 @@ def _learning_rate(cfg: TrainConfig, step: int) -> float:
 
 
 def train_lora(
-    student: HFVLMWrapper, examples: Sequence[TrainExample], cfg: TrainConfig, *, seed: int
+    student: HFVLMWrapper,
+    examples: Sequence[TrainExample],
+    cfg: TrainConfig,
+    *,
+    seed: int,
+    attach_adapter: bool = True,
 ) -> TrainResult:
     """Attach LoRA to the student (if not attached) and train it for ``cfg.steps`` optimizer steps.
+
+    With ``attach_adapter=False`` the trainable parameters are whatever already requires a
+    gradient (E4 installs its own quantizer with LoRA before calling this).
 
     One optimizer step uses ``batch_size * grad_accumulation`` examples taken in a
     seeded shuffled order (cycling if the data run out). Mixed precision is used when
@@ -306,7 +336,7 @@ def train_lora(
     if not examples:
         raise ValueError("no training examples")
     torch.manual_seed(seed)
-    if not isinstance(student.module, peft.PeftModel):
+    if attach_adapter and not isinstance(student.module, peft.PeftModel):
         attach_lora(student, cfg.lora)
     module = student.module
     if cfg.extra.get("gradient_checkpointing"):
@@ -396,7 +426,7 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
     """Stage entry point for ``scripts/02_train_student.py``.
 
     Dispatches on ``training.mode``: ``sft`` (E1) and ``offline_kd`` (E2) here;
-    ``qakd`` (E4) is part of the quantization stage. Both modes train on the same
+    ``qakd`` (E4) in ``compression/quantization/qakd.py``. All modes train on the same
     :func:`training_pool`. Writes the adapter under ``paths.checkpoint_root`` and a few
     training numbers to the results CSV.
     """
@@ -405,7 +435,10 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
 
     cfg = TrainConfig.from_config(config["training"])
     if cfg.mode == "qakd":
-        raise NotImplementedError("TODO: quantization-aware distillation is part of S08 (E4).")
+        from medcompress.compression.quantization.qakd import run_qakd_training
+
+        run_qakd_training(config, run)
+        return
     student_cfg = config.get("model", {}).get("config")
     side = config.get("inputs", {}).get("image_longest_side")
     open_keys = [

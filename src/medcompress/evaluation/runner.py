@@ -237,13 +237,11 @@ def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLM
 
         base = load_trained_student(config, "E2", run.seed, side)
         return load_pruned(base, pruned_dir(config, run))
-    if run.experiment_id in ("E3", "E8", "E9"):
+    if run.experiment_id in ("E3", "E4", "E8", "E9"):
         from medcompress.compression.quantization.ptq import load_run_quantized
 
         return load_run_quantized(config, run, side)
-    raise NotImplementedError(
-        f"loading the model of {run.experiment_id} arrives with its stage (E4: S08)."
-    )
+    raise NotImplementedError(f"no model loader for {run.experiment_id}")
 
 
 # ------------------------------------------------------------------- probes
