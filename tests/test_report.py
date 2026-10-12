@@ -10,6 +10,7 @@ from medcompress.evaluation.aggregate import load_results, summarise_over_seeds
 from medcompress.evaluation.report import (
     GENERATED_HEADER,
     MISSING,
+    ablation_table,
     fmt_mean_sd,
     macro_name,
     main_table,
@@ -74,6 +75,23 @@ def test_tables_contain_generated_numbers(tmp_path: Path) -> None:
     macros = numbers_tex(summary)
     assert "\\newcommand{\\resESevenBTwoSmallFindingRecall}{0.720}" in macros
     assert "\\newcommand{\\resESevenVsBestBTwoDiffSmallFindingRecallLow}{0.010}" in macros
+
+
+def test_arms_identical_to_e7_show_e7_only_without_runs_of_their_own(tmp_path: Path) -> None:
+    _tree(tmp_path / "results")
+    summary = summarise_over_seeds(load_results(tmp_path / "results"))
+    lines = ablation_table(summary).splitlines()
+    reused = next(line for line in lines if line.startswith("A4:n128"))
+    assert "(= E7)" in reused and "0.720 $\\pm$ 0.020" in reused
+    assert "(= E7)" not in next(line for line in lines if line.startswith("A4:n64"))
+    append_results(
+        [{"experiment": "A4:n128", "budget": "B2", "seed": 0,
+          "metric": "small_finding_recall", "value": 0.5}],
+        tmp_path / "results" / "A4" / "n128" / "B2" / "seed0" / "metrics.csv",
+    )  # fmt: skip
+    summary = summarise_over_seeds(load_results(tmp_path / "results"))
+    own = next(r for r in ablation_table(summary).splitlines() if r.startswith("A4:n128"))
+    assert "(= E7)" not in own and "0.500" in own
 
 
 def test_fmt_and_macro_names() -> None:

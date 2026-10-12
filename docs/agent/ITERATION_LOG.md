@@ -791,3 +791,28 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: ablations A1-A6 (S10): check the variant wiring and write RC-A1 to RC-A6.
 - Needs the team: nothing new.
+
+## Iteration 42: 2026-10-12 (interactive)
+- Stage / item: S10, ablation wiring and run cards RC-A1 to RC-A6; two pipeline flaws.
+- Did: checked that every ablation setting reaches the code (weighting, criterion, calibration
+  size, effect definition, unit types). **Flaw 1 (A3):** every arm ranks units by score per
+  parameter (D07); for random scores this sends whole layers first (a layer is about 100 times
+  a channel group), so A3 tested random *layer* removal (estimate on the student's unit sizes:
+  about 98 % of the removed parameters at a 30 % cut). A3 now ranks without the division
+  (`score_normalisation: none`); proposal for the team. **Flaw 2 (score reuse):** stage 04
+  reused saved scores when only the unit set, calibration size and seed matched, so a changed
+  `pruning.clinical` setting (for example the scoring method of D07 section 1, decided after
+  the RC-G2 pilot) or a retrained E2 would have silently reused old scores. The fingerprint now
+  holds the criterion's own settings (clinical: also the domain's findings, the probe and the
+  weight table) and a hash of the E2 adapter. **E7 reuse:** `A4:n128` and `A5:logprob_drop` have
+  exactly E7's settings (test); proposal: report E7's B2 runs for them
+  (`registry.SAME_AS_E7`, the ablation table falls back to E7 only when the arm has no runs).
+  Wrote RC-A1 to RC-A6 (27 runs, 33 without the reuse), all blocked like the pruning grid; RC-A5
+  states that the KL effect needs exact scoring, so the unit set of A5 follows D07 section 1. The
+  pruning cards now also commit the scoring settings file, so a later session can reuse scores.
+- Verified: ruff check, ruff format, pytest (new light tests: A3 order, fingerprint, identity
+  of the reused arms, table fallback); paper tables regenerated.
+- Commit: see `git log` on `research-loop`.
+- Next: S11 aggregation and figures (the A4 curve, the comparisons step from `outcomes*.npz`),
+  RC-X1 and RC-T1.
+- Needs the team: A3 ranking and the E7 reuse (pre-registration section 7).

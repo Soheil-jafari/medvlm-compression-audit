@@ -29,7 +29,12 @@ results in its next iteration.
 | [RC-E6](RC-E6_output_similarity_grid.md) | S09 | E6: output-similarity layer pruning x B1-B3 x 3 seeds (9 runs) | Amir | blocked (as RC-E5) |
 | [RC-E7](RC-E7_clinical_pruning_grid.md) | S09 | E7: clinical criterion x B1-B3 x 3 seeds (9 runs) | Amir | blocked (as RC-E5, weights frozen) |
 | [RC-E8](RC-E8_clinical_pruning_plus_ptq4.md) | S09 | E8: E7 + 4-bit GPTQ x B1-B3 x 3 seeds (9 runs) | Amir | blocked (RC-E7, RC-Q0, freeze) |
-| RC-A1 ... RC-A6 | S10 | Ablations at B2 | Amir | not written yet |
+| [RC-A1](RC-A1_unweighted_criterion.md) | S10 | A1: unweighted clinical criterion, B2 x 3 seeds | Amir | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-E7 at B2) |
+| [RC-A2](RC-A2_rarity_only_weights.md) | S10 | A2: rarity-only weights, B2 x 3 seeds | Amir | blocked (as RC-A1) |
+| [RC-A3](RC-A3_random_removal.md) | S10 | A3: random removal, B2 x 3 seeds | Amir | blocked (as RC-A1) |
+| [RC-A4](RC-A4_calibration_size.md) | S10 | A4: 32 / 64 / 256 calibration images, B2 x 3 seeds (128 = E7) | Amir | blocked (as RC-A1) |
+| [RC-A5](RC-A5_delta_definition.md) | S10 | A5: KL effect, B2 x 3 seeds (log-prob drop = E7) | Amir | blocked (as RC-A1; unit set depends on D07 section 1) |
+| [RC-A6](RC-A6_unit_granularity.md) | S10 | A6: layers only / heads and channel groups, B2 x 3 seeds | Amir | blocked (as RC-A1) |
 | RC-X1 | S11 | External test | Farzan | not written yet |
 | RC-T1 | S11 | Final timing on the rented GPU | Amir | not written yet |
 

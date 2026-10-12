@@ -76,7 +76,9 @@ For each of the five runs (`<run>` is `E5/<variant>`, `E6` or `E7`):
 
 - `results/<run>/B2/seed0/metrics.csv` and `efficiency.csv`
 - `results/<run>/B2/seed0/removal.json` and `budget_search.csv`
-- `results/<run>/nobudget/seed0/unit_scores.csv` (numbers per unit, no images)
+- `results/<run>/nobudget/seed0/unit_scores.csv`, `unit_scores.settings.json` and
+  `metrics.csv` (numbers per unit and the scoring settings, no images; a later run reuses the
+  scores only when the settings file matches)
 - This card with section 6 filled.
 
 Check before committing: `git status` shows no images, adapters, caches or `outcomes.npz`.

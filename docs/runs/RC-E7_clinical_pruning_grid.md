@@ -72,7 +72,9 @@ For every run (`<run>` = `E7`):
 
 - `results/<run>/<budget>/seed<k>/metrics.csv`, `metrics_test.csv`, `efficiency.csv`,
   `efficiency_setup.json`, `removal.json` and `budget_search.csv`
-- `results/<run>/nobudget/seed<k>/unit_scores.csv` (numbers per unit, no images)
+- `results/<run>/nobudget/seed<k>/unit_scores.csv`, `unit_scores.settings.json` and
+  `metrics.csv` (numbers per unit and the scoring settings, no images; a later run reuses the
+  scores only when the settings file matches)
 - This card with section 6 filled.
 
 Check before committing: `git status` shows no images, adapters, checkpoints or

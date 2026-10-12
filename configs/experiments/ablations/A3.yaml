@@ -13,3 +13,9 @@ experiment:
 
 pruning:
   criterion: random
+  removal:
+    # A random score has no per-weight meaning: divided by the unit size it would put the whole
+    # layers (about 100 times larger than a channel group) first, so A3 would remove random
+    # layers instead of random units. Without the division every unit is equally likely to go
+    # next. Proposed 2026-10-12 (iteration 42); [team] confirm in the pre-registration.
+    score_normalisation: none

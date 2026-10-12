@@ -136,6 +136,8 @@ kernel check).
 | Pruning | units: decoder layers, KV groups, MLP channel groups of 128; score per parameter; first 2 and last 1 layers protected; 128 calibration images; one-shot removal; 1 negative per positive; signed effects; probe batch 4; how a unit is switched off while scored **[team]** (D07 section 1) | D07 |
 | Quantization | E3 `w4`, `w8`: GPTQ, groups of 128, 128 calibration images, decoder linear layers only; `w8a8`: LLM.int8; E8, E9: the `w4` recipe; kernel class and versions from RC-Q0 | D08 |
 | E4 | 4-bit learned step sizes (groups of 128), LoRA through the rounding, GRACE's confidence-gated decoupled distillation on the cached top-20 (alpha 1, beta 4, T 2) | D08 |
+| Ablations (B2, 3 seeds) | A1 weights 1; A2 rarity only; A3 random order over E7's units, ranked **without** the per-parameter division **[team]** confirm (with it, whole layers would go first: an estimate from the student's unit sizes gives about 98 % of the removed parameters at a 30 % cut, so A3 would be random layer removal; without it about half); A4 32 / 64 / 128 / 256 nested calibration images; A5 KL effect (scored exactly; if D07 section 1 uses the first-order estimate for some units, both A5 variants run on the exactly scored unit types only); A6 layers only / KV and channel groups only | S10, iteration 42 |
+| Reuse of E7 **[team]** | proposal: `A4:n128` and `A5:logprob_drop` have exactly E7's settings (a test checks it), so E7's B2 runs are reported for them (6 runs fewer) | iteration 42 |
 
 ## 8. Deviations from the methods we follow (declared in advance)
 
