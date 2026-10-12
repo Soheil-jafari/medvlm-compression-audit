@@ -1,16 +1,16 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 23 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 24 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S04 (model wrappers and unit surgery); S03 waiting on RC-D1
+**Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
-1. S04: model loading and yes/no scoring for the teacher and the ten student
-   candidates, tested on CPU with tiny randomly initialised models; run card RC-M1.
-   (Unit enumeration and physical removal are done and tested.)
-2. S12 work-ahead: related-work draft with verified references.
+1. S05: teacher-output cache (`models/teacher_cache.py`) and the Gate 1 image-reliance
+   check, tested on tiny offline models; D04 memo (cache size and top-k).
+2. S05b: student-selection runner and ranking code; run cards RC-S0 to RC-S3.
+3. S12 work-ahead: related-work draft with verified references.
 
 ## Waiting on the team
 
@@ -21,6 +21,7 @@
 | 2b | CI on `main` is red (import error fixed on `research-loop` in a7ec704); merging `research-loop` into `main` turns it green | Soheil | 2026-10-12 |
 | 4 | Each member confirms own access to Kvasir-VQA-x1 and Kvasir-SEG (inbox) | all | 2026-10-12 |
 | 5 | Run RC-D1 (`docs/runs/RC-D1_data_preparation.md`) and commit `results/data/summary.csv` | Farzan | 2026-10-12 |
+| 6 | Run RC-M1 (`docs/runs/RC-M1_model_smoke_test.md`, Kaggle 2 x T4) and commit `results/smoke/RC-M1.csv` | Soheil | 2026-10-12 |
 
 ## Stages
 
@@ -30,7 +31,7 @@
 | S01 | Decisions | done (dataset-access confirmations pending) | - |
 | S02 | CPU infrastructure | done | - |
 | S03 | Data pipeline | waiting on RC-D1 | team runs RC-D1 |
-| S04 | Model wrappers and unit surgery | in progress (surgery done; loading and wrapper left) | - |
+| S04 | Model wrappers and unit surgery | code done; waiting on RC-M1 | team runs RC-M1 |
 | S05 | Teacher: Gate 1, cache | not started | S03, S04 |
 | S05b | Student selection 10 -> 5 -> 3 -> 1 | pool fixed: 10 Qwen-family models | S03, S04; freeze after RC-S0 |
 | S06 | Students E1, E2, budget reference | not started | S05, S05b |

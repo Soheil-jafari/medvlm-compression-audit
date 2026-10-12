@@ -355,3 +355,31 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S04 model loading (`models/loading.py`), the wrapper with yes/no scoring,
   and the RC-M1 smoke-test card.
 - Needs the team: nothing new.
+
+## Iteration 24: 2026-10-12 (interactive)
+- Stage / item: S04, model loading, wrapper, smoke test, pruned checkpoints.
+- Did: `models/loading.py` (ModelSpec from the configs, refusal of unpinned or
+  still-candidate models, opt-in for families that ship their own code, bitsandbytes
+  option, adapter loading), `models/hf.py` (`HFVLMWrapper`: chat-template inputs with
+  left padding, one-forward-pass yes/no scoring, greedy generation with top-k
+  log-probabilities and the stop token kept, unit listing, parameter count),
+  `models/tokens.py` (yes/no answer tokens, tokenizer fingerprint), `models/smoke.py`
+  and `scripts/smoke_models.py` (RC-M1 measurements), and
+  `compression/pruning/checkpoint.py` (a pruned model is saved as weights plus a
+  manifest of removal steps and reloaded by replaying them on the base model, because
+  per-layer shapes cannot be described by one config). Tests build a tiny offline
+  Qwen2.5-VL with the real processor classes and a word-level tokenizer.
+  Two bugs found by the tests and fixed: the tokenizer fingerprint changed after the
+  first padded call (padding settings are now excluded), and an adapter saved with
+  older module names left every language-model LoRA module untrained with the
+  installed peft and transformers (loading now remaps the keys and fails if any
+  language-model adapter module stays at zero). Library versions the code was tested
+  with are pinned in `requirements/train.txt` and `pyproject.toml`.
+  Run card `docs/runs/RC-M1_model_smoke_test.md` written with pass criteria fixed
+  before the run.
+- Verified: ruff check, ruff format, pytest (542 passed before the checkpoint test,
+  all passed after).
+- Commit: see `git log` on `research-loop`.
+- Next: S05: teacher-output cache (`teacher_cache.py`), image-reliance check script
+  for Gate 1, D04 memo; then the student-selection runner (S05b).
+- Needs the team: run RC-M1 (Soheil) and commit `results/smoke/RC-M1.csv`.

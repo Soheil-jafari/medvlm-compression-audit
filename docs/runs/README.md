@@ -10,7 +10,7 @@ results in its next iteration.
 | Card | Stage | What | Who | Status |
 |---|---|---|---|---|
 | [RC-D1](RC-D1_data_preparation.md) | S03 | Data preparation: download, val/test halves, dedup, mask links, aggregate counts | Farzan | ready |
-| RC-M1 | S04 | GPU smoke test: load pair, score probes, remove one layer | Soheil | not written yet |
+| [RC-M1](RC-M1_model_smoke_test.md) | S04 | GPU smoke test: load pair, score probes, remove one layer | Soheil | ready |
 | RC-E0a | S05 | Gate 1: teacher image-reliance checks (validation) | Soheil | not written yet |
 | RC-E0b | S05 | Teacher cache (train) and E0 validation metrics | Soheil | not written yet |
 | RC-S0 | S05b | Student candidates: feasibility of all 10 on one T4 | Soheil | not written yet |

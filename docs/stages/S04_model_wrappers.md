@@ -11,19 +11,19 @@ Round 2 models and the final student.
 
 ## Tasks
 
-- [ ] [agent] `models/loading.py` and a `VLMWrapper` for the teacher family and a
+- [x] [agent] `models/loading.py` and a `VLMWrapper` (`models/hf.py`) for the teacher family and a
   generic path for the 10 student candidates:
   `generate`, `score_yes_no` (log-probabilities of the answer tokens at the answer
   position, no free generation), `list_prunable_units` (decoder layers, attention
   head groups that respect grouped key-value heads, MLP channel groups; projector
   always kept).
-- [ ] [agent] `compression/pruning/units.py` (`validate_removal_set`) and
+- [x] [agent] `compression/pruning/units.py` (`validate_removal_set`) and
   `compression/pruning/apply.py`: reversible ablation for scoring; physical removal
   of layers, head groups and channel groups that yields a smaller saved model.
-- [ ] [agent] Tests with a tiny randomly initialised model of the same architecture
+- [x] [agent] Tests with a tiny randomly initialised model of the same architecture
   class (built from a config, no weight download), marked `heavy` and skipped in CI
   when torch is missing. The agent runs them on CPU in its own session.
-- [ ] [agent] Run card **RC-M1**: GPU smoke test on Kaggle. Load teacher and student
+- [x] [agent] Run card **RC-M1** (`docs/runs/RC-M1_model_smoke_test.md`, script `scripts/smoke_models.py`): GPU smoke test on Kaggle. Load teacher and student
   in the planned precision, check tokenizer identity at runtime, score 8 probes,
   remove one layer physically, record peak memory and timings to
   `results/smoke/RC-M1.csv`.

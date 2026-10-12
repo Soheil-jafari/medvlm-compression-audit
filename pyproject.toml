@@ -35,10 +35,11 @@ dependencies = [
 
 [project.optional-dependencies]
 train = [
-    "torch>=2.1",
-    "transformers",  # TODO: pin once teacher/student pair is decided
-    "peft",
-    "accelerate",
+    "torch>=2.8",
+    "torchvision>=0.23",
+    "transformers==5.19.0",
+    "peft==0.21.2",
+    "accelerate>=1.0",
     "datasets",
 ]
 dev = [
