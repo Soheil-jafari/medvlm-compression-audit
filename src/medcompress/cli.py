@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from medcompress.config import (
+    ConfigError,
     RunContext,
     experiment_config_path,
     find_todos,
@@ -18,6 +19,9 @@ from medcompress.registry import BUDGET_IDS, REGISTRY, get_experiment, validate_
 
 NOT_IMPLEMENTED_EXIT_CODE = 3
 """Exit code used when a stage is still a stub, so pipelines never mistake it for success."""
+
+CONFIG_INCOMPLETE_EXIT_CODE = 4
+"""Exit code used when a stage is implemented but a setting it needs is still ``TODO``."""
 
 
 def build_parser(description: str, *, experiment_args: bool = True) -> argparse.ArgumentParser:
@@ -146,15 +150,19 @@ def report_todos(config: dict[str, Any], limit: int = 10) -> None:
 
 
 def run_stage(stage: str, func: Callable[..., Any], /, **kwargs: Any) -> int:
-    """Call a stage function and turn ``NotImplementedError`` into a clean message.
+    """Call a stage function and turn expected stops into clean messages.
 
-    Returns 0 on success and :data:`NOT_IMPLEMENTED_EXIT_CODE` if the stage is a stub.
+    Returns 0 on success, :data:`NOT_IMPLEMENTED_EXIT_CODE` if the stage is a stub and
+    :data:`CONFIG_INCOMPLETE_EXIT_CODE` if a setting it needs is still open.
     """
     try:
         func(**kwargs)
     except NotImplementedError as exc:
         print(f"[{stage}] not implemented yet: {exc}")
         return NOT_IMPLEMENTED_EXIT_CODE
+    except ConfigError as exc:
+        print(f"[{stage}] configuration incomplete: {exc}")
+        return CONFIG_INCOMPLETE_EXIT_CODE
     return 0
 
 

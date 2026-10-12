@@ -120,12 +120,10 @@ def test_public_functions_have_return_annotations(name: str) -> None:
 def test_stubs_raise_not_implemented_with_todo() -> None:
     from medcompress.compression.pruning.criteria.clinical import ClinicalCriterion
     from medcompress.data.base import load_dataset
-    from medcompress.evaluation.image_reliance import check_teacher_image_reliance
 
     for call in (
         lambda: ClinicalCriterion({}).ablate(None, None),
         lambda: load_dataset({}),
-        lambda: check_teacher_image_reliance({}, None),
     ):
         with pytest.raises(NotImplementedError, match="TODO"):
             call()

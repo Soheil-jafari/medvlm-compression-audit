@@ -89,3 +89,25 @@ def append_results(rows: Iterable[Mapping[str, Any]], path: str | Path) -> int:
             writer.writerow({col: row.get(col, "") for col in RESULTS_COLUMNS})
             count += 1
     return count
+
+
+def upsert_results(rows: Iterable[Mapping[str, Any]], path: str | Path) -> int:
+    """Write rows to a results CSV, replacing existing rows with the same key.
+
+    The key is (experiment, budget, seed, metric), so running a check again updates
+    its rows instead of duplicating them, while rows of other metrics in the file
+    are kept. Returns the number of rows written for ``rows``.
+    """
+    path = Path(path)
+    new = [dict(row) for row in rows]
+    fresh = {(r["experiment"], str(r.get("budget", "")), str(r["seed"]), r["metric"]) for r in new}
+    kept: list[dict[str, Any]] = []
+    if path.exists():
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            for old in csv.DictReader(handle):
+                key = (old["experiment"], old.get("budget", ""), str(old["seed"]), old["metric"])
+                if key not in fresh:
+                    kept.append(old)
+        path.unlink()
+    append_results(kept + new, path)
+    return len(new)

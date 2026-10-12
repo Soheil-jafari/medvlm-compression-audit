@@ -162,6 +162,14 @@ def prepare(
     for k, value in enumerate(thresholds, start=1):
         rows.append(_row(f"lesion_area_threshold:q{k}", value))
     raw = {split: _raw_rows(data_root, split) for split in ("train", "test")}
+    # answer lengths in words (aggregate only); they set the teacher cache generation limit
+    words = sorted(len(str(r.get("answer", "")).split()) for r in raw["train"])
+    if words:
+        for pct in (50, 90, 99):
+            rows.append(
+                _row(f"answer_words:p{pct}", words[min(len(words) - 1, len(words) * pct // 100)])
+            )
+        rows.append(_row("answer_words:max", words[-1]))
     for key, count in sorted(answer_value_counts(raw, dataset_config.get("label_mapping")).items()):
         rows.append(_row(f"answer_count:{key}", count))
     return PreparedData(

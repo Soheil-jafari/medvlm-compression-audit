@@ -16,6 +16,7 @@ paths:
   checkpoint_root: ${env:MEDCOMPRESS_CHECKPOINT_ROOT,checkpoints}
   output_root: ${env:MEDCOMPRESS_OUTPUT_ROOT,outputs}
   results_root: ${env:MEDCOMPRESS_RESULTS_ROOT,results}
+  private_root: ${env:MEDCOMPRESS_PRIVATE_ROOT,private}   # splits and mask links from RC-D1; never in git
 
 # Which candidate configs are active. Nothing here is decided yet.
 components:
@@ -31,6 +32,9 @@ components:
     masks: data/kvasir_seg.yaml           # matched to VQA images by fingerprint
     rare_findings: data/kvasir_vqa_x1.yaml
     external_test: data/endobench.yaml    # licence / download still to verify
+
+inputs:
+  image_longest_side: TODO                # px; one value for the teacher and every student, fixed at the S05b freeze
 
 seeds:
   training: [0, 1, 2]                     # 3 seeds for every training arm

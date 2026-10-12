@@ -37,8 +37,6 @@ def test_help(script: Path, tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("script", "args"),
     [
-        ("00_check_teacher_image_reliance.py", []),
-        ("01_cache_teacher_outputs.py", []),
         ("02_train_student.py", ["--exp", "E2", "--seed", "1"]),
         ("03_quantize.py", ["--exp", "E3", "--variant", "w4"]),
         ("04_score_pruning_units.py", ["--exp", "E7"]),
@@ -52,6 +50,25 @@ def test_stub_stage_exits_cleanly(script: str, args: list[str], tmp_path: Path) 
     result = _run(script, *args, cwd=tmp_path)
     assert result.returncode == NOT_IMPLEMENTED_EXIT_CODE, result.stderr
     assert "not implemented yet" in result.stdout
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("script", "open_setting"),
+    [
+        ("01_cache_teacher_outputs.py", "top_k"),
+        ("00_check_teacher_image_reliance.py", "gate1.min_blank_accuracy_drop"),
+    ],
+)
+def test_teacher_stages_stop_cleanly_while_settings_are_open(
+    script: str, open_setting: str, tmp_path: Path
+) -> None:
+    """Implemented stages whose thresholds and limits wait for the D04 decision."""
+    from medcompress.cli import CONFIG_INCOMPLETE_EXIT_CODE
+
+    result = _run(script, cwd=tmp_path)
+    assert result.returncode == CONFIG_INCOMPLETE_EXIT_CODE, result.stderr
+    assert "configuration incomplete" in result.stdout and open_setting in result.stdout
     assert "Traceback" not in result.stderr
 
 

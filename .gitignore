@@ -2,6 +2,7 @@
 # "/data/" is anchored to the repo root on purpose: an unanchored "data/" also
 # matched src/medcompress/data/ and configs/data/ and kept them out of git.
 /data/
+/private/
 notebooks/data/
 scripts/data/
 datasets/

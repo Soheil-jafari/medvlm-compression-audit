@@ -403,3 +403,29 @@ def test_untrained_adapter_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ModelConfigError, match="untrained"):
         load_adapter(fresh, directory)
     load_adapter(fresh, directory, check_trained=False)  # explicit opt-out still works
+
+
+def test_teacher_cache_from_the_real_wrapper(wrapper: HFVLMWrapper, tmp_path: Path) -> None:
+    from medcompress.data.base import VQASample
+    from medcompress.models.teacher_cache import cache_teacher_outputs, load_teacher_cache
+
+    samples = []
+    for i in range(3):
+        _image(i + 1).save(tmp_path / f"{i}.png")
+        samples.append(VQASample(f"s{i}", "d", f"{i}.png", PROBE, "yes"))
+    out = cache_teacher_outputs(
+        wrapper,
+        samples,
+        tmp_path / "cache",
+        top_k=4,
+        max_new_tokens=3,
+        shard_size=2,
+        data_root=tmp_path,
+    )
+    records = list(load_teacher_cache(out))
+    direct = wrapper.generate([tmp_path / "1.png"], [PROBE], max_new_tokens=3, return_topk=4)[0]
+    assert [r.sample_id for r in records] == ["s0", "s1", "s2"]
+    assert records[1].answer_token_ids.tolist() == list(direct.token_ids)
+    assert records[1].topk_token_ids[:, 0].tolist() == list(direct.token_ids)  # greedy = top-1
+    assert records[1].topk_token_ids.shape == (len(direct.token_ids), 4)
+    assert (records[1].topk_logprobs[:, :-1] >= records[1].topk_logprobs[:, 1:]).all()

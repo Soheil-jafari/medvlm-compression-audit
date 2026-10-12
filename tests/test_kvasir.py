@@ -172,3 +172,34 @@ def test_prepare_end_to_end(tmp_path: Path) -> None:
     assert (tmp_path / "private" / "splits.json").is_file()
     append_results(prepared.rows, tmp_path / "results" / "data" / "summary.csv")
     assert validate_results_tree(tmp_path / "results") == []
+
+
+def test_load_prepared_rebuilds_the_prepared_splits(tmp_path: Path) -> None:
+    import pytest
+
+    from medcompress.data.prepare import prepare, write_private_outputs
+    from medcompress.data.prepared import load_prepared
+    from medcompress.data.splits import split_fingerprint
+
+    data = tmp_path / "data"
+    _layout(data)
+    config = {"name": "Kvasir-VQA-x1", "label_mapping": RULES}
+    prepared = prepare(data, config, split_seed=1, dedup_threshold=4, mask_threshold=4)
+    write_private_outputs(prepared, tmp_path / "private", data)
+
+    rebuilt = load_prepared(
+        data, config, tmp_path / "private", expected_split_sha256=prepared.split_sha256
+    )
+    assert set(rebuilt) == set(prepared.splits)
+    for name, members in prepared.splits.items():
+        assert [s.sample_id for s in rebuilt[name]] == [s.sample_id for s in members]
+        assert all(s.split == name for s in rebuilt[name])
+    assert split_fingerprint(rebuilt) == prepared.split_sha256
+    linked = [s for members in rebuilt.values() for s in members if s.mask_path]
+    assert linked and all(0 < (s.lesion_area or 0) <= 1 for s in linked)
+
+    with pytest.raises(ValueError, match="split fingerprint"):
+        load_prepared(data, config, tmp_path / "private", expected_split_sha256="0" * 64)
+    (data / "kvasir_vqa_x1" / "train.jsonl").write_text("")  # a different dataset version
+    with pytest.raises(ValueError, match="not in the dataset"):
+        load_prepared(data, config, tmp_path / "private")

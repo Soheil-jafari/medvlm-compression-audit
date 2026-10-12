@@ -383,3 +383,26 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S05: teacher-output cache (`teacher_cache.py`), image-reliance check script
   for Gate 1, D04 memo; then the student-selection runner (S05b).
 - Needs the team: run RC-M1 (Soheil) and commit `results/smoke/RC-M1.csv`.
+
+## Iteration 25: 2026-10-12 (interactive)
+- Stage / item: S05, teacher cache and Gate 1 tooling.
+- Did: `models/teacher_cache.py` implemented (sharded `.npz` files written atomically,
+  resumable, settings recorded in `metadata.json` and checked on resume, `manifest.json`
+  with shard checksums and a manifest hash for the run card, loader that verifies the
+  checksums); `data/prepared.py` (rebuilds the validation / training sample lists from
+  the private RC-D1 outputs); `evaluation/image_reliance.py` implemented (blank image,
+  lesion mask and area-matched random-region control, opposite-label image, balanced
+  accuracy, lesion-mask effect with a paired bootstrap CI, Gate 1 verdict, stage entry
+  point); `utils/io.upsert_results` so a re-run replaces its rows; stages now stop with
+  exit code 4 and a message while a needed setting is still `TODO`. RC-D1 now also
+  records answer-length percentiles (to set `max_new_tokens`). New config keys:
+  `paths.private_root`, `inputs.image_longest_side`, `image_reliance_check.gate1/fill/
+  mask_findings`. Decision memo D04 (Gate 1 thresholds, grey fill, cache `top_k`) and run
+  card RC-E0a (blocked until D04, RC-D1, RC-M1 and the image size are done).
+  Tests use a deterministic image-reliant fake model and a blind one, so the stress
+  tests and the verdict are checked on known answers.
+- Verified: ruff check, ruff format, pytest (571 passed).
+- Commit: see `git log` on `research-loop`.
+- Next: ask the team for D04; evaluation runner for E0 validation metrics (RC-E0b);
+  student-selection runner (S05b).
+- Needs the team: D04 answers.
