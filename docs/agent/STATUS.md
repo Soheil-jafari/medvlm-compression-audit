@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 36 (interactive run mode)
+**Last updated:** 2026-10-12, iteration 37 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
@@ -13,7 +13,9 @@
 1. Student: Qwen2.5-VL-3B chosen with checks (D05 amendment, 2026-10-12; fallback Qwen3-VL-2B).
    After RC-M1 and RC-S0, propose the image side, the G2 threshold and the training length from
    the measured speed, and pin the revision.
-2. Quantization stage (S08) and the pre-registration draft (S07) can be prepared now.
+2. Quantization stage (S08): D08 answered (iteration 37); implementing PTQ (E3, E8, E9), the
+   kernel check and E4 (option B), with run cards RC-Q0, RC-E3, RC-E4, RC-E9. Then the
+   pre-registration draft (S07).
 3. D07 section 1 (how a unit is switched off while scored), the timing hardware and B1-B3 are
    asked later; none is needed before E2 exists.
 
@@ -46,7 +48,7 @@ cards for the team (decision of 2026-10-12).
 | S05b | Student selection 10 -> 5 -> 3 -> 1 | code, ranking and run cards RC-S0 to RC-S3 done (blocked) | RC-M1, then RC-S0; freeze after RC-S0 |
 | S06 | Students E1, E2, budget reference | trainer done; recipe memo and run cards next | S05, S05b |
 | S07 | Pre-registration freeze | not started | S03, S06 |
-| S08 | Quantization E3, E4, E9 | not started | S07 |
+| S08 | Quantization E3, E4, E9 | D08 answered; code and run cards in progress | S07 (runs), RC-Q0 |
 | S09 | Pruning E5-E8, Gate 2 | code done (criteria, scoring, budget search, recovery, efficiency); D06 decided, D07 partly decided; run cards next | D07 (scoring method, budgets), S07 |
 | S10 | Ablations A1-A6 | not started | S09 |
 | S11 | External test, timing, aggregation | not started | S08-S10 |

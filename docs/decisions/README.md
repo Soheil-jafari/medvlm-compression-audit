@@ -13,6 +13,7 @@ in `docs/agent/INBOX.md`; the agent then records the decision in
 | [D05](D05_student_selection.md) | Student selection protocol, 10 -> 5 -> 3 -> 1 | S05b | answered 2026-10-12: teacher family only, keep size, weights accepted; amended 2026-10-12: one student with checks (Qwen2.5-VL-3B, fallback Qwen3-VL-2B), no ranking |
 | [D06](D06_training_recipe.md) | LoRA and optimiser recipe, recovery length, evaluation numbers | S05b, S06, S09 | answered 2026-10-12: all recommendations accepted |
 | [D07](D07_pruning_settings.md) | Scoring method and cost, removal order, grid, budgets | S09, S10 | partly answered 2026-10-12: removal order, grid, budget metric, tolerance and protocol accepted; scoring method, timing hardware and B1-B3 open |
+| [D08](D08_quantization.md) | Quantization tools, settings, calibration; scope of E4 | S08 | answered 2026-10-12: GPTQ 4/8 bit + LLM.int8, E4 reduced GRACE with confidence-gated decoupled distillation, 128 calibration images |
 
 Memo layout: question; options; evidence for each option with verified sources
 (links and access dates); risks; recommendation; what changes in the repository

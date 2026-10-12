@@ -14,6 +14,7 @@ Example: `- 2026-10-20 (Soheil): D01 decided: endoscopy, Qwen2.5-VL-7B -> 3B. Lo
 ## Handled
 
 <!-- - YYYY-MM-DD (name): note -> iteration N, what was done -->
+- 2026-10-12 (Soheil): D08 answered in the session (GPTQ 4/8 + LLM.int8, E4 option B, 128 calibration images, keep w8a8) -> iteration 37, D08, decisions log and quantization configs.
 - 2026-10-12 (Soheil): D05 amendment accepted, pick one student (Qwen2.5-VL-3B, fallback Qwen3-VL-2B) -> iteration 34, configs, D05, RC-S0 and the log updated.
 - 2026-10-12 (Soheil): D04 answered in the session (moderate Gate 1 rule, mid-grey fill, top_k 20) -> iteration 26, E0 config, D04 memo and decisions log updated.
 - 2026-10-12 (Soheil): D05 decided: Q1 teacher family only, Q2 keep size, Q3 weights accepted -> iteration 4, recorded in D05, `configs/student_selection.yaml` and the decisions log.

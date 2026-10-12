@@ -1,4 +1,4 @@
-_base_: ../base.yaml
+_base_: [../base.yaml, ../quantization.yaml]
 
 experiment:
   id: E9
@@ -22,13 +22,8 @@ experiment:
 
 model:
   role: teacher
-  config: TODO
+  config: models/qwen2_5_vl_7b_teacher.yaml   # D01: the teacher, adapter merged before quantizing
   start_from: E0
 
 quantization:
-  method: ptq
-  backend: TODO                           # gptq | awq
-  weight_bits: 4
-  activation_bits: null
-  group_size: TODO
-  calibration_size: TODO
+  recipe: w4                              # D08: the E3 w4 recipe on the teacher

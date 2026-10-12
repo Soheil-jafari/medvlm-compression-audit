@@ -685,3 +685,22 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: bug hunt part 3 (pruning, budgets, efficiency), then quantization (S08).
 - Needs the team: confirm the fixed training pool (open-decisions table; Soheil).
+
+## Iteration 37: 2026-10-12 (interactive)
+- Stage / item: S08, D08 memo (quantization tools and settings) and the answer.
+- Did: wrote `docs/decisions/D08_quantization.md` from primary sources read 2026-10-12
+  (`transformers` quantization overview and compressed-tensors docs, GPTQModel README 7.5.0,
+  bitsandbytes README 0.50.0, the AutoAWQ deprecation notice, the llm-compressor README, the
+  LLM.int8 paper, GRACE's paper record, README and `grace_modules.py`). Key facts: AutoAWQ is
+  archived; `transformers` runs int8 W8A8 checkpoints decompressed (no int8 kernel) and fp8 only
+  on SM89+; GPTQModel lists Qwen2.5-VL and Turing kernels. Soheil answered: GPTQ 4/8 bit
+  (GPTQModel, group 128) and LLM.int8 for `w8a8`; E4 option B (4-bit learned-step-size
+  quantization trained with LoRA and GRACE's confidence-gated decoupled distillation on the
+  cached top-20); 128 calibration images shared with pruning; `w8a8` kept. Applied:
+  `configs/quantization.yaml` (shared recipes), E3/E8/E9 inherit it, E4 carries the option-B
+  settings, E9 names the teacher config; decisions log, D08 status, memo index, inbox.
+- Verified: ruff check, ruff format, pytest (all passed without torch).
+- Commit: see `git log` on `research-loop`.
+- Next: `compression/quantization/ptq.py`, the kernel check, the E3/E8/E9 stage and model
+  loading, run cards RC-Q0, RC-E3, RC-E9; then E4 (`qakd.py`, RC-E4).
+- Needs the team: nothing new (RC-Q0 will be ready after the next iteration).

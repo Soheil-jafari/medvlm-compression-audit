@@ -63,6 +63,12 @@ must be logged here.
   and the optional second student. Rounds R1 to R3 are not run. Applied to the base and
   training configs; the training length and the image size follow from the RC-S0 numbers. Amir
   and Farzan are to be told.
+- **2026-10-12 (Soheil):** D08 answered: engine `transformers` for every arm; E3 `w4` and `w8`
+  with GPTQ (GPTQModel, group size 128), `w8a8` with bitsandbytes LLM.int8 (reported as 8-bit
+  with 16-bit outliers); only the decoder's linear layers are quantized; calibration = the same
+  128 images as the pruning criteria; E8 and E9 use the `w4` recipe; E4 = option B (4-bit
+  learned-step-size quantization trained with LoRA and GRACE's confidence-gated decoupled
+  distillation on the cached top-20). A smoke test (RC-Q0) pins the library versions first.
 
 ## Open decisions
 
@@ -73,5 +79,4 @@ must be logged here.
 | EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |
 | Finding list and weights | Pre-registered table, frozen before E7 | team | TODO |
 | Budgets and timing hardware | B1-B3 fractions (rule after RC-B0) and the rented GPU type; metric, tolerance and protocol are decided | Amir | TODO |
-| Quantization backends | GPTQ / AWQ / W8A8 tooling that runs on T4 and the timing GPU | Soheil | TODO |
 | Venue | e.g. MICCAI (Springer LNCS template) | team | TODO |
