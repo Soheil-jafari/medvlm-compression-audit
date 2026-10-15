@@ -106,6 +106,9 @@ def test_the_decoder_is_quantized_saved_and_reloaded(tmp_path: Path) -> None:
     assert report.n_targets == 3 * len(DECODER_TARGETS) and not report.ok  # reference only
     folder = save_quantized(records, RECIPE, tmp_path / "q", start_from={"experiment": "E2"})
     fresh = load_quantized(tiny_vlm.tiny_wrapper(seed=0), folder, kernel_class=REFERENCE_KERNEL)
+    # the scales are saved in 32 bit, so the reload is the installed model; with 16-bit storage
+    # this 32-bit model moved by up to 2.5e-4 on a Kaggle machine (RC-Q0), not a GPU effect:
+    # the tiny model runs on the CPU
     assert np.allclose(_scores(fresh), rounded, atol=1e-4)
 
 

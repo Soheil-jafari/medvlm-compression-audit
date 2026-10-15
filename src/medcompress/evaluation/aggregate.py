@@ -61,6 +61,8 @@ class ResultFile:
     budget: str | None = None
     seed: int | None = None
     split: str = ""
+    relative: str = ""
+    """The path relative to the results folder (``smoke/RC-M1.csv``), the same on every machine."""
 
 
 def split_experiment(experiment: str) -> tuple[str, str | None]:
@@ -77,24 +79,30 @@ def classify_path(path: Path, root: Path) -> ResultFile | None:
         return None
     if parts[0] == "comparisons":
         budget = parts[2] if len(parts) == 4 else None
-        return ResultFile(path, "comparison", budget=None if budget == "nobudget" else budget)
+        return ResultFile(
+            path,
+            kind="comparison",
+            relative=rel.as_posix(),
+            budget=None if budget == "nobudget" else budget,
+        )
     if parts[0] == "selection":
-        return ResultFile(path, "selection", split="val")
+        return ResultFile(path, relative=rel.as_posix(), kind="selection", split="val")
     if parts[0] in ("data", "smoke"):
-        return ResultFile(path, parts[0])
+        return ResultFile(path, relative=rel.as_posix(), kind=parts[0])
     if path.name not in RUN_FILES:
         return None
     # <ID>[/<variant>]/<budget|nobudget>/seed<k>/<file>
     split = SPLIT_OF_RUN_FILE[path.name]
     match = _SEED_DIR.match(parts[-2]) if len(parts) >= 4 else None
     if match is None:
-        return ResultFile(path, "run", split=split)
+        return ResultFile(path, relative=rel.as_posix(), kind="run", split=split)
     budget_dir = parts[-3]
     id_parts = parts[:-3]
     experiment = ":".join(id_parts)
     return ResultFile(
         path,
         "run",
+        relative=rel.as_posix(),
         experiment=experiment,
         budget="" if budget_dir == "nobudget" else budget_dir,
         seed=int(match.group(1)),
@@ -167,7 +175,7 @@ def read_result_file(result: ResultFile) -> tuple[pd.DataFrame, list[str]]:
                 problems.append(f"{where}: seed {row['seed']} != path seed{result.seed}")
     if result.kind == "run" and result.experiment is None:
         problems.append(f"{name}: path does not follow <ID>[/<variant>]/<budget>/seed<k>/<file>")
-    frame["source"] = str(result.path)
+    frame["source"] = result.relative or str(result.path)
     frame["split"] = result.split
     return frame, problems
 

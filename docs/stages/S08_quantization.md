@@ -19,9 +19,10 @@
 - [x] [agent] `compression/quantization/qakd.py` (D08 option B: learned step-size 4-bit
   quantization with LoRA trained through the rounding, GRACE's confidence-gated decoupled
   distillation on the cached top-20, exact export in the E3 `w4` format) and run card **RC-E4**.
-- [ ] [agent] After RC-Q0: set `quantization.kernel_class` and the library versions, pin them in
-  `requirements/train.txt`.
-- [ ] [team:Soheil] Execute the run cards.
+- [x] [agent] After RC-Q0: set `quantization.kernel_class` and the library versions, pin them in
+  `requirements/train.txt` (2026-10-15: TorchLinear; gptqmodel 7.6.0, bitsandbytes 0.50.2).
+- [ ] [team:Soheil] Execute the run cards (RC-Q0 done 2026-10-15; RC-E3, RC-E4, RC-E9 wait for the
+  data, E2 and the freeze).
 - [ ] [agent] `docs/results/E3.md`, `E4.md`, `E9.md` from the committed CSVs.
 
 ## Outputs

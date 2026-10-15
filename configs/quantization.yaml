@@ -27,6 +27,16 @@ quantization:
       activation_bits: 8
       group_size: null
   recipe: TODO                            # E3: the variant (w4 / w8 / w8a8); E8, E9: w4
-  kernel_class: TODO                      # GPTQModel module class for w4/w8 (dotted path), chosen
-                                          # by RC-Q0; "reference" = no kernel (tests only, fails the check)
-  library_versions: TODO                  # gptqmodel and bitsandbytes, pinned after RC-Q0
+  kernel_class: gptqmodel.nn_modules.qlinear.torch.TorchLinear
+                                          # RC-Q0 (2026-10-15): the fastest class at w4 among those that
+                                          # passed both w4 and w8 on a T4 (w4 0.238 ms, w8 0.201 ms);
+                                          # "reference" = no kernel (tests only, fails the check)
+  library_versions:                       # RC-Q0 (2026-10-15), Kaggle 1 x T4, Python 3.13.15, CUDA 12.8
+    gptqmodel: "7.6.0"                    # pinned in requirements/train.txt
+    bitsandbytes: "0.50.2"                # pinned in requirements/train.txt
+    torch: "2.11.0+cu128"                 # tested with (Kaggle's build, not replaced)
+    torchvision: "0.26.0+cu128"           # tested with
+    transformers: "5.19.0"                # pinned in requirements/train.txt
+    peft: "0.21.2"                        # pinned in requirements/train.txt
+    accelerate: "1.14.0"                  # tested with
+    torchao: "0.18.0"                     # tested with (peft 0.21.2 needs >= 0.16.0)

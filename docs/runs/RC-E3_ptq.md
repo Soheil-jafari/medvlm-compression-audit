@@ -15,7 +15,8 @@
 Blocked until all of these are true; the agent sets the status to `ready` when they are:
 
 - RC-Q0 passed; `quantization.kernel_class` and `quantization.library_versions` are set and
-  the versions are pinned in `requirements/train.txt`.
+  the versions are pinned in `requirements/train.txt`. **Met 2026-10-15:** RC-Q0 chose `TorchLinear`; gptqmodel 7.6.0 and bitsandbytes 0.50.2 are
+  pinned.
 - RC-E2 done for the seed you run (the E2 adapter on team storage).
 - RC-D1 done (the calibration images are 128 training images, drawn with the run seed, the
   same ones the pruning criteria use).

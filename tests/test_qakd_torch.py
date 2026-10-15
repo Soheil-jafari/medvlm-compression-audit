@@ -137,6 +137,8 @@ def test_the_e4_stage_trains_exports_and_reloads_the_same_model(tmp_path: Path) 
     reloaded = load_quantized(
         tiny_vlm.tiny_wrapper(seed=0), quantized_dir(config, run), kernel_class=REFERENCE_KERNEL
     ).score_yes_no(image, [tiny_vlm.PROBE])[0]
+    # exact up to float rounding: the step sizes are saved in 32 bit (16-bit storage moved this
+    # 32-bit model by up to 4e-4 on a Kaggle machine, RC-M1; the tiny model runs on the CPU)
     assert reloaded.logp_yes == pytest.approx(trained.logp_yes, abs=1e-4)
     assert reloaded.logp_no == pytest.approx(trained.logp_no, abs=1e-4)
 

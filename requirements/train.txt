@@ -1,20 +1,20 @@
 # Heavy dependencies for training, compression and evaluation on GPU.
 # Install on Kaggle / Colab / rented GPU only, never needed for CI.
 -r base.txt
-# Versions below are the ones the model wrapper and the surgery tests were run with
-# (CPU, tiny models). On Kaggle this replaces the preinstalled torch; restart the
-# kernel after installing.
-torch>=2.8            # tested with 2.8.0
-torchvision>=0.23     # the Qwen image and video processors need it; 0.23 matches torch 2.8
+# "Tested with" = the Kaggle runs RC-M1 and RC-Q0 (2026-10-15; T4, Python 3.13.15, CUDA 12.8).
+# pip keeps Kaggle's preinstalled torch when it meets the bound; it was never replaced there.
+torch>=2.8            # tested with 2.11.0+cu128 (Kaggle's build); the CPU tests also ran on 2.8.0
+torchvision>=0.23     # tested with 0.26.0+cu128; the Qwen image and video processors need it
 transformers==5.19.0  # the code relies on dtype= and logits_to_keep=
 peft==0.21.2
-accelerate>=1.0
+accelerate>=1.0       # tested with 1.14.0
+torchao>=0.16.0       # Kaggle ships torchao 0.10.0, which makes peft 0.21.2 fail to import (it needs
+                      # 0.16.0 or newer); this line upgrades it, or run `pip uninstall -y torchao`
+                      # before installing. Tested with 0.18.0 (pulled in by gptqmodel in RC-Q0)
 datasets
 
-# Optional quantization backends (E3, E4, E8, E9).
-# TODO: choose backends after checking which ones run on T4 (Kaggle) and on the
-# final timing GPU, then pin versions and uncomment.
-# gptqmodel           # TODO: GPTQ backend candidate
-# autoawq             # TODO: AWQ backend candidate
-# llmcompressor       # TODO: W8A8 backend candidate
-# bitsandbytes        # TODO: optional 8-bit / 4-bit loading for quick checks
+# Quantization backends (E3, E4, E8, E9), chosen by the smoke test RC-Q0 (D08).
+gptqmodel==7.6.0      # GPTQ codes and the TorchLinear kernel module (w4, w8)
+bitsandbytes==0.50.2  # LLM.int8 for w8a8
+# autoawq             # not used: D08 chose GPTQ for the weight-only arms
+# llmcompressor       # not used: transformers has no int8 kernel for T4, so w8a8 is LLM.int8 (D08)

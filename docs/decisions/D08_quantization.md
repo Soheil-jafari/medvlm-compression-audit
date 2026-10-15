@@ -17,6 +17,17 @@ pre-registration.
 | Calibration | 128 images, the same nested set as the pruning criteria (D07) |
 | `w8a8` | kept, reported as "8-bit weights and activations with 16-bit outliers" (LLM.int8) |
 
+**Toolchain fixed by RC-Q0 (2026-10-15, Kaggle 1 x T4).** Kernel class
+`gptqmodel.nn_modules.qlinear.torch.TorchLinear` (`quantization.kernel_class`): the fastest at
+`w4` (0.238 ms; `w8` 0.201 ms) among the classes that passed both widths (TritonV2Linear also
+did, at 0.240 ms; TorchAtenLinear passed `w4` only). The kernel check found TorchLinear on all
+252 decoder linear layers for `w4` and `w8`, and LLM.int8 on all 252 for `w8a8`; the answers on
+synthetic images matched the 16-bit model for all three recipes. Pinned in
+`requirements/train.txt`: gptqmodel 7.6.0 and bitsandbytes 0.50.2; tested with torch
+2.11.0+cu128, transformers 5.19.0, peft 0.21.2, accelerate 1.14.0 and torchao 0.18.0
+(`quantization.library_versions`). Kaggle's preinstalled torchao 0.10.0 breaks peft 0.21.2,
+which needs 0.16.0 or newer; the requirements now ask for that.
+
 **E4 loss (option B), taken from GRACE's code** (`qwen-vl-finetune/qwenvl/train/grace_modules.py`,
 read 2026-10-12) and adapted to the cache:
 

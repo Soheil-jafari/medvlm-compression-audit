@@ -185,7 +185,7 @@ def test_synthetic_images_and_probe_questions_are_reproducible() -> None:
     assert probe_questions(["polyp"])[0] == "Is there a polyp in this image? Answer yes or no."
 
 
-def test_measure_model_and_layer_removal_on_cpu(wrapper: HFVLMWrapper) -> None:
+def test_measure_model_and_layer_removal(wrapper: HFVLMWrapper) -> None:
     from medcompress.models.smoke import measure_layer_removal, measure_model, synthetic_images
 
     images = synthetic_images(3, size=(84, 56))
@@ -195,7 +195,11 @@ def test_measure_model_and_layer_removal_on_cpu(wrapper: HFVLMWrapper) -> None:
     assert values["m_scores_finite"] == 1.0 and len(texts) == 1
     assert values["m_scoring_seconds_per_probe"] > 0 and values["m_generate_tokens_per_second"] > 0
     assert 0 < values["m_yes_no_probability_mass"] <= 1
-    assert not any("gpu" in name for name in values)  # no CUDA in this session
+    gpu_names = {name for name in values if "gpu" in name}
+    if torch.cuda.is_available():  # GPU session: the peaks come from the CUDA allocator
+        assert {"m_peak_gpu_bytes_scoring", "m_peak_gpu_bytes_generate"} <= gpu_names
+    else:
+        assert not gpu_names  # no CUDA device: no GPU numbers are invented
     assert all(r["experiment"] == "RC-M1" and r["budget"] == "" for r in rows)
     removal = {
         r["metric"]: r["value"] for r in measure_layer_removal(wrapper, 1, images, questions, "m")

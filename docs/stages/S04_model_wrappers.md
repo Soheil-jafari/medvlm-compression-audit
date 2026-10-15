@@ -27,7 +27,8 @@ Round 2 models and the final student.
   in the planned precision, check tokenizer identity at runtime, score 8 probes,
   remove one layer physically, record peak memory and timings to
   `results/smoke/RC-M1.csv`.
-- [ ] [team:Soheil] Execute RC-M1 and commit the CSV and the completed run card.
+- [x] [team:Soheil] Execute RC-M1 and commit the CSV and the completed run card (done
+  2026-10-15: all 8 checks met; the exit gate below is met).
 
 ## Outputs
 

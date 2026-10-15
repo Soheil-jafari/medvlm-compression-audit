@@ -152,6 +152,40 @@ def kernel_class_from_config(config: Mapping[str, Any]) -> str:
     return str(value)
 
 
+QUANT_LIBRARIES: tuple[str, ...] = ("gptqmodel", "bitsandbytes")
+"""Packages whose versions RC-Q0 pinned for the quantized arms (``library_versions``)."""
+
+
+def library_versions_from_config(config: Mapping[str, Any]) -> dict[str, str]:
+    """``quantization.library_versions``: package name -> version string (set after RC-Q0).
+
+    Raises:
+        ConfigError: the value is open, not a mapping, or lacks gptqmodel or bitsandbytes.
+    """
+    value = (config.get("quantization") or {}).get("library_versions")
+    if _open(value):
+        raise ConfigError("settings still open: quantization.library_versions (set after RC-Q0)")
+    if not isinstance(value, Mapping):
+        raise ConfigError("quantization.library_versions must map a package to its version")
+    missing = [name for name in QUANT_LIBRARIES if name not in value]
+    if missing:
+        raise ConfigError(f"quantization.library_versions lacks {missing}")
+    return {str(name): str(version) for name, version in value.items()}
+
+
+def installed_versions(packages: Sequence[str]) -> dict[str, str | None]:
+    """The installed version of each package (None if it is not installed)."""
+    from importlib import metadata
+
+    out: dict[str, str | None] = {}
+    for name in packages:
+        try:
+            out[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            out[name] = None
+    return out
+
+
 def quantized_dir(config: Mapping[str, Any], run: RunContext) -> Path:
     """``<checkpoint_root>/<ID>[/<variant>]/<budget|nobudget>/seed<k>/quantized``."""
     tag = run.experiment_tag.replace(":", "/")
@@ -185,17 +219,23 @@ def save_quantized(
     start_from: Mapping[str, Any],
     extra: Mapping[str, Any] | None = None,
 ) -> Path:
-    """Write ``quantized.npz`` (packed codes, 16-bit scales) and the manifest; return the folder.
+    """Write ``quantized.npz`` (packed codes, 32-bit scales) and the manifest; return the folder.
 
     ``start_from`` names the parent model (experiment, budget, seed) that loading rebuilds.
     A recipe applied at load time (LLM.int8) has no records; only the manifest is written.
+    The scales are stored in 32 bit, so a 32-bit model reloads exactly the modules the run
+    installed (the tiny test models); stored in 16 bit, its scales were rounded by up to
+    2**-11, which moved log-probabilities by up to 4e-4 on the Kaggle machines (RC-M1, RC-Q0).
+    A 16-bit model (the real runs) casts them to 16 bit as the kernels keep them; the arms are
+    always evaluated from the reloaded model. ``quantized_weight_bytes`` still counts 16-bit
+    scales, the kernels' storage.
     """
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
     arrays: dict[str, np.ndarray] = {}
     for key, rec in sorted(records.items()):
         arrays[f"{key}.qweight"] = grid.pack_codes(rec.codes, rec.bits)
-        arrays[f"{key}.scales"] = rec.scales.astype(np.float16)
+        arrays[f"{key}.scales"] = rec.scales.astype(np.float32)
         arrays[f"{key}.in_features"] = np.array(rec.codes.shape[1], dtype=np.int64)
     if arrays:
         np.savez(out / TENSORS_NAME, **arrays)
@@ -537,6 +577,12 @@ def run_quantization(
         rows["quantization_seconds"] = time.perf_counter() - started
         rows["quantization_calibration_images"] = float(len(calibration))
         extra["calibration_sample_ids"] = [s.sample_id for s in calibration]
+    if isinstance((config.get("quantization") or {}).get("library_versions"), Mapping):
+        pinned = library_versions_from_config(config)  # provenance of the saved codes
+        extra["library_versions"] = {
+            "pinned": pinned,
+            "installed": installed_versions(list(pinned)),
+        }
     directory = save_quantized(
         records, recipe, quantized_dir(config, run), start_from=parent, extra=extra
     )

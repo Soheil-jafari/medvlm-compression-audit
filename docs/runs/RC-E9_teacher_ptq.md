@@ -14,7 +14,8 @@
 
 Blocked until all of these are true; the agent sets the status to `ready` when they are:
 
-- RC-Q0 passed; `quantization.kernel_class` and the library versions are set and pinned.
+- RC-Q0 passed; `quantization.kernel_class` and the library versions are set and pinned. **Met 2026-10-15:** RC-Q0 chose `TorchLinear`; gptqmodel 7.6.0 and bitsandbytes 0.50.2 are
+  pinned.
 - RC-D1 done (calibration: the 128 training images of seed 0, the same as the pruning criteria).
 - The pre-registration is frozen; `inputs.image_longest_side`, `evaluation.max_new_tokens` and
   `budgets.measurement.hardware` are set.

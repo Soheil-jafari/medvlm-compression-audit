@@ -14,14 +14,13 @@
   step (gate G1). The same run records the numbers that the team needs to fix the
   open Round 1 settings: visual tokens per image, scoring time per probe, peak memory,
   and the time of one LoRA step.
-- Status: `blocked` (see section 2)
+- Status: `done` (2026-10-15: RC-M1 passed all its checks)
 
 ## 2. Requirements
 
-Blocked until RC-M1 has passed: Round 0 reuses the loader, the yes/no scoring and the
-LoRA code that RC-M1 exercises on the 3B student, so a failure there would be
-mistaken for a failure of every candidate. The agent changes the status to `ready`
-when the RC-M1 numbers are in.
+Needed RC-M1 to pass first: Round 0 reuses the loader, the yes/no scoring and the LoRA code
+that RC-M1 exercises on the 3B student, so a failure there would be mistaken for a failure of
+every candidate. **Met 2026-10-15:** RC-M1 passed all 8 checks.
 
 - Platform: Kaggle notebook, GPU T4 x2, Internet **on**. Use **one** T4 only
   (`CUDA_VISIBLE_DEVICES=0`): the gate asks whether the candidate trains on one T4.
@@ -41,8 +40,11 @@ when the RC-M1 numbers are in.
 - Image size: `inputs.image_longest_side` is still open (it is decided from these
   numbers). For this run only, pass `-o inputs.image_longest_side=448` on the command
   line. Do not edit a config file.
-- Expected runtime: model download dominates (minutes per candidate); the measurements
-  take about a minute each.
+- Expected runtime (an **estimate** from RC-M1, same image side 448): the 3B student
+  downloaded in 40 s and loaded in 3 s; the 20 probes of Round 0 take about 20 x 0.199 s = 4 s
+  (RC-M1 measured 0.199 s per probe for the 3B student, not the 0.12 s assumed in D07); the
+  LoRA step takes seconds. With the install and the CPU test, plan about 30 minutes of the
+  session for both models; the 2B fallback has not been timed yet.
 
 ## 3. Commands
 
@@ -50,15 +52,18 @@ when the RC-M1 numbers are in.
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
 export HF_HOME=/kaggle/temp/hf
+pip show torchao 2>/dev/null | grep Version  # Kaggle ships 0.10.0; peft 0.21.2 needs 0.16.0 or newer
+pip uninstall -y torchao                     # only if the version above is below 0.16.0 (RC-M1)
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
 export MEDCOMPRESS_RESULTS_ROOT=$PWD/results
 export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
 export CUDA_VISIBLE_DEVICES=0
 python -m pytest -q tests/test_selection_ranking.py                  # CPU; must pass first
+python -m pytest -q 2>&1 | tail -3   # the whole suite with torch: write the last line in
+                                     # section 6 (checks the 2026-10-15 test fixes on a GPU machine)
 
-# your candidates only (see section 2); add --allow-remote-code ONLY for the five
-# families listed there, and only after reading their code
-for c in <candidate> <candidate>; do
+# neither model ships its own code, so --allow-remote-code is not used (see the note at the top)
+for c in qwen2_5_vl_3b qwen3_vl_2b; do       # the student and its fallback (D05 amendment)
   python scripts/select_student.py --round R0 --candidate $c \
       -o inputs.image_longest_side=448 2>&1 | tee rc_s0_$c.log
   rm -rf $HF_HOME/hub/models--*
@@ -71,7 +76,7 @@ If a candidate fails (does not load, out of memory, non-finite scores), keep its
 do not change any setting to get it through, and note the last 20 lines of the error in
 section 6. A failure is a result: it takes the candidate out of the pool.
 
-When all three shares are committed, one person (Soheil) merges them and runs
+When both models are done, run
 
 ```bash
 python scripts/select_student.py --rank R0      # prints pass/FAIL per candidate
@@ -101,6 +106,29 @@ subset size, the G2 threshold) and puts them in the inbox; the team confirms the
 sets `frozen_on` before RC-S1.
 
 ## 6. Run report (filled by the person who ran it)
+
+- Run by / date: Soheil, 2026-10-16 (Kaggle clock 2026-10-15 20:53 UTC), Kaggle
+- Commit actually used: 08e849504b16b1fa1954e0871e9f327396ac1233
+- Hardware and library versions: 1 x Tesla T4 (CUDA_VISIBLE_DEVICES=0), Python 3.13.15;
+  torch 2.11.0+cu128, transformers 5.19.0, peft 0.21.2, accelerate 1.14.0, torchao 0.18.0,
+  gptqmodel 7.6.0, optimum 2.3.0. Full test suite: 895 passed, 17 warnings.
+- Per candidate:
+  - qwen2_5_vl_3b: passed G1 (yes). Run 73 s incl. download (20:53:49 to 20:55:02 UTC).
+    No remote code. Visual tokens 194 (side 448). Peak 7,843,901,952 bytes scoring,
+    9,140,717,056 bytes LoRA step. 0.179 s per probe, LoRA step 0.74 s.
+    Generation sample: ['No.']
+  - qwen3_vl_2b: passed G1 (yes). Run 46 s (20:55:02 to 20:55:48 UTC). No remote code.
+    Visual tokens 142. Peak 4,505,061,376 bytes scoring, 5,058,956,288 bytes LoRA step.
+    0.074 s per probe, LoRA step 0.56 s. Generation sample: ['no']
+- Candidates not run or failed: the other eight candidates were not run (D05 amendment).
+- Session wall time: about __ minutes.
+- Anything unusual: torchao 0.10.0 was preinstalled and removed before installing. The full
+  test suite first failed 33 LoRA tests with "ImportError: gptqmodel requires optimum version
+  1.24.0 or higher": peft 0.21.2 needs optimum whenever gptqmodel is installed. Installing
+  optimum 2.3.0 changed no other package and fixed it (895 passed). `select_student.py --rank R0`
+  stopped with "internvl3_5_2b has no 'gate_g1_hardware' row": the ranking still uses the old
+  10-candidate pool in configs/student_selection.yaml. Not changed on Kaggle; ranking.csv is
+  left for a repo fix.
 
 - Run by / date:
 - Commit actually used:

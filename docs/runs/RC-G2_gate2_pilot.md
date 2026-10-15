@@ -26,7 +26,7 @@ Blocked until all of these are true; the agent changes the status to `ready` whe
   cannot be adjusted after seeing the pilot.
 - `training.steps` and `training.data_subset`, `evaluation.max_new_tokens`,
   `inputs.image_longest_side` and `budgets.measurement.hardware` are set.
-- RC-D1 done; RC-M1 passed.
+- RC-D1 done; RC-M1 passed (met 2026-10-15).
 
 Platform: Kaggle notebook, one T4 (`CUDA_VISIBLE_DEVICES=0`), Internet **on**. Dataset access:
 your own copy of Kvasir-VQA-x1 and Kvasir-SEG and the private RC-D1 outputs. The E2 adapter and

@@ -179,8 +179,37 @@ def test_recipe_errors_name_the_open_setting() -> None:
         PTQRecipe.from_config(config, "w4")
     PTQRecipe.from_config(config, "w8a8")  # LLM.int8 needs no calibration
     with pytest.raises(ConfigError, match="kernel_class"):
-        kernel_class_from_config(_ptq_config())
+        kernel_class_from_config(_ptq_config(kernel_class="TODO"))
     assert kernel_class_from_config(_ptq_config(kernel_class="reference")) == "reference"
+
+
+def test_rc_q0_set_the_kernel_class_and_the_library_versions() -> None:
+    from medcompress.compression.quantization.kernels import TORCH_KERNEL_CLASS
+    from medcompress.compression.quantization.ptq import (
+        kernel_class_from_config,
+        library_versions_from_config,
+    )
+    from medcompress.config import ConfigError, load_config
+
+    for exp in ("E3", "E4", "E8", "E9"):  # every quantized arm reads the same block
+        config = load_config(f"experiments/{exp}.yaml")
+        assert kernel_class_from_config(config) == TORCH_KERNEL_CLASS
+        versions = library_versions_from_config(config)
+        assert versions["gptqmodel"] == "7.6.0" and versions["bitsandbytes"] == "0.50.2"
+        assert all(isinstance(v, str) for v in versions.values())  # "5.19" must not be a float
+    with pytest.raises(ConfigError, match="library_versions"):
+        library_versions_from_config(_ptq_config(library_versions="TODO"))
+    with pytest.raises(ConfigError, match="map a package"):
+        library_versions_from_config(_ptq_config(library_versions=["gptqmodel==7.6.0"]))
+    with pytest.raises(ConfigError, match="bitsandbytes"):
+        library_versions_from_config(_ptq_config(library_versions={"gptqmodel": "7.6.0"}))
+
+
+def test_installed_versions_name_missing_packages_none() -> None:
+    from medcompress.compression.quantization.ptq import installed_versions
+
+    found = installed_versions(["numpy", "no-such-package-for-sure"])
+    assert found["numpy"] == np.__version__ and found["no-such-package-for-sure"] is None
 
 
 def test_quantized_checkpoints_round_trip(tmp_path) -> None:  # noqa: ANN001
@@ -213,8 +242,9 @@ def test_quantized_checkpoints_round_trip(tmp_path) -> None:  # noqa: ANN001
     )
     for key, rec in records.items():
         assert np.array_equal(back[key].codes, rec.codes)
-        # scales are stored in 16 bit, as the kernels use them
-        assert np.allclose(back[key].scales, rec.scales, rtol=1e-3)
+        # 32-bit storage: a 32-bit module gets exactly the scales the run installed, so a
+        # reloaded test model is the saved one (16-bit storage moved it by up to 4e-4)
+        assert np.array_equal(back[key].scales.astype(np.float32), rec.scales.astype(np.float32))
     empty = save_quantized(
         {},
         PTQRecipe.from_config(_ptq_config(), "w8a8"),
@@ -223,3 +253,52 @@ def test_quantized_checkpoints_round_trip(tmp_path) -> None:  # noqa: ANN001
     )
     assert read_quantized(empty)[1] == {}
     assert parent_of(RunContext("E9", seed=0))["experiment"] == "E0"
+
+
+def test_the_pinned_requirements_match_the_versions_rc_q0_tested() -> None:
+    """requirements/train.txt and quantization.library_versions must not drift apart."""
+    import re
+    from pathlib import Path
+
+    from medcompress.compression.quantization.ptq import library_versions_from_config
+
+    text = (Path(__file__).resolve().parents[1] / "requirements" / "train.txt").read_text()
+    pins = dict(re.findall(r"^([A-Za-z0-9_.-]+)==([^\s#]+)", text, flags=re.M))
+    versions = library_versions_from_config(_ptq_config())
+    for package in ("gptqmodel", "bitsandbytes", "transformers", "peft"):
+        assert pins[package] == versions[package], package
+    assert re.search(r"^torchao>=0\.16\.0", text, flags=re.M)  # peft 0.21.2 needs it
+
+
+def test_the_kernel_choice_needs_both_widths_and_then_takes_the_fastest_w4() -> None:
+    from medcompress.compression.quantization.smoke import choose_kernel_class, row
+
+    classes = ["pkg.a.FastW4Only", "pkg.b.Both", "pkg.c.BothSlower", "pkg.d.Broken"]
+    rows = [row("kernel_ok:FastW4Only:w4", 1), row("kernel_ms:FastW4Only:w4", 0.1),
+            row("kernel_ok:FastW4Only:w8", 0),
+            row("kernel_ok:Both:w4", 1), row("kernel_ms:Both:w4", 0.3),
+            row("kernel_ok:Both:w8", 1), row("kernel_ms:Both:w8", 0.2),
+            row("kernel_ok:BothSlower:w4", 1), row("kernel_ms:BothSlower:w4", 0.4),
+            row("kernel_ok:BothSlower:w8", 1), row("kernel_ms:BothSlower:w8", 0.1),
+            row("kernel_ok:Broken:w4", 0), row("kernel_ok:Broken:w8", 0)]  # fmt: skip
+    assert choose_kernel_class(rows, classes) == "pkg.b.Both"  # FastW4Only fails w8
+    tie = [*rows, row("kernel_ms:BothSlower:w4", 0.3)]  # later row wins; tie broken by name
+    assert choose_kernel_class(tie, classes) == "pkg.b.Both"
+    assert choose_kernel_class(rows[:3], classes) is None  # nothing passed both widths
+
+
+def test_the_committed_rc_q0_rows_give_the_configured_class() -> None:
+    import csv
+    from pathlib import Path
+
+    from medcompress.compression.quantization.kernels import TORCH_KERNEL_CLASS
+    from medcompress.compression.quantization.ptq import kernel_class_from_config
+    from medcompress.compression.quantization.smoke import choose_kernel_class
+
+    path = Path(__file__).resolve().parents[1] / "results" / "smoke" / "RC-Q0.csv"
+    with path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    shorts = sorted({r["metric"].split(":")[1] for r in rows if r["metric"].startswith("kernel_")})
+    classes = [TORCH_KERNEL_CLASS if s == "TorchLinear" else f"gptqmodel.x.{s}" for s in shorts]
+    assert choose_kernel_class(rows, classes) == TORCH_KERNEL_CLASS
+    assert kernel_class_from_config(_ptq_config()) == TORCH_KERNEL_CLASS

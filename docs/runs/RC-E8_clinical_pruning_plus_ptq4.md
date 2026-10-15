@@ -14,7 +14,8 @@
 Blocked until all of these are true; the agent sets the status to `ready` when they are:
 
 - RC-E7 done for the budgets and seeds you run (the pruned models on team storage).
-- RC-Q0 passed (`quantization.kernel_class` and the library versions set and pinned).
+- RC-Q0 passed (`quantization.kernel_class` and the library versions set and pinned). **Met 2026-10-15:** RC-Q0 chose `TorchLinear`; gptqmodel 7.6.0 and bitsandbytes 0.50.2 are
+  pinned.
 - The pre-registration is frozen.
 
 Platform: Kaggle notebook, one T4, Internet on. Dataset access as in RC-E7; attach the E7

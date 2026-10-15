@@ -71,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     from medcompress.compression.quantization.smoke import (
         answers_agree,
+        choose_kernel_class,
         discover_kernel_classes,
         kernel_rows,
         row,
@@ -93,18 +94,12 @@ def main(argv: list[str] | None = None) -> int:
     classes = discover_kernel_classes()
     print(f"{len(classes)} GPTQModel kernel classes found")
     rows += kernel_rows(classes)
-    timed = {
-        r["metric"].split(":")[1]: r["value"]
-        for r in rows
-        if r["metric"].startswith("kernel_ms:") and r["metric"].endswith(":w4")
-    }
     chosen = args.kernel_class
     if chosen is None:
-        if not timed:
-            print("no kernel class passed; stopping before the model steps")
+        chosen = choose_kernel_class(rows, classes)  # fastest at w4 among those passing w4 and w8
+        if chosen is None:
+            print("no kernel class passed both w4 and w8; stopping before the model steps")
             return _write(rows, args.out)
-        fastest = min(timed, key=timed.get)
-        chosen = next(c for c in classes if c.endswith("." + fastest))
     print(f"chosen kernel class: {chosen}")
 
     questions = probe_questions() * 4
