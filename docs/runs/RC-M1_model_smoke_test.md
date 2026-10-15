@@ -8,7 +8,7 @@
   share a tokenizer, answer yes/no probes in one forward pass with finite scores,
   and get smaller in **measured** memory when one decoder layer is removed. No
   dataset is used: the probes run on synthetic images.
-- Status: `ready`
+- Status: `done`
 
 ## 2. Requirements
 
