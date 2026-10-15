@@ -14,7 +14,7 @@
   step (gate G1). The same run records the numbers that the team needs to fix the
   open Round 1 settings: visual tokens per image, scoring time per probe, peak memory,
   and the time of one LoRA step.
-- Status: `ready` (2026-10-15: RC-M1 passed all its checks)
+- Status: `done` (2026-10-15: RC-M1 passed all its checks)
 
 ## 2. Requirements
 
@@ -106,6 +106,29 @@ subset size, the G2 threshold) and puts them in the inbox; the team confirms the
 sets `frozen_on` before RC-S1.
 
 ## 6. Run report (filled by the person who ran it)
+
+- Run by / date: Soheil, 2026-10-16 (Kaggle clock 2026-10-15 20:53 UTC), Kaggle
+- Commit actually used: 08e849504b16b1fa1954e0871e9f327396ac1233
+- Hardware and library versions: 1 x Tesla T4 (CUDA_VISIBLE_DEVICES=0), Python 3.13.15;
+  torch 2.11.0+cu128, transformers 5.19.0, peft 0.21.2, accelerate 1.14.0, torchao 0.18.0,
+  gptqmodel 7.6.0, optimum 2.3.0. Full test suite: 895 passed, 17 warnings.
+- Per candidate:
+  - qwen2_5_vl_3b: passed G1 (yes). Run 73 s incl. download (20:53:49 to 20:55:02 UTC).
+    No remote code. Visual tokens 194 (side 448). Peak 7,843,901,952 bytes scoring,
+    9,140,717,056 bytes LoRA step. 0.179 s per probe, LoRA step 0.74 s.
+    Generation sample: ['No.']
+  - qwen3_vl_2b: passed G1 (yes). Run 46 s (20:55:02 to 20:55:48 UTC). No remote code.
+    Visual tokens 142. Peak 4,505,061,376 bytes scoring, 5,058,956,288 bytes LoRA step.
+    0.074 s per probe, LoRA step 0.56 s. Generation sample: ['no']
+- Candidates not run or failed: the other eight candidates were not run (D05 amendment).
+- Session wall time: about __ minutes.
+- Anything unusual: torchao 0.10.0 was preinstalled and removed before installing. The full
+  test suite first failed 33 LoRA tests with "ImportError: gptqmodel requires optimum version
+  1.24.0 or higher": peft 0.21.2 needs optimum whenever gptqmodel is installed. Installing
+  optimum 2.3.0 changed no other package and fixed it (895 passed). `select_student.py --rank R0`
+  stopped with "internvl3_5_2b has no 'gate_g1_hardware' row": the ranking still uses the old
+  10-candidate pool in configs/student_selection.yaml. Not changed on Kaggle; ranking.csv is
+  left for a repo fix.
 
 - Run by / date:
 - Commit actually used:
