@@ -288,7 +288,12 @@ def test_the_benchmark_stage_writes_the_efficiency_files(tiny: Any, tmp_path: Pa
     assert rows["throughput_samples_per_s"] > 0 and rows["state_bytes"] > 0
     parts = ("decoder_layers_bytes", "vision_bytes", "other_bytes")
     assert sum(rows[k] for k in parts) == rows["state_bytes"]
-    assert "peak_memory_bytes" not in rows  # no CUDA device here: nothing is invented
+    import torch
+
+    if torch.cuda.is_available():  # GPU session: the peak comes from the CUDA allocator
+        assert rows["peak_memory_bytes"] >= 0
+    else:
+        assert "peak_memory_bytes" not in rows  # no CUDA device: nothing is invented
     setup = json.loads((target.parent / "efficiency_setup.json").read_text())
     assert setup["protocol"]["samples"] == 3 and setup["protocol"]["n_samples"] == 3
     assert "platform" in setup["hardware"]
@@ -325,8 +330,14 @@ def test_the_removal_measurer_removes_the_units_measures_and_frees_the_copy(
     smaller = measure([units[1]])
     assert full > 0 and smaller > 0 and len(built) == 2
     assert eff.count_parameters(built[0]) > eff.count_parameters(built[1])  # copies are separate
-    with pytest.raises(ValueError, match="no peak_memory_bytes"):
-        make_removal_measurer(factory, samples, protocol, tmp_path, "peak_memory")([])
+    import torch
+
+    by_memory = make_removal_measurer(factory, samples, protocol, tmp_path, "peak_memory")
+    if torch.cuda.is_available():  # GPU session: peak memory is measured
+        assert by_memory([]) >= 0
+    else:
+        with pytest.raises(ValueError, match="no peak_memory_bytes"):
+            by_memory([])  # no CUDA device: no peak memory to match a budget on
 
 
 def test_the_final_timing_has_its_own_file_names_and_gpu(tmp_path: Path) -> None:

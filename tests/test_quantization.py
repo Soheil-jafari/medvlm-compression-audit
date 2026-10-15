@@ -242,8 +242,9 @@ def test_quantized_checkpoints_round_trip(tmp_path) -> None:  # noqa: ANN001
     )
     for key, rec in records.items():
         assert np.array_equal(back[key].codes, rec.codes)
-        # scales are stored in 16 bit, as the kernels use them
-        assert np.allclose(back[key].scales, rec.scales, rtol=1e-3)
+        # 32-bit storage: a 32-bit module gets exactly the scales the run installed, so a
+        # reloaded test model is the saved one (16-bit storage moved it by up to 4e-4)
+        assert np.array_equal(back[key].scales.astype(np.float32), rec.scales.astype(np.float32))
     empty = save_quantized(
         {},
         PTQRecipe.from_config(_ptq_config(), "w8a8"),

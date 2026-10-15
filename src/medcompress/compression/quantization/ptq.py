@@ -219,17 +219,23 @@ def save_quantized(
     start_from: Mapping[str, Any],
     extra: Mapping[str, Any] | None = None,
 ) -> Path:
-    """Write ``quantized.npz`` (packed codes, 16-bit scales) and the manifest; return the folder.
+    """Write ``quantized.npz`` (packed codes, 32-bit scales) and the manifest; return the folder.
 
     ``start_from`` names the parent model (experiment, budget, seed) that loading rebuilds.
     A recipe applied at load time (LLM.int8) has no records; only the manifest is written.
+    The scales are stored in 32 bit, so a 32-bit model reloads exactly the modules the run
+    installed (the tiny test models); stored in 16 bit, its scales were rounded by up to
+    2**-11, which moved log-probabilities by up to 4e-4 on the Kaggle machines (RC-M1, RC-Q0).
+    A 16-bit model (the real runs) casts them to 16 bit as the kernels keep them; the arms are
+    always evaluated from the reloaded model. ``quantized_weight_bytes`` still counts 16-bit
+    scales, the kernels' storage.
     """
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
     arrays: dict[str, np.ndarray] = {}
     for key, rec in sorted(records.items()):
         arrays[f"{key}.qweight"] = grid.pack_codes(rec.codes, rec.bits)
-        arrays[f"{key}.scales"] = rec.scales.astype(np.float16)
+        arrays[f"{key}.scales"] = rec.scales.astype(np.float32)
         arrays[f"{key}.in_features"] = np.array(rec.codes.shape[1], dtype=np.int64)
     if arrays:
         np.savez(out / TENSORS_NAME, **arrays)

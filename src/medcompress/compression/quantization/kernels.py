@@ -134,7 +134,7 @@ def _reference_class() -> type:
     import torch
 
     class ReferenceQuantLinear(torch.nn.Module):
-        """Packed codes and 16-bit scales; forward dequantizes and multiplies (no kernel).
+        """Packed codes, scales in the model dtype; forward dequantizes and multiplies (no kernel).
 
         Holds exactly the storage of ``grid.pack_codes`` (``qweight`` int32, ``scales``), so
         its memory is that of the quantized weights; it exists for tests and CPU runs.

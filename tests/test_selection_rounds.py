@@ -191,13 +191,14 @@ def test_tokenizer_match_is_full_for_the_same_tokenizer(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------- R0
 
 
-def test_round_0_records_numbers_and_cannot_pass_the_gpu_gate_on_a_cpu(tmp_path: Path) -> None:
+def test_round_0_records_numbers_and_the_gpu_gate_follows_cuda(tmp_path: Path) -> None:
     config = _config(tmp_path)
     student = tiny_vlm.tiny_wrapper(seed=2)
     rounds.run_round(config, "R0", "qwen3_vl_2b", model=student)
     metrics = _metrics(config, "R0", "qwen3_vl_2b")
     assert metrics["r0_scores_finite"] == 1.0 and metrics["r0_lora_step_ok"] == 1.0
-    assert metrics["r0_on_cuda"] == 0.0 and metrics["gate_g1_hardware"] == 0.0
+    on_cuda = float(torch.cuda.is_available())  # the gate cannot pass without a GPU
+    assert metrics["r0_on_cuda"] == on_cuda and metrics["gate_g1_hardware"] == on_cuda
     assert metrics["r0_visual_tokens"] > 0 and metrics["r0_params"] > 0
     assert metrics["r0_load_ok"] == 1.0 and metrics["r0_lora_step_seconds"] > 0
     assert not any(math.isnan(v) for v in metrics.values())
