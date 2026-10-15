@@ -1,6 +1,6 @@
 # D07: Pruning settings, scoring cost and the budget protocol
 
-**Status:** partly answered 2026-10-12 (Soheil): sections 2 and 3 accepted as proposed (score per parameter; first 2 and last 1 layers protected for every arm; group 128, 128 calibration images, one shot, 1 negative per positive, signed effects, probe batch 4). In section 4 the metric (peak GPU memory), the tolerance (3 %) and the protocol (batch 1, 3 warm-up and 5 timed passes, 32 validation images drawn by a fixed seed) are accepted. Open: section 1 (how a unit is switched off while scored; the cost question waits for the T4 speed from RC-M1, and nothing needs it before E2 exists), the timing hardware, and B1 to B3 (set by the rule after RC-B0). **Stage:** S09, S10.
+**Status:** partly answered 2026-10-12 (Soheil): sections 2 and 3 accepted as proposed (score per parameter; first 2 and last 1 layers protected for every arm; group 128, 128 calibration images, one shot, 1 negative per positive, signed effects, probe batch 4). In section 4 the metric (peak GPU memory), the tolerance (3 %) and the protocol (batch 1, 3 warm-up and 5 timed passes, 32 validation images drawn by a fixed seed) are accepted. Open: section 1 (how a unit is switched off while scored; RC-M1 measured the T4 speed on 2026-10-15, so the cost table below is updated, and nothing needs the answer before E2 exists), the timing hardware, and B1 to B3 (set by the rule after RC-B0). **Stage:** S09, S10.
 **Depends on:** D02 (data and findings), D05 (student), D06 (recovery recipe).
 Every number below is fixed **before** the first pruning result, so none of it can be tuned
 to a result. After the team answers, the values go into `configs/pruning.yaml`,
@@ -47,15 +47,23 @@ Grid size depends on the student (hub configs read 2026-10-12):
 | Qwen2.5-VL-3B | 36 | 2 | 11 008 | 36 + 72 + 3 096 = **3 204** |
 | Qwen3-VL-2B | 28 | 8 | 6 144 | 28 + 224 + 1 344 = **1 596** |
 
-Cost on one T4 for one seed, with 128 calibration images and about 640 probes, and an
-**estimate** of 0.12 s per probe forward pass (RC-M1 reports the real number as
-`student_scoring_seconds_per_probe`):
+Cost on one T4 for one seed, with 128 calibration images and about 640 probes. This memo first
+**assumed** 0.12 s per probe forward pass. **Measured 2026-10-15 (RC-M1):** the 3B student takes
+**0.199 s per probe** (`student_scoring_seconds_per_probe` = 0.1993 in `results/smoke/RC-M1.csv`,
+synthetic images at the image side 448). The 2B fallback is not measured yet (RC-S0 measures it),
+so its column still uses the assumed speed. Hours = units x 640 probes x seconds per probe; they
+remain estimates, because the real number of probes depends on the frozen finding list.
 
-| Method | Qwen2.5-VL-3B | Qwen3-VL-2B |
-|---|---|---|
-| Exact for every unit | about 68 h | about 33 h |
-| Exact for layers and KV groups, first-order for channel groups (**proposed**) | about 2.3 h + minutes | about 5.4 h + minutes |
-| First-order for every unit | minutes | minutes |
+| Method | Qwen2.5-VL-3B, measured 0.199 s | Qwen2.5-VL-3B, assumed 0.12 s (old) | Qwen3-VL-2B, assumed 0.12 s |
+|---|---|---|---|
+| Exact for every unit | about 114 h | about 68 h | about 34 h |
+| Exact for layers and KV groups, first-order for channel groups (**proposed**) | about 3.8 h + minutes | about 2.3 h + minutes | about 5.4 h + minutes |
+| First-order for every unit | minutes | minutes | minutes |
+
+(The first version of this table gave about 33 h for the 2B; 1,596 x 640 x 0.12 s is about 34 h.)
+With the measured speed the proposed mix costs about 3.8 h of scoring per seed of E7, about
+11.5 h for its three seeds (A1 and A2 reuse these effects); exact scoring of every unit, about
+114 h per seed, is out of reach.
 
 Exact for every unit does not fit the budget of three Kaggle accounts for three seeds plus
 ablations. First-order for every unit would score whole layers with a straight line, which is
@@ -73,7 +81,8 @@ Two consequences, both stated openly:
   as E7 and differ only in the weights, so their effects are computed once and re-weighted.
 
 To check the approximation on the real model, RC-G2 also computes the exact effect for 30
-randomly chosen channel groups and reports its rank correlation with the estimate. It is a
+randomly chosen channel groups (about 30 x 640 x 0.199 s = 64 minutes, an estimate from the
+measured speed) and reports its rank correlation with the estimate. It is a
 report, not a gate; if the correlation is below 0.7 the agent stops and asks the team.
 
 ### 2. From scores to a removal order

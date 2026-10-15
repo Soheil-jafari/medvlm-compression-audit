@@ -69,12 +69,21 @@ must be logged here.
   128 images as the pruning criteria; E8 and E9 use the `w4` recipe; E4 = option B (4-bit
   learned-step-size quantization trained with LoRA and GRACE's confidence-gated decoupled
   distillation on the cached top-20). A smoke test (RC-Q0) pins the library versions first.
+- **2026-10-15 (Kaggle runs RC-M1 and RC-Q0, Soheil):** both passed all their checks.
+  RC-Q0 chose the GPTQModel kernel class `gptqmodel.nn_modules.qlinear.torch.TorchLinear` (the
+  fastest at `w4` among the classes that passed `w4` and `w8`); `quantization.kernel_class` and
+  `quantization.library_versions` are set, and gptqmodel 7.6.0 and bitsandbytes 0.50.2 are
+  pinned in `requirements/train.txt` with `torchao>=0.16.0` (Kaggle's 0.10.0 breaks peft
+  0.21.2). RC-M1 measured 0.199 s per probe for the 3B student (D07 had assumed 0.12 s): the
+  proposed scoring mix of D07 section 1 now costs about 3.8 h per seed instead of 2.3 h
+  (estimate). D07 section 1 itself is still open. RC-S0 is ready. (Agent, from
+  `results/smoke/RC-M1.csv`, `results/smoke/RC-Q0.csv` and the two cards.)
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| Student checks | Run RC-S0 for the two models, then set the image side, the G2 threshold and the training length from its numbers; tell Amir and Farzan about the amendment | Soheil | after RC-M1 |
+| Student checks | Run RC-S0 for the two models, then set the image side, the G2 threshold and the training length from its numbers; tell Amir and Farzan about the amendment | Soheil | now (RC-M1 passed 2026-10-15; RC-S0 ready) |
 | Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
 | EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |
 | Finding list and weights | Pre-registered table, frozen before E7. Draft rules (iteration 40): a finding enters C with at least 20 positive training images and 10 in each of validation and test; groups common >= 10 %, rare < 2 %; cap 20; three tiers with multipliers 2.0 / 1.5 / 1.0 assigned from the finding names | team | after RC-D1 |

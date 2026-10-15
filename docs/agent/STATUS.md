@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-10-12, iteration 45 (interactive run mode)
+**Last updated:** 2026-10-15, iteration 46 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S05 (teacher cache, Gate 1 tooling); S03 waiting on RC-D1, S04 waiting on RC-M1
+**Current stage:** S05b (RC-S0 ready); S03 waiting on RC-D1; S04 done (RC-M1 passed 2026-10-15)
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -11,8 +11,9 @@
    files, image-level bootstrap, bootstrap memory); training pool and teacher cache fixed
    (iteration 36). Pruning, budgets and efficiency next. Then quantization (S08).
 1. Student: Qwen2.5-VL-3B chosen with checks (D05 amendment, 2026-10-12; fallback Qwen3-VL-2B).
-   After RC-M1 and RC-S0, propose the image side, the G2 threshold and the training length from
-   the measured speed, and pin the revision.
+   RC-M1 and RC-Q0 passed (2026-10-15; kernel class and versions pinned, iteration 46). After
+   RC-S0, propose the image side, the G2 threshold and the training length from the measured
+   speed (0.199 s per probe for the 3B), and pin the revision.
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
    draft and freeze guard done (iteration 40). Pruning grid cards RC-E5 to RC-E8 done
    (iteration 41); ablation cards RC-A1 to RC-A6 done, A3 ranking and score reuse fixed
@@ -37,10 +38,9 @@ cards for the team (decision of 2026-10-12).
 | 7 | Tell Amir and Farzan that the staged selection was replaced by one student with checks (D05 amendment) | Soheil | 2026-10-12 |
 | 8 | Confirm the fixed training pool (one pool from `seeds.data_split` for E1, E2, E4 and the recoveries; the teacher cache holds only that pool) | Soheil | 2026-10-12 |
 | 10 | Answer the [team] items of the pre-registration draft (comparator rule, headline accuracy for H1/H4, finding thresholds, prevalence cut points, cap, tiers, training pool, A3 ranking, reuse of E7 for `A4:n128` and `A5:logprob_drop`, H2 matching, McNemar on the majority answer) | all | 2026-10-12 |
-| 9 | Run RC-Q0 (`docs/runs/RC-Q0_quantization_smoke_test.md`, one T4, no data) and commit `results/smoke/RC-Q0.csv` | Soheil | 2026-10-12 |
 | 11 | Choose the rented timing GPU and the precision (`hardware.final_timing`, `hardware.precision`) | team | 2026-10-12 |
 | 12 | Run RC-X1 part A: EndoBench terms, format and overlap (no GPU) | Farzan | 2026-10-12 |
-| 6 | Run RC-M1 (`docs/runs/RC-M1_model_smoke_test.md`, Kaggle 2 x T4) and commit `results/smoke/RC-M1.csv` | Soheil | 2026-10-12 |
+| 13 | Run RC-S0 (`docs/runs/RC-S0_student_feasibility.md`, one T4, no data) and commit `results/selection/R0/` | Soheil | 2026-10-15 |
 
 ## Stages
 
@@ -50,12 +50,12 @@ cards for the team (decision of 2026-10-12).
 | S01 | Decisions | done (dataset-access confirmations pending) | - |
 | S02 | CPU infrastructure | done | - |
 | S03 | Data pipeline | waiting on RC-D1 | team runs RC-D1 |
-| S04 | Model wrappers and unit surgery | code done; waiting on RC-M1 | team runs RC-M1 |
-| S05 | Teacher: Gate 1, cache | code and run cards done (RC-E0a, RC-E0b blocked) | RC-D1, RC-M1, open settings |
-| S05b | Student selection 10 -> 5 -> 3 -> 1 | code, ranking and run cards RC-S0 to RC-S3 done (blocked) | RC-M1, then RC-S0; freeze after RC-S0 |
+| S04 | Model wrappers and unit surgery | done (RC-M1 passed 2026-10-15) | - |
+| S05 | Teacher: Gate 1, cache | code and run cards done (RC-E0a, RC-E0b blocked) | RC-D1, open settings |
+| S05b | Student checks (D05 amendment: one student) | code and cards done; RC-S0 ready | team runs RC-S0; freeze after RC-S0 |
 | S06 | Students E1, E2, budget reference | trainer done; recipe memo and run cards next | S05, S05b |
 | S07 | Pre-registration freeze | draft and freeze guard done; values after RC-D1, RC-S0, RC-B0; team items open | RC-D1, team answers |
-| S08 | Quantization E3, E4, E9 | code and run cards done (RC-Q0 ready; RC-E3, RC-E4, RC-E9 blocked) | RC-Q0, S07 freeze, E2 |
+| S08 | Quantization E3, E4, E9 | RC-Q0 done 2026-10-15 (TorchLinear, versions pinned); RC-E3, RC-E4, RC-E9 blocked | S07 freeze, E2, RC-D1 |
 | S09 | Pruning E5-E8, Gate 2 | code and run cards done (RC-G2, RC-E5 to RC-E8, all blocked) | D07 (scoring method, budgets), S07 freeze, E2 |
 | S10 | Ablations A1-A6 | run cards done (RC-A1 to RC-A6, blocked); team: A3 ranking, E7 reuse | S09, S07 freeze |
 | S11 | External test, timing, aggregation | code and cards done (comparison step, appendix; RC-R1, RC-C1, RC-T1, RC-X1 part A); waiting for results | S08-S10; RC-X1 part A for the EndoBench loader |

@@ -893,3 +893,31 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S12 (paper text: method, setup and related work from verified sources; results only
   through generated macros), while the run cards wait for the team.
 - Needs the team: nothing new.
+
+## Iteration 46: 2026-10-15 (interactive)
+- Stage / item: S04, S05b, S08: reading the Kaggle runs RC-M1 and RC-Q0 (both passed).
+- Did: `quantization.kernel_class` = TorchLinear and `quantization.library_versions` (a package ->
+  version mapping, read by `ptq.library_versions_from_config`; the quantization stage records
+  the pinned and the installed versions in each checkpoint's manifest). Pinned gptqmodel 7.6.0
+  and bitsandbytes 0.50.2 in `requirements/train.txt`, added `torchao>=0.16.0` (Kaggle's 0.10.0
+  breaks peft 0.21.2); a test keeps the pins and the config in step. The RC-Q0 kernel choice now
+  takes the fastest w4 class among those passing both w4 and w8 (RC-Q0's result unchanged).
+  GPU-session tests: the ones that assumed no CUDA now check `torch.cuda.is_available()` either
+  way. **Root cause of the reload failures:** not the GPU (the tiny test models run on the CPU
+  even in a GPU session) but the save format: scales were stored in 16 bit while the 32-bit
+  test models installed them in 32 bit, so a reload moved log-probabilities by up to 4e-4 on
+  Kaggle's CPU. Scales are now stored in 32 bit; the 1e-4 tolerances stay as they were. Real
+  models are 16 bit, so no result changes. **Also fixed:** the committed `RC-Q0.csv` started
+  with a pasted `==== RC-Q0.csv` line (the results check rejected it; the line was removed,
+  no number changed), and `results/summary/all_rows.csv` stored absolute source paths, so the
+  committed summary depended on the machine (now relative to `results/`). RC-S0 set to
+  `ready` with the two models named; the RC-M1 / RC-Q0 requirements of the other cards marked
+  met; D07's cost table recomputed with the measured 0.199 s per probe (proposed scoring mix:
+  about 3.8 h per seed instead of 2.3 h, an estimate); D08 and the decisions log record the
+  RC-Q0 outcome.
+- Verified: ruff check, ruff format, pytest on CPU (the torch tests are skipped here: the two
+  reload tests and the CUDA-aware tests run next on Kaggle).
+- Commit: see `git log` on `research-loop`.
+- Next: S12 paper text while RC-S0 runs; after RC-S0, the image side, G2 threshold and
+  training length proposals.
+- Needs the team: run RC-S0.
