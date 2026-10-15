@@ -20,6 +20,8 @@ they are:
   `configs/data/kvasir_vqa_x1.yaml`), so the validation probes exist.
 - RC-M1 passed. **Met 2026-10-15.**
 - `inputs.image_longest_side` set at the student-selection freeze.
+- **Waiting on RC-S0b (2026-10-16):** `inputs.image_longest_side` is chosen from the RC-S0b
+  measurement by the rule of D05 (448 is provisional only); this card cannot run before.
 
 Platform: Kaggle notebook, **2 x T4**, Internet **on**. Dataset access: your own copy of
 Kvasir-VQA-x1 and Kvasir-SEG (from RC-D1) and the **private** RC-D1 outputs

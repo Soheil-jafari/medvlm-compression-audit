@@ -25,6 +25,8 @@ they are:
   `teacher_cache.max_new_tokens`, `teacher_cache.pool_size` (= `training.data_subset`, set
   from the RC-S0 speed), and `inputs.image_longest_side`. Part (a) caches only that training
   pool (drawn with `seeds.data_split`), not all 143,594 training rows.
+- **Waiting on RC-S0b (2026-10-16):** `inputs.image_longest_side` is chosen from the RC-S0b
+  measurement by the rule of D05 (448 is provisional only); this card cannot run before.
 - RC-M1 passed (gives the generation speed that decides how many sessions part (a) needs).
   **Met 2026-10-15:** the teacher generated 4.48 tokens per second (`results/smoke/RC-M1.csv`).
 

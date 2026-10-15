@@ -64,6 +64,11 @@ remain estimates, because the real number of probes depends on the frozen findin
 
 (The first version of this table gave about 33 h for the 2B at 0.12 s; 1,596 x 640 x 0.12 s is
 about 34 h. With RC-S0's 0.179 s the 3B would need about 102 h and 3.4 h.)
+
+All these timings are at the image side 448, which is provisional. The side is chosen after
+RC-S0b by the rule in D05 ("Image side: measurement and decision rule"); at a larger side the
+scoring hours scale with the seconds per probe RC-S0b measures there, and the projected total of
+the study at each side decides it.
 With the measured speed the proposed mix costs about 3.8 h of scoring per seed of E7, about
 11.5 h for its three seeds (A1 and A2 reuse these effects); exact scoring of every unit, about
 114 h per seed, is out of reach. For the 2B fallback the proposed mix would cost about 3.3 h per

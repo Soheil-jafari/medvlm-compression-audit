@@ -10,18 +10,11 @@ Example: `- 2026-10-20 (Soheil): D01 decided: endoscopy, Qwen2.5-VL-7B -> 3B. Lo
 ## Open
 
 <!-- newest first -->
-- 2026-10-16 (agent, for the team): RC-S0 proposals to answer here (details and numbers in
-  `docs/decisions/D05_student_selection.md`, "Round 0 numbers and proposals"):
-  `inputs.image_longest_side` = 448; G2 threshold = 0.10 (the teacher's Gate 1 blank-image
-  drop); `training.data_subset` = 10,000 provisional (steps 625), final once RC-D1 gives the
-  answer lengths and the weekly GPU quota is checked; `compute_unit_b` and the Round 1 subset
-  not needed. Also a flag: the D06 micro-batch of 4 may not fit one T4 for the 3B (estimate
-  14.0 of 15.6 GB); RC-E1 measures it. Answer format: `- 2026-10-.. (name): RC-S0 proposals:
-  side <448|...>, G2 <0.10|...>, data_subset <10000|...>`.
 
 ## Handled
 
 <!-- - YYYY-MM-DD (name): note -> iteration N, what was done -->
+- 2026-10-16 (Soheil, in the session): RC-S0 proposals answered: data_subset 10,000 accepted; image side not decided (RC-S0b first); training-length check added (30,000, E2 and E7 at B2, seed 0); G2 unchanged -> iteration 48, configs, D05, D06, pre-registration, RC-S0b, RC-L1 and the log.
 - 2026-10-12 (Soheil): D08 answered in the session (GPTQ 4/8 + LLM.int8, E4 option B, 128 calibration images, keep w8a8) -> iteration 37, D08, decisions log and quantization configs.
 - 2026-10-12 (Soheil): D05 amendment accepted, pick one student (Qwen2.5-VL-3B, fallback Qwen3-VL-2B) -> iteration 34, configs, D05, RC-S0 and the log updated.
 - 2026-10-12 (Soheil): D04 answered in the session (moderate Gate 1 rule, mid-grey fill, top_k 20) -> iteration 26, E0 config, D04 memo and decisions log updated.

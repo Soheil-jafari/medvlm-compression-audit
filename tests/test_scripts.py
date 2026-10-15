@@ -50,7 +50,8 @@ def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixtur
     [
         ("01_cache_teacher_outputs.py", [], "max_new_tokens"),
         ("00_check_teacher_image_reliance.py", [], "domain.findings"),
-        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "training.steps"),
+        # training.steps is set (2026-10-16); the image side is the open setting now
+        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "inputs.image_longest_side"),
         (
             "06_evaluate.py",
             ["--exp", "A4", "--budget", "B2", "--variant", "n64"],
