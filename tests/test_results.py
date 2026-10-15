@@ -143,3 +143,15 @@ def test_classify_path(tmp_path: Path) -> None:
     assert variant is not None and variant.kind == "comparison" and variant.budget == "B2"
     assert classify_path(tmp_path / "summary" / "by_arm.csv", tmp_path) is None
     assert classify_path(tmp_path / "README.md", tmp_path) is None
+
+
+def test_the_summary_names_sources_relative_to_the_results_folder(tmp_path: Path) -> None:
+    """The committed ``all_rows.csv`` must not depend on the machine or the working folder."""
+    from medcompress.evaluation.report import setup_data_table
+
+    row = {"experiment": "x", "budget": "", "seed": 0, "metric": "images", "value": 3.0}
+    append_results([row], tmp_path / "results" / "data" / "summary.csv")
+    append_results([{**row, "experiment": "RC-M1"}], tmp_path / "results" / "smoke" / "RC-M1.csv")
+    rows = load_results(tmp_path / "results")
+    assert sorted(rows["source"]) == ["data/summary.csv", "smoke/RC-M1.csv"]
+    assert "images" in setup_data_table(rows) and "RC-M1" not in setup_data_table(rows)
