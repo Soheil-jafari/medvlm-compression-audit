@@ -10,6 +10,14 @@ Example: `- 2026-10-20 (Soheil): D01 decided: endoscopy, Qwen2.5-VL-7B -> 3B. Lo
 ## Open
 
 <!-- newest first -->
+- 2026-10-16 (agent, for the team): RC-S0 proposals to answer here (details and numbers in
+  `docs/decisions/D05_student_selection.md`, "Round 0 numbers and proposals"):
+  `inputs.image_longest_side` = 448; G2 threshold = 0.10 (the teacher's Gate 1 blank-image
+  drop); `training.data_subset` = 10,000 provisional (steps 625), final once RC-D1 gives the
+  answer lengths and the weekly GPU quota is checked; `compute_unit_b` and the Round 1 subset
+  not needed. Also a flag: the D06 micro-batch of 4 may not fit one T4 for the 3B (estimate
+  14.0 of 15.6 GB); RC-E1 measures it. Answer format: `- 2026-10-.. (name): RC-S0 proposals:
+  side <448|...>, G2 <0.10|...>, data_subset <10000|...>`.
 
 ## Handled
 

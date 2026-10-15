@@ -16,10 +16,11 @@ Blocked until all of these are true; the agent changes the status to `ready` whe
 - RC-S0 passed for the chosen student (Qwen2.5-VL-3B; the fallback is Qwen3-VL-2B). The
   student is already named in `configs/base.yaml: components.student` and
   `configs/training.yaml: model.config` (D05 amendment); the agent pins its revision once RC-S0
-  has passed.
+  has passed. **RC-S0 met 2026-10-16** (both models pass G1); the revision pin is still to do.
 - `training.data_subset` and `training.steps` are set (rule of D06: one pass over the subset,
   `steps = ceil(data_subset / 16)`; the agent proposes the subset from the RC-S0 speed and the
-  team confirms). The other training values are already decided (D06).
+  team confirms). The other training values are already decided (D06). Proposal written
+  2026-10-16 (D05, "Round 0 numbers and proposals"): 10,000 examples, provisional.
 - RC-D1 done; the finding list, label rules, lesion-size thresholds and
   `image_reliance_check.mask_findings` are written to `configs/domain/endoscopy.yaml`.
 - `evaluation.max_new_tokens` and `inputs.image_longest_side` are set (D04 rule, RC-S0 numbers).
@@ -30,9 +31,19 @@ Dataset access: your own copy of Kvasir-VQA-x1 and Kvasir-SEG and the private RC
 (`splits.json`, `mask_links.json`) attached as a private dataset. Nothing from those goes into
 the repository.
 
-Runtime: one seed is one training run plus a validation pass. The agent fills in the estimate
-when it sets the card to `ready` (it follows from the RC-S0 speed and `training.steps`).
-Use one session per seed; the seeds are independent.
+Runtime: one seed is one training run plus a validation pass. Training is about
+`data_subset` x 0.74 s (RC-S0's one-example LoRA step on the 3B; an **estimate**, since the cost
+at micro-batch 4 is not measured): about 2.1 h for 10,000 examples. The agent fills in the full
+estimate when it sets the card to `ready`. Use one session per seed; the seeds are independent.
+
+**Memory check (first seed, before the other two).** D06 trains with a micro-batch of 4 and 4
+accumulation steps. RC-S0 measured 9,140,717,056 bytes for one LoRA step at **one** example;
+scaled to 4 examples that estimate is about 14.0 GB of the T4's 15.6 GB, and real training
+examples are longer than a Round 0 probe, so the micro-batch of 4 may not fit (D05 flag). The
+first seed measures it: `train_peak_gpu_bytes` and `train_seconds` / `train_steps` (seconds
+per update) in `metrics.csv`. If training stops with "CUDA out of memory", stop there, keep the
+last 30 lines of the log, and tell the agent through the inbox: do **not** change the batch
+yourself (the team decides, D06 stays as it is until then).
 
 ## 3. Commands
 
@@ -84,6 +95,8 @@ team before anything is compressed.
 - Run by / date:
 - Commit actually used:
 - Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft"`):
-- Per seed: wall time, peak GPU memory, final training loss:
+- Per seed: wall time, peak GPU memory (`train_peak_gpu_bytes`), seconds per update
+  (`train_seconds` / `train_steps`), final training loss; for seed 0, whether the micro-batch
+  of 4 fitted:
 - Name of the private datasets with your adapters and `outcomes.npz` files:
 - Anything unusual (errors, retries, changed settings):

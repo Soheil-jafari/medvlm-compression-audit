@@ -50,20 +50,24 @@ Grid size depends on the student (hub configs read 2026-10-12):
 Cost on one T4 for one seed, with 128 calibration images and about 640 probes. This memo first
 **assumed** 0.12 s per probe forward pass. **Measured 2026-10-15 (RC-M1):** the 3B student takes
 **0.199 s per probe** (`student_scoring_seconds_per_probe` = 0.1993 in `results/smoke/RC-M1.csv`,
-synthetic images at the image side 448). The 2B fallback is not measured yet (RC-S0 measures it),
-so its column still uses the assumed speed. Hours = units x 640 probes x seconds per probe; they
+synthetic images at the image side 448). **Measured 2026-10-16 (RC-S0, same side):** the 3B at
+0.179 s and the 2B fallback at **0.074 s per probe** (`r0_scoring_seconds_per_probe` in
+`results/selection/R0/`). The 3B column keeps RC-M1's larger 0.199 s; the 2B column now uses
+0.074 s instead of the assumed 0.12 s. Hours = units x 640 probes x seconds per probe; they
 remain estimates, because the real number of probes depends on the frozen finding list.
 
-| Method | Qwen2.5-VL-3B, measured 0.199 s | Qwen2.5-VL-3B, assumed 0.12 s (old) | Qwen3-VL-2B, assumed 0.12 s |
-|---|---|---|---|
-| Exact for every unit | about 114 h | about 68 h | about 34 h |
-| Exact for layers and KV groups, first-order for channel groups (**proposed**) | about 3.8 h + minutes | about 2.3 h + minutes | about 5.4 h + minutes |
-| First-order for every unit | minutes | minutes | minutes |
+| Method | Qwen2.5-VL-3B, measured 0.199 s | Qwen2.5-VL-3B, assumed 0.12 s (old) | Qwen3-VL-2B, measured 0.074 s | Qwen3-VL-2B, assumed 0.12 s (old) |
+|---|---|---|---|---|
+| Exact for every unit | about 114 h | about 68 h | about 21 h | about 34 h |
+| Exact for layers and KV groups, first-order for channel groups (**proposed**) | about 3.8 h + minutes | about 2.3 h + minutes | about 3.3 h + minutes | about 5.4 h + minutes |
+| First-order for every unit | minutes | minutes | minutes | minutes |
 
-(The first version of this table gave about 33 h for the 2B; 1,596 x 640 x 0.12 s is about 34 h.)
+(The first version of this table gave about 33 h for the 2B at 0.12 s; 1,596 x 640 x 0.12 s is
+about 34 h. With RC-S0's 0.179 s the 3B would need about 102 h and 3.4 h.)
 With the measured speed the proposed mix costs about 3.8 h of scoring per seed of E7, about
 11.5 h for its three seeds (A1 and A2 reuse these effects); exact scoring of every unit, about
-114 h per seed, is out of reach.
+114 h per seed, is out of reach. For the 2B fallback the proposed mix would cost about 3.3 h per
+seed: its 252 KV groups make up for its faster probes.
 
 Exact for every unit does not fit the budget of three Kaggle accounts for three seeds plus
 ablations. First-order for every unit would score whole layers with a straight line, which is
