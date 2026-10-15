@@ -139,12 +139,34 @@ kernel check).
 - **Gate 2** (reading only): E7 against the comparator at B2 on the validation split, seed 0
   (RC-G2), after the freeze. It decides which article shape is drafted first; it changes no
   setting.
+- **Training-length check** (secondary, **not confirmatory**; added 2026-10-16, decision 3 of
+  Soheil). E2 and E7 are run once more with **30,000** training examples, at one budget (**B2**)
+  and seed 0, next to the main 10,000-example runs:
+  - *Data:* the first 30,000 of the same seeded pool (`offline_kd.training_pool`, seed
+    20261012). Every pool is a prefix of one shuffle, so the 30,000 contain the 10,000 of the
+    main runs (`tests/test_training_config.py`): only the amount of data changes, together with
+    what follows from it, the number of steps (`ceil(30,000 / 16)` = 1,875) and the order in
+    which the examples are visited. Everything else is the D06 recipe.
+  - *How E7 depends on E2, and what changes:* every pruning arm starts from the E2 student of
+    its seed (adapter merged) for the scoring (stage 04), the removal and the recovery
+    (stage 05) and the evaluation (the pruned model is rebuilt from it); the recovery runs on
+    the first 25 % of the pool for 25 % of the E2 steps. For the check, E7 starts from the
+    30,000-example E2 (E2@30k) and recovers for 25 % of the E2@30k steps on the first 25 % of
+    its pool (7,500 examples, which lie inside the main 10,000), with the same rounding as the
+    main recovery. Its B2 target is the same absolute footprint as in the main runs (a fraction
+    of the main E2 reference, RC-B0; the merged 30k student has the same architecture).
+  - *Reported (appendix), whatever it shows:* at 10,000 (the main seed-0 runs) and at 30,000,
+    the two primary endpoints of E2 and of E7 at B2, the paired difference E7 - E2 with the
+    image-level paired bootstrap 95 % interval (10,000 resamples, seed 0; seed 0 against seed 0
+    at both sizes), and whether the order of E2 and E7 on each primary endpoint is the same at
+    both sizes. It is not part of H1-H4, cannot change the main analysis, the comparator or a
+    verdict, and no setting is changed because of it.
 
 ## 7. Compression settings (decided, frozen with this document)
 
 | Area | Settings | Source |
 |---|---|---|
-| Training (E1, E2, E4) | LoRA rank 16, alpha 32, dropout 0.05 on all decoder projections; AdamW 1e-4, linear decay, 20 warm-up steps, 4 x 4 examples per update, KD weight 0.5, temperature 2; one pass over the pool (`steps = ceil(data_subset / 16)`, **[RC-S0]**) | D06 |
+| Training (E1, E2, E4) | LoRA rank 16, alpha 32, dropout 0.05 on all decoder projections; AdamW 1e-4, linear decay, 20 warm-up steps, 4 x 4 examples per update, KD weight 0.5, temperature 2; one pass over the pool: 10,000 examples, 625 steps (decided 2026-10-16); the training-length check adds E2 and E7 at 30,000 examples (section 6) | D06 |
 | Recovery (E5-E7, A1-A6) | the same adapter, optimiser and loss; 25 % of the E2 steps on the first 25 % of the pool; identical for every arm (fingerprint logged) | D06 |
 | Pruning | units: decoder layers, KV groups, MLP channel groups of 128; score per parameter; first 2 and last 1 layers protected; 128 calibration images; one-shot removal; 1 negative per positive; signed effects; probe batch 4; how a unit is switched off while scored **[team]** (D07 section 1) | D07 |
 | Quantization | E3 `w4`, `w8`: GPTQ, groups of 128, 128 calibration images, decoder linear layers only; `w8a8`: LLM.int8; E8, E9: the `w4` recipe; kernel class and versions from RC-Q0 | D08 |

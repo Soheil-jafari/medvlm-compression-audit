@@ -97,3 +97,8 @@ Check before committing: `git status` shows no images, adapters, checkpoints or
 - Per run: wall time of scoring / search / recovery / evaluation, peak GPU memory:
 - Names of the private datasets with the pruned models and `outcomes*.npz` files:
 - Anything unusual (errors, retries, changed settings):
+
+## 7. Training-length check
+
+The B2 seed-0 run of this card is the 10,000-example side of the training-length check
+(pre-registration section 6); its 30,000-example counterpart, E7 from E2@30k, is run card RC-L1.

@@ -83,3 +83,8 @@ is compressed.
 - Per seed: wall time, peak GPU memory, final training loss and KD term:
 - Name of the private datasets with your adapters and `outcomes.npz` files:
 - Anything unusual (errors, retries, changed settings):
+
+## 7. Training-length check
+
+Seed 0 of this card is the 10,000-example side of the training-length check (pre-registration
+section 6); its 30,000-example counterpart is run card RC-L1.
