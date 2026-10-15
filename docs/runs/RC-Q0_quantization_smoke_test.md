@@ -95,3 +95,17 @@ After the run the agent sets `quantization.kernel_class` (the chosen class) and
   reload differs by up to 2.5e-4, tolerance 1e-4; same kind as the RC-M1 reload failures).
   torchao printed that its Hopper-only kernels (_C_cutlass_90a, _C_mxfp8) cannot load on T4.
   The kernel choice rule only compares w4 speed; here the chosen class also passed w8.
+
+## 7. Agent notes after the run (2026-10-15)
+
+- Kernel choice rule fixed: `scripts/smoke_quantization.py` compared only the w4 speed, so it
+  could have picked a class that fails w8 (TorchAtenLinear passed w4 only). It now chooses the
+  fastest class at w4 **among the classes that passed both w4 and w8**
+  (`quantization/smoke.py`, `choose_kernel_class`). This does not change this run's result:
+  TorchLinear passed both widths and was the fastest of the two that did (TritonV2Linear
+  0.240 ms at w4); a test applies the new rule to the committed `RC-Q0.csv` and gets
+  TorchLinear.
+- The first line of the committed `RC-Q0.csv` was a pasted `==== RC-Q0.csv` label, which the
+  results check rejects; the agent removed that line (no number changed).
+- `quantization.kernel_class` and `quantization.library_versions` are set from this run, and
+  gptqmodel 7.6.0 and bitsandbytes 0.50.2 are pinned in `requirements/train.txt`.

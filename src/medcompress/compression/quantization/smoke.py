@@ -20,7 +20,7 @@ import importlib
 import math
 import pkgutil
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +112,29 @@ def try_kernel(
         return {"ok": True, "ms": 1000 * (time.perf_counter() - started) / repeats, "error": ""}
     except Exception as exc:  # noqa: BLE001 - every failure is a finding of the smoke test
         return {"ok": False, "ms": math.nan, "error": f"{type(exc).__name__}: {exc}"[:300]}
+
+
+def choose_kernel_class(rows: Sequence[Mapping[str, Any]], classes: Sequence[str]) -> str | None:
+    """The class RC-Q0 picks: the fastest at w4 among those that passed **both** w4 and w8.
+
+    ``rows`` are the :func:`kernel_rows`; ``classes`` the dotted paths they were made from.
+    Every GPTQ recipe (E3 ``w4`` and ``w8``, E8, E9) loads the same class, so a class that
+    fails one of the two widths is never chosen. Ties are broken by name. None if no class
+    passed both.
+    """
+    values = {str(r["metric"]): float(r["value"]) for r in rows}
+    shorts = {dotted.rsplit(".", 1)[-1]: dotted for dotted in reversed(classes)}
+    passed = [
+        short
+        for short in shorts
+        if values.get(f"kernel_ok:{short}:w4") == 1.0
+        and values.get(f"kernel_ok:{short}:w8") == 1.0
+        and f"kernel_ms:{short}:w4" in values
+    ]
+    if not passed:
+        return None
+    fastest = min(passed, key=lambda short: (values[f"kernel_ms:{short}:w4"], short))
+    return shorts[fastest]
 
 
 def kernel_rows(classes: Sequence[str], log: Callable[[str], None] = print) -> list[dict[str, Any]]:

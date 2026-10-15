@@ -267,3 +267,37 @@ def test_the_pinned_requirements_match_the_versions_rc_q0_tested() -> None:
     for package in ("gptqmodel", "bitsandbytes", "transformers", "peft"):
         assert pins[package] == versions[package], package
     assert re.search(r"^torchao>=0\.16\.0", text, flags=re.M)  # peft 0.21.2 needs it
+
+
+def test_the_kernel_choice_needs_both_widths_and_then_takes_the_fastest_w4() -> None:
+    from medcompress.compression.quantization.smoke import choose_kernel_class, row
+
+    classes = ["pkg.a.FastW4Only", "pkg.b.Both", "pkg.c.BothSlower", "pkg.d.Broken"]
+    rows = [row("kernel_ok:FastW4Only:w4", 1), row("kernel_ms:FastW4Only:w4", 0.1),
+            row("kernel_ok:FastW4Only:w8", 0),
+            row("kernel_ok:Both:w4", 1), row("kernel_ms:Both:w4", 0.3),
+            row("kernel_ok:Both:w8", 1), row("kernel_ms:Both:w8", 0.2),
+            row("kernel_ok:BothSlower:w4", 1), row("kernel_ms:BothSlower:w4", 0.4),
+            row("kernel_ok:BothSlower:w8", 1), row("kernel_ms:BothSlower:w8", 0.1),
+            row("kernel_ok:Broken:w4", 0), row("kernel_ok:Broken:w8", 0)]  # fmt: skip
+    assert choose_kernel_class(rows, classes) == "pkg.b.Both"  # FastW4Only fails w8
+    tie = [*rows, row("kernel_ms:BothSlower:w4", 0.3)]  # later row wins; tie broken by name
+    assert choose_kernel_class(tie, classes) == "pkg.b.Both"
+    assert choose_kernel_class(rows[:3], classes) is None  # nothing passed both widths
+
+
+def test_the_committed_rc_q0_rows_give_the_configured_class() -> None:
+    import csv
+    from pathlib import Path
+
+    from medcompress.compression.quantization.kernels import TORCH_KERNEL_CLASS
+    from medcompress.compression.quantization.ptq import kernel_class_from_config
+    from medcompress.compression.quantization.smoke import choose_kernel_class
+
+    path = Path(__file__).resolve().parents[1] / "results" / "smoke" / "RC-Q0.csv"
+    with path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    shorts = sorted({r["metric"].split(":")[1] for r in rows if r["metric"].startswith("kernel_")})
+    classes = [TORCH_KERNEL_CLASS if s == "TorchLinear" else f"gptqmodel.x.{s}" for s in shorts]
+    assert choose_kernel_class(rows, classes) == TORCH_KERNEL_CLASS
+    assert kernel_class_from_config(_ptq_config()) == TORCH_KERNEL_CLASS
