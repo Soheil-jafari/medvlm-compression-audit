@@ -179,8 +179,37 @@ def test_recipe_errors_name_the_open_setting() -> None:
         PTQRecipe.from_config(config, "w4")
     PTQRecipe.from_config(config, "w8a8")  # LLM.int8 needs no calibration
     with pytest.raises(ConfigError, match="kernel_class"):
-        kernel_class_from_config(_ptq_config())
+        kernel_class_from_config(_ptq_config(kernel_class="TODO"))
     assert kernel_class_from_config(_ptq_config(kernel_class="reference")) == "reference"
+
+
+def test_rc_q0_set_the_kernel_class_and_the_library_versions() -> None:
+    from medcompress.compression.quantization.kernels import TORCH_KERNEL_CLASS
+    from medcompress.compression.quantization.ptq import (
+        kernel_class_from_config,
+        library_versions_from_config,
+    )
+    from medcompress.config import ConfigError, load_config
+
+    for exp in ("E3", "E4", "E8", "E9"):  # every quantized arm reads the same block
+        config = load_config(f"experiments/{exp}.yaml")
+        assert kernel_class_from_config(config) == TORCH_KERNEL_CLASS
+        versions = library_versions_from_config(config)
+        assert versions["gptqmodel"] == "7.6.0" and versions["bitsandbytes"] == "0.50.2"
+        assert all(isinstance(v, str) for v in versions.values())  # "5.19" must not be a float
+    with pytest.raises(ConfigError, match="library_versions"):
+        library_versions_from_config(_ptq_config(library_versions="TODO"))
+    with pytest.raises(ConfigError, match="map a package"):
+        library_versions_from_config(_ptq_config(library_versions=["gptqmodel==7.6.0"]))
+    with pytest.raises(ConfigError, match="bitsandbytes"):
+        library_versions_from_config(_ptq_config(library_versions={"gptqmodel": "7.6.0"}))
+
+
+def test_installed_versions_name_missing_packages_none() -> None:
+    from medcompress.compression.quantization.ptq import installed_versions
+
+    found = installed_versions(["numpy", "no-such-package-for-sure"])
+    assert found["numpy"] == np.__version__ and found["no-such-package-for-sure"] is None
 
 
 def test_quantized_checkpoints_round_trip(tmp_path) -> None:  # noqa: ANN001

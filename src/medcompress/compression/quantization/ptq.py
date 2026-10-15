@@ -152,6 +152,40 @@ def kernel_class_from_config(config: Mapping[str, Any]) -> str:
     return str(value)
 
 
+QUANT_LIBRARIES: tuple[str, ...] = ("gptqmodel", "bitsandbytes")
+"""Packages whose versions RC-Q0 pinned for the quantized arms (``library_versions``)."""
+
+
+def library_versions_from_config(config: Mapping[str, Any]) -> dict[str, str]:
+    """``quantization.library_versions``: package name -> version string (set after RC-Q0).
+
+    Raises:
+        ConfigError: the value is open, not a mapping, or lacks gptqmodel or bitsandbytes.
+    """
+    value = (config.get("quantization") or {}).get("library_versions")
+    if _open(value):
+        raise ConfigError("settings still open: quantization.library_versions (set after RC-Q0)")
+    if not isinstance(value, Mapping):
+        raise ConfigError("quantization.library_versions must map a package to its version")
+    missing = [name for name in QUANT_LIBRARIES if name not in value]
+    if missing:
+        raise ConfigError(f"quantization.library_versions lacks {missing}")
+    return {str(name): str(version) for name, version in value.items()}
+
+
+def installed_versions(packages: Sequence[str]) -> dict[str, str | None]:
+    """The installed version of each package (None if it is not installed)."""
+    from importlib import metadata
+
+    out: dict[str, str | None] = {}
+    for name in packages:
+        try:
+            out[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            out[name] = None
+    return out
+
+
 def quantized_dir(config: Mapping[str, Any], run: RunContext) -> Path:
     """``<checkpoint_root>/<ID>[/<variant>]/<budget|nobudget>/seed<k>/quantized``."""
     tag = run.experiment_tag.replace(":", "/")
@@ -537,6 +571,12 @@ def run_quantization(
         rows["quantization_seconds"] = time.perf_counter() - started
         rows["quantization_calibration_images"] = float(len(calibration))
         extra["calibration_sample_ids"] = [s.sample_id for s in calibration]
+    if isinstance((config.get("quantization") or {}).get("library_versions"), Mapping):
+        pinned = library_versions_from_config(config)  # provenance of the saved codes
+        extra["library_versions"] = {
+            "pinned": pinned,
+            "installed": installed_versions(list(pinned)),
+        }
     directory = save_quantized(
         records, recipe, quantized_dir(config, run), start_from=parent, extra=extra
     )
