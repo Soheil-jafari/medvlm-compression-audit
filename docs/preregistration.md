@@ -102,7 +102,7 @@ kernel check).
 ## 6. Analysis plan
 
 - **Bootstrap:** paired percentile bootstrap with 10,000 resamples (D06) that resamples
-  **images**: all probes of one image are drawn together (`statistics._resample_indices` with
+  **images**: all probes of one image are drawn together (`statistics.resample_indices` with
   `clusters`; iteration 35). Random seed of the bootstrap: 0. 95 % intervals.
 - **Seeds:** for each arm, the per-image outcomes are averaged over its 3 seeds, then images are
   bootstrapped (`evaluation/comparisons.py`); seed means and SDs are reported next to them.
@@ -116,6 +116,19 @@ kernel check).
   H3 supported if both primary differences are above 0 with Holm-adjusted p < 0.05, not
   supported if either CI lies at or below 0; H4 supported if any Kendall tau between the
   accuracy ranking and a clinical ranking has a CI upper bound below 1. Otherwise inconclusive.
+- **Comparison step** (`scripts/09_compare_arms.py`, `evaluation/compare_stage.py`): one
+  sequence of image-level resamples (seed 0) is shared by every arm and every comparison. An
+  arm with a missing seed is left out and listed, never compared on fewer seeds.
+  - H1 for every arm of E3-E8 (each variant and budget): the relative drop against E2 of the
+    small-finding recall minus that of the headline accuracy; the same with the rare-group
+    recall is reported next to it.
+  - H2 **[team]** proposal: E3 `w8` is compared at the budget whose target is nearest to its
+    measured peak memory, against the generic pruning arm (E5 criteria, E6) with the highest
+    validation small-finding recall at that budget (mean of 3 seeds).
+  - H4: the compressed students E3-E8 at every budget, ranked by the headline accuracy and by
+    small-finding recall, rare-group recall and ECE (negated, so higher is better in both).
+  - McNemar per finding **[team]** proposal: on each probe's majority answer over the 3 seeds
+    (right in at least 2), for E7 against the comparator and for H2.
 - **Answer parsing:** probes are scored, never parsed, so they cannot be unparseable. Free-text
   answers count as "yes"/"no" only if they start with that word after leading punctuation
   (`clinical.parse_yes_no`); anything else is an error.

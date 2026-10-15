@@ -120,3 +120,52 @@ def deduplicate(
         c for c, _ in find_near_duplicates(reference, candidates, threshold=threshold, root=root)
     }
     return [s for s in candidates if s.sample_id not in duplicated]
+
+
+IMAGE_SUFFIXES: tuple[str, ...] = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff")
+
+
+def folder_fingerprints(folder: Path) -> dict[str, str]:
+    """dHash of every image file under ``folder``; keys are paths relative to it.
+
+    Works on any external set before its question format is known (RC-X1 part A).
+    """
+    folder = Path(folder)
+    return {
+        path.relative_to(folder).as_posix(): image_fingerprint(str(path))
+        for path in sorted(folder.rglob("*"))
+        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
+    }
+
+
+def overlap_rows(
+    name: str,
+    candidates: Mapping[str, str],
+    splits: Mapping[str, Mapping[str, str]],
+    *,
+    threshold: int,
+) -> list[dict[str, object]]:
+    """Counts of external images that are near-duplicates of each of our splits.
+
+    ``candidates`` maps external images to fingerprints, ``splits`` maps a split name to the
+    fingerprints of its images. Only counts are returned (results schema, ``experiment`` =
+    ``name``): no image name leaves the machine.
+    """
+    rows: list[dict[str, object]] = [
+        {"experiment": name, "budget": "", "seed": 0, "metric": "images", "value": len(candidates)},
+        {"experiment": name, "budget": "", "seed": 0, "metric": "dedup_threshold",
+         "value": threshold},
+    ]  # fmt: skip
+    hit_any: set[str] = set()
+    for split, reference in splits.items():
+        hits = {c for c, _, _ in near_duplicate_pairs(reference, candidates, threshold=threshold)}
+        hit_any |= hits
+        rows.append(
+            {"experiment": name, "budget": "", "seed": 0,
+             "metric": f"near_duplicates_of:{split}", "value": len(hits)}
+        )  # fmt: skip
+    rows.append(
+        {"experiment": name, "budget": "", "seed": 0, "metric": "images_after_dedup",
+         "value": len(candidates) - len(hit_any)}
+    )  # fmt: skip
+    return rows

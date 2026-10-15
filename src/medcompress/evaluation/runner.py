@@ -10,6 +10,7 @@ comparisons between arms need them; the summary rows go to ``metrics.csv``.
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -358,6 +359,7 @@ def _image_reliance(
         samples,
         findings=list(settings.findings),
         max_per_finding=settings.max_per_finding,
+        subsample_seed=PROBE_SAMPLE_SEED,
         **_audit_kwargs(settings, data_root, seed),
     )
     audit_metrics, audit = _mask_audit(model, samples, settings, data_root, seed)
@@ -406,6 +408,7 @@ def evaluate_model(
             "probe_yes": out.yes,
             "probe_margin": out.margin,
             "probe_area": out.area,
+            "probe_has_mask": out.has_mask,
         }
         if out.yes_blank is not None:
             arrays["probe_yes_blank"] = out.yes_blank
@@ -440,6 +443,7 @@ def evaluate_model(
     if audit is not None:
         arrays |= {
             "audit_sample_ids": np.array(audit.sample_ids),
+            "audit_findings": np.array(audit.findings),
             "audit_original_yes": audit.original_yes,
             "audit_lesion_flip": audit.lesion_flip,
             "audit_random_flip": audit.random_flip,
@@ -523,8 +527,10 @@ def run_evaluation(
     if model is None:
         model = load_run_model(config, run, int(side))
     seed = run.seed
+    started = time.perf_counter()
     result = evaluate_model(model, samples, settings, data_root, seed)
-    metrics, arrays = result.metrics, result.arrays
+    seconds = time.perf_counter() - started  # compute used (appendix)
+    metrics, arrays = [*result.metrics, Metric("evaluation_seconds", seconds)], result.arrays
     budget = run.budget or ""
     rows = to_rows(metrics, run.experiment_tag, budget, seed)
     undefined = sorted(m.name for m in metrics if math.isnan(m.value))

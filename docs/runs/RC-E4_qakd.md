@@ -57,6 +57,9 @@ python -m pytest -q tests/test_results.py                  # must pass before yo
 codes go to `checkpoints/E4/nobudget/seed<k>/quantized/` (never committed); keep them as a
 private dataset.
 
+Keep `outputs/` (the per-probe `outcomes*.npz` files) as a private dataset too: the paired
+comparisons (RC-C1) need the test-split ones. Write its name in section 6.
+
 ## 4. What to commit back
 
 - `results/E4/nobudget/seed<k>/metrics.csv`, `metrics_test.csv`, `efficiency.csv`, `efficiency_setup.json`
@@ -82,3 +85,4 @@ Check before committing: `git status` shows no images, checkpoints, caches or `o
 - Teacher cache manifest hash:
 - Pass criteria: all met / not met (list):
 - Anything unusual:
+- Names of the private datasets with the checkpoints and `outcomes*.npz` files:

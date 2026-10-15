@@ -35,8 +35,10 @@ results in its next iteration.
 | [RC-A4](RC-A4_calibration_size.md) | S10 | A4: 32 / 64 / 256 calibration images, B2 x 3 seeds (128 = E7) | Amir | blocked (as RC-A1) |
 | [RC-A5](RC-A5_delta_definition.md) | S10 | A5: KL effect, B2 x 3 seeds (log-prob drop = E7) | Amir | blocked (as RC-A1; unit set depends on D07 section 1) |
 | [RC-A6](RC-A6_unit_granularity.md) | S10 | A6: layers only / heads and channel groups, B2 x 3 seeds | Amir | blocked (as RC-A1) |
-| RC-X1 | S11 | External test | Farzan | not written yet |
-| RC-T1 | S11 | Final timing on the rented GPU | Amir | not written yet |
+| [RC-R1](RC-R1_reference_arms_test_split.md) | S11 | E0, E1, E2 on the test split (after the freeze) | Soheil | blocked (freeze, RC-E0b, RC-E1, RC-E2) |
+| [RC-C1](RC-C1_paired_comparisons.md) | S11 | Paired comparisons (H1-H4), tables, figures, verdicts; CPU only | Soheil | blocked (every test-split evaluation) |
+| [RC-X1](RC-X1_external_test_endobench.md) | S11 | EndoBench part A: terms, format, overlap with our images (no GPU); part B written after it | Farzan | blocked (RC-D1) |
+| [RC-T1](RC-T1_final_timing.md) | S11 | Final timing of every arm on the rented GPU (T5) | Amir | blocked (GPU and precision chosen, every arm done) |
 
 Statuses: `not written yet` -> `ready` -> `running` -> `done` (or `failed`, with the
 reason in the card).

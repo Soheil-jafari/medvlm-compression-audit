@@ -133,11 +133,11 @@ def test_bootstrap_kendall_tau_agreeing_metrics() -> None:
 
 
 def test_cluster_bootstrap_resamples_whole_images() -> None:
-    from medcompress.evaluation.statistics import _resample_indices
+    from medcompress.evaluation.statistics import resample_indices
 
     # three images with 1, 2 and 3 probes: every resample keeps whole images
     clusters = np.array(["a", "b", "b", "c", "c", "c"])
-    for idx in _resample_indices(6, 50, seed=1, clusters=clusters):
+    for idx in resample_indices(6, 50, seed=1, clusters=clusters):
         for label in "abc":
             rows = np.flatnonzero(clusters == label)
             taken = np.isin(idx, rows)
@@ -145,7 +145,7 @@ def test_cluster_bootstrap_resamples_whole_images() -> None:
             counts = [int(np.sum(idx == r)) for r in rows]
             assert taken.sum() == 0 or len(set(counts)) == 1
     with pytest.raises(ValueError, match="labels"):
-        next(_resample_indices(6, 1, seed=0, clusters=["a", "b"]))
+        next(resample_indices(6, 1, seed=0, clusters=["a", "b"]))
 
 
 def test_cluster_bootstrap_widens_the_interval_for_correlated_probes() -> None:
@@ -161,8 +161,8 @@ def test_cluster_bootstrap_widens_the_interval_for_correlated_probes() -> None:
 
 
 def test_lazy_resampling_matches_the_old_batched_draws() -> None:
-    from medcompress.evaluation.statistics import _resample_indices
+    from medcompress.evaluation.statistics import resample_indices
 
     batched = np.random.default_rng(7).integers(0, 13, size=(20, 13))
-    lazy = np.stack(list(_resample_indices(13, 20, seed=7)))
+    lazy = np.stack(list(resample_indices(13, 20, seed=7)))
     assert np.array_equal(batched, lazy)

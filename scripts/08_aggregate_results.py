@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from medcompress.cli import build_parser, main_guard, resolve_config, run_stage  # noqa: E402
+from medcompress.evaluation.compare_stage import headline_metric  # noqa: E402
 from medcompress.evaluation.statistics import aggregate_results  # noqa: E402
 
 
@@ -44,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
         tables_dir=args.tables_dir,
         figures_dir=args.figures_dir,
         verdicts_path=args.verdicts,
+        headline=headline_metric(config),
     )
 
 

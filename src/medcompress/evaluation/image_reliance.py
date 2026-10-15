@@ -403,17 +403,20 @@ def reliance_metrics(
     fill: int = DEFAULT_FILL,
     max_per_finding: int | None = None,
     groups: Mapping[str, str] | None = None,
+    subsample_seed: int | None = None,
 ) -> dict[str, float]:
     """Blank-image and other-image tests on all labelled probes (no masks needed).
 
     Returns balanced accuracy (macro over findings) on the real images and on blank
     images, the yes rate on blank images, and how often the answer follows an image
-    with the opposite label.
+    with the opposite label. ``max_per_finding`` keeps a random subset per finding drawn
+    with ``subsample_seed`` (default ``seed``); give every model the same one so all are
+    tested on the same probes.
     """
     probes = subsample_per_finding(
         unique_image_probes(samples, findings, template, display_names=display_names),
         max_per_finding,
-        seed=seed,
+        seed=seed if subsample_seed is None else subsample_seed,
     )
     if not probes:
         raise ValueError("No labelled probes.")

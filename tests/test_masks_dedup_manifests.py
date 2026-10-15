@@ -140,3 +140,25 @@ def test_manifest_refuses_repository_paths(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="outside the repository"):
         write_manifest(manifest, REPO_ROOT / "results" / "should_not_exist.jsonl")
     assert not (REPO_ROOT / "results" / "should_not_exist.jsonl").exists()
+
+
+def test_external_overlap_counts_near_copies_of_each_split(tmp_path: Path) -> None:
+    from medcompress.data.dedup import folder_fingerprints, overlap_rows
+
+    rng = np.random.default_rng(3)
+    external = tmp_path / "external" / "sub"
+    external.mkdir(parents=True)
+    ours = {}
+    for i in range(3):
+        pixels = rng.integers(0, 255, (48, 64, 3), dtype=np.uint8)
+        Image.fromarray(pixels).save(tmp_path / f"train{i}.png")
+        ours[f"train{i}.png"] = image_fingerprint(str(tmp_path / f"train{i}.png"))
+    Image.open(tmp_path / "train0.png").resize((96, 72)).save(external / "copy.jpg", quality=90)
+    Image.fromarray(rng.integers(0, 255, (48, 64, 3), dtype=np.uint8)).save(external / "new.png")
+    (external / "notes.txt").write_text("not an image")
+    found = folder_fingerprints(tmp_path / "external")
+    assert sorted(found) == ["sub/copy.jpg", "sub/new.png"]
+    rows = {r["metric"]: r["value"] for r in overlap_rows("x", found, {"train": ours, "test": {}},
+                                                          threshold=6)}  # fmt: skip
+    assert rows["images"] == 2 and rows["near_duplicates_of:train"] == 1
+    assert rows["near_duplicates_of:test"] == 0 and rows["images_after_dedup"] == 1

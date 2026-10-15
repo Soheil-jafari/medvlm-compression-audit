@@ -27,10 +27,13 @@ The column order is defined once in `medcompress.utils.io.RESULTS_COLUMNS`; use
 results/
   <ID>[/<variant>]/<budget or nobudget>/seed<k>/metrics.csv      # per run, validation split
   <ID>[/<variant>]/<budget or nobudget>/seed<k>/metrics_test.csv # per run, test split (after the freeze)
-  <ID>[/<variant>]/<budget or nobudget>/seed<k>/efficiency.csv
-  comparisons/<A>_vs_<B>/<budget or nobudget>/comparison.csv     # paired differences with CIs
+  <ID>[/<variant>]/<budget or nobudget>/seed<k>/efficiency.csv       # development GPU (Kaggle T4)
+  <ID>[/<variant>]/<budget or nobudget>/seed<k>/efficiency_final.csv # rented timing GPU (RC-T1), metrics "final:<name>"
+  comparisons/<A>_vs_<B>/<budget or nobudget>/comparison.csv     # paired differences with CIs (step 09); ":" in a name is "-" in the folder
+  comparisons/choices.json                                       # comparator, matched budget, arms left out (step 09)
   selection/<round>/<candidate>/metrics.csv                      # student selection (D05), e.g. R1:qwen3_vl_2b
   data/summary.csv                                               # aggregate data statistics (RC-D1), no per-image rows
+  data/<name>_overlap.csv                                        # external images that are near-copies of ours (RC-X1)
   smoke/<card>.csv                                               # smoke tests, e.g. RC-M1
   summary/                                                       # written by scripts/08_aggregate_results.py
 ```
@@ -46,8 +49,9 @@ the verdicts from the test split and the split-free rows only. Validation rows s
 choice of the best of E5/E6 and the student checks. Comparison rows are computed on the test
 split unless their run card says otherwise. Comparison
 rows use `experiment = "<A>_vs_<B>"` and metrics such as `diff:small_finding_recall`
-or `p:small_finding_recall`; they are computed where the per-image predictions live
-(the GPU session), because per-image outputs are never committed.
+or `p:small_finding_recall`; `scripts/09_compare_arms.py` computes them where the per-probe
+outputs (`outcomes_test.npz`) are gathered (run card RC-C1), because per-probe outputs are never
+committed.
 
 Before committing results, run `pytest tests/test_results.py`: it validates every CSV
 in this folder (schema, known experiment IDs and variants, budgets, seeds, CI order,

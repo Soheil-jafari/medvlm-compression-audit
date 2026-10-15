@@ -23,6 +23,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -299,6 +300,7 @@ def run_teacher_caching(
 
         spec = ModelSpec.from_config(load_config(config["components"]["teacher"]))
         teacher = load_model(spec, image_longest_side=int(side))
+    started = time.perf_counter()
     out = cache_teacher_outputs(
         teacher,
         samples,
@@ -308,7 +310,31 @@ def run_teacher_caching(
         shard_size=int(needed["shard_size"]),
         data_root=Path(paths["data_root"]),
     )
+    if run is not None:
+        add_session_seconds(
+            run, Path(paths["results_root"]), "teacher_cache_seconds", time.perf_counter() - started
+        )
     print(f"teacher cache complete: {len(samples)} samples, manifest {cache_manifest_hash(out)}")
+
+
+def add_session_seconds(run: RunContext, results_root: Path, metric: str, seconds: float) -> float:
+    """Add this session's wall time to ``metric`` in the run's ``metrics.csv``; return the total.
+
+    The cache is filled over several sessions (it resumes), so the compute used is the sum.
+    """
+    import csv
+
+    from medcompress.utils.io import upsert_results
+
+    target = run.run_dir(results_root) / "metrics.csv"
+    total = seconds
+    if target.exists():
+        with target.open(encoding="utf-8", newline="") as handle:
+            total += sum(float(r["value"]) for r in csv.DictReader(handle) if r["metric"] == metric)
+    row = {"experiment": run.experiment_tag, "budget": run.budget or "", "seed": run.seed,
+           "metric": metric, "value": total}  # fmt: skip
+    upsert_results([row], target)
+    return total
 
 
 def _dataset_section(config: Mapping[str, Any]) -> Mapping[str, Any]:

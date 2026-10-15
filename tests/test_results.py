@@ -137,5 +137,9 @@ def test_classify_path(tmp_path: Path) -> None:
     assert run.split == "val"
     footprint = classify_path(tmp_path / "E7" / "B2" / "seed0" / "efficiency.csv", tmp_path)
     assert footprint is not None and footprint.split == ""
+    final = classify_path(tmp_path / "E7" / "B2" / "seed0" / "efficiency_final.csv", tmp_path)
+    assert final is not None and (final.experiment, final.split) == ("E7", "")
+    variant = classify_path(tmp_path / "comparisons" / "E5-taylor_vs_E2" / "B2" / "x.csv", tmp_path)
+    assert variant is not None and variant.kind == "comparison" and variant.budget == "B2"
     assert classify_path(tmp_path / "summary" / "by_arm.csv", tmp_path) is None
     assert classify_path(tmp_path / "README.md", tmp_path) is None

@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 """Prepare Kvasir-VQA-x1 and Kvasir-SEG on your own machine (run card RC-D1).
 
-Two commands:
+Three commands:
 
   export   download Kvasir-VQA images and Kvasir-VQA-x1 rows into
            <data_root>/kvasir_vqa_x1/ (needs the "datasets" package; GPU not needed)
   prepare  splits, deduplication, mask linking and aggregate counts; private files go
            to --private-dir (outside the repository), counts to
            <results_root>/data/summary.csv
+  overlap  how many images of an external set (any folder of images) are near-duplicates
+           of our training, validation and test images; counts only, to
+           <results_root>/data/<name>_overlap.csv (run card RC-X1)
 
 Example:
     python scripts/prepare_data.py export --data-root /kaggle/working/data
@@ -63,6 +66,28 @@ def export(data_root: Path, revision: str | None) -> None:
     print(f"exported {len(seen)} images and both splits to {out}")
 
 
+def overlap(args: argparse.Namespace, dataset: dict) -> int:
+    """Count external images that are near-duplicates of each of our splits."""
+    from medcompress.data.dedup import folder_fingerprints, image_fingerprint, overlap_rows
+    from medcompress.data.prepared import load_prepared
+
+    splits = load_prepared(args.data_root, dataset, args.private_dir)
+    ours = {  # one fingerprint per image (an image has many questions)
+        split: {p: image_fingerprint(str(args.data_root / p)) for p in {s.image_path for s in rows}}
+        for split, rows in splits.items()
+    }
+    rows = overlap_rows(
+        args.name, folder_fingerprints(args.images), ours, threshold=args.dedup_threshold
+    )
+    target = args.results_root / "data" / f"{args.name}_overlap.csv"
+    target.unlink(missing_ok=True)
+    append_results(rows, target)
+    for row in rows:
+        print(f"{row['metric']}: {row['value']}")
+    print(f"wrote {target}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -75,12 +100,21 @@ def main(argv: list[str] | None = None) -> int:
     prep.add_argument("--split-seed", type=int, required=True, help="pre-registered seed")
     prep.add_argument("--dedup-threshold", type=int, required=True, help="max Hamming distance")
     prep.add_argument("--mask-threshold", type=int, required=True, help="max Hamming distance")
+    over = sub.add_parser("overlap", help="near-duplicates of an external image folder")
+    over.add_argument("--data-root", type=Path, required=True)
+    over.add_argument("--private-dir", type=Path, required=True, help="the RC-D1 private files")
+    over.add_argument("--images", type=Path, required=True, help="folder of external images")
+    over.add_argument("--name", required=True, help="e.g. endobench")
+    over.add_argument("--results-root", type=Path, default=Path("results"))
+    over.add_argument("--dedup-threshold", type=int, required=True, help="max Hamming distance")
     args = parser.parse_args(argv)
 
     dataset = load_config(config_root() / "data" / "kvasir_vqa_x1.yaml")["dataset"]
     if args.command == "export":
         export(args.data_root, dataset.get("revision"))
         return 0
+    if args.command == "overlap":
+        return overlap(args, dataset)
 
     from medcompress.data.prepare import prepare, write_private_outputs
 

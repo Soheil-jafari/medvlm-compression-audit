@@ -50,6 +50,8 @@ logging:
 hardware:
   development: "Kaggle (2x T4, 16 GB each) and Google Colab"
   final_timing: TODO                      # rented GPU type for final efficiency numbers
+  timing_role: development                # stage 07 writes efficiency.csv; RC-T1 sets "final" on the
+                                          # rented GPU: efficiency_final.csv, "final:" metric names
   precision: TODO                         # fp16 vs bf16, depends on the GPU
   device_map: auto
   num_workers: 2
@@ -74,6 +76,9 @@ evaluation:
   generation_samples: 1000                # D06 (2026-10-12): QA rows answered by free generation (null = all); same rows for every arm
   ci_level: 0.95
   multiple_testing: holm
+  headline_accuracy: macro_balanced_accuracy   # H1 and H4 (comparison step, F1, F4); proposal
+                                          # (iteration 40): the overall probe accuracy mostly
+                                          # measures specificity; [team] confirm at the freeze
 
 # Shared by the Gate 1 check (E0) and the lesion-mask audit of every arm.
 image_reliance_check:
