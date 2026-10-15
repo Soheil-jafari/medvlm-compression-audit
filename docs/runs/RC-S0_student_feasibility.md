@@ -59,6 +59,8 @@ export MEDCOMPRESS_RESULTS_ROOT=$PWD/results
 export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
 export CUDA_VISIBLE_DEVICES=0
 python -m pytest -q tests/test_selection_ranking.py                  # CPU; must pass first
+python -m pytest -q 2>&1 | tail -3   # the whole suite with torch: write the last line in
+                                     # section 6 (checks the 2026-10-15 test fixes on a GPU machine)
 
 # neither model ships its own code, so --allow-remote-code is not used (see the note at the top)
 for c in qwen2_5_vl_3b qwen3_vl_2b; do       # the student and its fallback (D05 amendment)
