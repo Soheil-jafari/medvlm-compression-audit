@@ -10,7 +10,7 @@
   low-precision kernel check and still answers the probes, how much memory it saves, and which
   library versions work together. No dataset is used: calibration and probes run on synthetic
   images.
-- Status: `ready` (can run right after RC-M1, in the same kind of session)
+- Status: `done` (can run right after RC-M1, in the same kind of session)
 
 ## 2. Requirements
 
@@ -67,10 +67,31 @@ After the run the agent sets `quantization.kernel_class` (the chosen class) and
 
 ## 6. Run report (filled by the person who ran it)
 
-- Run by / date:
-- Commit actually used:
-- Hardware and the printed `versions` block:
+- Run by / date: Soheil, 2026-10-15, Kaggle
+- Commit actually used: 9cafa2bcdb3c4a634a83b528ee5c4fb550a6739a
+- Hardware and the printed `versions` block: 1 x Tesla T4 (15,636,037,632 bytes, capability 7.5),
+  4 CPUs, Python 3.13.15, CUDA 12.8. Versions: torch 2.11.0+cu128, transformers 5.19.0,
+  peft 0.21.2, gptqmodel 7.6.0, bitsandbytes 0.50.2 (also accelerate 1.14.0, torchao 0.18.0,
+  numpy 2.2.6, protobuf 7.36.2, Triton 3.6.0). 55 GPTQModel kernel classes found.
 - Chosen kernel class (printed) and the classes that failed (with their error lines):
-- Wall time and peak GPU memory (`fp16_peak_bytes`, `w4_peak_bytes`, `w8_peak_bytes`, `w8a8_peak_bytes`):
-- Pass criteria: all met / not met (list):
-- Anything unusual (errors, retries, changed settings, what pip tried to change):
+  chosen `gptqmodel.nn_modules.qlinear.torch.TorchLinear` (fastest at w4: 0.238 ms; w8 0.201 ms).
+  Also passed both: TritonV2Linear (w4 0.240 ms, w8 0.244 ms). TorchAtenLinear passed w4 only
+  (0.672 ms). All other classes failed, for example: BitBLAS classes "bitblas is not installed";
+  GPTQModel BitsAndBytes classes "has no buffer 'qweight' to load"; ExllamaV2Linear w4
+  "post_init() missing 1 required positional argument: 'scratch_space'", w8 "only supports [4]
+  bits"; Marlin/Machete need a newer GPU than T4; Mlx classes are for Apple hardware.
+  Kernel checks: "w4: kernel check True, classes {TorchLinear: 252}", "w8: kernel check True,
+  classes {TorchLinear: 252}", "w8a8: kernel check True, classes {bitsandbytes Linear8bitLt: 252}".
+- Wall time and peak GPU memory: wall time about __ minutes (GPTQ w4 508 s, w8 504 s).
+  Peak: fp16 7,843,649,024; w4 3,797,138,944; w8 5,197,114,880; w8a8 5,073,484,288 bytes.
+  State size: fp16 7,509,246,624; w4 3,405,009,312; w8 4,803,105,312; w8a8 4,734,714,528 bytes.
+- Pass criteria: all met. A class with w4 and w8 both 1 (TorchLinear, TritonV2Linear);
+  w4/w8/w8a8 kernels_ok = 1; all three state sizes below fp16; agreement with fp16 = 1.0
+  for w4, w8 and w8a8 (synthetic images only).
+- Anything unusual: a fresh Kaggle session had transformers 5.16.1 and peft 0.20.0
+  preinstalled; installing requirements/train.txt restored the pinned 5.19.0 and 0.21.2,
+  and GPTQModel 7.6.0 accepted them (no conflict reported). torch was never replaced.
+  Tests: 22 passed, 1 failed (test_ptq_torch.py::test_the_decoder_is_quantized_saved_and_reloaded:
+  reload differs by up to 2.5e-4, tolerance 1e-4; same kind as the RC-M1 reload failures).
+  torchao printed that its Hopper-only kernels (_C_cutlass_90a, _C_mxfp8) cannot load on T4.
+  The kernel choice rule only compares w4 speed; here the chosen class also passed w8.
