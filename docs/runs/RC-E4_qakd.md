@@ -16,7 +16,8 @@
 
 Blocked until all of these are true; the agent sets the status to `ready` when they are:
 
-- RC-Q0 passed; `quantization.kernel_class` and the library versions are set and pinned.
+- RC-Q0 passed; `quantization.kernel_class` and the library versions are set and pinned. **Met 2026-10-15:** RC-Q0 chose `TorchLinear`; gptqmodel 7.6.0 and bitsandbytes 0.50.2 are
+  pinned.
 - RC-E0b done (the teacher cache of the training pool on team storage; the manifest hash matches
   the logged one).
 - `training.steps`, `training.data_subset` and `teacher_cache.pool_size` are set (the E2 values;

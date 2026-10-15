@@ -27,8 +27,10 @@
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
 export HF_HOME=/kaggle/temp/hf
+pip show torchao 2>/dev/null | grep Version  # Kaggle ships 0.10.0; peft 0.21.2 needs 0.16.0 or newer
+pip uninstall -y torchao                     # only if the version above is below 0.16.0 (RC-M1)
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
-pip install -q gptqmodel bitsandbytes          # versions are printed below and pinned after this card
+pip install -q gptqmodel bitsandbytes          # as run on 2026-10-15; train.txt now pins 7.6.0 and 0.50.2
 # restart the kernel here if pip replaced torch, then continue:
 
 python -m pytest -q tests/test_quantization.py tests/test_ptq_torch.py   # includes the GPU kernel tests

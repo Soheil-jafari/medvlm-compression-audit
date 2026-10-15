@@ -18,7 +18,7 @@ they are:
   (`image_reliance_check.gate1`, `fill`, `mask_findings`).
 - RC-D1 done, label rules and the finding list frozen (`configs/domain/endoscopy.yaml`,
   `configs/data/kvasir_vqa_x1.yaml`), so the validation probes exist.
-- RC-M1 passed.
+- RC-M1 passed. **Met 2026-10-15.**
 - `inputs.image_longest_side` set at the student-selection freeze.
 
 Platform: Kaggle notebook, **2 x T4**, Internet **on**. Dataset access: your own copy of

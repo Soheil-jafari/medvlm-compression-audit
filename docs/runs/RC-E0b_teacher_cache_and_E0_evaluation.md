@@ -26,6 +26,7 @@ they are:
   from the RC-S0 speed), and `inputs.image_longest_side`. Part (a) caches only that training
   pool (drawn with `seeds.data_split`), not all 143,594 training rows.
 - RC-M1 passed (gives the generation speed that decides how many sessions part (a) needs).
+  **Met 2026-10-15:** the teacher generated 4.48 tokens per second (`results/smoke/RC-M1.csv`).
 
 Platform: Kaggle notebook, **2 x T4**, Internet **on**. Dataset access: your own copy of
 Kvasir-VQA-x1 and Kvasir-SEG, and the **private** RC-D1 outputs (`splits.json`,

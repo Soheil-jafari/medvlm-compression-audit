@@ -23,7 +23,7 @@ Blocked until all of these are true; the agent changes the status to `ready` whe
 - RC-D1 done; the finding list, label rules, lesion-size thresholds and
   `image_reliance_check.mask_findings` are written to `configs/domain/endoscopy.yaml`.
 - `evaluation.max_new_tokens` and `inputs.image_longest_side` are set (D04 rule, RC-S0 numbers).
-- RC-M1 passed.
+- RC-M1 passed. **Met 2026-10-15.**
 
 Platform: Kaggle notebook, one T4 is enough (`CUDA_VISIBLE_DEVICES=0`), Internet **on**.
 Dataset access: your own copy of Kvasir-VQA-x1 and Kvasir-SEG and the private RC-D1 outputs
