@@ -43,6 +43,12 @@ Protocol: `docs/decisions/D05_student_selection.md`; settings:
   the validation subset belong to Round 1, which is not run). The team confirms the freeze.
 - [x] [team] Execute RC-S0; replace failures with reserves in order (done 2026-10-16: both
   models pass G1, no reserve needed).
+- [x] [team:Soheil] Answer the RC-S0 proposals (2026-10-16): data_subset 10,000 and 625 steps
+  decided; image side not decided (RC-S0b first); training-length check added; G2 unchanged.
+- [x] [agent] Run card **RC-S0b** (image sides 448, 560, 672 on synthetic images; student on one
+  T4, teacher on two) and the decision rule in D05, written before it runs.
+- [ ] [team:Soheil] Execute RC-S0b; [team] state the GPU hours available.
+- [ ] [agent] Project the GPU hours per side from RC-S0b and propose the side by the D05 rule.
 - [x] [agent] Run cards **RC-S1** (10 candidates), **RC-S2** (top 5, new models) and
   **RC-S3** (top 3, 2 seeds), written blocked; each is set to `ready` after the previous
   ranking is committed.

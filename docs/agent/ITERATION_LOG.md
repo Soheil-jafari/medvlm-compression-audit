@@ -943,3 +943,25 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: pin the student revision after the team confirms; RC-D1 (Farzan) is the next card.
 - Needs the team: answers to the RC-S0 proposals (inbox).
+
+## Iteration 48: 2026-10-16 (interactive)
+- Stage / item: S05b, Soheil's answers to the RC-S0 proposals.
+- Did: recorded the four decisions (decisions log, D05, D06, inbox): `training.data_subset` =
+  10,000 and `steps` = 625, `teacher_cache.pool_size` = 10,000; the image side stays TODO (448
+  provisional) because a polyp of 5 % of the width is about 22 px at 448, under one 28 x 28
+  patch; G2 unchanged. **Task A:** run card RC-S0b and `scripts/measure_image_sides.py`
+  (`models/image_sides.py`): student on one T4 and teacher on two, at 448, 560 and 672, on the
+  synthetic images drawn at 1344 x 1008 (the loader only shrinks, so the 448 x 336 RC-S0 images
+  would look the same at every side); one LoRA step at micro-batch 1, 2 and 4, an
+  out-of-memory error written as a row; a print-only step for the adapter and processor image
+  settings ("not stated" when absent). Decision rule in D05 (largest side whose projected GPU
+  hours fit `TODO: team GPU hours available`); D06 micro-batch amendment written as a proposal
+  only. RC-E0a, RC-E0b and RC-E1 wait on RC-S0b. **Task B:** pre-registration section 6 adds the
+  training-length check (E2 and E7 at B2, seed 0, 30,000 examples, secondary); a test shows the
+  30,000 pool begins with the 10,000; E7@30k starts from E2@30k with 25 % recovery; run card
+  RC-L1 written blocked, with the code it needs listed (run identities, the pruning parent read
+  from config in four places, a teacher cache extension, the comparison rows).
+- Verified: ruff check, ruff format, pytest on CPU; summary and appendix tables regenerated.
+- Commit: see `git log` on `research-loop`.
+- Next: read RC-S0b and propose the side; then the RC-L1 code.
+- Needs the team: run RC-S0b; the GPU hours available; G2 threshold; recovery rounding.
