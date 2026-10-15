@@ -52,6 +52,7 @@ results/**/*.jsonl
 *.pem
 *.key
 kaggle.json
+links.env
 
 # ---- Python ----
 __pycache__/
