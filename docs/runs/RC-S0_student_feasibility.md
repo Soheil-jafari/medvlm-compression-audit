@@ -129,3 +129,13 @@ sets `frozen_on` before RC-S1.
   stopped with "internvl3_5_2b has no 'gate_g1_hardware' row": the ranking still uses the old
   10-candidate pool in configs/student_selection.yaml. Not changed on Kaggle; ranking.csv is
   left for a repo fix.
+
+## 7. Agent notes after the run (2026-10-16)
+
+- The ranking used the old ten-model pool; the D05 amendment is now applied to it
+  (`configs/student_selection.yaml`), and `select_student.py --rank R0` was run from the
+  committed CSVs: both models pass (`results/selection/R0/ranking.csv`).
+- `optimum>=1.24.0` is in `requirements/train.txt`, so the next sessions do not hit the 33
+  LoRA test failures.
+- The numbers feed the proposals in D05 ("Round 0 numbers and proposals") and the 2B column of
+  D07's cost table.

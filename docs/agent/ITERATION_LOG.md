@@ -921,3 +921,25 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S12 paper text while RC-S0 runs; after RC-S0, the image side, G2 threshold and
   training length proposals.
 - Needs the team: run RC-S0.
+
+## Iteration 47: 2026-10-16 (interactive)
+- Stage / item: S05b, reading RC-S0 (both models pass gate G1).
+- Did: the two R0 metrics files first reached `main` only; the copies uploaded to
+  `research-loop` (identical content) are the ones used. Added `optimum>=1.24.0` to
+  `requirements/train.txt` (peft 0.21.2 fails on every LoRA layer next to gptqmodel without it,
+  33 test failures on Kaggle); a test checks the line. **Ranking fix:** the selection code
+  ranked `student_selection.candidates`, which still listed the ten models, so `--rank R0`
+  stopped on a model that was never run; `candidates` is now the student and its fallback, the
+  ten are kept as `candidates_full_protocol` (not read by the code, model configs kept); tests
+  check the pool and rank the committed CSVs without torch. Ran `select_student.py --rank R0`
+  here: both pass, `results/selection/R0/ranking.csv` committed. **Proposals** (D05 "Round 0
+  numbers and proposals", pointer in the inbox): image side 448, G2 threshold 0.10 (the teacher's
+  Gate 1 drop), data_subset 10,000 provisional with a cost table (estimates); Round 1 settings
+  not needed. D07: the 2B column now uses the measured 0.074 s (proposed scoring mix about 3.3 h
+  per seed). **Flag:** the D06 micro-batch of 4 may not fit one T4 for the 3B (estimate 14.0 of
+  15.6 GB from the one-example LoRA step); RC-E1 now measures it on seed 0 and stops on an
+  out-of-memory error. D06 unchanged.
+- Verified: ruff check, ruff format, pytest on CPU; summary and appendix tables regenerated.
+- Commit: see `git log` on `research-loop`.
+- Next: pin the student revision after the team confirms; RC-D1 (Farzan) is the next card.
+- Needs the team: answers to the RC-S0 proposals (inbox).

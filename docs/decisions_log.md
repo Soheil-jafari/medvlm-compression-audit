@@ -78,12 +78,24 @@ must be logged here.
   proposed scoring mix of D07 section 1 now costs about 3.8 h per seed instead of 2.3 h
   (estimate). D07 section 1 itself is still open. RC-S0 is ready. (Agent, from
   `results/smoke/RC-M1.csv`, `results/smoke/RC-Q0.csv` and the two cards.)
+- **2026-10-16 (Kaggle run RC-S0, Soheil):** Qwen2.5-VL-3B and the fallback Qwen3-VL-2B both
+  pass gate G1 on one T4 (`results/selection/R0/ranking.csv`). The ranking still used the
+  ten-model pool and stopped on a model that was never run; the D05 amendment is now applied to
+  the pool (`student_selection.candidates` = the two models, the ten kept as
+  `candidates_full_protocol`). peft 0.21.2 needs `optimum>=1.24.0` next to gptqmodel (33 test
+  failures without it; tested with 2.3.0), now in `requirements/train.txt`; the full suite then
+  passed on the T4 (895 passed). Measured at side 448: 3B 194 visual tokens, 0.179 s per probe,
+  9,140,717,056 bytes for one LoRA step at one example; 2B 142, 0.074 s, 5,058,956,288 bytes.
+  D07's 2B column now uses 0.074 s (proposed scoring mix about 3.3 h per seed, estimate).
+  Agent proposals for the team in D05: image side 448, G2 threshold 0.10, data_subset 10,000
+  (provisional); flag that the D06 micro-batch of 4 may not fit the T4 for the 3B (RC-E1
+  measures it).
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| Student checks | Run RC-S0 for the two models, then set the image side, the G2 threshold and the training length from its numbers; tell Amir and Farzan about the amendment | Soheil | now (RC-M1 passed 2026-10-15; RC-S0 ready) |
+| Student checks | RC-S0 done 2026-10-16 (both pass G1). Decide the agent's proposals (D05, "Round 0 numbers and proposals"): image side 448, G2 threshold 0.10, data_subset 10,000 (provisional); tell Amir and Farzan about the amendment | Soheil | before RC-E1 |
 | Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
 | EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |
 | Finding list and weights | Pre-registered table, frozen before E7. Draft rules (iteration 40): a finding enters C with at least 20 positive training images and 10 in each of validation and test; groups common >= 10 %, rare < 2 %; cap 20; three tiers with multipliers 2.0 / 1.5 / 1.0 assigned from the finding names | team | after RC-D1 |
