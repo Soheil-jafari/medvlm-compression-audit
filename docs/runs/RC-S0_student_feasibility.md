@@ -129,10 +129,3 @@ sets `frozen_on` before RC-S1.
   stopped with "internvl3_5_2b has no 'gate_g1_hardware' row": the ranking still uses the old
   10-candidate pool in configs/student_selection.yaml. Not changed on Kaggle; ranking.csv is
   left for a repo fix.
-
-- Run by / date:
-- Commit actually used:
-- Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft|accelerate"`):
-- Per candidate: passed G1 (yes/no), wall time, remote code read (files and what you checked),
-  visual tokens, peak memory, anything unusual:
-- Candidates not run or failed, with the last lines of the error:

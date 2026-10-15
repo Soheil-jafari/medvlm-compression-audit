@@ -268,6 +268,7 @@ def test_the_pinned_requirements_match_the_versions_rc_q0_tested() -> None:
     for package in ("gptqmodel", "bitsandbytes", "transformers", "peft"):
         assert pins[package] == versions[package], package
     assert re.search(r"^torchao>=0\.16\.0", text, flags=re.M)  # peft 0.21.2 needs it
+    assert re.search(r"^optimum>=1\.24\.0", text, flags=re.M)  # peft + gptqmodel need it
 
 
 def test_the_kernel_choice_needs_both_widths_and_then_takes_the_fastest_w4() -> None:
