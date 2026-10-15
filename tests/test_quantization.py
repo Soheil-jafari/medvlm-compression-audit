@@ -252,3 +252,18 @@ def test_quantized_checkpoints_round_trip(tmp_path) -> None:  # noqa: ANN001
     )
     assert read_quantized(empty)[1] == {}
     assert parent_of(RunContext("E9", seed=0))["experiment"] == "E0"
+
+
+def test_the_pinned_requirements_match_the_versions_rc_q0_tested() -> None:
+    """requirements/train.txt and quantization.library_versions must not drift apart."""
+    import re
+    from pathlib import Path
+
+    from medcompress.compression.quantization.ptq import library_versions_from_config
+
+    text = (Path(__file__).resolve().parents[1] / "requirements" / "train.txt").read_text()
+    pins = dict(re.findall(r"^([A-Za-z0-9_.-]+)==([^\s#]+)", text, flags=re.M))
+    versions = library_versions_from_config(_ptq_config())
+    for package in ("gptqmodel", "bitsandbytes", "transformers", "peft"):
+        assert pins[package] == versions[package], package
+    assert re.search(r"^torchao>=0\.16\.0", text, flags=re.M)  # peft 0.21.2 needs it
