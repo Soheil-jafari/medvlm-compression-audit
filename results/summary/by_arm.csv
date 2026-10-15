@@ -1,4 +1,5 @@
 experiment,budget,split,metric,n_seeds,mean,sd,min,max,ci_low,ci_high
+R0:qwen2_5_vl_3b,,val,advance,1,1.0,,1.0,1.0,,
 R0:qwen2_5_vl_3b,,val,gate_g1_hardware,1,1.0,,1.0,1.0,,
 R0:qwen2_5_vl_3b,,val,r0_allocated_gpu_bytes_after_load,1,7509268992.0,,7509268992.0,7509268992.0,,
 R0:qwen2_5_vl_3b,,val,r0_generate_tokens_per_second,1,7.676644267344826,,7.676644267344826,7.676644267344826,,
@@ -16,6 +17,7 @@ R0:qwen2_5_vl_3b,,val,r0_scores_finite,1,1.0,,1.0,1.0,,
 R0:qwen2_5_vl_3b,,val,r0_scoring_seconds_per_probe,1,0.1793639895500007,,0.1793639895500007,0.1793639895500007,,
 R0:qwen2_5_vl_3b,,val,r0_visual_tokens,1,194.0,,194.0,194.0,,
 R0:qwen2_5_vl_3b,,val,r0_yes_no_probability_mass,1,0.9986258777212768,,0.9986258777212768,0.9986258777212768,,
+R0:qwen3_vl_2b,,val,advance,1,1.0,,1.0,1.0,,
 R0:qwen3_vl_2b,,val,gate_g1_hardware,1,1.0,,1.0,1.0,,
 R0:qwen3_vl_2b,,val,r0_allocated_gpu_bytes_after_load,1,4256129024.0,,4256129024.0,4256129024.0,,
 R0:qwen3_vl_2b,,val,r0_generate_tokens_per_second,1,12.747873801256349,,12.747873801256349,12.747873801256349,,

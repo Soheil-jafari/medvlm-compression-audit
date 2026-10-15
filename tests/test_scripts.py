@@ -170,7 +170,7 @@ def test_aggregate_script_writes_summary_and_tables(tmp_path: Path) -> None:
 def test_select_student_lists_the_pool_and_checks_its_arguments(tmp_path: Path) -> None:
     listed = _run("select_student.py", "--list", cwd=tmp_path)
     assert listed.returncode == 0, listed.stderr
-    assert "qwen3_vl_2b" in listed.stdout.split() and len(listed.stdout.split()) == 10
+    assert listed.stdout.split() == ["qwen2_5_vl_3b", "qwen3_vl_2b"]  # D05 amendment
     for args in (["--round", "R1"], ["--round", "R9", "--candidate", "x"], []):
         result = _run("select_student.py", *args, cwd=tmp_path)
         assert result.returncode == 2 and "Traceback" not in result.stderr

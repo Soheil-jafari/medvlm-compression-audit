@@ -33,6 +33,8 @@ R0:qwen3_vl_2b,,0,r0_on_cuda,1.0,,,selection/R0/qwen3_vl_2b/metrics.csv,val
 R0:qwen3_vl_2b,,0,gate_g1_hardware,1.0,,,selection/R0/qwen3_vl_2b/metrics.csv,val
 R0:qwen3_vl_2b,,0,r0_visual_tokens,142.0,,,selection/R0/qwen3_vl_2b/metrics.csv,val
 R0:qwen3_vl_2b,,0,r0_peak_gpu_bytes_lora_step,5058956288.0,,,selection/R0/qwen3_vl_2b/metrics.csv,val
+R0:qwen2_5_vl_3b,,0,advance,1.0,,,selection/R0/ranking.csv,val
+R0:qwen3_vl_2b,,0,advance,1.0,,,selection/R0/ranking.csv,val
 RC-M1,,0,teacher_params,8292166656.0,,,smoke/RC-M1.csv,
 RC-M1,,0,teacher_allocated_gpu_bytes_after_load,16601989632.0,,,smoke/RC-M1.csv,
 RC-M1,,0,teacher_scoring_seconds_per_probe,0.3141068368749984,,,smoke/RC-M1.csv,

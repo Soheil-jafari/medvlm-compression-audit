@@ -244,6 +244,14 @@ student (status stays `CANDIDATE` until RC-S0 passes, then the revision is pinne
 `configs/student_selection.yaml` carries the amendment, run card RC-S0 covers the two models
 only, RC-S1 to RC-S3 are kept but not used. Still to do: tell Amir and Farzan.
 
+Applied to the ranking on 2026-10-16: the selection code ran and ranked
+`student_selection.candidates`, which still listed the ten models, so `select_student.py --rank R0`
+stopped on the first model that was never run (internvl3_5_2b). `candidates` now holds only
+Qwen2.5-VL-3B and Qwen3-VL-2B; the ten of the full protocol are kept as the record
+`candidates_full_protocol` (not read by the code), and their model configs stay in
+`configs/models/`. Round 0 result (RC-S0, Kaggle T4): both models pass gate G1
+(`results/selection/R0/ranking.csv`).
+
 ## What changes in the repository once decided
 
 - `configs/student_selection.yaml`: freeze date, weights, `n1`, `b`, G2 threshold,
