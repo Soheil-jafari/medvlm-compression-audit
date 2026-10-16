@@ -73,6 +73,11 @@ def _environment(session: Session) -> list[str]:
         parse_requirements(requirements), quantization=plan.quantization
     )
     session.environment.insert(0, f"python {sys.version.split()[0]}")
+    if plan.card == "RC-D1":  # the export step downloads with the datasets package
+        from medcompress.utils.kaggle import installed_version
+
+        if installed_version("datasets") is None:
+            problems.append("datasets is not installed (pip install datasets)")
     if plan.gpus:
         visible, session.gpus = gpu_report()
         problems += check_gpus(plan.gpus, visible)
@@ -81,6 +86,9 @@ def _environment(session: Session) -> list[str]:
 
 def _finish(session: Session, code: int) -> int:
     path = write_report(session)
+    committed = session.out / "results_to_commit" / "docs" / "runs" / "reports" / path.name
+    committed.parent.mkdir(parents=True, exist_ok=True)  # each run's report is its own file
+    committed.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
     print("\n" + report_text(session))
     print(f"report saved to {path}")
     return code
@@ -99,7 +107,8 @@ def main(argv: list[str] | None = None) -> int:
     except CardError as exc:
         print(exc, file=sys.stderr)
         return 2
-    if status != "ready" and not args.allow_blocked:
+    allowed = {"ready", "running", "done"} if plan.card == "RC-D1-COUNTS" else {"ready"}
+    if status not in allowed and not args.allow_blocked:  # pass 2 follows a finished RC-D1
         print(f"{plan.card} is `{status}`, not `ready`: see its card, section 2", file=sys.stderr)
         return 2
     print(f"{plan.card}: {plan.title} ({plan.gpus} GPU(s); card status `{status}`)")

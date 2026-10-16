@@ -305,3 +305,21 @@ def test_a_later_session_runs_only_what_is_left_when_the_adapter_is_attached(
     )  # fmt: skip
     assert [s.status for s in session.steps] == ["skipped", "ok", "ok"]
     assert calls == ["scripts/06_evaluate.py", "scripts/07_benchmark_efficiency.py"]
+
+
+def test_every_runnable_card_says_what_to_attach_and_what_it_hands_off() -> None:
+    header = "## 2b. Shared data, hand-offs and the unattended run"
+    for card in RUNNABLE_CARDS:
+        if card.startswith("RC-D1"):
+            continue  # RC-D1 writes the shared data; its own sections 3 and 4 say how
+        text = card_file(card, RUNS).read_text()
+        assert header in text and "scripts/run_card.py --card" in text, card
+        assert text.index(header) < text.index("## 3."), card
+    d1 = card_file("RC-D1", RUNS).read_text()
+    assert "prepare_data.py bundle" in d1 and "RC-D1-counts" in d1 and "Private" in d1
+    assert "CC BY-NC 4.0" in d1 and "research and educational use" in d1
+    for doc in ("schedule.md", "team_setup.md"):
+        assert (REPO / "docs" / doc).is_file()
+    schedule = (REPO / "docs" / "schedule.md").read_text()
+    assert "seeds 0 Soheil, 1 Farzan, 2 Amir" in (RUNS / "README.md").read_text()
+    assert "estimate" in schedule and "unknown until RC-E0b times its first 100 answers" in schedule
