@@ -18,8 +18,14 @@ machines, with only aggregate statistics coming back to the repository.
   per split, prevalence per finding, lesion-area quantiles, duplicate counts,
   manifest and split hashes. No per-image rows.
 - [x] [agent] Run card **RC-D1** in `docs/runs/` for the preparation run.
-- [ ] [team:Farzan] Execute RC-D1 on own dataset access; commit
-  `results/data/summary.csv` and the completed run card.
+- [x] [agent] The shared-data folder of RC-D1 (`prepare_data.py bundle`, SHA-256 manifest) and
+  its check in every later stage (`--data-root`); the counts pass (`prepare_data.py counts`)
+  (2026-10-17).
+- [ ] [team:Soheil] Execute RC-D1 pass 1 (owner changed 2026-10-17); make the shared data one
+  private Kaggle dataset shared with the team; commit `results/data/summary.csv` and the report.
+- [ ] [agent] Propose the label values of the abnormality question from `answer_count:*`.
+- [ ] [team:Soheil] Execute RC-D1 pass 2 (`--card RC-D1-counts`, CPU) after the values are
+  confirmed; commit the new `summary.csv`.
 - [ ] [agent] Data cards in `docs/data_cards/` from the verified documentation and
   the RC-D1 aggregates.
 - [ ] [agent] Proposal for the finding list, prevalence groups and size thresholds,

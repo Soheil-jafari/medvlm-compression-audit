@@ -22,6 +22,17 @@
 Runtime: minutes for the overlap count (it fingerprints each image once); the reading of the
 terms takes as long as it takes.
 
+## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
+
+- **Who:** Farzan (CPU).
+- **Kaggle settings:** no GPU (CPU); Internet off is fine.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1.
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-X1"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-X1`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+  - overlap
+- **Hand-offs it writes:** none (its results reach the others through git).
+- **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
+- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit, and whether a T4 x2 session counts once or twice against the weekly quota. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
+
 ## 3. Steps
 
 1. **Terms.** Find the official EndoBench release from the paper (arXiv 2505.23601) and read

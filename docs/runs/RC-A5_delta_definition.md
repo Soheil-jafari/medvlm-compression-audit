@@ -38,6 +38,19 @@ evaluation passes. The agent fills in the estimate when it sets the card to `rea
 RC-M1, RC-E2 and RC-E7 times); until then any number is a guess. Every run is independent: split
 the runs over sessions and team members freely.
 
+## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
+
+- **Who:** card owner Amir; seeds split for time (proposal, docs/schedule.md): seed 0 Soheil, seed 1 Farzan, seed 2 Amir.
+- **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter; teacher cache.
+- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-A5"`, `SEED = <k>`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-A5 --seed <k> --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off> ...`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+  - run A5 kl B2 seed<k>
+  - test evaluation A5 kl B2 seed<k>
+- **Hand-offs it writes:** none (its results reach the others through git).
+- **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
+- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit, and whether a T4 x2 session counts once or twice against the weekly quota. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
+
 ## 3. Commands
 
 ```bash

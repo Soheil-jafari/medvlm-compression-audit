@@ -32,6 +32,23 @@ Runtime per run: **estimate** under an hour for GPTQ on 128 calibration images (
 the speed on 16 images), plus the evaluation and timing; LLM.int8 needs no calibration. Each
 run is independent; one session per seed is fine.
 
+## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
+
+- **Who:** Soheil, all three seeds (seeds 1 and 2 read the E2 hand-offs of Farzan and Amir).
+- **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter.
+- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E3"`, `SEED = <k>`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E3 --seed <k> --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+  - run E3 w4 seed<k>
+  - test evaluation E3 w4 seed<k>
+  - run E3 w8 seed<k>
+  - test evaluation E3 w8 seed<k>
+  - run E3 w8a8 seed<k>
+  - test evaluation E3 w8a8 seed<k>
+- **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E3_seed<k>_quantized`, `E3_seed<k>_outcomes`.
+- **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
+- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit, and whether a T4 x2 session counts once or twice against the weekly quota. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
+
 ## 3. Commands
 
 ```bash
