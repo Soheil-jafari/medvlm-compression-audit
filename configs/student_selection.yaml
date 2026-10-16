@@ -18,9 +18,17 @@ student_selection:
   tokenizer_rule: C             # decided 2026-10-12: teacher-family (same tokenizer) models only, in every round
                                 # (A: all in R1, compatible from R2; B: sequence-level distillation for all)
 
-  # Round 1 pool: one model per architecture, all sharing the teacher's Qwen tokenizer
-  # (D01 = Qwen2.5-VL-7B + Kvasir LoRA; D05 = teacher family only). Fixed 2026-10-12.
+  # The pool the selection code runs and ranks (D05 amendment, 2026-10-12): the student and its
+  # fallback. Applied here on 2026-10-16, after RC-S0: `select_student.py --rank R0` still
+  # ranked the ten models below and stopped on the first one that was never run.
   candidates:
+    - models/qwen2_5_vl_3b_student.yaml
+    - models/qwen3_vl_2b_student.yaml
+
+  # Record of the full protocol (not read by the code): the Round 1 pool fixed on 2026-10-12,
+  # one model per architecture, all sharing the teacher's Qwen tokenizer (D01 = Qwen2.5-VL-7B
+  # + Kvasir LoRA; D05 = teacher family only). Their model configs stay in configs/models/.
+  candidates_full_protocol:
     - models/qwen2_5_vl_3b_student.yaml
     - models/qwen3_vl_2b_student.yaml
     - models/internvl3_5_2b_student.yaml

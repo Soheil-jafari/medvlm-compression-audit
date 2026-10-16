@@ -16,5 +16,8 @@ datasets
 # Quantization backends (E3, E4, E8, E9), chosen by the smoke test RC-Q0 (D08).
 gptqmodel==7.6.0      # GPTQ codes and the TorchLinear kernel module (w4, w8)
 bitsandbytes==0.50.2  # LLM.int8 for w8a8
+optimum>=1.24.0       # tested with 2.3.0. With gptqmodel installed, peft 0.21.2 raises
+                      # "gptqmodel requires optimum version 1.24.0 or higher" on every LoRA layer
+                      # unless optimum >= 1.24 is there (RC-S0, 2026-10-16: 33 test failures)
 # autoawq             # not used: D08 chose GPTQ for the weight-only arms
 # llmcompressor       # not used: transformers has no int8 kernel for T4, so w8a8 is LLM.int8 (D08)

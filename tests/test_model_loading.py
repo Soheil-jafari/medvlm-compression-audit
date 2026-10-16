@@ -100,8 +100,11 @@ def test_spec_from_decided_teacher_config() -> None:
 
 def test_candidate_student_needs_explicit_permission() -> None:
     student = _spec("qwen2_5_vl_3b_student.yaml")
-    assert student.is_candidate and student.revision is None and student.sha_seen
-    assert student.resolved_revision == student.sha_seen
+    # pinned 2026-10-16 to the revision downloaded on Kaggle, still a candidate until the freeze
+    assert student.is_candidate and student.revision == student.sha_seen
+    assert student.resolved_revision == "66285546d2b821cf421d4f5eb2576359d3770cd3"
+    fallback = _spec("qwen3_vl_2b_student.yaml")
+    assert fallback.revision is None and fallback.resolved_revision == fallback.sha_seen
     assert student.dtype == "float16"  # TODO in the config falls back to the T4 default
     with pytest.raises(ModelConfigError, match="candidate"):
         check_loadable(student)

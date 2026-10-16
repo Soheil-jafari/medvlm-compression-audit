@@ -13,13 +13,14 @@ training:
     alpha: 32
     dropout: 0.05
     target_modules: [decoder_attention, decoder_mlp]
-  steps: TODO                             # ceil(data_subset / 16), set at the selection freeze (D06)
+  steps: 625                              # ceil(data_subset / 16) (D06); decided 2026-10-16 (Soheil)
   learning_rate: 1.0e-4
   batch_size: 4                           # micro-batch; 4 x 4 accumulation = 16 examples per update
   grad_accumulation: 4
   kd_weight: 0.5                          # E1 sets 0 (answers only)
   kd_temperature: 2.0
-  data_subset: TODO                       # Round 3 size of the selection, set at the freeze (D06)
+  data_subset: 10000                      # examples per E1/E2 run, decided 2026-10-16 (Soheil, D05 proposal);
+                                          # the first 10,000 of the seeded pool (offline_kd.training_pool)
   warmup_steps: 20
   lr_schedule: linear
   max_grad_norm: 1.0

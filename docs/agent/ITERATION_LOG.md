@@ -921,3 +921,70 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: S12 paper text while RC-S0 runs; after RC-S0, the image side, G2 threshold and
   training length proposals.
 - Needs the team: run RC-S0.
+
+## Iteration 47: 2026-10-16 (interactive)
+- Stage / item: S05b, reading RC-S0 (both models pass gate G1).
+- Did: the two R0 metrics files first reached `main` only; the copies uploaded to
+  `research-loop` (identical content) are the ones used. Added `optimum>=1.24.0` to
+  `requirements/train.txt` (peft 0.21.2 fails on every LoRA layer next to gptqmodel without it,
+  33 test failures on Kaggle); a test checks the line. **Ranking fix:** the selection code
+  ranked `student_selection.candidates`, which still listed the ten models, so `--rank R0`
+  stopped on a model that was never run; `candidates` is now the student and its fallback, the
+  ten are kept as `candidates_full_protocol` (not read by the code, model configs kept); tests
+  check the pool and rank the committed CSVs without torch. Ran `select_student.py --rank R0`
+  here: both pass, `results/selection/R0/ranking.csv` committed. **Proposals** (D05 "Round 0
+  numbers and proposals", pointer in the inbox): image side 448, G2 threshold 0.10 (the teacher's
+  Gate 1 drop), data_subset 10,000 provisional with a cost table (estimates); Round 1 settings
+  not needed. D07: the 2B column now uses the measured 0.074 s (proposed scoring mix about 3.3 h
+  per seed). **Flag:** the D06 micro-batch of 4 may not fit one T4 for the 3B (estimate 14.0 of
+  15.6 GB from the one-example LoRA step); RC-E1 now measures it on seed 0 and stops on an
+  out-of-memory error. D06 unchanged.
+- Verified: ruff check, ruff format, pytest on CPU; summary and appendix tables regenerated.
+- Commit: see `git log` on `research-loop`.
+- Next: pin the student revision after the team confirms; RC-D1 (Farzan) is the next card.
+- Needs the team: answers to the RC-S0 proposals (inbox).
+
+## Iteration 48: 2026-10-16 (interactive)
+- Stage / item: S05b, Soheil's answers to the RC-S0 proposals.
+- Did: recorded the four decisions (decisions log, D05, D06, inbox): `training.data_subset` =
+  10,000 and `steps` = 625, `teacher_cache.pool_size` = 10,000; the image side stays TODO (448
+  provisional) because a polyp of 5 % of the width is about 22 px at 448, under one 28 x 28
+  patch; G2 unchanged. **Task A:** run card RC-S0b and `scripts/measure_image_sides.py`
+  (`models/image_sides.py`): student on one T4 and teacher on two, at 448, 560 and 672, on the
+  synthetic images drawn at 1344 x 1008 (the loader only shrinks, so the 448 x 336 RC-S0 images
+  would look the same at every side); one LoRA step at micro-batch 1, 2 and 4, an
+  out-of-memory error written as a row; a print-only step for the adapter and processor image
+  settings ("not stated" when absent). Decision rule in D05 (largest side whose projected GPU
+  hours fit `TODO: team GPU hours available`); D06 micro-batch amendment written as a proposal
+  only. RC-E0a, RC-E0b and RC-E1 wait on RC-S0b. **Task B:** pre-registration section 6 adds the
+  training-length check (E2 and E7 at B2, seed 0, 30,000 examples, secondary); a test shows the
+  30,000 pool begins with the 10,000; E7@30k starts from E2@30k with 25 % recovery; run card
+  RC-L1 written blocked, with the code it needs listed (run identities, the pruning parent read
+  from config in four places, a teacher cache extension, the comparison rows).
+- Verified: ruff check, ruff format, pytest on CPU; summary and appendix tables regenerated.
+- Commit: see `git log` on `research-loop`.
+- Next: read RC-S0b and propose the side; then the RC-L1 code.
+- Needs the team: run RC-S0b; the GPU hours available; G2 threshold; recovery rounding.
+
+## Iteration 49: 2026-10-16 (interactive)
+- Stage / item: S05b, RC-S0b run 1 (Soheil, Kaggle, commit 5613b7f): stopped by a script bug.
+- Did: **Diagnosis checked in the code:** the script deleted its model reference and called
+  `gc.collect()` and `torch.cuda.empty_cache()` after every step, after a success and after a
+  failure, so no variable of the script held the second copy; something below it kept a
+  reference, also after a successful step (micro-batch 1 passed at 9.38 GB, micro-batch 2
+  failed at 15.4 GB). Which object it was cannot be found without a GPU. **Fix:** every
+  (side, step) runs in its own child process (`measure_image_sides.py child`); the parent
+  writes each child's rows as it ends and replaces that step's earlier rows for the side; a
+  failure (out of memory, a crash, a timeout, no rows) is `..._ok` = 0 with the peak when known,
+  and the run goes on. LoRA steps: a warm-up step, then a timed step measured like RC-S0's
+  `r0_lora_step_seconds` (run 1's 6.68 s included the adapter attach). Added steps with gradient
+  checkpointing (`lora_gc_mb<b>`, measurement only; D06 proposal lists it as an alternative,
+  defaults unchanged). Pinned the student revision `66285546...` (the 2B fallback stays TODO;
+  the settings step prints the config and hub revisions of all three models and says "revision
+  not pinned" instead of crashing). Fixed the out-of-memory test for CUDA. RC-S0b card: run 1
+  recorded, commands, reading rule and runtime estimate updated; RC-E1 and D06 memory flags.
+- Verified: ruff check, ruff format, pytest on CPU, including the real child processes on the
+  CPU (a model that cannot load: every step recorded as failed, the run goes on).
+- Commit: see `git log` on `research-loop`.
+- Next: RC-S0b run 2; then the GPU-hour projection per side.
+- Needs the team: run RC-S0b run 2; the GPU hours available.

@@ -85,6 +85,7 @@ the generic arm with the highest validation small-finding recall at B2; see
 | PTQ (E3: 3 variants x 3 seeds; E8: 3 budgets x 3 seeds; E9: 1) | 9 + 9 + 1 = 19 |
 | Pruning + recovery (E5: 3 x 3 x 3; E6, E7: 3 x 3 each) | 27 + 9 + 9 = 45 |
 | Ablations (A1-A3: 3 each; A4: 12; A5: 6; A6: 6; 6 fewer if `A4:n128` and `A5:logprob_drop` reuse E7) | 33 (27) |
+| Training-length check (E2 and E7 at B2 with 30,000 examples, seed 0; pre-registration section 6) | 2 |
 
 Every run is followed by evaluation (06) and benchmarking (07).
 

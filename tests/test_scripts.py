@@ -50,7 +50,8 @@ def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixtur
     [
         ("01_cache_teacher_outputs.py", [], "max_new_tokens"),
         ("00_check_teacher_image_reliance.py", [], "domain.findings"),
-        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "training.steps"),
+        # training.steps is set (2026-10-16); the image side is the open setting now
+        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "inputs.image_longest_side"),
         (
             "06_evaluate.py",
             ["--exp", "A4", "--budget", "B2", "--variant", "n64"],
@@ -170,7 +171,7 @@ def test_aggregate_script_writes_summary_and_tables(tmp_path: Path) -> None:
 def test_select_student_lists_the_pool_and_checks_its_arguments(tmp_path: Path) -> None:
     listed = _run("select_student.py", "--list", cwd=tmp_path)
     assert listed.returncode == 0, listed.stderr
-    assert "qwen3_vl_2b" in listed.stdout.split() and len(listed.stdout.split()) == 10
+    assert listed.stdout.split() == ["qwen2_5_vl_3b", "qwen3_vl_2b"]  # D05 amendment
     for args in (["--round", "R1"], ["--round", "R9", "--candidate", "x"], []):
         result = _run("select_student.py", *args, cwd=tmp_path)
         assert result.returncode == 2 and "Traceback" not in result.stderr

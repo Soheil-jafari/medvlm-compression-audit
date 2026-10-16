@@ -157,3 +157,26 @@ def test_qakd_runs_the_e4_stage_which_names_what_is_open() -> None:
         run_student_training({"training": _section(mode="qakd")}, None)
     with pytest.raises(ConfigError, match="quantization.recipe"):
         run_student_training({"training": _section(mode="qakd")}, RunContext("E4", seed=0))
+
+
+def test_the_30000_pool_of_the_length_check_starts_with_the_10000_pool() -> None:
+    """Pre-registration section 6: the training-length check only adds data.
+
+    One seeded shuffle of the whole training split (seed 20261012) gives every pool as a prefix,
+    so the 30,000 examples contain the 10,000 of the main runs, and the recovery pools (the
+    first 2,500 and 7,500) nest the same way.
+    """
+    from medcompress.compression.distillation.offline_kd import training_pool
+
+    samples = [_sample(i) for i in range(143_594)]  # the size of the training file
+    ids = [s.sample_id for s in samples]
+    main = training_pool(samples, 10_000, 20261012)
+    longer = training_pool(samples, 30_000, 20261012)
+    assert [s.sample_id for s in longer[:10_000]] == [s.sample_id for s in main]
+    assert len({s.sample_id for s in longer}) == 30_000
+    # the main 10,000 are still the first 10,000 of the seeded shuffle (nothing re-drawn)
+    assert [s.sample_id for s in main] == [ids[i] for i in select_subset(ids, 10_000, 20261012)]
+    recovery_main = training_pool(samples, 2_500, 20261012)
+    recovery_longer = training_pool(samples, 7_500, 20261012)
+    assert recovery_main == main[:2_500] and recovery_longer == longer[:7_500]
+    assert recovery_longer == main[:7_500]  # inside the 10,000 the main cache already holds

@@ -103,6 +103,44 @@ and optimiser, steps = 25 % of E2, KD), `configs/base.yaml` (`bootstrap_resample
 `calibration_bins`, `generation_samples`); `steps` and `data_subset` are filled in at the
 selection freeze from the RC-S0 throughput.
 
+## Training size (decided 2026-10-16, Soheil)
+
+`training.data_subset` = **10,000** examples per E1/E2 run and `training.steps` = **625**
+(`ceil(10,000 / 16)`, one pass at the effective batch of 16), as proposed in D05 ("Round 0
+numbers and proposals"). The teacher cache holds exactly this pool (`teacher_cache.pool_size`
+= 10,000). Still open, by this memo's own rule: the recovery runs on the first 25 % of the pool,
+2,500 examples, for 25 % of the E2 steps; 25 % of 625 is 156.25, so the rounding is a decision
+(proposal: 157 = `ceil(2,500 / 16)`, the same rounding as `steps`). Pre-registration section 6
+adds a secondary training-length check with 30,000 examples (E2 and E7 at B2, seed 0).
+
+## Proposed amendment: micro-batch (2026-10-16, a PROPOSAL, not in force)
+
+The batch row above says the micro-batch of 4 "fits a T4 at 448 px with fp16". That was not
+measured. RC-S0 measured 9,140,717,056 bytes for one LoRA step of the 3B at **one** example,
+and a linear estimate for 4 examples is about 14.0 GB of the T4's 15.6 GB (D05 flag); RC-S0b
+measures the step at micro-batch 1, 2 and 4 at each candidate image side, with and without
+gradient checkpointing. RC-S0b run 1 (2026-10-16): at side 448 micro-batch 1 fits (peak
+9,377,473,536 bytes); micro-batch 2 and 4 are not measured yet (run 1 left a second model copy
+on the GPU, so its out-of-memory results for them are invalid; RC-S0b card, section 6).
+
+Proposal, only if RC-S0b (or the first seed of RC-E1) shows that the micro-batch of 4 does not
+fit one T4 at the chosen image side: micro-batch **2 with 8 accumulation steps** if 2 fits,
+otherwise **1 with 16**. The update keeps 16 examples, the same learning rate, warm-up, schedule
+and number of steps, so the recipe is the same up to floating-point rounding (the model has no
+batch normalisation; only the order of the sums changes). 
+**Alternative (added 2026-10-16): gradient checkpointing** at the micro-batch of 4 (or the
+largest that fits with it), keeping 4 x 4. It recomputes activations in the backward pass
+instead of storing them, so it saves memory and costs time; the published teacher adapter was
+trained with it (`gradient_checkpointing=True` in its `args.json`, RC-S0b run 1). The math of
+the update is the same; dropout masks are replayed in the recomputation, so the recipe is the
+same up to floating-point rounding. Its time cost is not assumed: it is read from RC-S0b's
+`student_lora_gc_step_seconds_mb<b>` against `student_lora_step_seconds_mb<b>` at the chosen
+side, and the option with the smaller projected time is proposed. RC-S0b only measures it; the
+training defaults are unchanged (`training.yaml` sets no gradient checkpointing).
+
+This amendment takes effect only when the team accepts it; until then this memo's batch row
+stands.
+
 ## Sources (accessed 2026-10-12)
 
 1. Hu et al., *LoRA: Low-Rank Adaptation of Large Language Models*, arXiv:2106.09685.

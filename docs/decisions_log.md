@@ -78,12 +78,57 @@ must be logged here.
   proposed scoring mix of D07 section 1 now costs about 3.8 h per seed instead of 2.3 h
   (estimate). D07 section 1 itself is still open. RC-S0 is ready. (Agent, from
   `results/smoke/RC-M1.csv`, `results/smoke/RC-Q0.csv` and the two cards.)
+- **2026-10-16 (Kaggle run RC-S0, Soheil):** Qwen2.5-VL-3B and the fallback Qwen3-VL-2B both
+  pass gate G1 on one T4 (`results/selection/R0/ranking.csv`). The ranking still used the
+  ten-model pool and stopped on a model that was never run; the D05 amendment is now applied to
+  the pool (`student_selection.candidates` = the two models, the ten kept as
+  `candidates_full_protocol`). peft 0.21.2 needs `optimum>=1.24.0` next to gptqmodel (33 test
+  failures without it; tested with 2.3.0), now in `requirements/train.txt`; the full suite then
+  passed on the T4 (895 passed). Measured at side 448: 3B 194 visual tokens, 0.179 s per probe,
+  9,140,717,056 bytes for one LoRA step at one example; 2B 142, 0.074 s, 5,058,956,288 bytes.
+  D07's 2B column now uses 0.074 s (proposed scoring mix about 3.3 h per seed, estimate).
+  Agent proposals for the team in D05: image side 448, G2 threshold 0.10, data_subset 10,000
+  (provisional); flag that the D06 micro-batch of 4 may not fit the T4 for the 3B (RC-E1
+  measures it).
+- **2026-10-16 (Soheil, answers to the RC-S0 proposals):**
+  1. *Training size accepted:* 10,000 examples per E1/E2 run, 625 steps
+     (`training.data_subset`, `training.steps`; `teacher_cache.pool_size` = 10,000). Still open:
+     the rounding of the recovery steps (25 % of 625 = 156.25; proposal 157, D06 memo).
+  2. *Image side not decided:* 448 stays provisional (`inputs.image_longest_side` stays TODO).
+     Reason: at 448 a polyp of 5 % of the image width is about 22 pixels, smaller than one
+     28 x 28 visual-token patch, so the input resolution rather than the compression could
+     remove small findings. The side is chosen before Gate 1 by run card RC-S0b (sides 448, 560
+     and 672 on synthetic images) and the rule written before it runs (D05, "Image side:
+     measurement and decision rule"): the largest side whose projected GPU hours fit the hours
+     the team has. The D06 micro-batch amendment (2 x 8 or 1 x 16) is a proposal only.
+     RC-E0a, RC-E0b and RC-E1 wait on RC-S0b.
+  3. *Training-length check added:* pre-registration section 6, secondary and not
+     confirmatory: E2 and E7 at B2, seed 0, with 30,000 examples (the first 30,000 of the same
+     seeded pool, which contain the 10,000; 1,875 steps); E7@30k starts from E2@30k and recovers
+     for 25 % of its steps on the first 7,500 examples. Run card RC-L1 (blocked; code first).
+  4. *G2 threshold unchanged:* still the proposal of 0.10, not decided.
+- **2026-10-16 (RC-S0b run 1, Soheil):** stopped by a script bug. Every step loaded a fresh
+  model in one process and a second 7.5 GB copy stayed on the GPU, so the micro-batch 2 and 4
+  out-of-memory results and the crash at side 560 are not valid; valid are the stated settings
+  (the adapter was trained in bf16 with gradient checkpointing, `max_pixels` null; the
+  processors set no `min_pixels` / `max_pixels`), the side-448 scoring rows and the
+  micro-batch-1 step (fits, 9,377,473,536 bytes). Fixes: every (side, step) now runs in its own
+  process and any failure is a recorded row; the LoRA step is warmed up, then timed like RC-S0;
+  steps with gradient checkpointing are measured too (measurement only; added to the D06
+  micro-batch proposal as an alternative, D06 unchanged). Student revision pinned to
+  `66285546d2b821cf421d4f5eb2576359d3770cd3`, the revision downloaded on Kaggle (Soheil); the
+  fallback Qwen3-VL-2B stays unpinned and RC-S0b prints the revision the hub serves for it.
+  RC-S0b stays `ready` for run 2.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| Student checks | Run RC-S0 for the two models, then set the image side, the G2 threshold and the training length from its numbers; tell Amir and Farzan about the amendment | Soheil | now (RC-M1 passed 2026-10-15; RC-S0 ready) |
+| Image side | 448 provisional; decided by the RC-S0b rule (D05): the largest of 448 / 560 / 672 whose projected GPU hours fit. Needs RC-S0b and `TODO: team GPU hours available` (and whether a 2 x T4 session counts once or twice against the quota) | Soheil (run RC-S0b), team (hours) | before Gate 1 |
+| G2 threshold | proposal 0.10 (D05), not decided (2026-10-16) | team | before the selection freeze |
+| Recovery steps | 25 % of 625 = 156.25; proposal 157 = `ceil(2,500 / 16)` (D06 memo) | team | before RC-E5 |
+| D06 micro-batch (proposal) | only if micro-batch 4 does not fit one T4 at the chosen side: 2 x 8, else 1 x 16 (16 examples per update; D06 memo) | team | after RC-S0b |
+| Student amendment | tell Amir and Farzan that one student is used (D05 amendment) | Soheil | before RC-E1 |
 | Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
 | EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |
 | Finding list and weights | Pre-registered table, frozen before E7. Draft rules (iteration 40): a finding enters C with at least 20 positive training images and 10 in each of validation and test; groups common >= 10 %, rare < 2 %; cap 20; three tiers with multipliers 2.0 / 1.5 / 1.0 assigned from the finding names | team | after RC-D1 |

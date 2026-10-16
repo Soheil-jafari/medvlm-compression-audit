@@ -9,7 +9,10 @@ model:
   licence: qwen-research
   verified_on: "2026-10-12"
   verified_from: https://huggingface.co/api/models/Qwen/Qwen2.5-VL-3B-Instruct
-  sha_seen: 66285546d2b821cf421d4f5eb2576359d3770cd3  # pin as revision only once chosen
+  sha_seen: 66285546d2b821cf421d4f5eb2576359d3770cd3  # seen on the hub 2026-10-12
+  revision: 66285546d2b821cf421d4f5eb2576359d3770cd3  # pinned 2026-10-16: downloaded as main on Kaggle
+                                          # 2026-10-16 (RC-S0b run 1); RC-M1 and RC-S0 did not record theirs
+                                          # (load_model asks for sha_seen when no revision is set, the same hash)
   parameters_stored: 3754622976
   architecture:
     vision_encoder: "Qwen ViT, 32 layers x 1280, native resolution"

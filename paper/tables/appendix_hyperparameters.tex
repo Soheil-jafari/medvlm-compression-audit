@@ -9,7 +9,7 @@ Students (E1, E2) & LoRA targets & decoder\_attention, decoder\_mlp \\
 Students (E1, E2) & Learning rate, schedule, warm-up & 0.0001 / linear / 20 \\
 Students (E1, E2) & Micro-batch x accumulation & 4 / 4 \\
 Students (E1, E2) & KD weight / temperature & 0.5 / 2 \\
-Students (E1, E2) & Steps / training pool & -- / -- \\
+Students (E1, E2) & Steps / training pool & 625 / 10000 \\
 Recovery (E5-E7, A1-A6) & Steps / examples & -- / -- \\
 Recovery (E5-E7, A1-A6) & Learning rate / KD weight & 0.0001 / 0.5 \\
 Pruning & Unit types & decoder\_layer, attention\_head, mlp\_channel\_group \\

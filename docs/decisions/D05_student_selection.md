@@ -244,6 +244,118 @@ student (status stays `CANDIDATE` until RC-S0 passes, then the revision is pinne
 `configs/student_selection.yaml` carries the amendment, run card RC-S0 covers the two models
 only, RC-S1 to RC-S3 are kept but not used. Still to do: tell Amir and Farzan.
 
+Applied to the ranking on 2026-10-16: the selection code ran and ranked
+`student_selection.candidates`, which still listed the ten models, so `select_student.py --rank R0`
+stopped on the first model that was never run (internvl3_5_2b). `candidates` now holds only
+Qwen2.5-VL-3B and Qwen3-VL-2B; the ten of the full protocol are kept as the record
+`candidates_full_protocol` (not read by the code), and their model configs stay in
+`configs/models/`. Round 0 result (RC-S0, Kaggle T4): both models pass gate G1
+(`results/selection/R0/ranking.csv`).
+
+## Round 0 numbers and proposals (2026-10-16, agent; the team decides)
+
+Measured by RC-S0 on one Kaggle T4 (15,636,037,632 bytes), synthetic images at the image side
+448, from `results/selection/R0/*/metrics.csv`. Both models pass gate G1.
+
+| | Qwen2.5-VL-3B (student) | Qwen3-VL-2B (fallback) |
+|---|---|---|
+| Visual tokens per image (side 448) | 194 | 142 |
+| Seconds per yes/no probe | 0.179 | 0.074 |
+| Peak bytes, scoring | 7,843,901,952 | 4,505,061,376 |
+| Peak bytes, one LoRA step at one example | 9,140,717,056 | 5,058,956,288 |
+| Seconds per LoRA step at one example | 0.74 | 0.56 |
+
+RC-M1 measured the 3B at 0.199 s per probe on the same side; D07 keeps the larger number.
+
+Proposals, using only these numbers (every time below is an **estimate**):
+
+1. **`inputs.image_longest_side` = 448** (not accepted on 2026-10-16: decided after RC-S0b,
+   see below). It is the only side measured so far, for the student, the
+   fallback and the teacher (RC-M1: 0.314 s per probe, 17,181,603,328 bytes peak over two T4s),
+   and the side is shared by all of them. Visual tokens grow about with the image area, so 672
+   would give about 2.25 times as many (about 436 for the 3B, an estimate) with more memory and
+   time per example; that would need its own measurement first. Whether 448 leaves enough of
+   the small lesions is answered by condition 1 above (small-finding recall of the trained
+   student not at zero), not by a guess.
+2. **G2 threshold = 0.10**, the blank-image balanced-accuracy drop the teacher's Gate 1 already
+   uses (D04, `configs/experiments/E0.yaml`). RC-S0 cannot measure it (synthetic images, no
+   labels); it is read from the validation evaluation of the trained students (stage 06,
+   E1/E2) and fixed before those numbers exist.
+3. **Training length (`training.data_subset`, `training.steps` = ceil(data_subset / 16), D06).**
+   At 0.74 s per example (the one-example step; the cost at micro-batch 4 is not measured) one
+   run costs about data_subset x 0.74 s. The student-side training of the whole study is about
+   24 x data_subset examples: E1 and E2 with 3 seeds each (6 x data_subset) and about 72
+   recoveries of a quarter each (45 pruning-grid runs and 27 ablation runs, 18 x data_subset);
+   E4 is left out (its quantization-aware step is not measured).
+
+   | data_subset | steps | one E1/E2 run | student training of the study |
+   |---|---|---|---|
+   | 5,000 | 313 | about 1.0 h | about 25 h |
+   | 10,000 | 625 | about 2.1 h | about 49 h |
+   | 20,000 | 1,250 | about 4.1 h | about 99 h |
+
+   Provisional proposal: **10,000** (accepted on 2026-10-16). Two numbers were still missing: the
+   teacher cache costs data_subset x (answer tokens / 4.48 tokens per second, RC-M1), where the
+   answer length comes from RC-D1, and the weekly GPU quota per account is not yet checked
+   (TODO above). The team picks the size once both are known.
+4. **`compute_unit_b` and the Round 1 validation subset size:** not needed. They belong to
+   Round 1, which the amendment does not run; they stay `TODO` and unused.
+
+**Memory of the D06 batch (flag, not a change to D06).** At one example the 3B's LoRA step
+needs 1,631,448,064 bytes above the loaded weights (7,509,268,992 bytes). If all of that grew
+with the number of examples, a micro-batch of 4 would need about 14.0 GB, 90 % of the T4: an
+estimate with two errors in opposite directions (part of the extra is the adapter and its
+optimizer state, which do not grow; real training examples are longer than a Round 0 probe,
+whose text is one short question). So the D06 micro-batch of 4 x 4 accumulation **may not fit
+one T4 for the 3B**; for the 2B the same estimate is 7.5 GB (48 %). The first student training
+(RC-E1) measures it; if it does not fit, the team decides (for example 2 x 8 or 1 x 16, which
+keeps 16 examples per update, or gradient checkpointing, as E4 uses).
+
+### Decisions on these proposals (2026-10-16, Soheil)
+
+- **Training size: accepted.** 10,000 examples per E1/E2 run, 625 steps at the D06 effective
+  batch of 16 (`configs/training.yaml`; the teacher cache holds the same 10,000).
+- **Image side: not decided.** 448 stays provisional. Reason: the study is about small
+  findings; at 448 a polyp of 5 % of the image width is about 22 pixels, smaller than one
+  28 x 28 visual-token patch, so a reviewer could say that the input resolution, not the
+  compression, removed small findings. The side is decided from a cheap measurement on
+  synthetic images (RC-S0b), before Gate 1 or any real-image run, by the rule below.
+- **Training-length check added** to the pre-registration (section 6): E2 and E7 with 30,000
+  examples at B2, seed 0, next to the main 10,000 runs.
+- **G2 threshold:** unchanged, still the proposal of 0.10 awaiting the team.
+
+### Image side: measurement and decision rule (written 2026-10-16, before RC-S0b runs)
+
+RC-S0b measures the student (one T4) and the teacher (two T4s) at the sides 448, 560 and 672 on
+synthetic images: visual tokens, seconds per probe, peak memory, the teacher's generation
+speed, and one LoRA step of the student at micro-batch 1, 2 and 4. It also prints what the
+published teacher adapter and the Qwen processors state about image size ("not stated" where
+nothing is).
+
+For each side the agent then projects the GPU hours of the whole study. Inputs from RC-S0b at
+that side: the student's seconds per probe `p_s` and per update `u` (16 / m times
+`student_lora_step_seconds_mb<m>`, the warm step, at the largest micro-batch m that fits; for
+the gradient-checkpointing option, `student_lora_gc_step_seconds_mb<m>` instead), the teacher's seconds per probe `p_t` and
+tokens per second `g_t`. Inputs from RC-D1: the validation and test probe counts and the
+answer lengths that fix `teacher_cache.max_new_tokens` (`T`).
+
+| Block | Projected hours at one side |
+|---|---|
+| Teacher cache | 10,000 x (p_t + T / g_t), an upper bound (answers stop at their end token) |
+| Gate 1 and the E0 evaluations | the teacher's probe passes over the validation (and test) probes, x p_t |
+| E1 and E2 | 6 runs x 625 updates x u |
+| Pruning scores (D07) | 108 exactly scored units x 640 probes x p_s per clinical scoring run, for E7 and the ablations that score |
+| Recoveries | about 72 runs x the recovery updates x u |
+| Evaluations | every run's validation and test passes, x p_s per probe and condition, plus 1,000 free-text answers each |
+| Training-length check | the cache for 20,000 more examples, 1,875 updates x u, one scoring run, one recovery, four evaluations |
+
+The team states the GPU hours it has (`TODO: team GPU hours available`; whether a 2 x T4
+session counts once or twice against the Kaggle quota is to be checked, TODO: verify) and picks
+the **largest side whose projected total fits**. If the micro-batch of 4 does not fit one T4 at
+that side, the D06 amendment proposal applies (micro-batch 2 or 1, accumulation 8 or 16, 16
+examples per update, or gradient checkpointing at 4 x 4; D06 memo). Nothing in this rule reads a real image or a result of the
+study.
+
 ## What changes in the repository once decided
 
 - `configs/student_selection.yaml`: freeze date, weights, `n1`, `b`, G2 threshold,
