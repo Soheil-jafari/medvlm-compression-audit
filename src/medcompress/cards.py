@@ -1,0 +1,447 @@
+"""What each run card runs, in order, for the unattended runner (``scripts/run_card.py``).
+
+A :class:`CardPlan` lists a card's steps (the same stage scripts and flags as section 3 of
+the card), the hand-offs it writes for other accounts (``handoffs.py``), the hand-offs it
+reads (to attach with ``--from``), and how many GPUs it needs. Cards that are split by seed
+(E1, E2, E3, E4, E5-E8, A1-A6) take the seed; one account runs one seed in one session.
+
+The plans are data; ``tests/test_cards.py`` checks them against the experiment registry and
+the cards themselves. A card whose status is not ``ready`` is refused by the runner.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from medcompress.config import RunContext
+
+SEEDS: tuple[int, ...] = (0, 1, 2)
+BUDGETS: tuple[str, ...] = ("B1", "B2", "B3")
+E5_CRITERIA: tuple[str, ...] = ("magnitude", "activation", "taylor")
+E3_VARIANTS: tuple[str, ...] = ("w4", "w8", "w8a8")
+ABLATION_VARIANTS: dict[str, tuple[str | None, ...]] = {
+    "A1": (None,),
+    "A2": (None,),
+    "A3": (None,),
+    "A4": ("n32", "n64", "n256"),  # n128 is E7 itself (registry.SAME_AS_E7)
+    "A5": ("kl",),  # logprob_drop is E7 itself
+    "A6": ("layers_only", "heads_channels"),
+}
+RC_D1_SETTINGS: tuple[str, ...] = (
+    "--split-seed", "20261012", "--dedup-threshold", "4", "--mask-threshold", "4",
+)  # fmt: skip
+"""RC-D1's pre-registered settings (card section 2)."""
+REFERENCE_FILE = "results/E2/nobudget/seed0/efficiency.csv"
+SHARED_DATA_DIR = "medcompress_data"
+"""Folder under ``--out`` where RC-D1 writes the shared data (``data/`` + ``private/``)."""
+
+
+class CardError(ValueError):
+    """The card cannot run as asked (unknown card, wrong seed, not runnable here)."""
+
+
+@dataclass(frozen=True)
+class Run:
+    """One experiment run of a card."""
+
+    exp: str
+    seed: int = 0
+    budget: str | None = None
+    variant: str | None = None
+
+    @property
+    def context(self) -> RunContext:
+        return RunContext(self.exp, seed=self.seed, budget=self.budget, variant=self.variant)
+
+    def args(self) -> list[str]:
+        out = ["--exp", self.exp, "--seed", str(self.seed)]
+        if self.variant:
+            out += ["--variant", self.variant]
+        if self.budget:
+            out += ["--budget", self.budget]
+        return out
+
+    @property
+    def label(self) -> str:
+        parts = [self.exp, self.variant or "", self.budget or "", f"seed{self.seed}"]
+        return " ".join(p for p in parts if p)
+
+
+@dataclass(frozen=True)
+class Need:
+    """A hand-off the card reads: checked to be present (attached with ``--from``) before step 1.
+
+    ``kind`` is a hand-off kind; ``run`` the run it belongs to (``None`` for the teacher
+    cache). An ``optional`` need is used when present (RC-G2's pruned models in the grid's
+    seed-0 sessions). ``text`` describes a need that is not a single path.
+    """
+
+    kind: str
+    run: Run | None = None
+    optional: bool = False
+    text: str = ""
+
+    @property
+    def label(self) -> str:
+        if self.text:
+            return self.text
+        if self.run is None:
+            what = "teacher cache"
+        else:
+            what = f"{self.run.label} {self.kind}"
+        return what + (" (optional)" if self.optional else "")
+
+
+@dataclass(frozen=True)
+class Step:
+    """One command: a script of ``scripts/`` (or ``-c`` code) with its arguments.
+
+    ``inputs``: the runner adds ``--data-root`` and ``--from`` to it. ``optional``: a setting
+    that is still open (exit code 4) skips the step instead of stopping the card.
+    ``skip_if_pruned``: the run is skipped when its pruned model is attached and its results
+    are committed (a run RC-G2 already made); only its test evaluation then runs.
+    ``skip_if_present``: the step is skipped when this output is already there (an E1 or E2
+    adapter attached with ``--from``), so a later session runs only what is left.
+    """
+
+    label: str
+    argv: tuple[str, ...]
+    inputs: bool = True
+    optional: bool = False
+    skip_if_pruned: Run | None = None
+    skip_if_present: Need | None = None
+
+
+@dataclass(frozen=True)
+class Handoff:
+    """A folder the card writes for another account: one kind, one or more runs."""
+
+    kind: str
+    runs: tuple[Run, ...]
+    name: str
+
+
+@dataclass(frozen=True)
+class CardPlan:
+    card: str
+    title: str
+    gpus: int
+    steps: tuple[Step, ...]
+    handoffs: tuple[Handoff, ...] = ()
+    needs: tuple[Need, ...] = ()
+    seed: int | None = None
+    quantization: bool = False
+    internet: bool = False
+    notes: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def tag(self) -> str:
+        return self.card if self.seed is None else f"{self.card}_seed{self.seed}"
+
+
+def _script(name: str, *args: str) -> tuple[str, ...]:
+    return (f"scripts/{name}", *args)
+
+
+def _experiment(run: Run) -> Step:
+    return Step(f"run {run.label}", _script("run_experiment.py", *run.args()))
+
+
+def _test_eval(run: Run) -> Step:
+    return Step(
+        f"test evaluation {run.label}",
+        _script("06_evaluate.py", *run.args(), "-o", "evaluation.split=test"),
+    )
+
+
+def _training(run: Run) -> list[Step]:
+    """Stage 02, the validation pass and the benchmark (it waits while the hardware is open)."""
+    return [
+        Step(
+            f"train {run.label}",
+            _script("02_train_student.py", *run.args()),
+            skip_if_present=Need("adapter", run),
+        ),
+        Step(f"validation {run.label}", _script("06_evaluate.py", *run.args())),
+        Step(
+            f"benchmark {run.label}",
+            _script("07_benchmark_efficiency.py", *run.args()),
+            optional=True,
+        ),
+    ]
+
+
+def _pruning(runs: Sequence[Run]) -> list[Step]:
+    steps: list[Step] = []
+    for run in runs:
+        experiment = _experiment(run)
+        steps.append(Step(experiment.label, experiment.argv, skip_if_pruned=run))
+        steps.append(_test_eval(run))
+    return steps
+
+
+def g2_runs() -> tuple[Run, ...]:
+    """The five runs of RC-G2: E5 (three criteria), E6 and E7 at B2, seed 0."""
+    e5 = tuple(Run("E5", 0, "B2", v) for v in E5_CRITERIA)
+    return e5 + (Run("E6", 0, "B2"), Run("E7", 0, "B2"))
+
+
+def _pick(values: Sequence[str], wanted: Sequence[str] | None) -> tuple[str, ...]:
+    if not wanted:
+        return tuple(values)
+    unknown = sorted(set(wanted) - set(values))
+    if unknown:
+        raise CardError(f"unknown choice {unknown}; use {list(values)}")
+    return tuple(v for v in values if v in wanted)
+
+
+def _seed(card: str, seed: int | None, allowed: Sequence[int]) -> int:
+    if seed is None:
+        raise CardError(f"{card} runs one seed per session: give --seed ({list(allowed)})")
+    if seed not in allowed:
+        raise CardError(f"{card} runs seed {list(allowed)}, not {seed}")
+    return seed
+
+
+def _no_seed(card: str, seed: int | None) -> None:
+    if seed is not None:
+        raise CardError(f"{card} has no seed; leave --seed out")
+
+
+def build_plan(
+    card: str,
+    seed: int | None = None,
+    *,
+    variants: Sequence[str] | None = None,
+    budgets: Sequence[str] | None = None,
+    out: Path = Path("/kaggle/working"),
+    kvasir_seg: Path | None = None,
+    data_root: Path | None = None,
+    external_images: Path | None = None,
+) -> CardPlan:
+    """The plan of ``card`` (for ``seed`` where the card is split by seed)."""
+    card = card.upper()
+    picked_budgets = _pick(BUDGETS, budgets)
+    if card == "RC-D1":
+        _no_seed(card, seed)
+        if kvasir_seg is None:
+            raise CardError("RC-D1 needs --kvasir-seg (the attached Kvasir-SEG folder)")
+        shared = Path(out) / SHARED_DATA_DIR
+        settings = RC_D1_SETTINGS
+        data = ("--data-root", str(shared / "data"))
+        bundle_dir, whole = ("--bundle-dir", str(shared)), ("--data-root", str(shared))
+        copy = (
+            "-c",
+            "import sys; sys.path.insert(0, 'src'); from pathlib import Path; "
+            "from medcompress.utils.kaggle import copy_kvasir_seg; "
+            f"copy_kvasir_seg(Path({str(kvasir_seg)!r}), Path({str(shared / 'data')!r}))",
+        )
+        return CardPlan(
+            card, "Data preparation, first pass", 0,
+            (
+                Step("export", _script("prepare_data.py", "export", *data), inputs=False),
+                Step("copy Kvasir-SEG", copy, inputs=False),
+                Step(
+                    "prepare",
+                    _script("prepare_data.py", "prepare", "--data-root", str(shared / "data"),
+                            "--private-dir", str(shared / "private"), *settings),
+                    inputs=False,
+                ),
+                Step("bundle", _script("prepare_data.py", "bundle", *bundle_dir), inputs=False),
+                Step("verify", _script("prepare_data.py", "verify", *whole), inputs=False),
+            ),
+            internet=True,
+            notes=(f"upload {shared} as ONE private Kaggle dataset (card section 4)",),
+        )  # fmt: skip
+    if card == "RC-D1-COUNTS":
+        _no_seed(card, seed)
+        if data_root is None:
+            raise CardError("the second RC-D1 pass needs --data-root (the shared data)")
+        counts = _script(
+            "prepare_data.py", "counts", "--data-root", str(data_root), *RC_D1_SETTINGS
+        )
+        return CardPlan(
+            card, "Data preparation, second pass (counts with the label values)", 0,
+            (Step("counts", counts, inputs=False),),
+        )  # fmt: skip
+    if card == "RC-E0A":
+        _no_seed(card, seed)
+        run = Run("E0")
+        return CardPlan(
+            "RC-E0a", "Gate 1", 2,
+            (Step("gate 1", _script("00_check_teacher_image_reliance.py", *run.args())),),
+            internet=True,
+        )  # fmt: skip
+    if card == "RC-E0B":
+        _no_seed(card, seed)
+        run = Run("E0")
+        return CardPlan(
+            "RC-E0b", "Teacher cache and E0 validation", 2,
+            (
+                Step("teacher cache", _script("01_cache_teacher_outputs.py", *run.args())),
+                Step("E0 validation", _script("06_evaluate.py", *run.args())),
+            ),
+            handoffs=(Handoff("teacher_cache", (run,), "E0_teacher_cache"),),
+            internet=True,
+        )  # fmt: skip
+    if card in ("RC-E1", "RC-E2"):
+        exp = card[-2:]
+        run = Run(exp, _seed(card, seed, SEEDS))
+        return CardPlan(
+            card, f"{exp} training, seed {run.seed}", 1, tuple(_training(run)),
+            handoffs=(Handoff("adapter", (run,), f"{exp}_seed{run.seed}_adapter"),),
+            needs=(Need("teacher_cache"),) if exp == "E2" else (),
+            seed=run.seed, internet=True,
+        )  # fmt: skip
+    if card == "RC-B0":
+        _no_seed(card, seed)
+        run = Run("E2")
+        first = Path(out) / "first_reading.csv"
+        copy = (
+            "-c",
+            f"import shutil; shutil.copy({REFERENCE_FILE!r}, {str(first)!r})",
+        )
+        bench = _script("07_benchmark_efficiency.py", *run.args())
+        return CardPlan(
+            card, "E2 reference footprint (two fresh readings)", 1,
+            (Step("first reading", bench), Step("keep the first reading", copy, inputs=False),
+             Step("second reading", bench)),
+            needs=(Need("adapter", Run("E2")),), internet=True,
+        )  # fmt: skip
+    if card == "RC-E3":
+        s = _seed(card, seed, SEEDS)
+        runs = [Run("E3", s, variant=v) for v in _pick(E3_VARIANTS, variants)]
+        steps = [step for run in runs for step in (_experiment(run), _test_eval(run))]
+        return CardPlan(
+            card, f"E3 post-training quantization, seed {s}", 1, tuple(steps),
+            handoffs=(Handoff("quantized", tuple(runs), f"E3_seed{s}_quantized"),
+                      Handoff("outcomes", tuple(runs), f"E3_seed{s}_outcomes")),
+            needs=(Need("adapter", Run("E2", s)),), seed=s, quantization=True, internet=True,
+        )  # fmt: skip
+    if card == "RC-E4":
+        run = Run("E4", _seed(card, seed, SEEDS))
+        return CardPlan(
+            card, f"E4 quantization-aware distillation, seed {run.seed}", 1,
+            (_experiment(run), _test_eval(run)),
+            handoffs=(Handoff("quantized", (run,), f"E4_seed{run.seed}_quantized"),
+                      Handoff("outcomes", (run,), f"E4_seed{run.seed}_outcomes")),
+            needs=(Need("teacher_cache"),), seed=run.seed, quantization=True, internet=True,
+        )  # fmt: skip
+    if card == "RC-E9":
+        _no_seed(card, seed)
+        run = Run("E9")
+        return CardPlan(
+            card, "E9 the teacher at 4 bit", 2, (_experiment(run), _test_eval(run)),
+            handoffs=(Handoff("quantized", (run,), "E9_seed0_quantized"),),
+            quantization=True, internet=True,
+        )  # fmt: skip
+    if card == "RC-G2":
+        _no_seed(card, seed)
+        runs = list(g2_runs())
+        return CardPlan(
+            card, "Gate 2 pilot at B2, seed 0 (validation)", 1, tuple(_experiment(r) for r in runs),
+            handoffs=(Handoff("pruned", tuple(runs), "G2_B2_seed0_pruned"),),
+            needs=(Need("adapter", Run("E2")), Need("teacher_cache")), internet=True,
+            notes=("the grid sessions of seed 0 attach this hand-off and skip these five runs",),
+        )  # fmt: skip
+    if card in ("RC-E5", "RC-E6", "RC-E7"):
+        s = _seed(card, seed, SEEDS)
+        exp = card[-2:]
+        criteria = _pick(E5_CRITERIA, variants) if exp == "E5" else (None,)
+        runs = [Run(exp, s, b, v) for v in criteria for b in picked_budgets]
+        kept = runs if exp == "E7" else [r for r in runs if r.budget == "B2"]  # E8 / RC-T1
+        handoffs = [Handoff("outcomes", tuple(runs), f"{exp}_seed{s}_outcomes")]
+        if kept:
+            handoffs.insert(0, Handoff("pruned", tuple(kept), f"{exp}_seed{s}_pruned"))
+        return CardPlan(
+            card, f"{exp} pruning grid, seed {s}", 1, tuple(_pruning(runs)),
+            handoffs=tuple(handoffs),
+            needs=(Need("adapter", Run("E2", s)), Need("teacher_cache"))
+            + tuple(Need("pruned", r, optional=True) for r in runs if r in g2_runs()),
+            seed=s, internet=True,
+        )  # fmt: skip
+    if card == "RC-E8":
+        s = _seed(card, seed, SEEDS)
+        runs = [Run("E8", s, b) for b in picked_budgets]
+        steps = [step for run in runs for step in (_experiment(run), _test_eval(run))]
+        b2 = tuple(r for r in runs if r.budget == "B2")  # RC-T1 times B2
+        return CardPlan(
+            card, f"E8 clinical pruning + 4-bit, seed {s}", 1, tuple(steps),
+            handoffs=(Handoff("quantized", b2, f"E8_seed{s}_quantized"),
+                      Handoff("outcomes", tuple(runs), f"E8_seed{s}_outcomes")),
+            needs=(Need("adapter", Run("E2", s)),)
+            + tuple(Need("pruned", Run("E7", s, r.budget)) for r in runs),
+            seed=s, quantization=True,
+            internet=True,
+        )  # fmt: skip
+    if card in {f"RC-A{n}" for n in range(1, 7)}:
+        s = _seed(card, seed, SEEDS)
+        exp = card[3:]
+        choices = ABLATION_VARIANTS[exp]
+        if variants:
+            choices = _pick([c for c in choices if c], variants)
+        runs = [Run(exp, s, "B2", v) for v in choices]
+        return CardPlan(
+            card, f"{exp} ablation at B2, seed {s}", 1, tuple(_pruning(runs)),
+            needs=(Need("adapter", Run("E2", s)), Need("teacher_cache")), seed=s, internet=True,
+        )  # fmt: skip
+    if card == "RC-R1":
+        _no_seed(card, seed)
+        runs = [Run("E0")] + [Run(e, s) for e in ("E1", "E2") for s in SEEDS]
+        e2 = tuple(r for r in runs if r.exp == "E2")  # RC-C1 compares E2 with every arm
+        return CardPlan(
+            card, "E0, E1, E2 on the test split", 2, tuple(_test_eval(r) for r in runs),
+            handoffs=(Handoff("outcomes", e2, "E2_test_outcomes"),),
+            needs=tuple(Need("adapter", Run(e, s)) for e in ("E1", "E2") for s in SEEDS),
+            internet=True,
+        )  # fmt: skip
+    if card == "RC-C1":
+        _no_seed(card, seed)
+        return CardPlan(
+            card, "Paired comparisons (CPU)", 0,
+            (Step("comparisons", _script("09_compare_arms.py")),
+             Step("tables and figures", _script("08_aggregate_results.py"), inputs=False)),
+            needs=(Need("outcomes", text="outcomes of E2 (RC-R1) and of every E3-E8 session"),),
+        )  # fmt: skip
+    if card == "RC-X1":
+        _no_seed(card, seed)
+        if data_root is None or external_images is None:
+            raise CardError("RC-X1 needs --data-root (the shared data) and --external-images")
+        return CardPlan(
+            card, "EndoBench part A: overlap (CPU)", 0,
+            (Step("overlap", _script("prepare_data.py", "overlap", "--data-root", str(data_root),
+                                     "--images", str(external_images), "--name", "endobench",
+                                     "--dedup-threshold", "4"), inputs=False),),
+        )  # fmt: skip
+    if card == "RC-T1":
+        raise CardError("RC-T1 runs on the rented GPU, not on Kaggle: follow its card")
+    if card in ("RC-L1", "RC-S1", "RC-S2", "RC-S3"):
+        raise CardError(f"{card} has no runnable commands (see its card)")
+    raise CardError(f"unknown or finished card {card!r}")
+
+
+RUNNABLE_CARDS: tuple[str, ...] = (
+    "RC-D1", "RC-D1-counts", "RC-E0a", "RC-E0b", "RC-E1", "RC-E2", "RC-B0", "RC-E3", "RC-E4",
+    "RC-E9", "RC-G2", "RC-E5", "RC-E6", "RC-E7", "RC-E8", "RC-A1", "RC-A2", "RC-A3", "RC-A4",
+    "RC-A5", "RC-A6", "RC-R1", "RC-C1", "RC-X1",
+)  # fmt: skip
+
+
+def card_file(card: str, runs_dir: Path) -> Path:
+    """The markdown card of ``card`` (``RC-D1-counts`` is part of RC-D1)."""
+    base = card.split("-COUNTS")[0].split("-counts")[0]
+    matches = sorted(Path(runs_dir).glob(f"{base}_*.md"))
+    if len(matches) != 1:
+        raise CardError(f"no single card file for {card} in {runs_dir}")
+    return matches[0]
+
+
+def card_status(path: Path) -> str:
+    """The status word of a card (``- Status: `ready` ...``)."""
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- Status:") and "`" in stripped:
+            return stripped.split("`")[1].strip().lower()
+    raise CardError(f"{path} has no status line")

@@ -521,3 +521,45 @@ def test_stage_entry_trains_saves_the_adapter_and_writes_results(
     assert metrics["train_steps"] == 3 and metrics["train_examples_seen"] == 6
     assert metrics["train_loss_final"] > 0 and metrics["train_seconds"] > 0
     assert {r["experiment"] for r in rows} == {"E2"} and {int(r["seed"]) for r in rows} == {2}
+
+
+def _adapter_weights(wrapper: HFVLMWrapper) -> dict[str, torch.Tensor]:
+    return {n: p.detach().clone() for n, p in wrapper.module.named_parameters() if p.requires_grad}
+
+
+def test_a_stopped_training_resumes_from_its_last_saved_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _config(steps=6, extra={"checkpoint_every": 2})
+    full = _wrapper()
+    reference = offline_kd.train_lora(full, _examples(), cfg, seed=3)
+
+    calls = {"n": 0}
+    step_loss = offline_kd._step_loss
+
+    def stops_in_step_five(*args: object, **kwargs: object) -> object:
+        calls["n"] += 1
+        if calls["n"] == 5:  # one micro-batch per step: the session ends in step 5
+            raise RuntimeError("session ended")
+        return step_loss(*args, **kwargs)
+
+    monkeypatch.setattr(offline_kd, "_step_loss", stops_in_step_five)
+    folder = tmp_path / "resume"
+    with pytest.raises(RuntimeError, match="session ended"):
+        offline_kd.train_lora(_wrapper(), _examples(), cfg, seed=3, resume_dir=folder)
+    monkeypatch.setattr(offline_kd, "_step_loss", step_loss)
+    assert (folder / "current" / "progress.json").is_file()  # saved after step 4
+
+    resumed_model = _wrapper()  # a new session: the model is loaded again
+    resumed = offline_kd.train_lora(resumed_model, _examples(), cfg, seed=3, resume_dir=folder)
+    assert resumed.steps == 6 and resumed.examples_seen == reference.examples_seen
+    assert resumed.losses[:4] == pytest.approx(reference.losses[:4])
+    assert resumed.losses == pytest.approx(reference.losses, rel=1e-4, abs=1e-6)
+    expected = _adapter_weights(full)
+    for name, value in _adapter_weights(resumed_model).items():
+        torch.testing.assert_close(value, expected[name], rtol=1e-4, atol=1e-6)
+    with pytest.raises(ValueError, match="belongs to another run"):
+        offline_kd.train_lora(
+            _wrapper(), _examples(), dataclasses.replace(cfg, learning_rate=5e-3), seed=3,
+            resume_dir=folder,
+        )  # fmt: skip

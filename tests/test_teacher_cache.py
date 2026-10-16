@@ -215,3 +215,38 @@ def test_the_cache_metadata_records_the_image_size(tmp_path: Path) -> None:
     teacher.image_longest_side = 512  # type: ignore[attr-defined]
     with pytest.raises(ValueError, match="image_longest_side"):
         cache_teacher_outputs(teacher, _samples(2), tmp_path / "c", top_k=TOP_K, max_new_tokens=2)
+
+
+def test_the_first_answers_are_timed_on_whole_batches_and_recorded_at_once(
+    tmp_path: Path,
+) -> None:
+    from medcompress.config import RunContext
+
+    plain = cache_teacher_outputs(
+        FakeTeacher(), _samples(7), tmp_path / "plain", top_k=TOP_K, max_new_tokens=4, shard_size=5
+    )
+    timed, seen = FakeTeacher(), []
+    timed.batch_size = 2  # type: ignore[attr-defined]
+    out = cache_teacher_outputs(
+        timed, _samples(7), tmp_path / "timed", top_k=TOP_K, max_new_tokens=4, shard_size=5,
+        time_first=3, on_timed=lambda n, s: seen.append((n, s)),
+    )  # fmt: skip
+    assert [len(c) for c in timed.calls] == [4, 1, 2]  # 3 rounded up to two batches of 2
+    assert len(seen) == 1 and seen[0][0] == 4 and seen[0][1] >= 0
+    same = [r.answer_text for r in load_teacher_cache(out)]
+    assert same == [r.answer_text for r in load_teacher_cache(plain)]
+    again = FakeTeacher()
+    cache_teacher_outputs(
+        again, _samples(7), tmp_path / "timed", top_k=TOP_K, max_new_tokens=4, shard_size=5,
+        time_first=3, on_timed=lambda n, s: seen.append((n, s)),
+    )  # fmt: skip
+    assert again.calls == [] and len(seen) == 1  # a resumed cache is not timed again
+
+    config = _config(tmp_path / "stage")
+    config["paths"]["results_root"] = str(tmp_path / "results")
+    run_teacher_caching(
+        config, RunContext("E0", seed=0), teacher=FakeTeacher(), samples=_samples(3)
+    )
+    metrics = (tmp_path / "results" / "E0" / "nobudget" / "seed0" / "metrics.csv").read_text()
+    assert "teacher_cache_first_answers," in metrics
+    assert "teacher_cache_first_answers_seconds" in metrics

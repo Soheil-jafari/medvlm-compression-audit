@@ -317,6 +317,7 @@ def train_lora(
     *,
     seed: int,
     attach_adapter: bool = True,
+    resume_dir: Path | None = None,
 ) -> TrainResult:
     """Attach LoRA to the student (if not attached) and train it for ``cfg.steps`` optimizer steps.
 
@@ -327,10 +328,22 @@ def train_lora(
     seeded shuffled order (cycling if the data run out). Mixed precision is used when
     the model is fp16 on CUDA. The adapter stays attached; use ``lora.merge_adapter``
     or ``lora.save_adapter`` afterwards.
+
+    With ``resume_dir`` the run saves its state there every ``checkpoint_every`` steps
+    (``cfg.extra``; default ``resume.DEFAULT_CHECKPOINT_EVERY``) and after the last step, and a
+    run started again with the same settings and examples continues from the last saved step
+    (``resume.py``). The caller removes the folder once the final output is saved.
     """
     import peft
     import torch
 
+    from medcompress.compression.distillation.resume import (
+        DEFAULT_CHECKPOINT_EVERY,
+        Progress,
+        ResumeStore,
+        run_fingerprint,
+        settings_for_fingerprint,
+    )
     from medcompress.models.smoke import cuda_available, peak_gpu_bytes, reset_peak
 
     if not examples:
@@ -357,16 +370,54 @@ def train_lora(
     clip = float(cfg.extra.get("max_grad_norm", 1.0))
     order = select_subset([e.sample_id for e in examples], None, seed)
     per_step = cfg.batch_size * cfg.grad_accumulation
-    result = TrainResult()
+    spec = getattr(student, "spec", None)
+    fingerprint = run_fingerprint(
+        settings_for_fingerprint(cfg),
+        seed,
+        [examples[i].sample_id for i in order],
+        model=f"{getattr(spec, 'name', None)}@{getattr(spec, 'resolved_revision', None)}",
+    )
+    progress = Progress(fingerprint)
+    store = None
+    if resume_dir is not None:
+        every = int(cfg.extra.get("checkpoint_every", DEFAULT_CHECKPOINT_EVERY))
+        store = ResumeStore(Path(resume_dir), fingerprint, every=every)
+        named = {n: p for n, p in module.named_parameters() if p.requires_grad}
+
+        def save_state(folder: Path) -> None:
+            torch.save({n: p.detach().cpu() for n, p in named.items()}, folder / "trainable.pt")
+            torch.save(optimizer.state_dict(), folder / "optimizer.pt")
+            torch.save(scaler.state_dict(), folder / "scaler.pt")
+            cuda_rng = torch.cuda.get_rng_state_all() if cuda_available() else []
+            torch.save({"cpu": torch.get_rng_state(), "cuda": cuda_rng}, folder / "rng.pt")
+
+        def load_state(folder: Path) -> None:
+            saved = torch.load(folder / "trainable.pt", map_location="cpu")
+            if set(saved) != set(named):
+                raise ValueError(f"the resume state in {folder} has other trainable weights")
+            with torch.no_grad():
+                for name, value in saved.items():
+                    named[name].copy_(value)
+            optimizer.load_state_dict(torch.load(folder / "optimizer.pt", map_location="cpu"))
+            scaler.load_state_dict(torch.load(folder / "scaler.pt"))
+            rng = torch.load(folder / "rng.pt")
+            torch.set_rng_state(rng["cpu"])
+            if rng["cuda"] and cuda_available():
+                torch.cuda.set_rng_state_all(rng["cuda"])
+
+        loaded = store.load(load_state)
+        if loaded is not None:
+            progress = loaded
+            print(f"resuming from step {progress.step} of {cfg.steps} ({resume_dir})")
     reset_peak()
-    start, cursor = time.perf_counter(), 0
-    for step in range(cfg.steps):
+    start = time.perf_counter()
+    for step in range(progress.step, cfg.steps):
         for group in optimizer.param_groups:
             group["lr"] = _learning_rate(cfg, step)
         totals = [0.0, 0.0, 0.0]
         for _ in range(cfg.grad_accumulation):
-            idx = [order[(cursor + i) % len(order)] for i in range(cfg.batch_size)]
-            cursor += cfg.batch_size
+            idx = [order[(progress.cursor + i) % len(order)] for i in range(cfg.batch_size)]
+            progress.cursor += cfg.batch_size
             gt, teacher = _micro_batches(student, [examples[i] for i in idx], cfg)
             gt = move(gt, device)
             teacher = move(teacher, device) if teacher is not None else None
@@ -381,19 +432,34 @@ def train_lora(
         scaler.step(optimizer)
         scaler.update()
         optimizer.zero_grad(set_to_none=True)
-        result.losses.append(totals[0])
-        result.ce_losses.append(totals[1])
-        result.kd_losses.append(totals[2])
-        result.steps += 1
-        result.examples_seen += per_step
-    result.seconds = time.perf_counter() - start
+        progress.losses.append(totals[0])
+        progress.ce_losses.append(totals[1])
+        progress.kd_losses.append(totals[2])
+        progress.step = step + 1
+        progress.examples_seen += per_step
+        if store is not None and store.due(progress.step, cfg.steps):
+            done = progress.seconds + time.perf_counter() - start
+            store.save(Progress(**{**progress.__dict__, "seconds": done}), save_state)
+    result = TrainResult(
+        steps=progress.step,
+        examples_seen=progress.examples_seen,
+        seconds=progress.seconds + time.perf_counter() - start,
+        losses=list(progress.losses),
+        ce_losses=list(progress.ce_losses),
+        kd_losses=list(progress.kd_losses),
+    )
     result.peak_gpu_bytes = peak_gpu_bytes()
     module.eval()
     return result
 
 
 def train_student_sft(
-    student: HFVLMWrapper, examples: Sequence[TrainExample], cfg: TrainConfig, *, seed: int
+    student: HFVLMWrapper,
+    examples: Sequence[TrainExample],
+    cfg: TrainConfig,
+    *,
+    seed: int,
+    resume_dir: Path | None = None,
 ) -> TrainResult:
     """Fine-tune the student on ground-truth answers only (kd_weight = 0).
 
@@ -401,11 +467,16 @@ def train_student_sft(
     """
     if cfg.kd_weight != 0:
         raise ValueError("answer-only fine-tuning needs kd_weight = 0")
-    return train_lora(student, examples, cfg, seed=seed)
+    return train_lora(student, examples, cfg, seed=seed, resume_dir=resume_dir)
 
 
 def train_offline_kd(
-    student: HFVLMWrapper, examples: Sequence[TrainExample], cfg: TrainConfig, *, seed: int
+    student: HFVLMWrapper,
+    examples: Sequence[TrainExample],
+    cfg: TrainConfig,
+    *,
+    seed: int,
+    resume_dir: Path | None = None,
 ) -> TrainResult:
     """Train the student on ground-truth answers and cached teacher outputs.
 
@@ -419,7 +490,7 @@ def train_offline_kd(
         raise ValueError(
             f"{len(missing)} examples have no cached teacher record (first: {missing[0]})"
         )
-    return train_lora(student, examples, cfg, seed=seed)
+    return train_lora(student, examples, cfg, seed=seed, resume_dir=resume_dir)
 
 
 def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> None:
@@ -439,7 +510,9 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
 
         run_qakd_training(config, run)
         return
-    student_cfg = config.get("model", {}).get("config")
+    from medcompress.config import student_config_path
+
+    student_cfg = student_config_path(config)
     side = config.get("inputs", {}).get("image_longest_side")
     open_keys = [
         name
@@ -474,14 +547,16 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
         image_longest_side=int(side),
     )
     train_fn = train_offline_kd if cfg.mode == "offline_kd" else train_student_sft
-    result = train_fn(student, examples, cfg, seed=seed)
+    tag = run.experiment_tag if run is not None else cfg.mode
+    run_folder = Path(paths["checkpoint_root"]) / tag.replace(":", "/") / f"seed{seed}"
+    resume_dir = run_folder / "resume"  # handoffs.resume_relpath; kept until the adapter is saved
+    result = train_fn(student, examples, cfg, seed=seed, resume_dir=resume_dir)
 
+    from medcompress.compression.distillation.resume import ResumeStore
     from medcompress.compression.lora import save_adapter
 
-    tag = run.experiment_tag if run is not None else cfg.mode
-    save_adapter(
-        student, Path(paths["checkpoint_root"]) / tag.replace(":", "/") / f"seed{seed}" / "adapter"
-    )
+    save_adapter(student, run_folder / "adapter")
+    ResumeStore(resume_dir, "").clear()
     rows = [
         {"experiment": tag, "budget": "", "seed": seed, "metric": name, "value": float(value)}
         for name, value in (
