@@ -988,3 +988,43 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: RC-S0b run 2; then the GPU-hour projection per side.
 - Needs the team: run RC-S0b run 2; the GPU hours available.
+
+## Iteration 50: 2026-10-17 (interactive)
+- Stage / item: S05b closed, S03 next. Soheil's decisions of 2026-10-17 and Tasks 1-5.
+- Did:
+  - **Decisions:** image side 672, G2 0.10, micro-batch 1 x 16 without gradient
+    checkpointing for every training run (E4 too; its memory at 1 x 16 is unmeasured), 90 GPU h
+    per week (30 per person), RC-D1 by Soheil. Recorded in the configs, the decisions log, D05,
+    D06, D07 (scoring cost at 672) and the pre-registration.
+  - **Task 1:** RC-D1 writes ONE shared-data folder (`data/` + `private/` +
+    `bundle_manifest.json` with the SHA-256 of every file, the commit, the licences, the
+    split hash; `prepare_data.py bundle` and `verify`). Every stage takes `--data-root` and stops
+    (exit 5) if a hash differs. A second CPU pass (`counts`) recounts once the label values are
+    filled: the first pass writes no positives, because `values: {}`.
+  - **Task 2:** hand-offs (`utils/bundles.py`, `handoffs.py`, `scripts/handoff.py`) for the
+    teacher cache, adapters, pruned and quantized models, outcomes and resume states, with a
+    manifest (SHA-256, commit, config hash, experiment, seed, budget, the settings that must
+    match). `--from` verifies them and links them in place. CPU tests.
+  - **Task 3:** `scripts/run_card.py` + `src/medcompress/cards.py` (one plan per card) +
+    `notebooks/run_card.ipynb` for Save & Run All. The runner checks the environment, verifies
+    the inputs, runs the steps, writes the hand-offs and the results to commit, and prints
+    section 6. Training had no resume: `train_lora` now saves its state every 50 updates and
+    continues from it (CPU test here, tiny-model test on Kaggle); recovery and QAKD too. The
+    teacher cache times its first 100 answers and writes them at once.
+  - **Task 4:** owners re-assigned. E1 and E2 seeds are split Soheil 0, Farzan 1, Amir 2; the
+    grid seeds Amir 0 and 2, Farzan 1; the ablation seeds (proposal, for time) Soheil 0,
+    Farzan 1, Amir 2. Section 2b of each card was generated from the plans. `docs/schedule.md`
+    and `docs/team_setup.md` written; run reports go to `docs/runs/reports/`, so commits do not
+    clash.
+  - **Task 5:** the freeze list in the inbox.
+  - **Found and fixed:** the compression arms had no `model.config`, so they would have
+    stopped before loading E2; they now use `components.student`. Loading E2 now checks the
+    adapter before the model, so nothing is downloaded for nothing.
+  - **Found, for the team:** A1/A2 score again what D07 says they reuse (about 48 h; freeze
+    list item 15). The benchmark step of E1/E2 waits on `budgets.measurement.hardware`; the
+    runner skips it.
+- Verified: ruff check, ruff format, pytest on CPU; summary and appendix tables regenerated.
+- Commit: see `git log` on `research-loop`.
+- Next: RC-D1 pass 1, then the label values (agent) and pass 2.
+- Needs the team: run RC-D1; approve the freeze list; check the T4 x2 quota rule and the
+  session limit; collaborator access.
