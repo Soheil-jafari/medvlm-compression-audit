@@ -34,8 +34,8 @@ components:
     external_test: data/endobench.yaml    # licence / download still to verify
 
 inputs:
-  image_longest_side: TODO                # px; one value for the teacher and every student, fixed at the S05b freeze;
-                                          # 448 provisional, chosen by the RC-S0b rule (D05, 2026-10-16)
+  image_longest_side: 672                 # px; one value for the teacher and every student. Decided 2026-10-17
+                                          # (Soheil) from RC-S0b run 2 by the D05 rule (results/smoke/RC-S0b/)
 
 seeds:
   training: [0, 1, 2]                     # 3 seeds for every training arm

@@ -108,7 +108,7 @@ student_selection:
 
   gates:
     G1_hardware: {round: R0, rule: "loads, scores and trains one LoRA step on one T4 in fp16"}
-    G2_uses_image: {round: R1, rule: "blank-image accuracy drop above threshold", threshold: TODO}
+    G2_uses_image: {round: R1, rule: "blank-image accuracy drop above threshold", threshold: 0.10}  # decided 2026-10-17 (Soheil): the teacher's Gate 1 drop
     G3_compressible: {round: R2, rule: "25% decoder-layer removal and 4-bit PTQ run, cut measured memory and change validation metrics; pass/fail only"}
     G4_licence: {round: R0, rule: "research use and publication of results allowed"}
     G5_no_test_exposure: {round: R0, rule: "no documented use of our test images in training"}

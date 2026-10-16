@@ -12,8 +12,9 @@ recovery:
     target_modules: [decoder_attention, decoder_mlp]
   steps: TODO                             # 25 % of the E2 steps, set at the selection freeze
   learning_rate: 1.0e-4
-  batch_size: 4
-  grad_accumulation: 4
+  batch_size: 1                           # D06 amendment 2026-10-17: 1 x 16, as every training run
+  grad_accumulation: 16
+  gradient_checkpointing: false
   kd_weight: 0.5
   kd_temperature: 2.0
   data_subset: TODO                       # 25 % of the E2 examples: the first part of the same

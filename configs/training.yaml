@@ -15,8 +15,10 @@ training:
     target_modules: [decoder_attention, decoder_mlp]
   steps: 625                              # ceil(data_subset / 16) (D06); decided 2026-10-16 (Soheil)
   learning_rate: 1.0e-4
-  batch_size: 4                           # micro-batch; 4 x 4 accumulation = 16 examples per update
-  grad_accumulation: 4
+  batch_size: 1                           # micro-batch; 1 x 16 accumulation = 16 examples per update
+  grad_accumulation: 16                   # D06 amendment decided 2026-10-17 (Soheil), every training run at
+                                          # side 672: 4 x 4 did not fit one T4, 2 x 8 left about 2 GB (RC-S0b)
+  gradient_checkpointing: false           # off for every training run (2026-10-17)
   kd_weight: 0.5                          # E1 sets 0 (answers only)
   kd_temperature: 2.0
   data_subset: 10000                      # examples per E1/E2 run, decided 2026-10-16 (Soheil, D05 proposal);
