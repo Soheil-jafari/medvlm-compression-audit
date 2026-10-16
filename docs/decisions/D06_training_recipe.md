@@ -118,14 +118,28 @@ adds a secondary training-length check with 30,000 examples (E2 and E7 at B2, se
 The batch row above says the micro-batch of 4 "fits a T4 at 448 px with fp16". That was not
 measured. RC-S0 measured 9,140,717,056 bytes for one LoRA step of the 3B at **one** example,
 and a linear estimate for 4 examples is about 14.0 GB of the T4's 15.6 GB (D05 flag); RC-S0b
-measures the step at micro-batch 1, 2 and 4 at each candidate image side.
+measures the step at micro-batch 1, 2 and 4 at each candidate image side, with and without
+gradient checkpointing. RC-S0b run 1 (2026-10-16): at side 448 micro-batch 1 fits (peak
+9,377,473,536 bytes); micro-batch 2 and 4 are not measured yet (run 1 left a second model copy
+on the GPU, so its out-of-memory results for them are invalid; RC-S0b card, section 6).
 
 Proposal, only if RC-S0b (or the first seed of RC-E1) shows that the micro-batch of 4 does not
 fit one T4 at the chosen image side: micro-batch **2 with 8 accumulation steps** if 2 fits,
 otherwise **1 with 16**. The update keeps 16 examples, the same learning rate, warm-up, schedule
 and number of steps, so the recipe is the same up to floating-point rounding (the model has no
-batch normalisation; only the order of the sums changes). This amendment takes effect only when
-the team accepts it; until then this memo's batch row stands.
+batch normalisation; only the order of the sums changes). 
+**Alternative (added 2026-10-16): gradient checkpointing** at the micro-batch of 4 (or the
+largest that fits with it), keeping 4 x 4. It recomputes activations in the backward pass
+instead of storing them, so it saves memory and costs time; the published teacher adapter was
+trained with it (`gradient_checkpointing=True` in its `args.json`, RC-S0b run 1). The math of
+the update is the same; dropout masks are replayed in the recomputation, so the recipe is the
+same up to floating-point rounding. Its time cost is not assumed: it is read from RC-S0b's
+`student_lora_gc_step_seconds_mb<b>` against `student_lora_step_seconds_mb<b>` at the chosen
+side, and the option with the smaller projected time is proposed. RC-S0b only measures it; the
+training defaults are unchanged (`training.yaml` sets no gradient checkpointing).
+
+This amendment takes effect only when the team accepts it; until then this memo's batch row
+stands.
 
 ## Sources (accessed 2026-10-12)
 

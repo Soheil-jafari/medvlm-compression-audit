@@ -14,7 +14,7 @@ results in its next iteration.
 | [RC-E0a](RC-E0a_gate1_teacher_image_reliance.md) | S05 | Gate 1: teacher image-reliance checks (validation) | Soheil | blocked (RC-D1, RC-S0b for the image side; RC-M1 met) |
 | [RC-E0b](RC-E0b_teacher_cache_and_E0_evaluation.md) | S05 | Teacher cache (train) and E0 validation metrics | Soheil | blocked (Gate 1 verdict, RC-D1, RC-S0b for the image side, open settings) |
 | [RC-S0](RC-S0_student_feasibility.md) | S05b | Student checks: feasibility of Qwen2.5-VL-3B and the fallback Qwen3-VL-2B on one T4 | Soheil | done 2026-10-16 (both pass G1) |
-| [RC-S0b](RC-S0b_image_size_measurement.md) | S05b | Image side: student and teacher at 448 / 560 / 672 on synthetic images, LoRA step at micro-batch 1 / 2 / 4, stated adapter and processor settings | Soheil | **ready** |
+| [RC-S0b](RC-S0b_image_size_measurement.md) | S05b | Image side: student and teacher at 448 / 560 / 672 on synthetic images, one process per step, LoRA step at micro-batch 1 / 2 / 4 with and without gradient checkpointing, stated adapter and processor settings | Soheil | **ready** (run 1 stopped by a script bug, fixed; run again) |
 | [RC-S1](RC-S1_round1_screen.md) | S05b | Round 1 screen, 10 candidates | all three | not used (D05 amendment) |
 | [RC-S2](RC-S2_round2_recipe.md) | S05b | Round 2, top 5 rebuilt with the full recipe | all three | not used (D05 amendment) |
 | [RC-S3](RC-S3_round3_e2_recipe.md) | S05b | Round 3, top 3 with the E2 recipe, 2 seeds | all three | not used (D05 amendment) |

@@ -107,6 +107,18 @@ must be logged here.
      seeded pool, which contain the 10,000; 1,875 steps); E7@30k starts from E2@30k and recovers
      for 25 % of its steps on the first 7,500 examples. Run card RC-L1 (blocked; code first).
   4. *G2 threshold unchanged:* still the proposal of 0.10, not decided.
+- **2026-10-16 (RC-S0b run 1, Soheil):** stopped by a script bug. Every step loaded a fresh
+  model in one process and a second 7.5 GB copy stayed on the GPU, so the micro-batch 2 and 4
+  out-of-memory results and the crash at side 560 are not valid; valid are the stated settings
+  (the adapter was trained in bf16 with gradient checkpointing, `max_pixels` null; the
+  processors set no `min_pixels` / `max_pixels`), the side-448 scoring rows and the
+  micro-batch-1 step (fits, 9,377,473,536 bytes). Fixes: every (side, step) now runs in its own
+  process and any failure is a recorded row; the LoRA step is warmed up, then timed like RC-S0;
+  steps with gradient checkpointing are measured too (measurement only; added to the D06
+  micro-batch proposal as an alternative, D06 unchanged). Student revision pinned to
+  `66285546d2b821cf421d4f5eb2576359d3770cd3`, the revision downloaded on Kaggle (Soheil); the
+  fallback Qwen3-VL-2B stays unpinned and RC-S0b prints the revision the hub serves for it.
+  RC-S0b stays `ready` for run 2.
 
 ## Open decisions
 

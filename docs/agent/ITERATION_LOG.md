@@ -965,3 +965,26 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: read RC-S0b and propose the side; then the RC-L1 code.
 - Needs the team: run RC-S0b; the GPU hours available; G2 threshold; recovery rounding.
+
+## Iteration 49: 2026-10-16 (interactive)
+- Stage / item: S05b, RC-S0b run 1 (Soheil, Kaggle, commit 5613b7f): stopped by a script bug.
+- Did: **Diagnosis checked in the code:** the script deleted its model reference and called
+  `gc.collect()` and `torch.cuda.empty_cache()` after every step, after a success and after a
+  failure, so no variable of the script held the second copy; something below it kept a
+  reference, also after a successful step (micro-batch 1 passed at 9.38 GB, micro-batch 2
+  failed at 15.4 GB). Which object it was cannot be found without a GPU. **Fix:** every
+  (side, step) runs in its own child process (`measure_image_sides.py child`); the parent
+  writes each child's rows as it ends and replaces that step's earlier rows for the side; a
+  failure (out of memory, a crash, a timeout, no rows) is `..._ok` = 0 with the peak when known,
+  and the run goes on. LoRA steps: a warm-up step, then a timed step measured like RC-S0's
+  `r0_lora_step_seconds` (run 1's 6.68 s included the adapter attach). Added steps with gradient
+  checkpointing (`lora_gc_mb<b>`, measurement only; D06 proposal lists it as an alternative,
+  defaults unchanged). Pinned the student revision `66285546...` (the 2B fallback stays TODO;
+  the settings step prints the config and hub revisions of all three models and says "revision
+  not pinned" instead of crashing). Fixed the out-of-memory test for CUDA. RC-S0b card: run 1
+  recorded, commands, reading rule and runtime estimate updated; RC-E1 and D06 memory flags.
+- Verified: ruff check, ruff format, pytest on CPU, including the real child processes on the
+  CPU (a model that cannot load: every step recorded as failed, the run goes on).
+- Commit: see `git log` on `research-loop`.
+- Next: RC-S0b run 2; then the GPU-hour projection per side.
+- Needs the team: run RC-S0b run 2; the GPU hours available.

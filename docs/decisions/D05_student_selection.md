@@ -333,8 +333,9 @@ published teacher adapter and the Qwen processors state about image size ("not s
 nothing is).
 
 For each side the agent then projects the GPU hours of the whole study. Inputs from RC-S0b at
-that side: the student's seconds per probe `p_s` and per update `u` (16 / m times the step
-seconds at the largest micro-batch m that fits), the teacher's seconds per probe `p_t` and
+that side: the student's seconds per probe `p_s` and per update `u` (16 / m times
+`student_lora_step_seconds_mb<m>`, the warm step, at the largest micro-batch m that fits; for
+the gradient-checkpointing option, `student_lora_gc_step_seconds_mb<m>` instead), the teacher's seconds per probe `p_t` and
 tokens per second `g_t`. Inputs from RC-D1: the validation and test probe counts and the
 answer lengths that fix `teacher_cache.max_new_tokens` (`T`).
 
@@ -352,7 +353,7 @@ The team states the GPU hours it has (`TODO: team GPU hours available`; whether 
 session counts once or twice against the Kaggle quota is to be checked, TODO: verify) and picks
 the **largest side whose projected total fits**. If the micro-batch of 4 does not fit one T4 at
 that side, the D06 amendment proposal applies (micro-batch 2 or 1, accumulation 8 or 16, 16
-examples per update; D06 memo). Nothing in this rule reads a real image or a result of the
+examples per update, or gradient checkpointing at 4 x 4; D06 memo). Nothing in this rule reads a real image or a result of the
 study.
 
 ## What changes in the repository once decided

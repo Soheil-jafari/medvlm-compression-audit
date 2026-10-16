@@ -42,8 +42,10 @@ estimate when it sets the card to `ready`. Use one session per seed; the seeds a
 **Memory check (first seed, before the other two).** D06 trains with a micro-batch of 4 and 4
 accumulation steps. RC-S0 measured 9,140,717,056 bytes for one LoRA step at **one** example;
 scaled to 4 examples that estimate is about 14.0 GB of the T4's 15.6 GB, so the micro-batch of 4
-may not fit (D05 flag). RC-S0b measures the step at micro-batch 4 on synthetic probes at each
-side; real training examples are longer (an answer, not "Yes"/"No"), so the first seed here
+may not fit (D05 flag). RC-S0b run 1 (2026-10-16): at side 448 the step at micro-batch 1
+**fits** (peak 9,377,473,536 bytes); micro-batch 2 and 4 are **not measured yet** (their
+out-of-memory results were caused by a second model copy left on the GPU, so run 1 is invalid
+for them; RC-S0b run 2 measures them, also with gradient checkpointing). Real training examples are longer (an answer, not "Yes"/"No"), so the first seed here
 confirms it on real data: `train_peak_gpu_bytes` and `train_seconds` / `train_steps` (seconds
 per update) in `metrics.csv`. If training stops with "CUDA out of memory", stop there, keep the
 last 30 lines of the log, and tell the agent through the inbox: do **not** change the batch
