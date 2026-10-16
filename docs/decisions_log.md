@@ -119,15 +119,45 @@ must be logged here.
   `66285546d2b821cf421d4f5eb2576359d3770cd3`, the revision downloaded on Kaggle (Soheil); the
   fallback Qwen3-VL-2B stays unpinned and RC-S0b prints the revision the hub serves for it.
   RC-S0b stays `ready` for run 2.
+- **2026-10-17 (Soheil, from RC-S0b run 2):**
+  1. *Image side 672* (`inputs.image_longest_side: 672`), chosen from RC-S0b run 2
+     (`results/smoke/RC-S0b/`). At 672 the student shows 434 visual tokens and 0.414 s per probe;
+     its LoRA step takes 0.849 s at micro-batch 1 (peak 11,372,899,328 bytes) and 1.541 s at
+     micro-batch 2 (peak 13,674,425,344 bytes); micro-batch 4 runs out of memory. The teacher takes
+     0.584 s per probe and generates 2.66 tokens per second (peak 17,856,403,456 bytes over two T4s).
+     All on synthetic probes. RC-E0a, RC-E0b and RC-E1 no longer wait on RC-S0b.
+  2. *G2 threshold 0.10*, the same blank-image drop as the teacher's Gate 1.
+  3. *D06 amendment: micro-batch 1 with 16 accumulation steps* (still 16 examples per update),
+     gradient checkpointing off, for every training run at side 672 (E1, E2, E4, every recovery,
+     RC-L1). Reasons:
+     - 2 x 8 left about 2 GB free on synthetic probes, and real examples are longer;
+     - one fixed setting for the whole study.
+     Measured cost: 16 x 0.849 s = about 13.6 s per update, against 8 x 1.541 s = about 12.3 s for
+     2 x 8. E4 had gradient checkpointing on, for memory only; it is now off as well, and its memory
+     at 1 x 16 is not measured yet (RC-E4 seed 0 checks it first).
+  4. *GPU budget:* 90 Kaggle GPU hours per week in total, 30 per person (Soheil, Amir, Farzan).
+     Not known yet: whether a T4 x2 session counts once or twice against the quota (TODO: the team
+     checks on Kaggle).
+  5. *RC-D1 is run by Soheil* (not Farzan).
+
+  Found by the agent while applying these (iteration 50):
+  - The compression arms (E3, E5-E8, A1-A6) had no `model.config`, so they would have stopped
+    before loading the E2 student. They now use `components.student`.
+  - The first RC-D1 pass writes no positives or prevalences, because the label values of
+    `configs/data/kvasir_vqa_x1.yaml` are still empty. A second, CPU-only counts pass on the
+    shared data follows after the values are filled from the first pass's answer counts.
+  - D07 says A1 and A2 reuse E7's per-probe effects, but the code scores them again. At side 672
+    that costs about 7.9 h per run (estimate).
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| Image side | 448 provisional; decided by the RC-S0b rule (D05): the largest of 448 / 560 / 672 whose projected GPU hours fit. Needs RC-S0b and `TODO: team GPU hours available` (and whether a 2 x T4 session counts once or twice against the quota) | Soheil (run RC-S0b), team (hours) | before Gate 1 |
-| G2 threshold | proposal 0.10 (D05), not decided (2026-10-16) | team | before the selection freeze |
+| T4 x2 and the quota | whether a T4 x2 session counts once or twice against the weekly Kaggle quota, and the session time limit (both unknown here; the cards and `docs/schedule.md` mark them) | team (check on Kaggle) | before RC-E0a |
+| Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |
 | Recovery steps | 25 % of 625 = 156.25; proposal 157 = `ceil(2,500 / 16)` (D06 memo) | team | before RC-E5 |
-| D06 micro-batch (proposal) | only if micro-batch 4 does not fit one T4 at the chosen side: 2 x 8, else 1 x 16 (16 examples per update; D06 memo) | team | after RC-S0b |
+| A1 and A2 reuse of E7's effects | D07 says they reuse E7's per-probe effects; the code scores them again (about 7.9 h per run at 672, an estimate). Either the agent adds the reuse (the per-probe effects must then be kept) or the schedule keeps the cost | team | before the freeze |
+| Budget hardware for stage 07 | `budgets.measurement.hardware` is open, so the benchmark step of RC-E1 and RC-E2 waits (the runner skips it and goes on) | Amir | before RC-B0 |
 | Student amendment | tell Amir and Farzan that one student is used (D05 amendment) | Soheil | before RC-E1 |
 | Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
 | EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |

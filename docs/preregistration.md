@@ -23,7 +23,7 @@ How to read this draft:
 |---|---|---|
 | Domain | GI endoscopy | D02 |
 | Teacher | Qwen2.5-VL-7B-Instruct, revision `cc594898`, with the SimulaMet Kvasir-VQA-x1 LoRA, revision `79e77755`, merged | D01 |
-| Student | Qwen2.5-VL-3B-Instruct; revision pinned from `sha_seen` `66285546` once **[RC-S0]** passes; fallback Qwen3-VL-2B-Instruct | D05 amendment |
+| Student | Qwen2.5-VL-3B-Instruct, revision `66285546d2b821cf421d4f5eb2576359d3770cd3` (pinned 2026-10-16 after RC-S0 passed); fallback Qwen3-VL-2B-Instruct; image side 672 for every model (decided 2026-10-17, RC-S0b) | D05 amendment |
 | Tokenizer equality | `tokenizers_identical = 1` in `results/smoke/RC-M1.csv` | RC-M1 |
 | Main data | Kvasir-VQA-x1, revision `61e41148`: official train file = training; official test split halved **by image** into validation and test with seed 20261012 | D02, RC-D1 |
 | Near-duplicates | validation / test images within 4 of 64 dHash bits of a training image are removed (count: **[RC-D1]** `duplicates_removed:val_test`) | RC-D1 |
@@ -166,7 +166,7 @@ kernel check).
 
 | Area | Settings | Source |
 |---|---|---|
-| Training (E1, E2, E4) | LoRA rank 16, alpha 32, dropout 0.05 on all decoder projections; AdamW 1e-4, linear decay, 20 warm-up steps, 4 x 4 examples per update, KD weight 0.5, temperature 2; one pass over the pool: 10,000 examples, 625 steps (decided 2026-10-16); the training-length check adds E2 and E7 at 30,000 examples (section 6) | D06 |
+| Training (E1, E2, E4) | LoRA rank 16, alpha 32, dropout 0.05 on all decoder projections; AdamW 1e-4, linear decay, 20 warm-up steps, 16 examples per update as micro-batch 1 x 16 accumulation steps without gradient checkpointing (D06 amendment, 2026-10-17), KD weight 0.5, temperature 2; one pass over the pool: 10,000 examples, 625 steps (decided 2026-10-16); the training-length check adds E2 and E7 at 30,000 examples (section 6) | D06 |
 | Recovery (E5-E7, A1-A6) | the same adapter, optimiser and loss; 25 % of the E2 steps on the first 25 % of the pool; identical for every arm (fingerprint logged) | D06 |
 | Pruning | units: decoder layers, KV groups, MLP channel groups of 128; score per parameter; first 2 and last 1 layers protected; 128 calibration images; one-shot removal; 1 negative per positive; signed effects; probe batch 4; how a unit is switched off while scored **[team]** (D07 section 1) | D07 |
 | Quantization | E3 `w4`, `w8`: GPTQ, groups of 128, 128 calibration images, decoder linear layers only; `w8a8`: LLM.int8; E8, E9: the `w4` recipe; kernel class and versions from RC-Q0 | D08 |

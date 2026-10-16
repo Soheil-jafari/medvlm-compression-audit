@@ -111,6 +111,8 @@ its micro-batch-1 step should be near the 9,377,473,536 bytes of run 1 (RC-S0:
 9,140,717,056). Whole 28-pixel patches would give 302 tokens at 560 and 434 at 672; the
 measurement, not this arithmetic, is what counts.
 
+**Decided 2026-10-17 (Soheil): side 672**, with micro-batch 1 x 16 (D05, D06).
+
 **Decision rule (written 2026-10-16, before the run; D05).** For each side the agent computes
 the projected GPU hours of the whole study from these numbers and the RC-D1 counts: the teacher
 cache, Gate 1, E0 evaluation, E1/E2 training at 10,000 examples, the scoring of D07, the

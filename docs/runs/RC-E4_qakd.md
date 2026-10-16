@@ -16,6 +16,11 @@
 
 Blocked until all of these are true; the agent sets the status to `ready` when they are:
 
+- **Memory (2026-10-17):** E4 now trains at micro-batch 1 x 16 **without** gradient
+  checkpointing, like every training run (D06 amendment). It had checkpointing on for memory
+  only, and its peak at 1 x 16 is not measured. Run seed 0 first. If it stops with "CUDA out of
+  memory", stop there, keep the last 30 lines of the log and tell the agent: do not turn
+  checkpointing back on yourself (the team decides).
 - RC-Q0 passed; `quantization.kernel_class` and the library versions are set and pinned. **Met 2026-10-15:** RC-Q0 chose `TorchLinear`; gptqmodel 7.6.0 and bitsandbytes 0.50.2 are
   pinned.
 - RC-E0b done (the teacher cache of the training pool on team storage; the manifest hash matches
@@ -31,6 +36,19 @@ and the private RC-D1 outputs; the teacher cache attached as a private dataset.
 Runtime per seed: **estimate** 1.5 to 3 times an E2 run of the same length (every step rounds
 the weights, and the layers are recomputed in the backward pass to save memory). RC-E2 reports
 the E2 time; this card then gets a number.
+
+## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
+
+- **Who:** Soheil, all three seeds.
+- **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher cache.
+- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E4"`, `SEED = <k>`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E4 --seed <k> --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+  - run E4 seed<k>
+  - test evaluation E4 seed<k>
+- **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E4_seed<k>_quantized`, `E4_seed<k>_outcomes`.
+- **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
+- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit, and whether a T4 x2 session counts once or twice against the weekly quota. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
 
 ## 3. Commands
 
