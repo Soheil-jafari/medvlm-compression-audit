@@ -113,33 +113,37 @@ numbers and proposals"). The teacher cache holds exactly this pool (`teacher_cac
 (proposal: 157 = `ceil(2,500 / 16)`, the same rounding as `steps`). Pre-registration section 6
 adds a secondary training-length check with 30,000 examples (E2 and E7 at B2, seed 0).
 
-## Proposed amendment: micro-batch (2026-10-16, a PROPOSAL, not in force)
+## Amendment: micro-batch 1 x 16 (decided 2026-10-17, Soheil; proposed 2026-10-16)
 
-The batch row above says the micro-batch of 4 "fits a T4 at 448 px with fp16". That was not
-measured. RC-S0 measured 9,140,717,056 bytes for one LoRA step of the 3B at **one** example,
-and a linear estimate for 4 examples is about 14.0 GB of the T4's 15.6 GB (D05 flag); RC-S0b
-measures the step at micro-batch 1, 2 and 4 at each candidate image side, with and without
-gradient checkpointing. RC-S0b run 1 (2026-10-16): at side 448 micro-batch 1 fits (peak
-9,377,473,536 bytes); micro-batch 2 and 4 are not measured yet (run 1 left a second model copy
-on the GPU, so its out-of-memory results for them are invalid; RC-S0b card, section 6).
+**In force:** every training run at side 672 (E1, E2, E4, every recovery, RC-L1) uses a
+**micro-batch of 1 with 16 accumulation steps** and **no gradient checkpointing**
+(`configs/training.yaml`, `configs/recovery.yaml`; E4's config sets the same). The batch row
+above (4 x 4) is replaced by this.
 
-Proposal, only if RC-S0b (or the first seed of RC-E1) shows that the micro-batch of 4 does not
-fit one T4 at the chosen image side: micro-batch **2 with 8 accumulation steps** if 2 fits,
-otherwise **1 with 16**. The update keeps 16 examples, the same learning rate, warm-up, schedule
-and number of steps, so the recipe is the same up to floating-point rounding (the model has no
-batch normalisation; only the order of the sums changes). 
-**Alternative (added 2026-10-16): gradient checkpointing** at the micro-batch of 4 (or the
-largest that fits with it), keeping 4 x 4. It recomputes activations in the backward pass
-instead of storing them, so it saves memory and costs time; the published teacher adapter was
-trained with it (`gradient_checkpointing=True` in its `args.json`, RC-S0b run 1). The math of
-the update is the same; dropout masks are replayed in the recomputation, so the recipe is the
-same up to floating-point rounding. Its time cost is not assumed: it is read from RC-S0b's
-`student_lora_gc_step_seconds_mb<b>` against `student_lora_step_seconds_mb<b>` at the chosen
-side, and the option with the smaller projected time is proposed. RC-S0b only measures it; the
-training defaults are unchanged (`training.yaml` sets no gradient checkpointing).
+Why:
+- The update still holds 16 examples, with the same learning rate, warm-up, schedule and
+  number of steps. So the recipe is the same up to floating-point rounding: the model has no
+  batch normalisation, and only the order of the sums changes.
+- Measured by RC-S0b run 2 at side 672 on synthetic probes:
 
-This amendment takes effect only when the team accepts it; until then this memo's batch row
-stands.
+  | Micro-batch | Peak memory | Warm optimizer step |
+  |---|---|---|
+  | 1 | 11,372,899,328 bytes | 0.849 s |
+  | 2 | 13,674,425,344 bytes | 1.541 s |
+  | 4 | out of memory on one T4 | — |
+
+- 2 x 8 would cost about 12.3 s per update (8 x 1.541 s) against about 13.6 s for 1 x 16
+  (16 x 0.849 s). But it left only about 2 GB free, and real examples are longer than the
+  probes. One fixed setting for the whole study was preferred.
+- Gradient checkpointing would save memory but cost time: at 672, mb1 takes 1.727 s with it
+  against 0.849 s without.
+
+E4 had gradient checkpointing on for memory only (its 4-bit forward is recomputed). It is off
+now as well, and E4's peak memory at 1 x 16 is not measured: the first seed of RC-E4 checks it,
+and stops on an out-of-memory error rather than changing the setting.
+
+The earlier proposal text (2 x 8 if it fits, else 1 x 16; gradient checkpointing as an
+alternative) is kept in the history of this file and in `docs/decisions_log.md`.
 
 ## Sources (accessed 2026-10-12)
 

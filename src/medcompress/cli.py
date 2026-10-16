@@ -23,6 +23,9 @@ NOT_IMPLEMENTED_EXIT_CODE = 3
 CONFIG_INCOMPLETE_EXIT_CODE = 4
 """Exit code used when a stage is implemented but a setting it needs is still ``TODO``."""
 
+INPUT_CHECK_EXIT_CODE = 5
+"""Exit code used when an attached dataset (``--data-root``, ``--from``) fails its check."""
+
 
 def build_parser(description: str, *, experiment_args: bool = True) -> argparse.ArgumentParser:
     """Create an argument parser with the options shared by all scripts."""
@@ -41,6 +44,23 @@ def build_parser(description: str, *, experiment_args: bool = True) -> argparse.
         metavar="KEY=VALUE",
         help="Override a config value, e.g. -o paths.data_root=/kaggle/input/x (repeatable).",
     )
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=None,
+        help="The attached shared-data dataset of RC-D1 (e.g. /kaggle/input/<name>); its "
+        "manifest is verified before anything runs.",
+    )
+    parser.add_argument(
+        "--from",
+        dest="handoffs",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="An attached hand-off dataset (teacher cache, adapter, pruned or quantized model, "
+        "outcomes); verified, then linked into the path roots (repeatable).",
+    )
     if experiment_args:
         parser.add_argument("--exp", choices=list(REGISTRY), help="Experiment ID (E0-E9, A1-A6).")
         parser.add_argument("--budget", choices=list(BUDGET_IDS), default=None)
@@ -56,7 +76,32 @@ def resolve_config(args: argparse.Namespace) -> dict[str, Any]:
         path = experiment_config_path(args.exp)
     if path is None:
         path = Path("base.yaml")
-    return load_config(path, args.override)
+    config = load_config(path, args.override)
+    attach_inputs(config, getattr(args, "data_root", None), getattr(args, "handoffs", ()))
+    return config
+
+
+def attach_inputs(config: dict[str, Any], data_root: Path | None, handoffs: Any = ()) -> None:
+    """Verify the attached datasets and point the run at them; exit with code 5 if one fails.
+
+    ``data_root`` is the shared data of RC-D1 (``paths.data_root`` and ``private_root`` are
+    set to it); each of ``handoffs`` is the output of an earlier run, linked into the path
+    roots. Every file's SHA-256 is checked against the dataset's manifest first.
+    """
+    from medcompress.utils.bundles import BundleError, attach_data, attach_handoff
+
+    try:
+        if data_root is not None:
+            bundle = attach_data(config, Path(data_root))
+            print(
+                f"[inputs] shared data verified: {bundle.root} (commit {bundle.meta.get('commit')})"
+            )
+        for path in handoffs or ():
+            bundle = attach_handoff(config, Path(path))
+            print(f"[inputs] {bundle.label} verified and linked: {bundle.root}")
+    except BundleError as exc:
+        print(f"[inputs] check failed: {exc}", file=sys.stderr)
+        sys.exit(INPUT_CHECK_EXIT_CODE)
 
 
 def run_context(

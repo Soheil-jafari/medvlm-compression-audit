@@ -28,6 +28,24 @@ Runtime: one evaluation pass per run, the same work as the validation evaluation
 RC-E1 and RC-E2 (the split halves are about the same size). The agent fills in the estimate
 from those cards' wall times when it sets this card to `ready`.
 
+## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
+
+- **Who:** Soheil.
+- **Kaggle settings:** GPU T4 x2 (both T4s); Internet on.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1; E1 seed0 adapter; E1 seed<k> adapter; E1 seed2 adapter; E2 seed0 adapter; E2 seed<k> adapter; E2 seed2 adapter.
+- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-R1"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-R1 --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off> ...`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+  - test evaluation E0 seed0
+  - test evaluation E1 seed0
+  - test evaluation E1 seed<k>
+  - test evaluation E1 seed2
+  - test evaluation E2 seed0
+  - test evaluation E2 seed<k>
+  - test evaluation E2 seed2
+- **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E2_test_outcomes`.
+- **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
+- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit, and whether a T4 x2 session counts once or twice against the weekly quota. This card uses T4 x2. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
+
 ## 3. Commands
 
 ```bash

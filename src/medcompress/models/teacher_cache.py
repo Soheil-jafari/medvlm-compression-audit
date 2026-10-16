@@ -24,7 +24,7 @@ import hashlib
 import json
 import os
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,6 +37,9 @@ if TYPE_CHECKING:
     from medcompress.models.base import VLMWrapper
 
 CACHE_FORMAT_VERSION = 1
+TIME_FIRST_ANSWERS = 100
+"""RC-E0b times its first 100 answers (rounded up to whole batches) and records them at once,
+so the cost of the whole cache is an estimate from measured answers within minutes."""
 METADATA_NAME = "metadata.json"
 MANIFEST_NAME = "manifest.json"
 
@@ -133,12 +136,19 @@ def cache_teacher_outputs(
     max_new_tokens: int,
     shard_size: int = 1000,
     data_root: Path | None = None,
+    time_first: int = 0,
+    on_timed: Callable[[int, float], None] | None = None,
 ) -> Path:
     """Generate teacher answers once and write them to sharded files with a manifest.
 
     Resumable: a shard that already holds the right samples is skipped. The settings
     are written to ``metadata.json`` and must match on resume. Nothing is written
     outside ``out_dir``. ``data_root`` is joined to each sample's relative image path.
+
+    With ``time_first`` > 0 and the first shard still to do, its first ``time_first`` answers
+    (rounded up to whole batches of the teacher, so no batch changes) are generated and timed
+    on their own, and ``on_timed(answers, seconds)`` is called at once: the cost of the cache is
+    known long before it is finished.
 
     Used by: E0 (producer); E2, E4, E5-E7, A1-A6 (consumers).
     """
@@ -178,12 +188,27 @@ def cache_teacher_outputs(
         path = out / shard_name(index)
         if not (path.exists() and _shard_matches(path, chunk_ids)):
             images = [(root / s.image_path) if root is not None else s.image_path for s in chunk]
-            outputs = teacher.generate(
-                images,
-                [s.question for s in chunk],
-                max_new_tokens=max_new_tokens,
-                return_topk=top_k,
-            )
+            questions = [s.question for s in chunk]
+            first = 0
+            if index == 0 and time_first > 0:
+                batch = max(1, int(getattr(teacher, "batch_size", 1) or 1))
+                first = min(len(chunk), -(-time_first // batch) * batch)
+            outputs = []
+            if first:
+                started = time.perf_counter()
+                outputs = teacher.generate(
+                    images[:first], questions[:first], max_new_tokens=max_new_tokens,
+                    return_topk=top_k,
+                )  # fmt: skip
+                if on_timed is not None:
+                    on_timed(first, time.perf_counter() - started)
+            if first < len(chunk):
+                outputs = list(outputs) + list(
+                    teacher.generate(
+                        images[first:], questions[first:], max_new_tokens=max_new_tokens,
+                        return_topk=top_k,
+                    )
+                )  # fmt: skip
             tmp = path.with_name(path.name + ".tmp")
             with tmp.open("wb") as handle:
                 np.savez_compressed(handle, **_pack_shard(chunk_ids, outputs, top_k))
@@ -300,6 +325,27 @@ def run_teacher_caching(
 
         spec = ModelSpec.from_config(load_config(config["components"]["teacher"]))
         teacher = load_model(spec, image_longest_side=int(side))
+    pool = len(samples)
+
+    def timed(answers: int, seconds: float) -> None:
+        hours = pool * seconds / answers / 3600
+        print(
+            f"teacher cache: the first {answers} answers took {seconds:.1f} s; the {pool} answers "
+            f"would take about {hours:.1f} h (an estimate from these answers)"
+        )
+        if run is not None:
+            from medcompress.utils.io import upsert_results
+
+            rows = [
+                {"experiment": run.experiment_tag, "budget": run.budget or "", "seed": run.seed,
+                 "metric": metric, "value": float(value)}
+                for metric, value in (
+                    ("teacher_cache_first_answers", answers),
+                    ("teacher_cache_first_answers_seconds", seconds),
+                )
+            ]  # fmt: skip
+            upsert_results(rows, run.run_dir(Path(paths["results_root"])) / "metrics.csv")
+
     started = time.perf_counter()
     out = cache_teacher_outputs(
         teacher,
@@ -309,6 +355,8 @@ def run_teacher_caching(
         max_new_tokens=int(needed["max_new_tokens"]),
         shard_size=int(needed["shard_size"]),
         data_root=Path(paths["data_root"]),
+        time_first=TIME_FIRST_ANSWERS,
+        on_timed=timed,
     )
     if run is not None:
         add_session_seconds(

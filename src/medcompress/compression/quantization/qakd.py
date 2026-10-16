@@ -420,7 +420,9 @@ def run_qakd_training(
     paths = config["paths"]
     if student is None:
         side = config.get("inputs", {}).get("image_longest_side")
-        student_cfg = config.get("model", {}).get("config")
+        from medcompress.config import student_config_path
+
+        student_cfg = student_config_path(config)
         open_keys = [
             n
             for n, v in (("model.config", student_cfg), ("inputs.image_longest_side", side))
@@ -466,8 +468,14 @@ def run_qakd_training(
     }
     from dataclasses import replace
 
+    resume_dir = quantized_dir(config, run).parent / "resume"  # removed once the model is saved
     result = train_lora(
-        student, examples, replace(cfg, extra=extra), seed=run.seed, attach_adapter=False
+        student,
+        examples,
+        replace(cfg, extra=extra),
+        seed=run.seed,
+        attach_adapter=False,
+        resume_dir=resume_dir,
     )
     quantized = export_qat(student, settings.targets)
     recipe = PTQRecipe.from_config(config)
@@ -485,6 +493,9 @@ def run_qakd_training(
             }
         },
     )
+    from medcompress.compression.distillation.resume import ResumeStore
+
+    ResumeStore(resume_dir, "").clear()
     values = {
         "train_steps": result.steps,
         "train_examples_seen": result.examples_seen,

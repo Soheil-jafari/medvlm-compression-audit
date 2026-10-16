@@ -502,9 +502,10 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
 
     parent = parent_of(run)
     if parent["experiment"] == "pretrained":
+        from medcompress.config import student_config_path
         from medcompress.models.loading import ModelSpec, load_model
 
-        student = config.get("model", {}).get("config")
+        student = student_config_path(config)
         if _open(student):
             raise ConfigError("settings still open: model.config (the student)")
         spec = ModelSpec.from_config(load_config(student))

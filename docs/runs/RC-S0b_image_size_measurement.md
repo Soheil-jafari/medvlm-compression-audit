@@ -11,7 +11,7 @@
   input resolution, not the compression, removed the small findings. The side is therefore
   chosen (decision 2 of 2026-10-16) from a cheap measurement of what each side costs, before
   Gate 1 or any real-image run. Nothing here looks at a real image or a result of the study.
-- Status: `ready` (run 1 on 2026-10-16 was stopped by a script bug, section 6; run again)
+- Status: `done` (run 1 on 2026-10-16 was stopped by a script bug, section 6; run again)
 
 ## 2. Requirements
 
@@ -111,6 +111,8 @@ its micro-batch-1 step should be near the 9,377,473,536 bytes of run 1 (RC-S0:
 9,140,717,056). Whole 28-pixel patches would give 302 tokens at 560 and 434 at 672; the
 measurement, not this arithmetic, is what counts.
 
+**Decided 2026-10-17 (Soheil): side 672**, with micro-batch 1 x 16 (D05, D06).
+
 **Decision rule (written 2026-10-16, before the run; D05).** For each side the agent computes
 the projected GPU hours of the whole study from these numbers and the RC-D1 counts: the teacher
 cache, Gate 1, E0 evaluation, E1/E2 training at 10,000 examples, the scoring of D07, the
@@ -163,13 +165,26 @@ memo); D06 stays as it is until the team decides.
   (9,377,473,536 bytes: only one model was on the GPU then). **Not valid:** the micro-batch 2
   and 4 out-of-memory results and the side-560 crash. The run is repeated in full.
 
-### Run 2
 
-- Run by / date:
-- Commit actually used:
-- Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft|accelerate|optimum"`):
-- Step (1) output (paste all of it; "not stated" and "revision not pinned" lines included):
-- Step (2): wall time, and the "failed" line at its end (with the error line of each failure):
-- Step (3): wall time, and the "failed" line at its end:
-- Session wall time:
-- Anything unusual:
+### Run 2 (2026-10-16, Kaggle T4 x2, same session as run 1)
+- Commit: e044d749e45a1847a96270e96bcfef6ae9e3398d (repo reset to it; run-1 CSVs deleted first)
+- Versions: torch 2.11.0+cu128, transformers 5.19.0, peft 0.21.2, accelerate 1.14.0, optimum 2.3.0,
+  torchao 0.18.0, gptqmodel 7.6.0, bitsandbytes 0.50.2. Tests: test_image_sides + test_results 16 passed.
+- Settings step (completed): adapter SimulaMet/Qwen2.5-VL-KvasirVQA-x1-ft @ 79e77755...: args.json
+  "max_pixels": null; training_args: bf16=True, gradient_checkpointing=True,
+  per_device_train_batch_size=32, learning_rate=2e-05, num_train_epochs=3.0, cosine schedule;
+  adapter_config.json, additional_config.json, trainer_state.json: not stated.
+  Teacher Qwen2.5-VL-7B-Instruct: config revision cc594898...; hub main now cc594898....
+  Student Qwen2.5-VL-3B-Instruct: config revision 66285546...; sha_seen 66285546...; hub main now 66285546....
+  2B Qwen3-VL-2B-Instruct: revision not pinned; sha_seen 89644892e4d85e24eaac8bacfd4f463576704203;
+  hub main now 89644892e4d85e24eaac8bacfd4f463576704203.
+  Teacher and student processors: Qwen2VLImageProcessor, patch_size 14, merge_size 2,
+  longest_edge=12845056, shortest_edge=3136, min_pixels/max_pixels not set. This repository
+  shrinks images only to inputs.image_longest_side; no config sets max_pixels.
+- Student (1 T4): 14:20:14 to 14:29:31 UTC (9 min 17 s). Failed (recorded as _ok = 0):
+  side 560 lora_mb4 and side 672 lora_mb4, both CUDA out of memory (14.5 GiB in use).
+  All other 19 steps ok, including all gradient-checkpointing steps.
+- Teacher (2 T4): 14:31:25 to 14:36:00 UTC (4 min 35 s, incl. download). All three sides ok.
+- Results test: 6 passed.
+- Anything unusual: none in run 2. Run 1's mb2/mb4 failures were caused by the script
+  (now fixed: one process per step); at side 448 mb2 and mb4 fit in run 2.

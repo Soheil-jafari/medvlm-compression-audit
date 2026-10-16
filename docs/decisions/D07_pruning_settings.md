@@ -69,6 +69,25 @@ All these timings are at the image side 448, which is provisional. The side is c
 RC-S0b by the rule in D05 ("Image side: measurement and decision rule"); at a larger side the
 scoring hours scale with the seconds per probe RC-S0b measures there, and the projected total of
 the study at each side decides it.
+
+**At the decided side 672 (2026-10-17).** RC-S0b run 2 measured 0.414 s per probe for the 3B
+(`results/smoke/RC-S0b/student.csv`, synthetic probes). At that speed (every number an
+**estimate**):
+
+| Method | Cost per seed |
+|---|---|
+| Proposed mix: 108 exactly scored units x 640 probes | about 7.9 h |
+| Exact scoring of all 3,204 units | about 236 h |
+| The 30-group check of RC-G2 (30 x 640 probes) | about 2.2 h |
+
+The method itself (section 1) is still open. The number of probes follows the frozen finding
+list.
+
+**Code differs from the text above (found 2026-10-17).** A1 and A2 do not reuse E7's
+effects: each run scores its units again and keeps only the summed score, not the per-probe
+effects. As the code stands, each costs a full clinical scoring run (about 7.9 h per seed at
+672). `docs/schedule.md` counts that cost. Adding the reuse needs the per-probe effects of E7 to
+be kept; this is an open item for the team (decisions log).
 With the measured speed the proposed mix costs about 3.8 h of scoring per seed of E7, about
 11.5 h for its three seeds (A1 and A2 reuse these effects); exact scoring of every unit, about
 114 h per seed, is out of reach. For the 2B fallback the proposed mix would cost about 3.3 h per

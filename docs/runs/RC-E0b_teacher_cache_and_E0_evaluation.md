@@ -25,8 +25,7 @@ they are:
   `teacher_cache.max_new_tokens`, `teacher_cache.pool_size` (= `training.data_subset`, set
   from the RC-S0 speed), and `inputs.image_longest_side`. Part (a) caches only that training
   pool (drawn with `seeds.data_split`), not all 143,594 training rows.
-- **Waiting on RC-S0b (2026-10-16):** `inputs.image_longest_side` is chosen from the RC-S0b
-  measurement by the rule of D05 (448 is provisional only); this card cannot run before.
+- Image side from RC-S0b: **Met 2026-10-17:** `inputs.image_longest_side` = 672 (Soheil, D05).
 - RC-M1 passed (gives the generation speed that decides how many sessions part (a) needs).
   **Met 2026-10-15:** the teacher generated 4.48 tokens per second (`results/smoke/RC-M1.csv`).
 
@@ -40,6 +39,19 @@ measured in RC-M1; it is **resumable** (finished shards are skipped), so if a se
 ends, download `cache/teacher/`, attach it to the next session as a private dataset
 (or copy it back into `MEDCOMPRESS_CACHE_ROOT`) and run the same command again.
 Part (b) takes minutes to an hour.
+
+## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
+
+- **Who:** Soheil.
+- **Kaggle settings:** GPU T4 x2 (both T4s); Internet on.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1.
+- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E0b"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E0b --data-root /kaggle/input/<shared-data>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+  - teacher cache
+  - E0 validation
+- **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E0_teacher_cache`.
+- **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
+- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit, and whether a T4 x2 session counts once or twice against the weekly quota. This card uses T4 x2. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
 
 ## 3. Commands
 

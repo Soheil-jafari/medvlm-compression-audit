@@ -24,8 +24,9 @@ experiment:
 
 training:
   mode: qakd
-  gradient_checkpointing: true            # memory only: the 4-bit forward is recomputed in the
-                                          # backward pass layer by layer (same maths as E2)
+  gradient_checkpointing: false           # off for every training run (D06 amendment, 2026-10-17); it was on
+                                          # here for memory only. E4's memory at 1 x 16 is not measured yet:
+                                          # RC-E4 seed 0 checks it first
 
 quantization:                             # D08 option B (answered 2026-10-12)
   recipe: w4                              # the E3 w4 grid (4 bit, groups of 128); E4 is exported in

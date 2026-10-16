@@ -349,12 +349,32 @@ answer lengths that fix `teacher_cache.max_new_tokens` (`T`).
 | Evaluations | every run's validation and test passes, x p_s per probe and condition, plus 1,000 free-text answers each |
 | Training-length check | the cache for 20,000 more examples, 1,875 updates x u, one scoring run, one recovery, four evaluations |
 
-The team states the GPU hours it has (`TODO: team GPU hours available`; whether a 2 x T4
-session counts once or twice against the Kaggle quota is to be checked, TODO: verify) and picks
+The team states the GPU hours it has (90 Kaggle GPU hours per week, 30 per person, stated
+2026-10-17; whether a T4 x2 session counts once or twice against the Kaggle quota is still to be
+checked on Kaggle, TODO: verify) and picks
 the **largest side whose projected total fits**. If the micro-batch of 4 does not fit one T4 at
 that side, the D06 amendment proposal applies (micro-batch 2 or 1, accumulation 8 or 16, 16
 examples per update, or gradient checkpointing at 4 x 4; D06 memo). Nothing in this rule reads a real image or a result of the
 study.
+
+### Image side and G2: decided (2026-10-17, Soheil)
+
+- **Image side 672** (`configs/base.yaml: inputs.image_longest_side`), from RC-S0b run 2
+  (`results/smoke/RC-S0b/`, synthetic probes):
+
+  | Side | Student s per probe | Student LoRA step mb1 / mb2 / mb4 | Teacher s per probe | Teacher tokens per s |
+  |---|---|---|---|---|
+  | 448 | 0.177 | 0.47 s / 0.69 s / 1.35 s | 0.273 | 5.14 |
+  | 560 | 0.282 | 0.59 s / 1.07 s / out of memory | 0.421 | 3.50 |
+  | 672 | 0.414 | 0.85 s / 1.54 s / out of memory | 0.584 | 2.66 |
+
+  At 672 a polyp of 5 % of the image width is about 34 pixels, more than one 28 x 28 patch.
+  Training runs at micro-batch 1 x 16 (the D06 amendment of the same day).
+- **G2 threshold 0.10**, the blank-image drop of the teacher's Gate 1
+  (`configs/student_selection.yaml`).
+- **GPU budget:** 90 Kaggle GPU hours per week, 30 per person. The projected hours of the study
+  at 672 are in `docs/schedule.md` (estimates; the evaluation passes and the teacher cache are
+  unknown until RC-D1 and RC-E0b).
 
 ## What changes in the repository once decided
 

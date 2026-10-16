@@ -50,19 +50,14 @@ def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixtur
     [
         ("01_cache_teacher_outputs.py", [], "max_new_tokens"),
         ("00_check_teacher_image_reliance.py", [], "domain.findings"),
-        # training.steps is set (2026-10-16); the image side is the open setting now
-        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "inputs.image_longest_side"),
+        # the image side is set (2026-10-17): the stage stops at the missing shared data
+        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "--data-root"),
         (
             "06_evaluate.py",
             ["--exp", "A4", "--budget", "B2", "--variant", "n64"],
             "domain.findings",
         ),
         ("select_student.py", ["--round", "R1", "--candidate", "qwen3_vl_2b"], "compute_unit_b"),
-        (
-            "select_student.py",
-            ["--round", "R0", "--candidate", "qwen3_vl_2b"],
-            "image_longest_side",
-        ),
         ("select_student.py", ["--rank", "R1"], "domain.small_findings.thresholds"),
         ("04_score_pruning_units.py", ["--exp", "E7"], "pruning.clinical.ablation_method"),
         ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "training.steps"),
@@ -72,18 +67,11 @@ def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixtur
             "budgets.levels.B2.target_fraction",
         ),
         ("07_benchmark_efficiency.py", ["--exp", "E9"], "budgets.measurement.hardware"),
-        ("03_quantize.py", ["--exp", "E3", "--variant", "w4"], "inputs.image_longest_side"),
-        ("03_quantize.py", ["--exp", "E8", "--budget", "B2"], "inputs.image_longest_side"),
-        (
-            "run_experiment.py",
-            ["--exp", "E3", "--variant", "w4", "--seed", "0"],
-            "inputs.image_longest_side",
-        ),
-        (
-            "04_score_pruning_units.py",
-            ["--exp", "E5", "--variant", "taylor"],
-            "inputs.image_longest_side",
-        ),
+        ("03_quantize.py", ["--exp", "E3", "--variant", "w4"], "--data-root"),
+        ("03_quantize.py", ["--exp", "E8", "--budget", "B2"], "--data-root"),
+        ("run_experiment.py", ["--exp", "E3", "--variant", "w4", "--seed", "0"], "--data-root"),
+        # scoring loads the E2 student first: it stops before any download if E2 is missing
+        ("04_score_pruning_units.py", ["--exp", "E5", "--variant", "taylor"], "--from"),
         ("run_experiment.py", ["--exp", "E7", "--budget", "B2", "--seed", "0"], "pruning"),
     ],
 )

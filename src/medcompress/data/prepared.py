@@ -40,6 +40,13 @@ def load_prepared(
             dataset on this machine lacks samples that the splits list.
     """
     data_root, private_dir = Path(data_root), Path(private_dir)
+    if not (private_dir / "splits.json").is_file():
+        from medcompress.config import ConfigError
+
+        raise ConfigError(
+            f"the RC-D1 files are not at {private_dir} (splits.json): attach the shared data "
+            "dataset and pass --data-root <its path>"
+        )
     assignment: dict[str, str] = json.loads((private_dir / "splits.json").read_text("utf-8"))
     links: dict[str, str] = json.loads((private_dir / "mask_links.json").read_text("utf-8"))
     areas: dict[str, float] = {}

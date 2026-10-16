@@ -7,7 +7,7 @@ Block & Setting & Value \\
 Students (E1, E2) & LoRA rank / alpha / dropout & 16 / 32 / 0.05 \\
 Students (E1, E2) & LoRA targets & decoder\_attention, decoder\_mlp \\
 Students (E1, E2) & Learning rate, schedule, warm-up & 0.0001 / linear / 20 \\
-Students (E1, E2) & Micro-batch x accumulation & 4 / 4 \\
+Students (E1, E2) & Micro-batch x accumulation & 1 / 16 \\
 Students (E1, E2) & KD weight / temperature & 0.5 / 2 \\
 Students (E1, E2) & Steps / training pool & 625 / 10000 \\
 Recovery (E5-E7, A1-A6) & Steps / examples & -- / -- \\

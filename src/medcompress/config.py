@@ -283,6 +283,21 @@ def get_by_path(config: Mapping[str, Any], dotted: str, default: Any = None) -> 
     return node
 
 
+def student_config_path(config: Mapping[str, Any]) -> Any:
+    """The student's model config: ``model.config`` if set, else ``components.student``.
+
+    The training configs (E1, E2, E4) set ``model.config``; the compression arms (E3, E5-E8,
+    A1-A6) start from the E2 student and name it through ``components.student`` of
+    ``configs/base.yaml``. Returns ``None`` or a ``TODO`` string when neither is set.
+    """
+    value = (config.get("model") or {}).get("config")
+    if value is None or (isinstance(value, str) and value.strip().startswith(TODO_MARKER)):
+        fallback = (config.get("components") or {}).get("student")
+        if fallback is not None:
+            return fallback
+    return value
+
+
 def find_todos(config: Any, prefix: str = "") -> list[str]:
     """List dotted paths whose value is a string starting with ``TODO``."""
     found: list[str] = []

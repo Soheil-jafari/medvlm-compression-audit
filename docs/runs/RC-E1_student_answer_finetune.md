@@ -25,8 +25,7 @@ Blocked until all of these are true; the agent changes the status to `ready` whe
   `image_reliance_check.mask_findings` are written to `configs/domain/endoscopy.yaml`.
 - `evaluation.max_new_tokens` and `inputs.image_longest_side` are set (D04 rule; the side from
   RC-S0b).
-- **Waiting on RC-S0b (2026-10-16):** `inputs.image_longest_side` is chosen from the RC-S0b
-  measurement by the rule of D05 (448 is provisional only); this card cannot run before.
+- Image side from RC-S0b: **Met 2026-10-17:** `inputs.image_longest_side` = 672 (Soheil, D05).
 - RC-M1 passed. **Met 2026-10-15.**
 
 Platform: Kaggle notebook, one T4 is enough (`CUDA_VISIBLE_DEVICES=0`), Internet **on**.
@@ -34,22 +33,35 @@ Dataset access: your own copy of Kvasir-VQA-x1 and Kvasir-SEG and the private RC
 (`splits.json`, `mask_links.json`) attached as a private dataset. Nothing from those goes into
 the repository.
 
-Runtime: one seed is one training run plus a validation pass. Training is about
-`data_subset` x 0.74 s (RC-S0's one-example LoRA step on the 3B; an **estimate**, since the cost
-at micro-batch 4 is not measured): about 2.1 h for 10,000 examples. The agent fills in the full
-estimate when it sets the card to `ready`. Use one session per seed; the seeds are independent.
+Runtime: one seed is one training run plus a validation pass. Training at side 672 is 625
+updates of 16 examples at micro-batch 1 (D06 amendment, 2026-10-17). RC-S0b run 2 measured
+0.849 s per one-example step on synthetic probes, so one update takes about 13.6 s and one seed
+about **2.4 h** of training. This is an **estimate**: real examples are longer, and the model
+load, the saves (every 50 updates) and the validation pass come on top. The validation pass is
+unknown until RC-D1 gives the probe counts. Use one session per seed; the seeds are independent
+and run on three accounts (section 2b).
 
-**Memory check (first seed, before the other two).** D06 trains with a micro-batch of 4 and 4
-accumulation steps. RC-S0 measured 9,140,717,056 bytes for one LoRA step at **one** example;
-scaled to 4 examples that estimate is about 14.0 GB of the T4's 15.6 GB, so the micro-batch of 4
-may not fit (D05 flag). RC-S0b run 1 (2026-10-16): at side 448 the step at micro-batch 1
-**fits** (peak 9,377,473,536 bytes); micro-batch 2 and 4 are **not measured yet** (their
-out-of-memory results were caused by a second model copy left on the GPU, so run 1 is invalid
-for them; RC-S0b run 2 measures them, also with gradient checkpointing). Real training examples are longer (an answer, not "Yes"/"No"), so the first seed here
-confirms it on real data: `train_peak_gpu_bytes` and `train_seconds` / `train_steps` (seconds
-per update) in `metrics.csv`. If training stops with "CUDA out of memory", stop there, keep the
-last 30 lines of the log, and tell the agent through the inbox: do **not** change the batch
-yourself (the team decides, D06 stays as it is until then).
+**Memory check (first seed, before the other two).** At 672 the step at micro-batch 1 peaked
+at 11,372,899,328 bytes on synthetic probes (RC-S0b run 2; the T4 has 15,636,037,632). Real
+training examples are longer (an answer, not "Yes"/"No"), so the first seed confirms it on real
+data: `train_peak_gpu_bytes` and `train_seconds` / `train_steps` (seconds per update) in
+`metrics.csv`. If training stops with "CUDA out of memory", stop there, keep the last 30 lines of
+the log and tell the agent through the inbox. Do **not** change the batch yourself: 1 x 16 is the
+decided setting (D06).
+
+## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
+
+- **Who:** seeds split across the accounts: seed 0 Soheil, seed 1 Farzan, seed 2 Amir (one session each, in the same week). Card owner: Farzan.
+- **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1.
+- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E1"`, `SEED = <k>`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E1 --seed <k> --data-root /kaggle/input/<shared-data>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+  - train E1 seed<k> (skipped when its adapter is attached: a later session then runs only the rest)
+  - validation E1 seed<k>
+  - benchmark E1 seed<k> (waits if a setting is open; the run goes on)
+- **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E1_seed<k>_adapter`.
+- **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
+- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit, and whether a T4 x2 session counts once or twice against the weekly quota. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
 
 ## 3. Commands
 

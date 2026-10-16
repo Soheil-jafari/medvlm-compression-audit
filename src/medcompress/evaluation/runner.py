@@ -200,17 +200,22 @@ def load_trained_student(
     The compression arms start from this model, so the weights they prune and evaluate
     are the merged ones.
     """
-    from medcompress.config import ConfigError, load_config
+    from medcompress.config import ConfigError, load_config, student_config_path
     from medcompress.models.loading import ModelSpec, load_adapter, load_model
 
-    student = config.get("model", {}).get("config")
+    student = student_config_path(config)
     if _is_open(student):
         raise ConfigError("settings still open: model.config (the student, from S05b)")
     spec = ModelSpec.from_config(load_config(student))
+    adapter = Path(config["paths"]["checkpoint_root"]) / tag.replace(":", "/") / f"seed{seed}"
+    if not (adapter / "adapter").is_dir():  # checked first: no model download for nothing
+        raise ConfigError(
+            f"the {tag} seed {seed} adapter is not at {adapter / 'adapter'}: attach its hand-off "
+            "dataset with --from <path> (or run its training card first)"
+        )
     kwargs = {} if device_map is None else {"device_map": device_map}
     model = load_model(spec, allow_candidate=True, image_longest_side=side, **kwargs)
-    adapter = Path(config["paths"]["checkpoint_root"]) / tag.replace(":", "/")
-    return load_adapter(model, adapter / f"seed{seed}" / "adapter", merge=True)
+    return load_adapter(model, adapter / "adapter", merge=True)
 
 
 def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:

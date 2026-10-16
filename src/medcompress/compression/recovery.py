@@ -123,6 +123,7 @@ def run_recovery(
     recovery_config: Mapping[str, Any],
     *,
     seed: int,
+    resume_dir: Path | None = None,
 ) -> TrainResult:
     """Run the shared LoRA + offline-KD recovery on a pruned model and merge the adapter.
 
@@ -140,7 +141,7 @@ def run_recovery(
     if recovery_config.get("method") not in (None, "lora_plus_offline_kd"):
         raise ConfigError(f"unknown recovery method {recovery_config.get('method')!r}")
     cfg = TrainConfig.from_config({**recovery_config, "mode": "offline_kd"})
-    result = train_offline_kd(pruned, examples, cfg, seed=seed)
+    result = train_offline_kd(pruned, examples, cfg, seed=seed, resume_dir=resume_dir)
     merge_adapter(pruned)
     return result
 
@@ -288,13 +289,17 @@ def run_prune_and_recover(
     pool = training_pool(train, recovery.get("data_subset"), pool_seed)
     examples = examples_from_samples(pool, data_root, records=records)
     require_teacher_records(pool, examples)
-    result = run_recovery(model, examples, recovery, seed=run.seed)  # type: ignore[arg-type]
+    resume_dir = pruned_dir(config, run).parent / "resume"  # removed once the model is saved
+    result = run_recovery(model, examples, recovery, seed=run.seed, resume_dir=resume_dir)  # type: ignore[arg-type]
     directory = save_pruned(
         model,
         pruned_dir(config, run),
         [list(search.removal)],
         mlp_channel_group_size=scoring.mlp_channel_group_size or NO_CHANNEL_GROUPS,
     )
+    from medcompress.compression.distillation.resume import ResumeStore
+
+    ResumeStore(resume_dir, "").clear()
     _write_outputs(config, run, settings, search, check, result, recovery)
     print(
         f"removed {len(search.removal)} units for {run.budget}: footprint {search.footprint:.4g} "
