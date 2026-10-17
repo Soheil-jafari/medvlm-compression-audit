@@ -88,7 +88,7 @@ class Need:
         if self.text:
             return self.text
         if self.run is None:
-            what = "teacher cache"
+            what = "teacher adapter" if self.kind == "teacher_adapter" else "teacher cache"
         else:
             what = f"{self.run.label} {self.kind}"
         return what + (" (optional)" if self.optional else "")
@@ -271,7 +271,7 @@ def build_plan(
         return CardPlan(
             "RC-E0a", "Gate 1", 2,
             (Step("gate 1", _script("00_check_teacher_image_reliance.py", *run.args())),),
-            internet=True,
+            needs=(Need("teacher_adapter"),), internet=True,
         )  # fmt: skip
     if card == "RC-E0B":
         _no_seed(card, seed)
@@ -283,7 +283,7 @@ def build_plan(
                 Step("E0 validation", _script("06_evaluate.py", *run.args())),
             ),
             handoffs=(Handoff("teacher_cache", (run,), "E0_teacher_cache"),),
-            internet=True,
+            needs=(Need("teacher_adapter"),), internet=True,
         )  # fmt: skip
     if card in ("RC-E1", "RC-E2"):
         exp = card[-2:]
@@ -334,7 +334,7 @@ def build_plan(
         return CardPlan(
             card, "E9 the teacher at 4 bit", 2, (_experiment(run), _test_eval(run)),
             handoffs=(Handoff("quantized", (run,), "E9_seed0_quantized"),),
-            quantization=True, internet=True,
+            needs=(Need("teacher_adapter"),), quantization=True, internet=True,
         )  # fmt: skip
     if card == "RC-G2":
         _no_seed(card, seed)
@@ -393,7 +393,8 @@ def build_plan(
         return CardPlan(
             card, "E0, E1, E2 on the test split", 2, tuple(_test_eval(r) for r in runs),
             handoffs=(Handoff("outcomes", e2, "E2_test_outcomes"),),
-            needs=tuple(Need("adapter", Run(e, s)) for e in ("E1", "E2") for s in SEEDS),
+            needs=(Need("teacher_adapter"),)
+            + tuple(Need("adapter", Run(e, s)) for e in ("E1", "E2") for s in SEEDS),
             internet=True,
         )  # fmt: skip
     if card == "RC-C1":
@@ -414,6 +415,22 @@ def build_plan(
                                      "--images", str(external_images), "--name", "endobench",
                                      "--dedup-threshold", "4"), inputs=False),),
         )  # fmt: skip
+    if card == "RC-TT0":
+        _no_seed(card, seed)
+        return CardPlan(
+            "RC-TT0", "Teacher feasibility: one LoRA step per setup, then rule 3", 2,
+            (Step("feasibility, rule 3", _script("teacher_feasibility.py", "run"), inputs=False),),
+            internet=True, quantization=True,
+            notes=("commit results/smoke/RC-TT0/teacher_training.csv: RC-TT1 reads it",),
+        )  # fmt: skip
+    if card == "RC-TT1":
+        _no_seed(card, seed)
+        return CardPlan(
+            "RC-TT1", "Our teacher adapter: training (resumable), hand-off, validation", 2,
+            (Step("train the teacher", _script("train_teacher.py")),),
+            internet=True, quantization=True,
+            notes=("the script writes the hand-off E0_teacher_adapter itself",),
+        )  # fmt: skip
     if card == "RC-T1":
         raise CardError("RC-T1 runs on the rented GPU, not on Kaggle: follow its card")
     if card in ("RC-L1", "RC-S1", "RC-S2", "RC-S3"):
@@ -424,7 +441,7 @@ def build_plan(
 RUNNABLE_CARDS: tuple[str, ...] = (
     "RC-D1", "RC-D1-counts", "RC-E0a", "RC-E0b", "RC-E1", "RC-E2", "RC-B0", "RC-E3", "RC-E4",
     "RC-E9", "RC-G2", "RC-E5", "RC-E6", "RC-E7", "RC-E8", "RC-A1", "RC-A2", "RC-A3", "RC-A4",
-    "RC-A5", "RC-A6", "RC-R1", "RC-C1", "RC-X1",
+    "RC-A5", "RC-A6", "RC-R1", "RC-C1", "RC-X1", "RC-TT0", "RC-TT1",
 )  # fmt: skip
 
 

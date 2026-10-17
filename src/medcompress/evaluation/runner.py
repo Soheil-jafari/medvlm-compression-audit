@@ -232,7 +232,9 @@ def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLM
 
     if run.experiment_id == "E0":
         spec = ModelSpec.from_config(load_config(config["components"]["teacher"]))
-        return load_model(spec, image_longest_side=side)
+        quantization = (config.get("evaluation") or {}).get("teacher_quantization")
+        # RC-TT1 records the nf4 teacher next to the fp16 one when rule 3 chose QLoRA
+        return load_model(spec, image_longest_side=side, quantization=quantization or None)
     if run.experiment_id in ("E1", "E2"):
         return load_trained_student(config, run.experiment_tag, run.seed, side)
     from medcompress.registry import SCORE_UNITS, get_experiment

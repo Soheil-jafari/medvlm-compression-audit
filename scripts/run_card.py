@@ -166,6 +166,9 @@ def main(argv: list[str] | None = None) -> int:
     os.chdir(REPO)
     run_steps(session, config, env, repo=REPO, data_root=args.data_root, handoffs=args.handoffs)
     export_handoffs(session, config)
+    from medcompress.card_runner import report_step_handoffs
+
+    report_step_handoffs(session)
     collect_results(session, REPO)
     failed = [s for s in session.steps if s.status in ("failed", "stopped: setting open")]
     code = 0 if session.ok else next((s.code for s in failed if s.code), 1)

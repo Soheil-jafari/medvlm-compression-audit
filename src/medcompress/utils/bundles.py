@@ -41,6 +41,7 @@ dataset is read-only)."""
 FORMAT_VERSION = 1
 DATA_KIND = "data"
 HANDOFF_KINDS: tuple[str, ...] = (
+    "teacher_adapter",
     "teacher_cache",
     "adapter",
     "pruned",
@@ -48,7 +49,8 @@ HANDOFF_KINDS: tuple[str, ...] = (
     "outcomes",
     "resume",
 )
-"""What a hand-off holds: the teacher cache (RC-E0b), a trained adapter (E1, E2, E4), a pruned
+"""What a hand-off holds: our teacher adapter (RC-TT1), the teacher cache (RC-E0b), a trained
+adapter (E1, E2, E4), a pruned
 model (E5-E8, A1-A6), a quantized model (E3, E8, E9), the evaluation outcomes needed by the
 comparison step, or the resume state of a training run that stopped."""
 PATH_ROOTS: tuple[str, ...] = ("cache_root", "checkpoint_root", "output_root")

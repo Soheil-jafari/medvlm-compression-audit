@@ -57,7 +57,7 @@ from medcompress.models.image_sides import (  # noqa: E402
 )
 from medcompress.models.loading import ModelConfigError, ModelSpec, check_loadable  # noqa: E402
 
-TEACHER_CONFIG = Path("configs/models/qwen2_5_vl_7b_teacher.yaml")
+TEACHER_CONFIG = Path("configs/models/qwen2_5_vl_7b_teacher_simulamet.yaml")  # RC-S0b (done)
 STUDENT_CONFIG = Path("configs/models/qwen2_5_vl_3b_student.yaml")
 FALLBACK_CONFIG = Path("configs/models/qwen3_vl_2b_student.yaml")
 TOKENIZER_FILES = ("tokenizer.json", "tokenizer_config.json", "vocab.json", "merges.txt")

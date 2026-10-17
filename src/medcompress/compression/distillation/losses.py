@@ -27,6 +27,7 @@ def answer_ce_loss(student_logits: torch.Tensor, target_ids: torch.Tensor) -> to
         raise ValueError(
             f"logits {tuple(student_logits.shape)} do not match targets {tuple(target_ids.shape)}"
         )
+    target_ids = target_ids.to(student_logits.device)  # a model split over two GPUs (teacher)
     valid = target_ids != IGNORE_INDEX
     if not valid.any():
         return student_logits.sum() * 0.0
@@ -65,6 +66,12 @@ def topk_kl_loss(
         raise ValueError("logits, top-k tensors and mask must share batch and length")
     if not mask.any():
         return student_logits.sum() * 0.0
+    device = student_logits.device  # a model split over two GPUs
+    teacher_topk_ids, teacher_topk_logprobs = (
+        teacher_topk_ids.to(device),
+        teacher_topk_logprobs.to(device),
+    )
+    mask = mask.to(device)
     gathered = student_logits.float().gather(-1, teacher_topk_ids.long()) / temperature
     log_student = F.log_softmax(gathered, dim=-1)
     log_teacher = F.log_softmax(teacher_topk_logprobs.float() / temperature, dim=-1)

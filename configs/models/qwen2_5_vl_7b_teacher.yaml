@@ -2,7 +2,7 @@ _base_: _model_base.yaml
 
 model:
   status: "DECIDED"
-  name: "Qwen2.5-VL-7B-Instruct + Kvasir-VQA-x1 LoRA"
+  name: "Qwen2.5-VL-7B-Instruct + our Kvasir LoRA (RC-TT1)"
   role: teacher
   family: qwen2_5_vl
   size: "7B"
@@ -12,9 +12,11 @@ model:
   verified_from: https://huggingface.co/api/models/Qwen/Qwen2.5-VL-7B-Instruct
   revision: cc594898137f460bfe9f0759e9844b3ce807cfb5  # pinned 2026-10-12 (D01)
   parameters_stored: 8292166656
-  adapter: SimulaMet/Qwen2.5-VL-KvasirVQA-x1-ft  # LoRA r16 / alpha 64, all-linear, ViT frozen; licence mit
-  adapter_revision: 79e77755aaabd8e665d306d77499c0335400371b  # pinned 2026-10-12 (D01)
-  adapter_training: "3 epochs on the Kvasir-VQA-x1 train file, lr 2e-5, bf16 (args.json)"
+  adapter: ${env:MEDCOMPRESS_CHECKPOINT_ROOT,checkpoints}/E0/teacher_adapter  # OUR adapter (D01 amendment
+                                          # 2026-10-18), trained by RC-TT1 on our training split only;
+                                          # attach its private hand-off dataset with --from
+  adapter_revision: null                  # a local folder: the hand-off manifest pins its content
+  adapter_training: "RC-TT1: LoRA on the language model, vision tower frozen, lr 2e-5, cosine, 3 % warm-up, weight decay 0.1, 1 x 16 per update, fp16 with loss scaling; setup and size by rule 3 (configs/teacher_training.yaml)"
   architecture:
     vision_encoder: "Qwen ViT, 32 layers x 1280, patch 14, window attention"
     connector: "MLP merger"
@@ -23,4 +25,4 @@ model:
     vocab_size: 152064
   tokenizer_shared_with: models/qwen2_5_vl_3b_student.yaml   # tokenizer files byte-identical (hub blob hashes, 2026-10-12)
   dtype: float16   # T4 has no bf16; fp16 stability checked in RC-M1
-  notes: "Teacher, decided 2026-10-12 (D01, option T1)."
+  notes: "Teacher: base decided 2026-10-12 (D01); adapter replaced by our own, 2026-10-18 (D01 amendment). The published SimulaMet adapter is in qwen2_5_vl_7b_teacher_simulamet.yaml (appendix item only)."

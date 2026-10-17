@@ -140,6 +140,11 @@ def check_loadable(spec: ModelSpec, *, allow_candidate: bool = False) -> None:
         raise ModelConfigError(
             f"{spec.name} has no pinned revision; refusing to load unpinned weights"
         )
+    if spec.adapter and not spec.adapter_revision and not Path(spec.adapter).expanduser().exists():
+        raise ModelConfigError(  # a local adapter (our teacher's): checked before any download
+            f"the adapter of {spec.name} is not at {spec.adapter}: attach the RC-TT1 hand-off "
+            "(the teacher adapter) with --from <path>"
+        )
 
 
 _QUANTIZATION_KEYS = {"bits", "quant_type", "compute_dtype", "double_quant"}
