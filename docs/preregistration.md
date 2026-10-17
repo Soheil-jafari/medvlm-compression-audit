@@ -22,11 +22,12 @@ How to read this draft:
 | Item | Value | Source |
 |---|---|---|
 | Domain | GI endoscopy | D02 |
-| Teacher | Qwen2.5-VL-7B-Instruct, revision `cc594898`, with the SimulaMet Kvasir-VQA-x1 LoRA, revision `79e77755`, merged | D01 |
+| Teacher | Qwen2.5-VL-7B-Instruct, revision `cc594898`, with **our own** LoRA adapter, trained on our training split only at image side 672 (RC-TT1), merged. The published SimulaMet adapter (revision `79e77755`) was trained on the official train split, which holds almost every image of our test split: it is used only for the appendix item of section 6 | D01 amendment 2026-10-18 |
+| Teacher training (rule 3) | recipe from the SimulaMet `args.json` where it applies (LoRA on the language model, vision tower frozen, lr 2e-5, cosine, 3 % warm-up, weight decay 0.1), 16 examples per update as micro-batch 1 x 16, fp16 with loss scaling. Setup: fp16 over 2 x T4 unless it runs out of memory or is more than 2x slower per example than QLoRA (NF4) on 1 x T4. N: the largest multiple of 1,000 training examples within 15 GPU hours from RC-TT0's warm step time, capped at one pass, drawn stratified by question type with seed 20261012. Quality: Gate 1 passes and validation macro balanced accuracy >= E1 seed 0 + 0.02, else one extension of +50 % of N, accepted and reported either way | D01 amendment, `configs/teacher_training.yaml` |
 | Student | Qwen2.5-VL-3B-Instruct, revision `66285546d2b821cf421d4f5eb2576359d3770cd3` (pinned 2026-10-16 after RC-S0 passed); fallback Qwen3-VL-2B-Instruct; image side 672 for every model (decided 2026-10-17, RC-S0b) | D05 amendment |
 | Tokenizer equality | `tokenizers_identical = 1` in `results/smoke/RC-M1.csv` | RC-M1 |
-| Main data | Kvasir-VQA-x1, revision `61e41148`: official train file = training; official test split halved **by image** into validation and test with seed 20261012 | D02, RC-D1 |
-| Near-duplicates | validation / test images within 4 of 64 dHash bits of a training image are removed (count: **[RC-D1]** `duplicates_removed:val_test`) | RC-D1 |
+| Main data | Kvasir-VQA-x1, revision `61e41148`: all 6,449 images, with the questions of both official splits, re-split **by image** into train / validation / test = 70 / 15 / 15 % of the images, seed 20261012, stratified by finding answer value and Kvasir-SEG mask (`data/splits.py: assign_groups_stratified`). The official split is by question, so it is not used (data card `docs/data_cards/kvasir_vqa_x1.md`) | D02 amendment 2026-10-18, RC-D1 run 2 |
+| Near-duplicates | images within 4 of 64 dHash bits are grouped transitively (union-find) and each group goes whole to one split, so no validation or test image is within 4 bits of a training image (checked: **[RC-D1]** `val_test_near_duplicates_of_train` = 0). The distances from 5 to 17 bits are reported in the data card (**[RC-D1]** `min_distance_to_train:*`), not filtered | D02 amendment, RC-D1 |
 | Masks | Kvasir-SEG, linked to VQA images within 4 dHash bits; ambiguous links dropped (counts **[RC-D1]**) | D02, RC-D1 |
 | Split hash | **[RC-D1]** `split_sha256` (printed by `scripts/prepare_data.py`) | RC-D1 |
 | External test | EndoBench, deduplicated against training images; licence still to be verified by Farzan (TODO: verify) | D02 |
@@ -136,6 +137,17 @@ kernel check).
   quantized; a budget-matched run outside the 3 % tolerance is reported, marked, and the primary
   comparison is repeated without such runs as a sensitivity analysis; a run that crashes is
   rerun once with the same seed and otherwise reported as failed.
+- **Appendix item: the published adapter** (secondary, pre-registered 2026-10-18). The
+  published SimulaMet adapter (`configs/models/qwen2_5_vl_7b_teacher_simulamet.yaml`) is
+  evaluated on our test split with the same suites as E0. It is labelled "has seen these images
+  in training", because it was trained on the official train split, which holds almost every
+  image of our test split. It is reported next to our teacher (E0), with the official split's
+  overlap counts from the data card. It has no other use in the study.
+- **Teacher quality rule** (rule 3, D01 amendment). Our teacher must pass Gate 1 and, once E1
+  seed 0 exists, reach a validation macro balanced accuracy of at least E1 seed 0's + 0.02. If
+  either fails, it is trained once more for +50 % of N (the next examples of the same order,
+  from the trained adapter), re-checked, and accepted and reported either way. After that one
+  extension, a failed Gate 1 stops the study as before (`docs/FINAL_GOAL.md`).
 - **Gate 2** (reading only): E7 against the comparator at B2 on the validation split, seed 0
   (RC-G2), after the freeze. It decides which article shape is drafted first; it changes no
   setting.
