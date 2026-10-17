@@ -114,7 +114,7 @@ def check_gpus(needed: int, visible: int) -> list[str]:
     return []
 
 
-def find_kvasir_seg(source: Path, *, max_depth: int = 3) -> Path:
+def find_kvasir_seg(source: Path, *, max_depth: int = 6) -> Path:
     """The folder under ``source`` that holds both ``images/`` and ``masks/`` (Kvasir-SEG)."""
     level = [Path(source)]
     for _ in range(max_depth + 1):

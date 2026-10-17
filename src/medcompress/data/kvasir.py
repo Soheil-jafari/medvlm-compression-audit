@@ -207,13 +207,20 @@ def link_masks(
     *,
     data_root: Path,
     threshold: int,
+    fingerprints: Mapping[str, str] | None = None,
 ) -> MaskLinks:
     """Match each VQA image to the closest Kvasir-SEG image within ``threshold`` bits.
+
+    ``fingerprints`` (VQA image path -> dHash), if given, saves hashing the VQA images again.
 
     VQA images whose closest masks tie are reported as ambiguous and not linked.
     """
     root = Path(data_root)
-    vqa_fp = {p: image_fingerprint(str(root / p)) for p in sorted(set(vqa_images))}
+    known = fingerprints or {}
+    vqa_fp = {
+        p: known[p] if p in known else image_fingerprint(str(root / p))
+        for p in sorted(set(vqa_images))
+    }
     seg_fp = {r.image_path: image_fingerprint(str(root / r.image_path)) for r in seg_records}
     mask_of = {r.image_path: r.mask_path for r in seg_records}
     best: dict[str, list[tuple[int, str]]] = {}

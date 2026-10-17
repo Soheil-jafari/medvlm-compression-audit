@@ -226,8 +226,7 @@ def build_plan(
     picked_budgets = _pick(BUDGETS, budgets)
     if card == "RC-D1":
         _no_seed(card, seed)
-        if kvasir_seg is None:
-            raise CardError("RC-D1 needs --kvasir-seg (the attached Kvasir-SEG folder)")
+        kvasir_seg = kvasir_seg or Path("/kaggle/input")  # searched for images/ + masks/
         shared = Path(out) / SHARED_DATA_DIR
         settings = RC_D1_SETTINGS
         data = ("--data-root", str(shared / "data"))
