@@ -148,12 +148,39 @@ must be logged here.
     shared data follows after the values are filled from the first pass's answer counts.
   - D07 says A1 and A2 reuse E7's per-probe effects, but the code scores them again. At side 672
     that costs about 7.9 h per run (estimate).
+- **2026-10-18 (decided under Soheil's delegation, from RC-D1 run 1):**
+  1. *D02 amendment: image-disjoint re-split.*
+     - The official Kvasir-VQA-x1 split is by question: 3,821 of its 4,058 test images are
+       training images; 15,718 of the 15,955 test rows are on shared images.
+     - All 6,449 images are re-split by image, 70 / 15 / 15 %, seed 20261012.
+     - Near-duplicate groups (dHash <= 4 bits, transitive) are assigned whole, stratified by
+       finding answer and Kvasir-SEG mask.
+     - No validation or test image is within 4 bits of a training image (checked); the 5-17
+       bit tail is a data-card number.
+     - Run 1's splits are discarded; RC-D1 run 2 makes the new ones.
+  2. *D01 amendment: our own teacher adapter.* Qwen2.5-VL-7B-Instruct (same revision) + a LoRA
+     we train on our training split only, at side 672. The recipe follows the SimulaMet
+     `args.json` where it applies. Run cards RC-TT0 (feasibility) and RC-TT1 (training);
+     `configs/teacher_training.yaml`.
+  3. *Rule 3* (pre-registered before any validation result):
+     - setup (a), fp16 over 2 x T4, unless it runs out of memory or is more than 2x slower than
+       (b), QLoRA on 1 x T4;
+     - N = the largest multiple of 1,000 examples within 15 GPU hours, capped at one pass;
+     - examples stratified by question type;
+     - quality: Gate 1 passes and macro balanced accuracy >= E1 seed 0 + 0.02, else one
+       extension of +50 % of N.
+  4. *Appendix item:* the published SimulaMet adapter on our test split, labelled "has seen
+     these images in training", and the official split's overlap in the data card.
+
+  Recorded in D01, D02, D04, D06, the configs, RC-D1, RC-TT0, RC-TT1, RC-E0a, RC-E0b and the
+  pre-registration draft. Open: whether Kaggle counts a T4 x2 hour once or twice (it changes N
+  by a factor of 2; the conservative reading is used until checked).
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| T4 x2 and the quota | whether a T4 x2 session counts once or twice against the weekly Kaggle quota, and the session time limit (both unknown here; the cards and `docs/schedule.md` mark them) | team (check on Kaggle) | before RC-E0a |
+| T4 x2 and the quota | whether a T4 x2 session counts once or twice against the weekly Kaggle quota (rule 3 counts it twice until checked: N doubles if it counts once), and the session time limit (both unknown here) | team (check on Kaggle) | before RC-TT1 |
 | Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |
 | Recovery steps | 25 % of 625 = 156.25; proposal 157 = `ceil(2,500 / 16)` (D06 memo) | team | before RC-E5 |
 | A1 and A2 reuse of E7's effects | D07 says they reuse E7's per-probe effects; the code scores them again (about 7.9 h per run at 672, an estimate). Either the agent adds the reuse (the per-probe effects must then be kept) or the schedule keeps the cost | team | before the freeze |

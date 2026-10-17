@@ -112,6 +112,17 @@ approved.
 - `max_new_tokens`: rule `ceil(1.5 x p99 answer words) + 8`, applied when the RC-D1
   counts arrive unless the team objects then.
 
+## Amendment (2026-10-18): Gate 1 with our teacher; the teacher's quality rule
+
+- Gate 1 is run on **our** teacher (D01 amendment): the 7B with the LoRA RC-TT1 trains on our
+  training split. The thresholds of the decision of 2026-10-12 are unchanged.
+- Rule 3, its quality part (D01 amendment): the teacher must pass Gate 1 and, once E1 seed 0
+  exists, have a validation macro balanced accuracy of at least E1 seed 0's + 0.02. If either
+  fails, it is trained once more for +50 % of N, re-checked, and accepted and reported either
+  way. After that one extension, the study's stop rule for a failed Gate 1 applies as before.
+- Gate 1 now has masked validation images. The image-disjoint split (D02 amendment) puts the
+  Kvasir-SEG-linked images into validation in proportion; run 1's old split had none.
+
 ## Questions that were asked
 
 1. Approve the three Gate 1 thresholds (0.65 / 0.10 / CI above 0)?

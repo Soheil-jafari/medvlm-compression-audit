@@ -85,6 +85,51 @@ be fine-tuned first).
 - D05: the student pool keeps only teacher-family models and is topped up to 10.
 - Run card RC-M1 (load test) can be written.
 
+## Amendment (2026-10-18, Soheil): our own teacher adapter, and rule 3
+
+**Why.** The published SimulaMet adapter was trained on the official train split. That split
+holds 3,821 of the 4,058 official test images and almost every image of any image-disjoint
+split (D02 amendment, same day). Teaching the students with it would leak test images through
+the teacher.
+
+**Decision.**
+1. **The teacher.** Qwen2.5-VL-7B-Instruct at the same pinned revision, with a LoRA adapter
+   **we** train on our training split only, at image side 672 (the students' input).
+   - Recipe from the SimulaMet `args.json` where it applies: LoRA on the language model, vision
+     tower frozen, lr 2e-5, cosine schedule, 3 % warm-up, weight decay 0.1.
+   - LoRA rank, alpha and dropout: D06's 16 / 32 / 0.05, unless the published
+     `adapter_config.json` differs and can be read on Kaggle. Then RC-TT0 prints it and its
+     values are used.
+   - 16 examples per update (micro-batch 1 x 16, as the students); fp16 on T4 with loss
+     scaling and fp32 LoRA weights.
+   - `configs/teacher_training.yaml`; run cards RC-TT0 and RC-TT1.
+2. **Rule 3** (pre-registered, fixed before any validation result):
+   - **Setup:** prefer (a), the fp16 base split over 2 x T4. Use (b), QLoRA with an NF4 base on
+     1 x T4, only if (a) runs out of memory or is more than 2x slower per example. If (b), the
+     teacher is still evaluated in fp16 with the trained adapter, and the card reports the
+     validation balanced accuracy under both NF4 and fp16 for the record.
+   - **Size:** N is the largest multiple of 1,000 training examples whose projected time, from
+     RC-TT0's warm step time, is at most 15 GPU hours, capped at one pass over the training
+     split's QA rows. A T4 x2 hour counts as 2 GPU hours until the team has checked Kaggle's
+     rule; RC-TT0 records the other reading next to it.
+   - **Examples:** drawn from the training split with seed 20261012, stratified by question
+     type, so rare types are included: one seeded order, of which N is the first part
+     (`models/teacher_training.py: teacher_order`). The students' 10,000 / 30,000 pools stay as
+     they are.
+   - **Quality:** the teacher must pass Gate 1 (D04 thresholds unchanged) and, once E1 seed 0
+     exists, have a validation macro balanced accuracy of at least E1 seed 0's + 0.02. If
+     either fails, it is trained **once** more from the last checkpoint for +50 % of N:
+     - the next N / 2 examples of the same order;
+     - starting from the trained adapter;
+     - with its own 3 % warm-up and cosine schedule;
+     - then re-checked, and accepted and reported either way.
+
+     The study's stop rule for a failed Gate 1 stays as it is after that one extension.
+3. **Appendix item** (secondary, pre-registered): the published SimulaMet adapter
+   (`configs/models/qwen2_5_vl_7b_teacher_simulamet.yaml`) is evaluated on our new test split,
+   labelled "has seen these images in training", next to our teacher. The overlap counts of
+   the official split go into the data card. The published adapter has no other use.
+
 ## Answer format for the inbox
 
 `- YYYY-MM-DD (name): D01 decided: <T1 | T2 | T3 | T4 | T5>.`

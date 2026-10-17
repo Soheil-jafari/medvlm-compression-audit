@@ -1028,3 +1028,37 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: RC-D1 pass 1, then the label values (agent) and pass 2.
 - Needs the team: run RC-D1; approve the freeze list; check the T4 x2 quota rule and the
   session limit; collaborator access.
+
+## Iteration 51: 2026-10-18 (interactive)
+- Stage / item: S03 and S05, from RC-D1 run 1 (the official split is by question, not by image).
+- Did:
+  - **Task A:** `prepare` re-splits all 6,449 images. Near-duplicates (dHash <= 4,
+    transitive, union-find) are grouped; whole groups are assigned 70 / 15 / 15 %, stratified by
+    finding answer value and Kvasir-SEG mask (a group version of iterative stratification).
+    It checks that no held-out image is within 4 bits of train, and counts the 5-17 bit tail,
+    the groups, the per-split answer values and the official split's overlap. Kvasir-SEG is
+    found under /kaggle/input with `find`. RC-D1 is ready for run 2.
+  - **Task B:** RC-TT0 and `scripts/teacher_feasibility.py`:
+    - one LoRA step of the 7B base in fp16 over two T4s and in QLoRA (NF4) on one T4, each with
+      and without gradient checkpointing, one process per setup;
+    - the published `adapter_config.json` read and printed;
+    - rule 3 applied: setup, N and the projected hours (estimates).
+  - **Task C:** RC-TT1 and `scripts/train_teacher.py`:
+    - the plan comes from RC-TT0's result file;
+    - the examples follow one seeded order stratified by question type;
+    - saves about every 30 minutes, and resumes from the furthest state, including one in an
+      attached previous output;
+    - writes the hand-off with N, steps and setup in its manifest, then runs validation and
+      Gate 1 when they can run;
+    - `--extend` is the quality rule's one extension.
+
+    Also: a cosine schedule, losses on a model split over two GPUs, the `teacher_adapter`
+    hand-off kind, and an NF4 record of the teacher's evaluation.
+  - **Task D:** the teacher config now points at our adapter (it stops before any download if
+    the adapter is not attached). The SimulaMet adapter is kept in its own config for the
+    appendix item. RC-E0a, RC-E0b, RC-E9 and RC-R1 wait for RC-TT1. The decisions are recorded
+    in the log and in D01, D02, D04 and D06.
+- Verified: ruff check, ruff format, pytest on CPU.
+- Commit: see `git log` on `research-loop`.
+- Next: Task E (pre-registration wording, data card), then RC-D1 run 2's counts.
+- Needs the team: RC-D1 run 2, RC-TT0, RC-TT1 (Soheil, tonight); the T4 x2 quota rule.

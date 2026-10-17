@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-10-17, iteration 50 (interactive run mode)
+**Last updated:** 2026-10-18, iteration 51 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S03: RC-D1 is next (Soheil; shared data and counts); S05b done (side 672, G2 0.10, 1 x 16 decided 2026-10-17)
+**Current stage:** S03 + S05: RC-D1 run 2 (image-disjoint re-split), then RC-TT0 (teacher feasibility) and RC-TT1 (our teacher's training), all Soheil
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -15,8 +15,11 @@
    Shared data (RC-D1 bundle, `--data-root`), hand-offs between accounts (`--from`), the
    unattended runner (`scripts/run_card.py`, `notebooks/run_card.ipynb`), training resume and the
    timing of the first 100 teacher answers are in place. The work split and `docs/schedule.md` and
-   `docs/team_setup.md` are written; the freeze list is in the inbox. Next: RC-D1 pass 1; then the
-   label values, pass 2, the finding list and `max_new_tokens`; then Gate 1. RC-L1 needs code
+   `docs/team_setup.md` are written; the freeze list is in the inbox.
+   2026-10-18 (iteration 51): the official split is by question, so all images are re-split
+   by image (D02 amendment); the teacher gets our own LoRA (D01 amendment; rule 3; RC-TT0,
+   RC-TT1); Gate 1 and the cache wait for RC-TT1. Next: read RC-D1 run 2 (label values,
+   finding list, `max_new_tokens`), RC-TT0's rule 3 and RC-TT1's progress. RC-L1 needs code
    first (run identities, parent from config, cache extension, comparison rows); the A1/A2 reuse
    of E7's effects waits on the team (freeze list item 15).
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
@@ -39,7 +42,7 @@ cards for the team (decision of 2026-10-12).
 | 2 | Optional: full names for the copyright line in `LICENSE` and `CITATION.cff` | team | 2026-10-12 |
 | 2b | CI on `main` is red (import error fixed on `research-loop` in a7ec704); merging `research-loop` into `main` turns it green | Soheil | 2026-10-12 |
 | 4 | Each member confirms own access to Kvasir-VQA-x1 and Kvasir-SEG (inbox) | all | 2026-10-12 |
-| 5 | Run RC-D1 pass 1 (`docs/runs/RC-D1_data_preparation.md`), make the shared data ONE private dataset, share it with Amir and Farzan, commit `results/data/summary.csv` | Soheil | 2026-10-17 |
+| 5 | Run RC-D1 **run 2** (image-disjoint re-split), make the shared data ONE private dataset, share it, commit `results/data/summary.csv`; then RC-TT0 (T4 x2) and commit its result file; then start RC-TT1 with Save & Run All | Soheil | 2026-10-18 |
 | 7 | Tell Amir and Farzan that the staged selection was replaced by one student with checks (D05 amendment) | Soheil | 2026-10-12 |
 | 8 | Confirm the fixed training pool (one pool from `seeds.data_split` for E1, E2, E4 and the recoveries; the teacher cache holds only that pool) | Soheil | 2026-10-12 |
 | 10 | Answer the [team] items of the pre-registration draft (comparator rule, headline accuracy for H1/H4, finding thresholds, prevalence cut points, cap, tiers, training pool, A3 ranking, reuse of E7 for `A4:n128` and `A5:logprob_drop`, H2 matching, McNemar on the majority answer) | all | 2026-10-12 |
