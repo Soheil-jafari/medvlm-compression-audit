@@ -26,6 +26,13 @@ they are:
   from the RC-S0 speed), and `inputs.image_longest_side`. Part (a) caches only that training
   pool (drawn with `seeds.data_split`), not all 143,594 training rows.
 - Image side from RC-S0b: **Met 2026-10-17:** `inputs.image_longest_side` = 672 (Soheil, D05).
+- **Waiting on RC-TT1 (2026-10-18):** the teacher is now Qwen2.5-VL-7B-Instruct with **our**
+  LoRA adapter, trained on our training split only (D01 amendment). The published SimulaMet
+  adapter has seen almost every image of our test split. Attach the RC-TT1 hand-off
+  (`E0_teacher_adapter`) with `--from`; `configs/models/qwen2_5_vl_7b_teacher.yaml` points at
+  it, and the run stops before any download if it is missing.
+- RC-D1 **run 2** (image-disjoint split, D02 amendment) replaces run 1: the validation and test
+  splits of run 1 are not used.
 - RC-M1 passed (gives the generation speed that decides how many sessions part (a) needs).
   **Met 2026-10-15:** the teacher generated 4.48 tokens per second (`results/smoke/RC-M1.csv`).
 
@@ -44,9 +51,9 @@ Part (b) takes minutes to an hour.
 
 - **Who:** Soheil.
 - **Kaggle settings:** GPU T4 x2 (both T4s); Internet on.
-- **Attach (Add Input), all private datasets:** the shared data of RC-D1.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher adapter.
 - **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
-- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E0b"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E0b --data-root /kaggle/input/<shared-data>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E0b"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E0b --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
   - teacher cache
   - E0 validation
 - **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E0_teacher_cache`.
