@@ -157,16 +157,27 @@ def test_prepare_end_to_end(tmp_path: Path) -> None:
         dedup_threshold=4,
         mask_threshold=4,
     )
-    assert "kvasir_vqa_x1/images/a4.jpg" in prepared.excluded
+    # D02 amendment 2026-10-18: nothing is dropped; a4 (a copy of a1) is grouped with a1
+    assert prepared.excluded == ()
     assert set(prepared.splits) == {"train", "val", "test"}
-    assert all(
-        s.image_path != "kvasir_vqa_x1/images/a4.jpg"
-        for s in prepared.splits["val"] + prepared.splits["test"]
-    )
+    split_of = {s.image_path: name for name, rows in prepared.splits.items() for s in rows}
+    assert split_of["kvasir_vqa_x1/images/a4.jpg"] == split_of["kvasir_vqa_x1/images/a1.jpg"]
+    assert len(split_of) == 4  # every image of both official splits is used
     metrics = {r["metric"]: r["value"] for r in prepared.rows}
-    assert metrics["qa_rows:train"] == 2 and metrics["masks:linked"] >= 1
-    assert metrics["prevalence:polyp"] == 0.5
+    assert sum(metrics[f"qa_rows:{n}"] for n in ("train", "val", "test")) == 4
+    assert metrics["masks:linked"] >= 1 and metrics["groups:total"] == 3
+    assert metrics["groups:multi_image"] == 1 and metrics["images_in_multi_image_groups"] == 2
+    assert metrics["val_test_near_duplicates_of_train"] == 0
     assert metrics["answer_count:abnormalities:polyp"] == 2
+    assert (metrics["official:images:train"], metrics["official:images:test"]) == (2, 2)
+    assert metrics["official:images:both"] == 0 and metrics["official:images:test_only"] == 2
+    assert metrics["official:test_rows:test_only_images"] == 2
+    assert metrics["official:test_only_min_distance_to_train:0"] == 1  # a4 is a copy of a1
+    again = prepare(
+        data, {"name": "Kvasir-VQA-x1", "label_mapping": RULES},
+        split_seed=1, dedup_threshold=4, mask_threshold=4,
+    )  # fmt: skip
+    assert again.split_sha256 == prepared.split_sha256  # deterministic by seed
     hashes = write_private_outputs(prepared, tmp_path / "private", data)
     assert {"split_sha256", "manifest_kvasir_vqa_x1", "manifest_kvasir_seg"} <= set(hashes)
     assert (tmp_path / "private" / "splits.json").is_file()

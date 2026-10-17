@@ -305,8 +305,12 @@ def _learning_rate(cfg: TrainConfig, step: int) -> float:
     warmup = int(cfg.extra.get("warmup_steps", 0))
     if warmup and step < warmup:
         return cfg.learning_rate * (step + 1) / warmup
-    if cfg.extra.get("lr_schedule", "constant") == "linear":
+    schedule = cfg.extra.get("lr_schedule", "constant")
+    if schedule == "linear":
         return cfg.learning_rate * max(0.0, 1.0 - step / max(1, cfg.steps))
+    if schedule == "cosine":  # the teacher (D01 amendment): cosine decay to 0 after the warm-up
+        progress = (step - warmup) / max(1, cfg.steps - warmup)
+        return cfg.learning_rate * 0.5 * (1.0 + math.cos(math.pi * min(1.0, max(0.0, progress))))
     return cfg.learning_rate
 
 

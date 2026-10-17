@@ -92,10 +92,12 @@ def test_spec_from_decided_teacher_config() -> None:
     teacher = _spec("qwen2_5_vl_7b_teacher.yaml")
     assert teacher.role == "teacher" and teacher.family == "qwen2_5_vl"
     assert teacher.source == "Qwen/Qwen2.5-VL-7B-Instruct"
-    assert teacher.revision and teacher.adapter_revision
+    assert teacher.revision and teacher.adapter_revision is None  # our adapter (RC-TT1)
     assert teacher.dtype == "float16" and not teacher.is_candidate
     assert teacher.resolved_revision == teacher.revision
-    check_loadable(teacher)  # decided and pinned
+    published = _spec("qwen2_5_vl_7b_teacher_simulamet.yaml")  # the appendix item
+    assert published.revision == teacher.revision and published.adapter_revision
+    check_loadable(published)  # decided and pinned
 
 
 def test_candidate_student_needs_explicit_permission() -> None:

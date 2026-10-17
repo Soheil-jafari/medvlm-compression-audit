@@ -16,10 +16,15 @@ dataset:
   local_dir: ${env:MEDCOMPRESS_DATA_ROOT,data}/kvasir_vqa_x1   # images/, train.jsonl, test.jsonl
   has_masks: false
   has_patient_ids: false                  # only img_id
-  splits_used:                            # D02 Q1 = A
-    train: official train
-    val: half of official test, by img_id (fixed seed, pre-registered)
-    test: other half of official test
+  splits_used:                            # D02 amendment 2026-10-18 (replaces Q1 = A)
+    train: 70 % of all 6,449 images of both official splits, by near-duplicate group
+    val: 15 % of the images
+    test: 15 % of the images
+  split_ratios: {train: 0.70, val: 0.15, test: 0.15}   # fractions of images; groups of near-
+                                          # duplicates (dHash <= 4 bits, transitive) go whole,
+                                          # stratified by finding answer and by Kvasir-SEG mask;
+                                          # seed seeds.data_split (data/prepare.py)
+  official_split_note: "by question, not by image: 3,821 of the 4,058 official test images are training images (RC-D1 run 1); used only for the data card and the appendix item"
   label_mapping:                          # per-image finding labels from the source Kvasir-VQA questions
     status: TODO                          # values filled from the RC-D1 answer counts, then pre-registered
     rules:

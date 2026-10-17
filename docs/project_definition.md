@@ -65,7 +65,12 @@ at budget B2, comparing E7 against the best of E5 and E6.
 - Medical domain: lead candidate GI endoscopy; alternative retinal fundus.
 - Teacher and student (must share a tokenizer). Candidates: Qwen2.5-VL-7B with a
   published Kvasir-VQA-x1 adapter -> Qwen2.5-VL-3B; Qwen3-VL-8B -> Qwen3-VL-2B;
-  MedGemma family.
+  MedGemma family. **Decided since:** Qwen2.5-VL-7B -> Qwen2.5-VL-3B (D01, D05). Since
+  2026-10-18 the teacher has **our own** LoRA, trained on our training split, because the
+  published adapter was trained on almost every image (D01 amendment).
+- Splits: **image-disjoint** (D02 amendment 2026-10-18). All Kvasir-VQA-x1 images are re-split
+  by near-duplicate group, 70 / 15 / 15 %, because the official split is by question
+  (`docs/data_cards/kvasir_vqa_x1.md`).
 - Datasets. Candidates: Kvasir-VQA-x1 (main QA), Kvasir-SEG (polyp masks),
   ColonVQA/ColonEval and ColonPert (rare findings, stress tests), EndoBench
   (external test); IDRiD and FGADR for retinal.

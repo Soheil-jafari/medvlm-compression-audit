@@ -145,6 +145,18 @@ and stops on an out-of-memory error rather than changing the setting.
 The earlier proposal text (2 x 8 if it fits, else 1 x 16; gradient checkpointing as an
 alternative) is kept in the history of this file and in `docs/decisions_log.md`.
 
+## Amendment (2026-10-18): the teacher's recipe
+
+The students' recipe above is unchanged. Our teacher (D01 amendment) uses its own recipe in
+`configs/teacher_training.yaml`:
+- from the SimulaMet `args.json`: lr 2e-5, cosine schedule, 3 % warm-up, weight decay 0.1;
+- from this memo: 16 examples per update as micro-batch 1 x 16, gradient clipping at 1.0, and
+  LoRA 16 / 32 / 0.05 unless the published `adapter_config.json` can be read (RC-TT0);
+- the setup (fp16 over two T4s, or QLoRA on one), gradient checkpointing and N from rule 3.
+
+The trainer has a cosine schedule for it (`offline_kd._learning_rate`), and losses that work
+with a model split over two GPUs.
+
 ## Sources (accessed 2026-10-12)
 
 1. Hu et al., *LoRA: Low-Rank Adaptation of Large Language Models*, arXiv:2106.09685.

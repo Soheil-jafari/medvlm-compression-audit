@@ -14,6 +14,7 @@
 
 Blocked until all of these are true; the agent sets the status to `ready` when they are:
 
+- RC-TT1 done: E9 quantizes the teacher with **our** adapter (D01 amendment 2026-10-18); attach its hand-off with `--from`.
 - RC-Q0 passed; `quantization.kernel_class` and the library versions are set and pinned. **Met 2026-10-15:** RC-Q0 chose `TorchLinear`; gptqmodel 7.6.0 and bitsandbytes 0.50.2 are
   pinned.
 - RC-D1 done (calibration: the 128 training images of seed 0, the same as the pruning criteria).
@@ -31,9 +32,9 @@ in section 6 and stop: the agent will move that step to the CPU.
 
 - **Who:** Farzan.
 - **Kaggle settings:** GPU T4 x2 (both T4s); Internet on.
-- **Attach (Add Input), all private datasets:** the shared data of RC-D1.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher adapter.
 - **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
-- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E9"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E9 --data-root /kaggle/input/<shared-data>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E9"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E9 --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
   - run E9 seed0
   - test evaluation E9 seed0
 - **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E9_seed0_quantized`.

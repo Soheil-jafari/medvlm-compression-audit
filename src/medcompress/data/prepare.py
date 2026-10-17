@@ -1,19 +1,25 @@
 """Data preparation for Kvasir-VQA-x1 + Kvasir-SEG (run card RC-D1).
 
 Runs on a team member's machine against their own copy of the data. It writes
-splits, manifests, mask links and exclusions **outside** the repository, and only
-aggregate counts to ``results/data/summary.csv`` (experiment ``DATA``). No
-per-image row ever reaches the repository.
+splits, manifests and mask links **outside** the repository, and only aggregate counts to
+``results/data/summary.csv`` (experiment ``DATA``). No per-image row ever reaches the
+repository.
 
-Steps:
-1. read Kvasir-VQA-x1 (official train / test) with ``data/kvasir.py``;
-2. halve the official test split by image into validation and test (D02, Q1 = A)
-   with the pre-registered split seed;
-3. drop validation / test images that are near-duplicates of training images;
-4. link Kvasir-SEG masks to VQA images by fingerprint; lesion areas and the
-   size-stratum thresholds come from training images with a mask;
-5. count QA rows, images, positives per finding, prevalence on the training
-   split, and the answer values of the label questions (to fill the label rules).
+Steps (D02 amendment of 2026-10-18: the official Kvasir-VQA-x1 split is by question, not by
+image, so it is not used for training or evaluation):
+1. read every question of both official splits of Kvasir-VQA-x1 (``data/kvasir.py``);
+2. fingerprint every image (dHash) and group near-duplicates transitively (distance at most
+   ``dedup_threshold`` bits, union-find);
+3. link Kvasir-SEG masks to the images by fingerprint;
+4. assign whole groups to train / validation / test (70 / 15 / 15 % of the images, the
+   pre-registered seed), stratified by the answer values of the finding question and by
+   the linked masks (``splits.make_image_disjoint_splits``);
+5. check that no validation or test image is within ``dedup_threshold`` bits of a training
+   image (none, by construction) and count the distances just above it (a data-card number,
+   not a filter);
+6. count QA rows, images, groups, masked images and positives per split, prevalence and
+   lesion-size thresholds on the training split, answer lengths, answer values per split,
+   and the overlap of the official split (for the data card and the appendix item).
 """
 
 from __future__ import annotations
@@ -27,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from medcompress.data.base import VQASample
-from medcompress.data.dedup import image_fingerprint, near_duplicate_pairs
+from medcompress.data.dedup import image_fingerprint, min_distances, near_duplicate_groups
 from medcompress.data.kvasir import (
     KvasirVQAx1,
     link_masks,
@@ -36,7 +42,7 @@ from medcompress.data.kvasir import (
 )
 from medcompress.data.manifests import build_manifest, write_manifest
 from medcompress.data.masks import lesion_area_fraction, load_mask, size_strata_thresholds
-from medcompress.data.splits import make_patient_splits, split_fingerprint
+from medcompress.data.splits import make_image_disjoint_splits, split_fingerprint
 
 DATA_EXPERIMENT = "DATA"
 
@@ -95,6 +101,95 @@ def answer_value_counts(
     return counts
 
 
+DEFAULT_SPLIT_RATIOS: dict[str, float] = {"train": 0.70, "val": 0.15, "test": 0.15}
+TAIL_MAX_BITS = 17
+"""The distances above the grouping threshold are counted up to this one (RC-D1 run 1 found
+the official test-only images at up to 17 bits from a training image)."""
+
+
+def split_ratios(dataset_config: Mapping[str, Any]) -> dict[str, float]:
+    """``split_ratios`` of the dataset config (fractions of images), 70 / 15 / 15 by default."""
+    configured = dataset_config.get("split_ratios") or DEFAULT_SPLIT_RATIOS
+    return {str(k): float(v) for k, v in configured.items()}
+
+
+def image_answer_values(
+    raw_rows: Mapping[str, Sequence[Mapping[str, Any]]], rules_cfg: Any
+) -> dict[str, frozenset[str]]:
+    """``{img_id: {"<rule>:<value>", ...}}``: the answer values of each label question.
+
+    Values listed as ``none_values`` of the rule (for example "none") are left out: they mark
+    the absence of a finding. These values are the strata of the re-split. They do not depend
+    on the label mapping, which is decided after RC-D1.
+    """
+    cfg_rules = list((rules_cfg or {}).get("rules") or []) if isinstance(rules_cfg, Mapping) else []
+    wanted = [
+        (
+            str(r.get("name") or _slug(r["question_contains"])),
+            str(r["question_contains"]).lower(),
+            {str(v).lower() for v in r.get("none_values") or ("none", "no")},
+        )
+        for r in cfg_rules
+    ] or [("abnormalities", "are there any abnormalities in the image", {"none", "no"})]
+    out: dict[str, set[str]] = {}
+    for rows in raw_rows.values():
+        for row in rows:
+            for q, a in parse_original(row.get("original")):
+                for name, question, none_values in wanted:
+                    if question in q.lower():
+                        values = {v.strip().lower() for v in a.split(";") if v.strip()}
+                        out.setdefault(str(row["img_id"]), set()).update(
+                            f"{name}:{v}" for v in values - none_values
+                        )
+    return {img: frozenset(values) for img, values in out.items()}
+
+
+def _histogram(distances: Sequence[int], low: int, high: int) -> dict[str, int]:
+    counts = {str(d): 0 for d in range(low, high + 1)}
+    counts[f"{high + 1}_or_more"] = 0
+    for d in distances:
+        if d < low:
+            continue
+        key = str(d) if d <= high else f"{high + 1}_or_more"
+        counts[key] += 1
+    return counts
+
+
+def official_split_rows(
+    raw: Mapping[str, Sequence[Mapping[str, Any]]],
+    fingerprints: Mapping[str, str],
+    image_of: Mapping[str, str],
+) -> list[dict[str, Any]]:
+    """How the official split overlaps by image (data card; appendix item of D02/D04).
+
+    ``image_of`` maps an img_id to its image path, ``fingerprints`` an image path to its dHash.
+    """
+    train_ids = {str(r["img_id"]) for r in raw.get("train", ())}
+    test_ids = {str(r["img_id"]) for r in raw.get("test", ())}
+    both, test_only = train_ids & test_ids, test_ids - train_ids
+    rows = [
+        _row("official:images:train", len(train_ids)),
+        _row("official:images:test", len(test_ids)),
+        _row("official:images:both", len(both)),
+        _row("official:images:test_only", len(test_only)),
+        _row("official:images:all", len(train_ids | test_ids)),
+        _row(
+            "official:test_rows:shared_images",
+            sum(1 for r in raw.get("test", ()) if str(r["img_id"]) in train_ids),
+        ),
+        _row(
+            "official:test_rows:test_only_images",
+            sum(1 for r in raw.get("test", ()) if str(r["img_id"]) in test_only),
+        ),
+    ]
+    train_fp = {image_of[i]: fingerprints[image_of[i]] for i in sorted(train_ids) if i in image_of}
+    test_fp = {image_of[i]: fingerprints[image_of[i]] for i in sorted(test_only) if i in image_of}
+    closest = min_distances(train_fp, test_fp)
+    for key, value in _histogram(list(closest.values()), 0, TAIL_MAX_BITS).items():
+        rows.append(_row(f"official:test_only_min_distance_to_train:{key}", value))
+    return rows
+
+
 def prepare(
     data_root: Path,
     dataset_config: Mapping[str, Any],
@@ -103,36 +198,54 @@ def prepare(
     dedup_threshold: int,
     mask_threshold: int,
 ) -> PreparedData:
-    """Run steps 1-5 and return the decisions plus the aggregate result rows."""
+    """Run steps 1-6 and return the decisions plus the aggregate result rows."""
     data_root = Path(data_root)
     reader = KvasirVQAx1(dataset_config, data_root=data_root)
     samples = reader.load()
-    train = [s for s in samples if s.split == "train"]
-    official_test = [s for s in samples if s.split == "test"]
-    halves = make_patient_splits(official_test, {"val": 0.5, "test": 0.5}, seed=split_seed)
+    images = sorted({s.image_path for s in samples})
+    fingerprints = {p: image_fingerprint(str(data_root / p)) for p in images}
+    image_group = near_duplicate_groups(fingerprints, threshold=dedup_threshold)
 
-    # near-duplicates of training images in validation / test
-    train_fp = {
-        p: image_fingerprint(str(data_root / p)) for p in sorted({s.image_path for s in train})
-    }
-    held_out = {s.image_path for half in halves.values() for s in half}
-    held_fp = {p: image_fingerprint(str(data_root / p)) for p in sorted(held_out)}
-    duplicates = {
-        c for c, _, _ in near_duplicate_pairs(train_fp, held_fp, threshold=dedup_threshold)
-    }
-    splits: dict[str, list[VQASample]] = {"train": train}
-    for name, members in halves.items():
-        splits[name] = [s for s in members if s.image_path not in duplicates]
-
-    # masks
     seg = load_kvasir_seg(data_root)
     links = link_masks(
-        sorted({s.image_path for s in samples}), seg, data_root=data_root, threshold=mask_threshold
+        images, seg, data_root=data_root, threshold=mask_threshold, fingerprints=fingerprints
     )
+    raw = {split: _raw_rows(data_root, split) for split in ("train", "test")}
+    values = image_answer_values(raw, dataset_config.get("label_mapping"))
+    image_of = {str(s.metadata["img_id"]): s.image_path for s in samples}
+    findings_of = {s.image_path: s.findings for s in samples}
+    labels: dict[str, set[str]] = {}
+    for img_id, path in image_of.items():
+        group_labels = labels.setdefault(image_group[path], set())
+        group_labels.update(f"answer:{v}" for v in values.get(img_id, ()))
+        group_labels.update(f"finding:{f}" for f, on in findings_of[path].items() if on)
+        if path in links.links:
+            group_labels.add("masked")
+    splits = make_image_disjoint_splits(
+        samples,
+        image_group,
+        {g: frozenset(v) for g, v in labels.items()},
+        split_ratios(dataset_config),
+        seed=split_seed,
+    )
+
+    split_images = {
+        name: sorted({s.image_path for s in members}) for name, members in splits.items()
+    }
+    train_fp = {p: fingerprints[p] for p in split_images["train"]}
+    closest = {
+        name: min_distances(train_fp, {p: fingerprints[p] for p in split_images[name]})
+        for name in split_images
+        if name != "train"
+    }
+    leaks = sum(1 for d in closest.values() for v in d.values() if v <= dedup_threshold)
+    if leaks:  # impossible by construction: pairs within the threshold share a group
+        raise AssertionError(f"{leaks} held-out images are near-duplicates of training images")
+
     areas = {
         img: lesion_area_fraction(load_mask(str(data_root / m))) for img, m in links.links.items()
     }
-    train_areas = [areas[p] for p in sorted({s.image_path for s in train}) if p in areas]
+    train_areas = [areas[p] for p in split_images["train"] if p in areas]
     thresholds = tuple(size_strata_thresholds(train_areas)) if len(train_areas) >= 4 else ()
     splits = {
         name: [
@@ -143,27 +256,48 @@ def prepare(
     }
 
     rows: list[dict[str, Any]] = []
+    group_size: dict[str, int] = {}
+    for path in images:
+        group_size[image_group[path]] = group_size.get(image_group[path], 0) + 1
+    multi = [g for g, n in group_size.items() if n > 1]
+    rows += [
+        _row("images:all", len(images)),
+        _row("groups:total", len(group_size)),
+        _row("groups:multi_image", len(multi)),
+        _row("groups:largest", max(group_size.values(), default=0)),
+        _row("images_in_multi_image_groups", sum(group_size[g] for g in multi)),
+        _row("grouping_threshold_bits", dedup_threshold),
+    ]
     for name, members in splits.items():
-        images = {s.image_path for s in members}
+        in_split = set(split_images[name])
         rows.append(_row(f"qa_rows:{name}", len(members)))
-        rows.append(_row(f"images:{name}", len(images)))
-        rows.append(_row(f"masked_images:{name}", len(images & set(links.links))))
+        rows.append(_row(f"images:{name}", len(in_split)))
+        rows.append(_row(f"image_fraction:{name}", len(in_split) / max(1, len(images))))
+        rows.append(_row(f"groups:{name}", len({image_group[p] for p in in_split})))
+        rows.append(_row(f"masked_images:{name}", len(in_split & set(links.links))))
         by_image: dict[str, Mapping[str, bool]] = {s.image_path: s.findings for s in members}
-        findings = sorted({f for labels in by_image.values() for f in labels})
-        for finding in findings:
-            positives = sum(1 for labels in by_image.values() if labels.get(finding))
+        for finding in sorted({f for labels_ in by_image.values() for f in labels_}):
+            positives = sum(1 for labels_ in by_image.values() if labels_.get(finding))
             rows.append(_row(f"positives:{finding}:{name}", positives))
             if name == "train" and by_image:
                 rows.append(_row(f"prevalence:{finding}", positives / len(by_image)))
-    rows.append(_row("duplicates_removed:val_test", len(duplicates)))
+        per_value: Counter[str] = Counter(
+            v for p in in_split for v in values.get(str(Path(p).stem), ())
+        )
+        for value, count in sorted(per_value.items()):
+            rows.append(_row(f"answer_count:{value}:{name}", count))
+    rows.append(_row("val_test_near_duplicates_of_train", leaks))
+    for name, distances in closest.items():
+        hist = _histogram(list(distances.values()), dedup_threshold + 1, TAIL_MAX_BITS)
+        for key, value in hist.items():
+            rows.append(_row(f"min_distance_to_train:{name}:{key}", value))
     rows.append(_row("masks:linked", len(links.links)))
     rows.append(_row("masks:ambiguous", len(links.ambiguous)))
     rows.append(_row("masks:unmatched", links.unmatched_masks))
     for k, value in enumerate(thresholds, start=1):
         rows.append(_row(f"lesion_area_threshold:q{k}", value))
-    raw = {split: _raw_rows(data_root, split) for split in ("train", "test")}
-    # answer lengths in words (aggregate only); they set the teacher cache generation limit
-    words = sorted(len(str(r.get("answer", "")).split()) for r in raw["train"])
+    # answer lengths in words, on the training split (they set the generation limit, D04)
+    words = sorted(len(str(s.answer).split()) for s in splits["train"])
     if words:
         for pct in (50, 90, 99):
             rows.append(
@@ -172,9 +306,10 @@ def prepare(
         rows.append(_row("answer_words:max", words[-1]))
     for key, count in sorted(answer_value_counts(raw, dataset_config.get("label_mapping")).items()):
         rows.append(_row(f"answer_count:{key}", count))
+    rows += official_split_rows(raw, fingerprints, image_of)
     return PreparedData(
         splits=splits,
-        excluded=tuple(sorted(duplicates)),
+        excluded=(),
         mask_links=dict(links.links),
         thresholds=thresholds,
         rows=tuple(rows),

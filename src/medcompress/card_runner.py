@@ -13,6 +13,7 @@ optional; any other failure stops it. What finished before is kept and reported.
 from __future__ import annotations
 
 import csv
+import json
 import os
 import shutil
 import subprocess
@@ -220,6 +221,18 @@ def export_handoffs(session: Session, config: Mapping[str, Any]) -> None:
             f"{handoff.name}: {made.root} ({len(made.files)} files, {size / 1e9:.2f} GB); "
             "make it a private dataset"
         )
+
+
+def report_step_handoffs(session: Session) -> None:
+    """List hand-off folders a step wrote itself (RC-TT1's teacher adapter), with their manifest."""
+    listed = " ".join(session.handoffs)
+    for manifest in sorted((session.out / "handoff").glob("*/" + bundles.MANIFEST_NAME)):
+        folder = manifest.parent
+        if folder.name not in listed:
+            files = len(json.loads(manifest.read_text(encoding="utf-8")).get("files") or ())
+            session.handoffs.append(
+                f"{folder.name}: {folder} ({files} files); make it a private dataset"
+            )
 
 
 def collect_results(session: Session, repo: Path) -> None:

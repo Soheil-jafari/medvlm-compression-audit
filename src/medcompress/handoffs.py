@@ -3,6 +3,7 @@
 A run that a later run builds on writes its output under a path root (``paths`` in
 ``configs/base.yaml``); :func:`handoff_items` names it, by kind:
 
+* ``teacher_adapter``: ``checkpoint_root/E0/teacher_adapter`` (RC-TT1, our teacher's LoRA);
 * ``teacher_cache``: ``cache_root/teacher`` (RC-E0b, stage 01);
 * ``adapter``: ``checkpoint_root/<tag>/seed<k>/adapter`` (RC-E1, RC-E2, stage 02);
 * ``pruned``: ``checkpoint_root/<tag>/<budget>/seed<k>/pruned`` (E5-E8, A1-A6, stage 05);
@@ -54,6 +55,8 @@ def handoff_items(
         raise ConfigError(f"unknown hand-off kind {kind!r}; use one of {HANDOFF_KINDS}")
     if kind == "teacher_cache":
         return [("cache_root", "teacher")]
+    if kind == "teacher_adapter":  # RC-TT1; the teacher config points at this folder
+        return [("checkpoint_root", "E0/teacher_adapter")]
     if run is None:
         raise ConfigError(f"a {kind} hand-off belongs to a run: give --exp and --seed")
     paths = config["paths"]

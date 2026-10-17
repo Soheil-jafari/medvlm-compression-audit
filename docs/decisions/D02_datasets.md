@@ -113,6 +113,42 @@ landmarks are kept as **control** questions, not findings.
 - `docs/data_cards/` for each chosen dataset.
 - S03 tasks (readers, fingerprint matching of Kvasir-SEG, splits) and run card RC-D1.
 
+## Amendment (2026-10-18, Soheil): image-disjoint re-split of all images
+
+**Why.** RC-D1 run 1 showed that the official Kvasir-VQA-x1 split is by question, not by image.
+- Images: train 6,212; test 4,058; in both 3,821; test only 237; all 6,449.
+- Test rows: 15,718 of the 15,955 are on images that are also in train.
+- The dataset paper (arXiv 2506.09958, section 2.3) says so: "Each image-question pair is
+  assigned to either the training or test set".
+- The test-only images are close to training images too. Smallest dHash distance (bits) to a
+  training image, with the number of images: 0: 43, 1: 43, 2: 43, 3: 21, 4: 18, 5: 14, 6: 14,
+  7: 10, 8: 5, 9: 7, 10: 5, 11: 1, 12: 6, 13: 1, 14: 4, 15: 1, 17: 1.
+
+Halving the official test split (Q1 = A) therefore left 39 validation and 30 test images after
+deduplication, and none with a Kvasir-SEG mask.
+
+**Decision.** This replaces Q1 = A.
+1. All 6,449 images are re-split, with the questions of both official splits, by image: train /
+   validation / test = 70 / 15 / 15 % of the images, seed 20261012.
+2. Near-duplicate images (dHash distance <= 4 bits, transitive, union-find) are grouped first,
+   and whole groups are assigned.
+3. The assignment is stratified, so that every finding with positives and the Kvasir-SEG-linked
+   images are in validation and test in proportion. The method is a group version of iterative
+   stratification (`data/splits.py: assign_groups_stratified`, CPU-tested):
+   - labels are the answer values of the finding question, and "has a mask";
+   - the labels are taken from the rarest to the most common, and one group goes to each split
+     first where a label has three groups or more;
+   - the rest of a label's groups go to the split furthest below its share;
+   - unlabelled groups fill the image targets.
+4. RC-D1 checks that no validation or test image is within 4 bits of a training image (zero by
+   construction). It reports the distances from 5 to 17 bits as a data-card number, not a
+   filter.
+5. The official split is kept only for the data card and the appendix item of D01: the
+   published adapter has seen these images.
+
+Applied in `data/prepare.py`, `data/splits.py`, `data/dedup.py`,
+`configs/data/kvasir_vqa_x1.yaml` (`split_ratios`) and run card RC-D1 (run 2).
+
 ## Answer format for the inbox
 
 `- YYYY-MM-DD (name): D02 decided: Q1 <A|B>, Q2 <match|probes>, Q3 <EndoBench|ColonEval|none>, Q4 <x1 only|add ColonVQA>, Q5 <later|drop>.`

@@ -169,3 +169,41 @@ def overlap_rows(
          "value": len(candidates) - len(hit_any)}
     )  # fmt: skip
     return rows
+
+
+def near_duplicate_groups(fingerprints: Mapping[str, str], *, threshold: int) -> dict[str, str]:
+    """Group images whose fingerprints are within ``threshold`` bits, transitively.
+
+    Union-find over every pair within the threshold: if a~b and b~c, then a, b and c share one
+    group even when a and c are farther apart. Returns ``{image: group id}``; the group id is
+    the smallest image key of the group, so the result does not depend on input order.
+    Used by the image-disjoint re-split (D02 amendment 2026-10-18): whole groups go to one split.
+    """
+    keys = sorted(fingerprints)
+    parent = list(range(len(keys)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    values = _to_uint64([fingerprints[k] for k in keys])
+    for i in range(len(keys) - 1):
+        distances = _popcount(values[i + 1 :] ^ values[i])
+        for offset in np.nonzero(distances <= threshold)[0]:
+            a, b = find(i), find(i + 1 + int(offset))
+            if a != b:
+                parent[max(a, b)] = min(a, b)  # the root is the smallest index: the smallest key
+    return {key: keys[find(i)] for i, key in enumerate(keys)}
+
+
+def min_distances(reference: Mapping[str, str], candidates: Mapping[str, str]) -> dict[str, int]:
+    """For each candidate image, the smallest Hamming distance to any reference image."""
+    if not reference:
+        return {key: HASH_BITS for key in candidates}
+    ref = _to_uint64(list(reference.values()))
+    return {
+        key: int(_popcount(ref ^ np.uint64(int(fingerprint, 16))).min())
+        for key, fingerprint in candidates.items()
+    }

@@ -32,7 +32,7 @@ from those cards' wall times when it sets this card to `ready`.
 
 - **Who:** Soheil.
 - **Kaggle settings:** GPU T4 x2 (both T4s); Internet on.
-- **Attach (Add Input), all private datasets:** the shared data of RC-D1; E1 seed0 adapter; E1 seed<k> adapter; E1 seed2 adapter; E2 seed0 adapter; E2 seed<k> adapter; E2 seed2 adapter.
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher adapter; E1 seed0 adapter; E1 seed<k> adapter; E1 seed2 adapter; E2 seed0 adapter; E2 seed<k> adapter; E2 seed2 adapter.
 - **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
 - **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-R1"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-R1 --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off> ...`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
   - test evaluation E0 seed0
