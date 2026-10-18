@@ -22,7 +22,9 @@
 
 ## 2. Requirements
 
-- RC-D1 run 2 done: the shared-data dataset (image-disjoint split) attached.
+- RC-D1 **run 3** done: its shared-data dataset (image-disjoint split with the two-stage
+  near-duplicate grouping, D02 amendment 2) attached. Not run 2's: its 4-bit groups missed
+  adjacent frames, so its validation and test images have copies in its training split.
 - RC-TT0 done, and its `results/smoke/RC-TT0/teacher_training.csv` committed.
 - Platform: Kaggle notebook, **GPU T4 x2** (setup b uses one of them), Internet **on** (model
   download).
@@ -52,7 +54,7 @@
 
 - **Who:** Soheil.
 - **Kaggle settings:** GPU T4 x2; Internet on.
-- **Attach (Add Input), all private datasets:** the shared data of RC-D1. To resume, also the
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1 run 3. To resume, also the
   output of the stopped notebook version. For `--extend`, also the teacher adapter hand-off.
 - **Checks before anything runs:** `--data-root /kaggle/input/<shared-data>` is verified
   (the SHA-256 of every file), and the run stops if a file differs. The plan is read from

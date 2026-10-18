@@ -1,7 +1,7 @@
 # Data card: Kvasir-VQA-x1 (with Kvasir-VQA images and Kvasir-SEG masks)
 
 > No images, no patient identifiers, no per-image rows. Counts marked **[RC-D1]** come from
-> `results/data/summary.csv` once RC-D1 run 2 is committed.
+> `results/data/summary.csv` once RC-D1 run 3 is committed.
 
 | Field | Value |
 |---|---|
@@ -37,23 +37,50 @@ or test set". RC-D1 run 1 (2026-10-16/17) counted:
   image-disjoint test split. Hence the image-disjoint re-split (D02 amendment) and our own
   teacher adapter (D01 amendment), both 2026-10-18.
 
-RC-D1 run 2 writes these numbers again from the code (`official:*` rows in `summary.csv`).
+RC-D1 run 3 writes these numbers again from the code (`official:*` rows in `summary.csv`).
 The appendix item reports them next to the published adapter's test results.
 
-## Our splits (RC-D1 run 2)
+## Our splits (RC-D1 run 3)
 
+- **Why two stages (D02 amendment 2).** RC-D1 run 2 grouped images within 4 dHash bits only.
+  A look at the pairs showed that this misses real duplicates: at 5-6 bits, 3 of 8 pairs were
+  the same scene, and at 7-8 bits, 2 to 3 of 8. At 9-12 bits, 0 of 4 were; those pairs looked
+  alike only at 9 x 8 pixels (colour, lumen position, and the text and green box drawn on the
+  image). 1,038 of run 2's 1,931 validation and test images had a training image within 8
+  bits. A larger dHash threshold alone would chain unrelated images.
 - **Method:**
-  1. Every image of both official splits is fingerprinted (dHash).
-  2. Images within 4 bits are grouped transitively (union-find).
-  3. Whole groups are assigned to train / validation / test = 70 / 15 / 15 % of the images,
+  1. Every image of both official splits is fingerprinted (dHash, 64 bits).
+  2. Candidates: pairs within 12 bits.
+  3. Confirmation on the centre of the image: the central 60 % of width and height, grey-scale,
+     32 x 32 pixels, with a Gaussian blur (4 px) subtracted; the measure is the highest Pearson
+     correlation over shifts of up to 3 px (5.6 % of the side). Pairs at or above the
+     threshold **[RC-D1 calibration]** `min_correlation` are joined. The threshold is chosen
+     on the data before the split, from the distribution over all candidate pairs and a
+     contact sheet checked by eye (RC-D1 section 3a).
+  4. Pairs within 4 bits are always joined; union-find over all joined pairs gives the groups.
+     The run stops if one group holds more than 5 % of the images (chaining guard).
+  5. Whole groups are assigned to train / validation / test = 70 / 15 / 15 % of the images,
      seed 20261012, stratified by the answer values of the finding question and by the
      Kvasir-SEG mask (`data/splits.py: assign_groups_stratified`).
 - **Images and QA rows per split:** **[RC-D1]** `images:<split>`, `qa_rows:<split>`,
   `image_fraction:<split>`.
-- **Groups:** **[RC-D1]** `groups:total`, `groups:multi_image`, `groups:largest`.
+- **Groups:** **[RC-D1]** `groups:total`, `groups:multi_image`, `groups:largest`,
+  `groups:largest_fraction`, `groups:size:*`; pairs **[RC-D1]**
+  `near_duplicates:joined_pairs:always` and `:confirmed`.
 - **Near-duplicates of training images in validation and test:** 0 by construction
-  (**[RC-D1]** `val_test_near_duplicates_of_train`). Distances just above the threshold:
-  **[RC-D1]** `min_distance_to_train:<split>:5` ... `:17`. These are reported, not filtered.
+  (**[RC-D1]** `val_test_near_duplicates_of_train`, `val_test_confirmed_duplicates_of_train`).
+  Reported, not filtered: the dHash distances above 4 bits (**[RC-D1]**
+  `min_distance_to_train:<split>:5` ... `:17`), each held-out image's highest crop correlation
+  with a training image (**[RC-D1]** `max_score_to_train:<split>:*`), and the held-out images
+  whose crop correlation with a training image beyond 12 bits reaches the threshold
+  (**[RC-D1]** `similar_to_train_beyond_candidates:<split>`). The 24 most similar pairs across
+  splits are checked by eye on a contact sheet (kept private).
+- **Limitation: no patient identifiers.** HyperKvasir, the source of the Kvasir-VQA images, has
+  no patient IDs, only image IDs. The grouping joins identical images and adjacent frames of
+  one scene, but images of the same patient taken at different moments (another part of the
+  bowel, another angle) can still fall into different splits. Validation and
+  test are therefore image-disjoint and near-duplicate-disjoint, **not patient-disjoint**, and
+  results on them may be optimistic by an unknown amount.
 - **Kvasir-SEG masks per split:** **[RC-D1]** `masked_images:<split>`; links
   `masks:linked/ambiguous/unmatched`.
 - **Split hash:** **[RC-D1]** `split_sha256` (printed by `prepare_data.py bundle`).

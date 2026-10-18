@@ -149,6 +149,78 @@ deduplication, and none with a Kvasir-SEG mask.
 Applied in `data/prepare.py`, `data/splits.py`, `data/dedup.py`,
 `configs/data/kvasir_vqa_x1.yaml` (`split_ratios`) and run card RC-D1 (run 2).
 
+## Amendment 2 (2026-10-18, Soheil): two-stage near-duplicate detection
+
+Decided before any model result, from RC-D1 run 2 (4-bit grouping; split_sha256
+`024f4abf05a81dffaa1c2b120e3e7bb99456b03fd248ddb6419284a8cf57fde9`; nothing committed):
+- Images 4,518 / 965 / 966 (70.06 / 14.96 / 14.98 %); QA rows 112,370 / 24,379 / 22,458;
+  masked images 710 / 152 / 148.
+- Groups: 4,457 in all, 398 with more than one image, the largest 255 images; 2,390 images in
+  multi-image groups. No held-out image within 4 bits of a training image.
+- Smallest dHash distance to a training image (bits: images): validation 5: 119, 6: 126, 7: 148,
+  8: 169, 9: 136, 10: 100, 11: 60, 12: 41, 13: 29, 14: 13, 15: 16, 16: 6, 17: 2; test 5: 99,
+  6: 113, 7: 138, 8: 126, 9: 168, 10: 121, 11: 82, 12: 56, 13: 30, 14: 15, 15: 13, 16: 4,
+  18 or more: 1.
+- Visual check: random pairs have a median distance of 26 bits and a 5th percentile of 17;
+  1,038 of the 1,931 validation and test images have a training image within 8 bits. At 5-6
+  bits, 3 of 8 pairs were the same scene; at 7-8 bits, 2 to 3 of 8; at 9-12 bits, 0 of 4; random
+  controls 0 of 4. The other pairs looked alike only at 9 x 8 pixels: colour, lumen position, and
+  the overlays (text at the top left, a green box at the bottom left).
+
+So the 4-bit rule misses real duplicates, and a larger dHash threshold alone would chain
+unrelated images.
+
+**Decision.** Two stages, then group, then split exactly as in the first amendment.
+1. Candidates: pairs within 12 bits of the 64-bit dHash.
+2. Confirmation with a finer measure that ignores borders and overlays:
+   - the central 60 % of the width and of the height (20 % cut from each side), grey-scale,
+     resized by area average to 32 x 32 pixels, with a Gaussian blur of 4 px (at 32)
+     subtracted, so the measure follows the mucosa's detail rather than the lighting and the
+     lumen position;
+   - the measure: the highest Pearson correlation between the crop of one image and the other
+     image shifted by up to 3 px (5.6 % of the side) in each direction, both ways round;
+   - the threshold `min_correlation` is calibrated on the data by `prepare_data.py calibrate`
+     (RC-D1 section 3a, CPU): the distribution over all candidate pairs, what each threshold
+     from 0.30 to 0.95 gives, and a contact sheet of the pairs just above and below the
+     proposed value plus random controls. It is chosen so that identical scenes and adjacent
+     frames are joined and different scenes are not; the value and the reason are recorded
+     here before run 3. **Open until the calibration step has run.**
+3. Union-find over the confirmed pairs plus every pair within 4 bits; whole groups to 70 / 15 /
+   15 %, the same stratification, seed 20261012.
+4. Safety checks in `summary.csv`: the number and sizes of the groups and the largest group;
+   the run STOPS and reports if the largest group holds more than 5 % of all images (322 of
+   6,449; a group of one or two images cannot chain, so only groups of three or more count,
+   which matters only for tiny test sets); the validation and test images with a confirmed
+   duplicate in train (must be 0); the new tail. Also reported, not filtered: each held-out
+   image's highest crop correlation with a training image, and how many reach the threshold
+   with a training image beyond 12 bits (what the candidate stage cannot see).
+5. After the split, a final contact sheet of the 24 most similar cross-split pairs by the
+   crop measure (a PNG, private, never committed), attached to the run report.
+6. Data card limitation: HyperKvasir has no patient IDs, so images of the same patient at
+   different moments can still fall into different splits.
+
+The crop fraction, the size, the blur and the shift are the agent's choice within this
+decision:
+- 60 % is the lower end of the decided 60-70 %, to keep the text and the green box out; the
+  contact sheets draw the crop so the runner can check it;
+- the blur removes what made unrelated images look alike at 9 x 8;
+- the shifts let adjacent frames match.
+
+On synthetic test images (`tests/test_near_duplicates.py`), identical, re-encoded, brighter
+and 3 %-shifted copies score above 0.95, different images below 0.6, and overlays outside the
+crop do not change the score. Scores on the real images are unknown until the calibration step.
+
+The calibration step's provisional proposal is the smallest grid value that passes the guard
+and that at most 0.1 % of 2,000 random pairs beyond 12 bits reach. It is a starting point to
+check on the contact sheet, not the decision.
+
+Applied in `data/dedup.py` (`two_stage_groups`, `crop_similarity`), `data/prepare.py`
+(`prepare`, `calibrate`), `data/contact_sheet.py`, `scripts/prepare_data.py` (`calibrate`,
+exit code 7 for the guard), `configs/data/kvasir_vqa_x1.yaml` (`near_duplicates`) and run card
+RC-D1 (calibration step, run 3).
+
+Chosen threshold (filled after the calibration step): `min_correlation` = TODO; reason: TODO.
+
 ## Answer format for the inbox
 
 `- YYYY-MM-DD (name): D02 decided: Q1 <A|B>, Q2 <match|probes>, Q3 <EndoBench|ColonEval|none>, Q4 <x1 only|add ColonVQA>, Q5 <later|drop>.`

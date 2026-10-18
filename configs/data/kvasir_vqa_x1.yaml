@@ -46,4 +46,4 @@ dataset:
         mode: multi_label
         values: {}                        # answer value -> finding id, e.g. "polyp": polyp
         none_values: ["none", "no"]
-  notes: "Teacher LoRA was trained on the train file (D01), so validation comes from the official test split."
+  notes: "D02 amendments of 2026-10-18: the official split is by question, so all images are re-split by image (splits_used), with two-stage near-duplicate groups (near_duplicates)."

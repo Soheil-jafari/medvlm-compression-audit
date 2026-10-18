@@ -66,7 +66,9 @@ Example: `- 2026-10-20 (Soheil): D01 decided: endoscopy, Qwen2.5-VL-7B -> 3B. Lo
 
   **Need the RC-D1 counts** (placeholders until `summary.csv` is in)
   - A1. Finding list C: findings that pass rule 2. Depends on: `positives:<f>:train/val/test`
-    [RC-D1 pass 2].
+    [RC-D1 pass 2]. For the record (no action): in run 2's split, the rarest answer values had
+    these image counts (train / validation / test): barretts 15 / 4 / 3, short-segment barretts
+    8 / 4 / 1, hemorrhoids 1 / 0 / 0. Run 3's counts replace them.
   - A2. Display names. Depends on: the answer values as written (`answer_count:*`, pass 1).
   - A3. Prevalence per finding. Depends on: `prevalence:<f>` [RC-D1 pass 2].
   - A4. Common and rare groups. Depends on: A3 and rule 3.
@@ -76,8 +78,9 @@ Example: `- 2026-10-20 (Soheil): D01 decided: endoscopy, Qwen2.5-VL-7B -> 3B. Lo
   - A7. Tier of each finding. Depends on: A1 and rule 6.
   - A8. `max_new_tokens` = ceil(1.5 x p99 answer words) + 8, the same value in three configs.
     Depends on: `answer_words:p99` [RC-D1 pass 1]. Needed before RC-E0b.
-  - A9. Data facts in the document. Depends on: `duplicates_removed:val_test`,
-    `masks:linked/ambiguous/unmatched` and the printed `split_sha256` [RC-D1].
+  - A9. Data facts in the document. Depends on: the group rows (`groups:*`,
+    `val_test_confirmed_duplicates_of_train`), `masks:linked/ambiguous/unmatched` and the printed
+    `split_sha256` [RC-D1 run 3]; and the chosen `min_correlation` [RC-D1 calibration].
   - A10. Enough masked validation images for Gate 1's interval (a check). Depends on:
     `masked_images:val` [RC-D1].
   - Before pass 2: the label values of the abnormality question
@@ -96,6 +99,8 @@ Example: `- 2026-10-20 (Soheil): D01 decided: endoscopy, Qwen2.5-VL-7B -> 3B. Lo
 ## Handled
 
 <!-- - YYYY-MM-DD (name): note -> iteration N, what was done -->
+- 2026-10-18 (Soheil, in the session): RC-D1 run 2 result; D02 amendment 2 (two-stage near-duplicate detection, calibration step, run 3) -> iteration 52, code, tests, RC-D1, RC-TT0, RC-TT1, data card, D02, log, pre-registration.
+- 2026-10-18 (Soheil, in the session): RC-D1 run 1 findings; D02 and D01 amendments, rule 3, the appendix item -> iteration 51.
 - 2026-10-17 (Soheil, in the session): decisions on the image side (672), G2 (0.10), the D06 amendment (1 x 16, no gradient checkpointing), the GPU budget (90 h per week, 30 per person), RC-D1 owner (Soheil); Tasks 1-5 (shared data, hand-offs, unattended runs, work split and schedule, freeze list) -> iteration 50.
 - 2026-10-16 (Soheil, in the session): RC-S0 proposals answered: data_subset 10,000 accepted; image side not decided (RC-S0b first); training-length check added (30,000, E2 and E7 at B2, seed 0); G2 unchanged -> iteration 48, configs, D05, D06, pre-registration, RC-S0b, RC-L1 and the log.
 - 2026-10-12 (Soheil): D08 answered in the session (GPTQ 4/8 + LLM.int8, E4 option B, 128 calibration images, keep w8a8) -> iteration 37, D08, decisions log and quantization configs.
