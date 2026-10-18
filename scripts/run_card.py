@@ -73,7 +73,7 @@ def _environment(session: Session) -> list[str]:
         parse_requirements(requirements), quantization=plan.quantization
     )
     session.environment.insert(0, f"python {sys.version.split()[0]}")
-    if plan.card == "RC-D1":  # the export step downloads with the datasets package
+    if any("export" in step.argv for step in plan.steps):  # it downloads with `datasets`
         from medcompress.utils.kaggle import installed_version
 
         if installed_version("datasets") is None:

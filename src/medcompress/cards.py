@@ -32,10 +32,13 @@ ABLATION_VARIANTS: dict[str, tuple[str | None, ...]] = {
 RC_D1_SETTINGS: tuple[str, ...] = (
     "--split-seed", "20261012", "--dedup-threshold", "4", "--mask-threshold", "4",
 )  # fmt: skip
-"""RC-D1's pre-registered settings (card section 2)."""
+"""RC-D1's pre-registered settings (card section 2). The crop settings and the confirmation
+threshold of D02 amendment 2 are in ``configs/data/kvasir_vqa_x1.yaml`` (``near_duplicates``)."""
 REFERENCE_FILE = "results/E2/nobudget/seed0/efficiency.csv"
 SHARED_DATA_DIR = "medcompress_data"
 """Folder under ``--out`` where RC-D1 writes the shared data (``data/`` + ``private/``)."""
+SHEET_DIR = "rc_d1_sheets"
+"""Folder under ``--out`` for the contact sheets (private outputs, never committed)."""
 
 
 class CardError(ValueError):
@@ -237,6 +240,7 @@ def build_plan(
             "from medcompress.utils.kaggle import copy_kvasir_seg; "
             f"copy_kvasir_seg(Path({str(kvasir_seg)!r}), Path({str(shared / 'data')!r}))",
         )
+        sheets = ("--sheet-dir", str(Path(out) / SHEET_DIR))
         return CardPlan(
             card, "Data preparation, first pass", 0,
             (
@@ -245,14 +249,50 @@ def build_plan(
                 Step(
                     "prepare",
                     _script("prepare_data.py", "prepare", "--data-root", str(shared / "data"),
-                            "--private-dir", str(shared / "private"), *settings),
+                            "--private-dir", str(shared / "private"), *settings, *sheets),
                     inputs=False,
                 ),
                 Step("bundle", _script("prepare_data.py", "bundle", *bundle_dir), inputs=False),
                 Step("verify", _script("prepare_data.py", "verify", *whole), inputs=False),
             ),
             internet=True,
-            notes=(f"upload {shared} as ONE private Kaggle dataset (card section 4)",),
+            notes=(f"upload {shared} as ONE private Kaggle dataset (card section 4)",
+                   f"attach {Path(out) / SHEET_DIR / 'rc_d1_final_cross_split_pairs.png'} to "
+                   "the report; never commit it"),
+        )  # fmt: skip
+    if card == "RC-D1-CALIBRATE":
+        _no_seed(card, seed)
+        sheets = ("--sheet-dir", str(Path(out) / SHEET_DIR))
+        steps: list[Step] = []
+        exporting = data_root is None
+        if data_root is None:  # no shared data attached: export the images first
+            data_root = Path(out) / SHARED_DATA_DIR / "data"
+            steps.append(
+                Step(
+                    "export",
+                    _script("prepare_data.py", "export", "--data-root", str(data_root)),
+                    inputs=False,
+                )
+            )
+        steps.append(
+            Step(
+                "calibrate",
+                _script(
+                    "prepare_data.py",
+                    "calibrate",
+                    "--data-root",
+                    str(data_root),
+                    *RC_D1_SETTINGS[:4],
+                    *sheets,
+                ),
+                inputs=False,
+            )
+        )
+        return CardPlan(
+            "RC-D1-calibrate", "Near-duplicate calibration (before the split)", 0, tuple(steps),
+            internet=exporting,
+            notes=("paste the printed distribution back, with "
+                   f"{Path(out) / SHEET_DIR / 'rc_d1_calibration_pairs.png'}; never commit it",),
         )  # fmt: skip
     if card == "RC-D1-COUNTS":
         _no_seed(card, seed)
@@ -439,15 +479,16 @@ def build_plan(
 
 
 RUNNABLE_CARDS: tuple[str, ...] = (
-    "RC-D1", "RC-D1-counts", "RC-E0a", "RC-E0b", "RC-E1", "RC-E2", "RC-B0", "RC-E3", "RC-E4",
-    "RC-E9", "RC-G2", "RC-E5", "RC-E6", "RC-E7", "RC-E8", "RC-A1", "RC-A2", "RC-A3", "RC-A4",
-    "RC-A5", "RC-A6", "RC-R1", "RC-C1", "RC-X1", "RC-TT0", "RC-TT1",
+    "RC-D1-calibrate", "RC-D1", "RC-D1-counts", "RC-E0a", "RC-E0b", "RC-E1", "RC-E2", "RC-B0",
+    "RC-E3", "RC-E4", "RC-E9", "RC-G2", "RC-E5", "RC-E6", "RC-E7", "RC-E8", "RC-A1", "RC-A2",
+    "RC-A3", "RC-A4", "RC-A5", "RC-A6", "RC-R1", "RC-C1", "RC-X1", "RC-TT0", "RC-TT1",
 )  # fmt: skip
 
 
 def card_file(card: str, runs_dir: Path) -> Path:
-    """The markdown card of ``card`` (``RC-D1-counts`` is part of RC-D1)."""
-    base = card.split("-COUNTS")[0].split("-counts")[0]
+    """The markdown card of ``card`` (``RC-D1-calibrate`` and ``RC-D1-counts`` are part of
+    RC-D1)."""
+    base = "RC-D1" if card.upper().startswith("RC-D1") else card
     matches = sorted(Path(runs_dir).glob(f"{base}_*.md"))
     if len(matches) != 1:
         raise CardError(f"no single card file for {card} in {runs_dir}")
