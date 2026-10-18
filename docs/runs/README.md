@@ -16,10 +16,10 @@ set up an account: `docs/team_setup.md`. Who runs what, week by week: `docs/sche
 
 | Card | Stage | What | Who | Status |
 |---|---|---|---|---|
-| [RC-D1](RC-D1_data_preparation.md) | S03 | Data preparation: download, image-disjoint re-split of all images (70/15/15 by near-duplicate group), mask links, aggregate counts, the shared-data dataset; pass 2 recounts after the label values | Soheil | **ready (run 2)**; run 1 used the old split |
+| [RC-D1](RC-D1_data_preparation.md) | S03 | Data preparation: download, image-disjoint re-split of all images (70/15/15 by near-duplicate group), mask links, aggregate counts, the shared-data dataset; pass 2 recounts after the label values | Soheil | **ready: the calibration step (RC-D1-calibrate), then run 3** (two-stage near-duplicate grouping, D02 amendment 2); runs 1 and 2 not used |
 | [RC-M1](RC-M1_model_smoke_test.md) | S04 | GPU smoke test: load pair, score probes, remove one layer | Soheil | done 2026-10-15 |
-| [RC-TT0](RC-TT0_teacher_feasibility.md) | S05 | Our teacher: feasibility of one LoRA step of the 7B (fp16 on 2 x T4, QLoRA on 1 x T4), then rule 3 (setup and N) | Soheil | **ready** |
-| [RC-TT1](RC-TT1_teacher_training.md) | S05 | Our teacher: LoRA training on our training split (resumable), hand-off, validation | Soheil | ready (needs RC-D1 run 2 and RC-TT0's result file) |
+| [RC-TT0](RC-TT0_teacher_feasibility.md) | S05 | Our teacher: feasibility of one LoRA step of the 7B (fp16 on 2 x T4, QLoRA on 1 x T4), then rule 3 (setup and N) | Soheil | **ready** (synthetic images; does not wait for RC-D1) |
+| [RC-TT1](RC-TT1_teacher_training.md) | S05 | Our teacher: LoRA training on our training split (resumable), hand-off, validation | Soheil | ready (needs RC-D1 run 3 and RC-TT0's result file) |
 | [RC-E0a](RC-E0a_gate1_teacher_image_reliance.md) | S05 | Gate 1: teacher image-reliance checks (validation), with our teacher adapter | Soheil | blocked (RC-TT1, RC-D1 both passes, finding list; image side and RC-M1 met) |
 | [RC-E0b](RC-E0b_teacher_cache_and_E0_evaluation.md) | S05 | Teacher cache (train; its first 100 answers are timed) and E0 validation metrics, with our teacher adapter | Soheil | blocked (RC-TT1, Gate 1 verdict, RC-D1, open settings; image side met) |
 | [RC-S0](RC-S0_student_feasibility.md) | S05b | Student checks: feasibility of Qwen2.5-VL-3B and the fallback Qwen3-VL-2B on one T4 | Soheil | done 2026-10-16 (both pass G1) |

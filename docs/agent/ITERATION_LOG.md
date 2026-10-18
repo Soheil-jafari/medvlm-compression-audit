@@ -1062,3 +1062,32 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: Task E (pre-registration wording, data card), then RC-D1 run 2's counts.
 - Needs the team: RC-D1 run 2, RC-TT0, RC-TT1 (Soheil, tonight); the T4 x2 quota rule.
+
+## Iteration 52: 2026-10-18 (interactive)
+- Stage / item: S03, D02 amendment 2 (from RC-D1 run 2: the 4-bit dHash groups missed adjacent
+  frames; a larger dHash threshold alone would chain unrelated images).
+- Did:
+  - **Two stages** in `data/dedup.py`: candidates within 12 bits; a crop signature (the central
+    60 %, grey, 32 x 32 by area average, a 4 px Gaussian blur subtracted); the measure is the
+    highest Pearson correlation over shifts of up to 3 px, both ways round; union-find over the
+    confirmed pairs and the pairs within 4 bits; the chaining guard (STOP above 5 % of the
+    images, groups of three or more). A matrix version scores every cross-split pair.
+  - **`prepare`** uses them; new rows: group sizes, the settings, the pairs of each stage, the
+    confirmed duplicates across splits (must be 0), the crop-correlation tail, the held-out
+    images that match a training image beyond 12 bits, the 24 closest cross-split pairs. The
+    threshold is read from `near_duplicates.min_correlation` (open: exit code 4) or
+    `--confirm-threshold`; the guard exits with code 7.
+  - **`prepare_data.py calibrate`**: the distribution over all candidate pairs by dHash band,
+    2,000 random controls beyond 12 bits, a threshold table (0.30 to 0.95) with the guard, a
+    provisional proposal, a contact sheet (private PNG) and aggregate rows. Runner card
+    `RC-D1-calibrate` (with run 2's shared data, or after an export).
+  - RC-D1 card: the calibration step, run 3, what to paste back, run 2 recorded. RC-TT0: does
+    not wait for RC-D1. RC-TT1, RC-E0a, RC-E0b: RC-D1 run 3. Data card: the method and the
+    no-patient-ID limitation. D02, decisions log, pre-registration, schedule, queue, inbox.
+  - CPU tests on synthetic images: candidates; identical, re-encoded, brighter and shifted
+    copies joined; different images not; overlays ignored; the guard; determinism and
+    symmetry; the calibration and the final sheet; the runner plans.
+- Verified: ruff check, ruff format, pytest on CPU.
+- Commit: see `git log` on `research-loop`.
+- Next: choose `min_correlation` from the calibration printout and sheet; then RC-D1 run 3.
+- Needs the team: the calibration step and run 3 (Soheil); RC-TT0 can run now.

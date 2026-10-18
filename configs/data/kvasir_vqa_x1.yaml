@@ -21,9 +21,22 @@ dataset:
     val: 15 % of the images
     test: 15 % of the images
   split_ratios: {train: 0.70, val: 0.15, test: 0.15}   # fractions of images; groups of near-
-                                          # duplicates (dHash <= 4 bits, transitive) go whole,
-                                          # stratified by finding answer and by Kvasir-SEG mask;
-                                          # seed seeds.data_split (data/prepare.py)
+                                          # duplicates (near_duplicates below, transitive) go
+                                          # whole, stratified by finding answer and by
+                                          # Kvasir-SEG mask; seed seeds.data_split (data/prepare.py)
+  near_duplicates:                        # D02 amendment 2 (2026-10-18), before any model result.
+                                          # Pairs within --dedup-threshold (4) bits are always one
+                                          # group, as in run 2. Pairs within candidate_bits are one
+                                          # group when their crop correlation is >= min_correlation
+    candidate_bits: 12                    # 64-bit dHash distance of the candidate pairs
+    crop_fraction: 0.60                   # the central 60 % of width and of height (20 % cut per
+                                          # side: the text, the green box, the black border)
+    crop_side: 32                         # grey-scale, area-averaged to 32 x 32 pixels
+    crop_highpass_sigma: 4.0              # a Gaussian blur of 4 px (at 32) is subtracted
+    crop_max_shift: 3                     # px at 32 (5.6 % of the image side), in each direction
+    min_correlation: TODO                 # highest Pearson correlation over the shifts; chosen
+                                          # from `prepare_data.py calibrate` (RC-D1 section 3a)
+    max_group_fraction: 0.05              # chaining guard: STOP if one group holds more images
   official_split_note: "by question, not by image: 3,821 of the 4,058 official test images are training images (RC-D1 run 1); used only for the data card and the appendix item"
   label_mapping:                          # per-image finding labels from the source Kvasir-VQA questions
     status: TODO                          # values filled from the RC-D1 answer counts, then pre-registered
@@ -33,4 +46,4 @@ dataset:
         mode: multi_label
         values: {}                        # answer value -> finding id, e.g. "polyp": polyp
         none_values: ["none", "no"]
-  notes: "Teacher LoRA was trained on the train file (D01), so validation comes from the official test split."
+  notes: "D02 amendments of 2026-10-18: the official split is by question, so all images are re-split by image (splits_used), with two-stage near-duplicate groups (near_duplicates)."

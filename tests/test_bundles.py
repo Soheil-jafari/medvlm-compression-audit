@@ -65,7 +65,9 @@ def _shared_data(root: Path) -> None:
     _image(data / "kvasir_seg" / "images" / "s1.jpg", seed=3)
     _image(data / "kvasir_seg" / "masks" / "s1.jpg", seed=99)
     config = {"name": "Kvasir-VQA-x1", "label_mapping": RULES}
-    prepared = prepare(data, config, split_seed=1, dedup_threshold=4, mask_threshold=4)
+    prepared = prepare(
+        data, config, split_seed=1, dedup_threshold=4, mask_threshold=4, confirm_threshold=0.9
+    )
     write_private_outputs(prepared, root / "private", data)
 
 
@@ -133,7 +135,8 @@ def test_rc_d1_writes_one_shared_data_folder_that_later_runs_verify(tmp_path: Pa
     }
     # the second RC-D1 pass: counts again from the shared data, with the first pass's settings
     out = tmp_path / "results"
-    first = ("--dedup-threshold", "4", "--mask-threshold", "4", "--results-root", str(out))
+    first = ("--dedup-threshold", "4", "--mask-threshold", "4", "--confirm-threshold", "0.9",
+             "--results-root", str(out))  # fmt: skip
     counted = _run(
         "prepare_data.py", "counts", "--data-root", str(shared), "--split-seed", "1", *first
     )
@@ -162,8 +165,9 @@ def _split_hash(shared: Path, seed: int) -> str:
 
     dataset = load_config(config_root() / "data" / "kvasir_vqa_x1.yaml")["dataset"]
     return prepare(
-        shared / "data", dataset, split_seed=seed, dedup_threshold=4, mask_threshold=4
-    ).split_sha256
+        shared / "data", dataset, split_seed=seed, dedup_threshold=4, mask_threshold=4,
+        confirm_threshold=0.9,
+    ).split_sha256  # fmt: skip
 
 
 def test_a_stage_without_the_shared_data_stops_with_a_hint(tmp_path: Path) -> None:

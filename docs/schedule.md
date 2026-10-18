@@ -80,12 +80,12 @@ teacher cache. The budget reference is always E2 seed 0 (RC-B0), for every seed,
 Weeks are counted from the week RC-D1 runs. Since 2026-10-18 (D01 and D02 amendments) the
 teacher has its own LoRA (RC-TT0, RC-TT1, at most 15 GPU hours by rule 3) before Gate 1. The
 image-disjoint split also makes validation and test about 15 % of the images each, so V and T are
-larger than the old split's 39 / 30 images would have given; they stay unknown until RC-D1 run 2. The **known** GPU hours of each person per week
+larger than the old split's 39 / 30 images would have given; they stay unknown until RC-D1 run 3. The **known** GPU hours of each person per week
 are given against the 30 h each person has. The unknown parts are named next to them.
 
 | Week | Soheil | Farzan | Amir | Known GPU h (S / F / A) |
 |---|---|---|---|---|
-| 1 | RC-D1 pass 1 (CPU); share the dataset; RC-D1 pass 2 (CPU) once the label values are confirmed | account setup; RC-X1 part A (CPU) once the shared data is shared | account setup; attach and verify the shared data | 0 / 0 / 0 |
+| 1 | RC-D1 calibration step, then run 3 = pass 1 (CPU; D02 amendment 2); share the dataset; RC-D1 pass 2 (CPU) once the label values are confirmed; RC-TT0 does not wait for RC-D1 | account setup; RC-X1 part A (CPU) once the shared data is shared | account setup; attach and verify the shared data | 0 / 0 / 0 |
 | 2 | RC-TT0 (minutes) and RC-TT1, our teacher's training (at most 15 GPU hours by rule 3, an estimate); then RC-E0a Gate 1 and RC-E0b cache with our adapter (T4 x2); RC-E1 seed 0 | RC-E1 seed 1 | RC-E1 seed 2 | up to 15 + 2.4 + G + C + 2 V / 2.4 + V / 2.4 + V |
 | 3 | RC-E2 seed 0 | RC-E2 seed 1 | RC-E2 seed 2; RC-B0 (minutes, E2 seed 0 hand-off). Then B1-B3 and the **freeze** | 2.4 + V / 2.4 + V / 2.4 + V |
 | 4 | RC-E3 seed 0; RC-E4 seed 0; RC-R1 | RC-E9 (T4 x2) | RC-G2 (5 runs) | 5.5-9.1 + 4 V + 11 T / 1-2 + V + T (teacher) / 10.9 + 5 V + 5 S |
@@ -111,9 +111,9 @@ moves with it.
 
 ## 6. Critical path
 
-RC-D1 pass 1 -> label values -> RC-D1 pass 2 -> finding list -> RC-E0a (Gate 1) -> RC-E0b (the
-teacher cache, **C unknown**) -> RC-E2 seed 0 -> RC-B0 -> B1-B3 and the freeze -> RC-G2 -> the
-E7 grid of each seed -> RC-E8 -> RC-C1. The ablations and RC-L1 are needed for the paper but
+RC-D1 calibration -> RC-D1 pass 1 (run 3) -> label values -> RC-D1 pass 2 -> finding list ->
+RC-E0a (Gate 1) -> RC-E0b (the teacher cache, **C unknown**) -> RC-E2 seed 0 -> RC-B0 -> B1-B3
+and the freeze -> RC-G2 -> the E7 grid of each seed -> RC-E8 -> RC-C1. The ablations and RC-L1 are needed for the paper but
 not for the comparisons (H1-H4).
 
 Things that change this schedule when they become known:

@@ -63,7 +63,9 @@ python scripts/prepare_data.py overlap --data-root /kaggle/working/data \
 python -m pytest -q tests/test_results.py                  # must pass before you commit
 ```
 
-The threshold 4 (of 64 bits) is the one RC-D1 used for validation and test.
+The threshold 4 (of 64 bits) is RC-D1's always-joined distance. Since D02 amendment 2, RC-D1
+also joins pairs within 12 bits whose crop correlation reaches `min_correlation`; this overlap
+count still uses the dHash alone (open: whether RC-X1 uses the same two stages, decisions log).
 
 ## 4. What to commit back
 

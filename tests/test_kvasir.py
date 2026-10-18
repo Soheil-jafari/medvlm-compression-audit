@@ -156,6 +156,7 @@ def test_prepare_end_to_end(tmp_path: Path) -> None:
         split_seed=1,
         dedup_threshold=4,
         mask_threshold=4,
+        confirm_threshold=0.9,
     )
     # D02 amendment 2026-10-18: nothing is dropped; a4 (a copy of a1) is grouped with a1
     assert prepared.excluded == ()
@@ -175,7 +176,7 @@ def test_prepare_end_to_end(tmp_path: Path) -> None:
     assert metrics["official:test_only_min_distance_to_train:0"] == 1  # a4 is a copy of a1
     again = prepare(
         data, {"name": "Kvasir-VQA-x1", "label_mapping": RULES},
-        split_seed=1, dedup_threshold=4, mask_threshold=4,
+        split_seed=1, dedup_threshold=4, mask_threshold=4, confirm_threshold=0.9,
     )  # fmt: skip
     assert again.split_sha256 == prepared.split_sha256  # deterministic by seed
     hashes = write_private_outputs(prepared, tmp_path / "private", data)
@@ -195,7 +196,9 @@ def test_load_prepared_rebuilds_the_prepared_splits(tmp_path: Path) -> None:
     data = tmp_path / "data"
     _layout(data)
     config = {"name": "Kvasir-VQA-x1", "label_mapping": RULES}
-    prepared = prepare(data, config, split_seed=1, dedup_threshold=4, mask_threshold=4)
+    prepared = prepare(
+        data, config, split_seed=1, dedup_threshold=4, mask_threshold=4, confirm_threshold=0.9
+    )
     write_private_outputs(prepared, tmp_path / "private", data)
 
     rebuilt = load_prepared(

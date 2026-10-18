@@ -18,12 +18,22 @@ Commands:
   overlap  how many images of an external set (any folder of images) are near-duplicates
            of our training, validation and test images; counts only, to
            <results_root>/data/<name>_overlap.csv (run card RC-X1)
+  calibrate  the step before prepare (D02 amendment 2): the crop correlation of every
+           candidate pair, what each threshold would give, and a contact sheet (a PNG in
+           --sheet-dir, outside the repository); counts to
+           <results_root>/data/near_duplicate_calibration.csv. --data-root is a data folder
+           (kvasir_vqa_x1/ inside) or a shared-data dataset (verified first)
+
+Exit codes: 4 a setting is open (the confirmation threshold before calibration), 5 an input
+check failed, 7 the chaining guard stopped the run (one group holds too many images).
 
 Example (RC-D1):
     python scripts/prepare_data.py export --data-root /kaggle/working/medcompress_data/data
+    python scripts/prepare_data.py calibrate --data-root /kaggle/working/medcompress_data/data \\
+        --split-seed 20261012 --dedup-threshold 4 --sheet-dir /kaggle/working/rc_d1_sheets
     python scripts/prepare_data.py prepare --data-root /kaggle/working/medcompress_data/data \\
         --private-dir /kaggle/working/medcompress_data/private --split-seed 20261012 \\
-        --dedup-threshold 4 --mask-threshold 4
+        --dedup-threshold 4 --mask-threshold 4 --sheet-dir /kaggle/working/rc_d1_sheets
     python scripts/prepare_data.py bundle --bundle-dir /kaggle/working/medcompress_data
     python scripts/prepare_data.py verify --data-root /kaggle/working/medcompress_data
 """
@@ -42,6 +52,11 @@ from medcompress.utils.io import append_results  # noqa: E402
 
 X1_REPO = "SimulaMet/Kvasir-VQA-x1"
 HOST_REPO = "SimulaMet-HOST/Kvasir-VQA"
+SETTING_OPEN = 4
+INPUT_CHECK_FAILED = 5
+CHAINING_STOP = 7
+CALIBRATION_SHEET = "rc_d1_calibration_pairs.png"
+FINAL_SHEET = "rc_d1_final_cross_split_pairs.png"
 
 
 def export(data_root: Path, revision: str | None) -> None:
@@ -107,6 +122,9 @@ def bundle(args: argparse.Namespace, dataset: dict) -> int:
         meta[f"manifest_{name}_sha256"] = load_manifest(
             root / "private" / f"manifest_{name}.jsonl"
         ).manifest_sha256
+    settings = root / "private" / "near_duplicates.json"
+    if settings.is_file():  # D02 amendment 2: how the groups were made
+        meta["near_duplicates"] = json.loads(settings.read_text(encoding="utf-8"))
     try:
         made = write_bundle_manifest(root, kind="data", meta=meta)
     except BundleError as exc:
@@ -130,13 +148,14 @@ def counts(args: argparse.Namespace, dataset: dict) -> int:
         shared = attach_data({}, args.data_root)
     except BundleError as exc:
         print(f"check failed: {exc}", file=sys.stderr)
-        return 5
+        return INPUT_CHECK_FAILED
     prepared = prepare(
         shared.root / "data",
         dataset,
         split_seed=args.split_seed,
         dedup_threshold=args.dedup_threshold,
         mask_threshold=args.mask_threshold,
+        confirm_threshold=args.confirm_threshold,
     )
     if prepared.split_sha256 != shared.meta.get("split_sha256"):
         print(
@@ -154,6 +173,57 @@ def counts(args: argparse.Namespace, dataset: dict) -> int:
     return 0
 
 
+def _data_folder(data_root: Path) -> Path:
+    """A bare data folder (``kvasir_vqa_x1/`` inside), or the ``data/`` of a verified
+    shared-data dataset (raises ``BundleError`` if a file differs)."""
+    if (data_root / "kvasir_vqa_x1").is_dir():
+        return data_root
+    from medcompress.utils.bundles import attach_data
+
+    return attach_data({}, data_root).root / "data"
+
+
+def calibrate(args: argparse.Namespace, dataset: dict) -> int:
+    """The calibration step (D02 amendment 2): print the distribution, draw the sheet."""
+    from medcompress.data.contact_sheet import render_pairs
+    from medcompress.data.prepare import calibrate as run_calibration
+    from medcompress.utils.bundles import BundleError
+
+    try:
+        data_root = _data_folder(args.data_root)
+    except BundleError as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    result = run_calibration(
+        data_root, dataset, dedup_threshold=args.dedup_threshold, seed=args.split_seed,
+        threshold=args.threshold,
+    )  # fmt: skip
+    print("\n".join(result.lines))
+    target = args.results_root / "data" / "near_duplicate_calibration.csv"
+    target.unlink(missing_ok=True)
+    append_results(result.rows, target)
+    print(f"wrote {len(result.rows)} aggregate rows to {target}")
+    if result.bands:
+        sheet = render_pairs(
+            result.bands, args.sheet_dir / CALIBRATION_SHEET, crop_fraction=result.crop_fraction
+        )
+        print(f"contact sheet (private, never commit it): {sheet}")
+    return 0
+
+
+def _final_sheet(prepared, sheet_dir: Path, data_root: Path) -> Path:  # type: ignore[no-untyped-def]
+    from medcompress.data.contact_sheet import render_pairs
+
+    cells = tuple(
+        (str(data_root / t.first), str(data_root / t.second),
+         f"r={t.score:.3f}  {t.bits} bits  {t.first_split} / {t.second_split}")
+        for t in prepared.top_cross_split
+    )  # fmt: skip
+    title = f"The {len(cells)} most similar pairs across splits (crop correlation)"
+    crop = float(prepared.near_duplicates.get("crop_fraction", 0.60))
+    return render_pairs(((title, cells),), sheet_dir / FINAL_SHEET, crop_fraction=crop, columns=3)
+
+
 def verify(args: argparse.Namespace) -> int:
     """Check an attached shared-data dataset against its manifest."""
     from medcompress.utils.bundles import BundleError, check_data_layout, verify_bundle
@@ -162,7 +232,7 @@ def verify(args: argparse.Namespace) -> int:
         made = verify_bundle(args.data_root, kind="data")
     except BundleError as exc:
         print(f"check failed: {exc}", file=sys.stderr)
-        return 5
+        return INPUT_CHECK_FAILED
     lacking = check_data_layout(made.root)
     if lacking:
         print(f"check failed: {made.root} lacks {', '.join(lacking)}", file=sys.stderr)
@@ -215,6 +285,13 @@ def main(argv: list[str] | None = None) -> int:
     prep.add_argument("--split-seed", type=int, required=True, help="pre-registered seed")
     prep.add_argument("--dedup-threshold", type=int, required=True, help="max Hamming distance")
     prep.add_argument("--mask-threshold", type=int, required=True, help="max Hamming distance")
+    prep.add_argument(
+        "--confirm-threshold", type=float, default=None,
+        help="crop correlation that joins a candidate pair (default: the dataset config)",
+    )  # fmt: skip
+    prep.add_argument(
+        "--sheet-dir", type=Path, default=None, help="final contact sheet (outside the repo)"
+    )
     bund = sub.add_parser("bundle", help="manifest of the shared-data folder (data/ + private/)")
     bund.add_argument("--bundle-dir", type=Path, required=True, help="outside the repository")
     ver = sub.add_parser("verify", help="check an attached shared-data dataset")
@@ -225,6 +302,17 @@ def main(argv: list[str] | None = None) -> int:
     cnt.add_argument("--split-seed", type=int, required=True, help="as in the first pass")
     cnt.add_argument("--dedup-threshold", type=int, required=True, help="as in the first pass")
     cnt.add_argument("--mask-threshold", type=int, required=True, help="as in the first pass")
+    cnt.add_argument("--confirm-threshold", type=float, default=None, help="as in the first pass")
+    cal = sub.add_parser("calibrate", help="choose the crop threshold (before prepare)")
+    cal.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")
+    cal.add_argument("--results-root", type=Path, default=Path("results"))
+    cal.add_argument("--split-seed", type=int, required=True, help="seeds the random controls")
+    cal.add_argument("--dedup-threshold", type=int, required=True, help="always-joined bits")
+    cal.add_argument("--sheet-dir", type=Path, required=True, help="outside the repository")
+    cal.add_argument(
+        "--threshold", type=float, default=None,
+        help="draw the sheet at this value (default: the provisional proposal)",
+    )  # fmt: skip
     over = sub.add_parser("overlap", help="near-duplicates of an external image folder")
     over.add_argument("--data-root", type=Path, required=True, help="the shared-data dataset")
     over.add_argument(
@@ -246,9 +334,25 @@ def main(argv: list[str] | None = None) -> int:
         return bundle(args, dataset)
     if args.command == "verify":
         return verify(args)
-    if args.command == "counts":
-        return counts(args, dataset)
+    from medcompress.config import ConfigError
+    from medcompress.data.dedup import ChainingError
 
+    try:
+        if args.command == "calibrate":
+            return calibrate(args, dataset)
+        if args.command == "counts":
+            return counts(args, dataset)
+        return prepare_command(args, dataset)
+    except ConfigError as exc:
+        print(f"setting open: {exc}", file=sys.stderr)
+        return SETTING_OPEN
+    except ChainingError as exc:
+        print(f"STOP: {exc}", file=sys.stderr)
+        return CHAINING_STOP
+
+
+def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
+    """The first RC-D1 pass: splits, private files, counts and the final contact sheet."""
     from medcompress.data.prepare import prepare, write_private_outputs
 
     prepared = prepare(
@@ -257,6 +361,7 @@ def main(argv: list[str] | None = None) -> int:
         split_seed=args.split_seed,
         dedup_threshold=args.dedup_threshold,
         mask_threshold=args.mask_threshold,
+        confirm_threshold=args.confirm_threshold,
     )
     hashes = write_private_outputs(prepared, args.private_dir, args.data_root)
     summary = args.results_root / "data" / "summary.csv"
@@ -264,6 +369,15 @@ def main(argv: list[str] | None = None) -> int:
         summary.unlink()
     append_results(prepared.rows, summary)
     print(f"wrote {len(prepared.rows)} aggregate rows to {summary}")
+    metrics = {r["metric"]: r["value"] for r in prepared.rows}
+    print(
+        f"groups {metrics['groups:total']:.0f}, largest {metrics['groups:largest']:.0f} "
+        f"({metrics['groups:largest_fraction']:.1%}); held-out images with a confirmed "
+        f"duplicate in train: {metrics['val_test_confirmed_duplicates_of_train']:.0f}"
+    )
+    if args.sheet_dir is not None:
+        sheet = _final_sheet(prepared, args.sheet_dir, args.data_root)
+        print(f"final contact sheet (private, never commit it; attach it to the report): {sheet}")
     print("hashes for the run card:", json.dumps(hashes, indent=2))
     return 0
 

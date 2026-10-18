@@ -31,8 +31,8 @@ they are:
   adapter has seen almost every image of our test split. Attach the RC-TT1 hand-off
   (`E0_teacher_adapter`) with `--from`; `configs/models/qwen2_5_vl_7b_teacher.yaml` points at
   it, and the run stops before any download if it is missing.
-- RC-D1 **run 2** (image-disjoint split, D02 amendment) replaces run 1: the validation and test
-  splits of run 1 are not used.
+- RC-D1 **run 3** (image-disjoint split with the two-stage near-duplicate grouping, D02
+  amendments of 2026-10-18) replaces runs 1 and 2: their splits are not used.
 - RC-M1 passed (gives the generation speed that decides how many sessions part (a) needs).
   **Met 2026-10-15:** the teacher generated 4.48 tokens per second (`results/smoke/RC-M1.csv`).
 

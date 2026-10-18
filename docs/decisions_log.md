@@ -175,12 +175,32 @@ must be logged here.
   Recorded in D01, D02, D04, D06, the configs, RC-D1, RC-TT0, RC-TT1, RC-E0a, RC-E0b and the
   pre-registration draft. Open: whether Kaggle counts a T4 x2 hour once or twice (it changes N
   by a factor of 2; the conservative reading is used until checked).
+- **2026-10-18 (Soheil, from RC-D1 run 2), D02 amendment 2: two-stage near-duplicate
+  detection,** before any model result.
+  - Run 2 (4-bit grouping) missed real duplicates: at 5-6 bits, 3 of 8 pairs were the same
+    scene, and at 7-8 bits, 2 to 3 of 8; 1,038 of the 1,931 validation and test images have a
+    training image within 8 bits. At 9-12 bits the pairs looked alike only at 9 x 8 pixels, so
+    a larger dHash threshold alone would chain unrelated images.
+  - Candidates within 12 dHash bits are confirmed by the highest Pearson correlation of the
+    central 60 % (32 x 32, a 4 px blur subtracted, shifts up to 3 px). The threshold is chosen
+    from a calibration step on the data (RC-D1 section 3a). Pairs within 4 bits stay joined.
+    Union-find, then the split as before.
+  - The run STOPS if one group holds more than 5 % of the images. Validation and test images
+    with a confirmed duplicate in train must be 0. A final contact sheet of the 24 most similar
+    cross-split pairs is attached to the report.
+  - Data card: no patient IDs in HyperKvasir, so the splits are not patient-disjoint.
+  - RC-TT0 does not wait for RC-D1 (synthetic images); RC-TT1 waits for RC-D1 run 3.
+
+  Recorded in D02, the dataset config, RC-D1, RC-TT0, RC-TT1, RC-E0a, RC-E0b, RC-X1, the data
+  card and the pre-registration draft.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
 | T4 x2 and the quota | whether a T4 x2 session counts once or twice against the weekly Kaggle quota (rule 3 counts it twice until checked: N doubles if it counts once), and the session time limit (both unknown here) | team (check on Kaggle) | before RC-TT1 |
+| Confirmation threshold (D02 amendment 2) | `near_duplicates.min_correlation`, from the RC-D1 calibration step's printout and contact sheet; the value and the reason go into D02 and the dataset config before run 3 | Soheil, with the agent | before RC-D1 run 3 |
+| RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
 | Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |
 | Recovery steps | 25 % of 625 = 156.25; proposal 157 = `ceil(2,500 / 16)` (D06 memo) | team | before RC-E5 |
 | A1 and A2 reuse of E7's effects | D07 says they reuse E7's per-probe effects; the code scores them again (about 7.9 h per run at 672, an estimate). Either the agent adds the reuse (the per-probe effects must then be kept) or the schedule keeps the cost | team | before the freeze |
