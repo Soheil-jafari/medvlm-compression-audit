@@ -43,6 +43,8 @@ DATA_KIND = "data"
 EMBED_KIND = "near_duplicates"
 """RC-D1-embed's private output (embeddings, candidates, the labelling sheets), D02 amendment 3:
 verified and read in place by the scoring step and RC-D1 run 4."""
+TOPUP_KIND = "near_duplicate_topup"
+"""The top-up's private output (the extra pairs, their sheets and template), D02 amendment 3."""
 HANDOFF_KINDS: tuple[str, ...] = (
     "teacher_adapter",
     "teacher_cache",
@@ -209,9 +211,10 @@ def write_bundle_manifest(
     root = Path(root).resolve()
     if root.is_relative_to(repo_root().resolve()):
         raise BundleError(f"a shared folder must be outside the repository: {root}")
-    if kind not in (DATA_KIND, EMBED_KIND) and kind not in HANDOFF_KINDS:
+    if kind not in (DATA_KIND, EMBED_KIND, TOPUP_KIND) and kind not in HANDOFF_KINDS:
         raise BundleError(
-            f"unknown kind {kind!r}; use {DATA_KIND}, {EMBED_KIND} or one of {HANDOFF_KINDS}"
+            f"unknown kind {kind!r}; use {DATA_KIND}, {EMBED_KIND}, {TOPUP_KIND} or one of "
+            f"{HANDOFF_KINDS}"
         )
     files = {p.relative_to(root).as_posix(): file_sha256(p) for p in _files_under(root)}
     if not files:

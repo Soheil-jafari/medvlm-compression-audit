@@ -288,6 +288,195 @@ def test_the_rule_choice_fixed_in_advance() -> None:
     assert equal["precision"][0] == pytest.approx(0.8)
 
 
+# ------------------------------------------------------------------ top-up, third member, blinding
+
+
+def _band_table(images: int = 40, seed: int = 0) -> cand.CandidateTable:
+    rng = np.random.default_rng(seed)
+    a, b = np.triu_indices(images, 1)
+    return cand.CandidateTable(
+        tuple(f"im{i:03d}" for i in range(images)), a, b, np.full(len(a), 20),
+        np.zeros(len(a), np.float32), rng.uniform(0.8, 1.0, len(a)).astype(np.float32),
+        rng.uniform(0.8, 1.0, len(a)).astype(np.float32), np.ones(len(a), np.int64),
+    )  # fmt: skip
+
+
+def _labelled(table: cand.CandidateTable, rows: list[int]) -> list[lab.LabelPair]:
+    return [
+        lab.LabelPair(pid, k, table.images[table.a[k]], table.images[table.b[k]], "s", 1.0,
+                      int(table.bits[k]), 0.0, float(table.cos_full[k]),
+                      float(table.cos_centre[k]))
+        for pid, k in enumerate(rows, start=1)
+    ]  # fmt: skip
+
+
+def test_the_topup_sampler(tmp_path: Path) -> None:
+    table = _band_table()
+    rule = cand.JoinRule("full", 0.95)
+    inside = np.flatnonzero(lab.in_band(table.cos_full, 0.95))
+    outside = np.flatnonzero(~lab.in_band(table.cos_full, 0.95))
+    labelled = _labelled(table, [*inside[:29].tolist(), *outside[:269].tolist()])  # 298 pairs
+    assert lab.labelled_in_band(labelled, rule) == 29
+    top = lab.topup_sample(table, labelled, rule)
+    assert top.needed and top.in_band_labelled == 29
+    assert top.in_band_unlabelled == len(inside) - 29 >= 100
+    assert len(top.pairs) == lab.TOPUP_PAIRS == 100
+    assert [p.pair_id for p in top.pairs] == list(range(299, 399))  # numbered after the first
+    assert all(abs(p.cos_full - 0.95) <= 0.03 + 1e-6 for p in top.pairs)  # all in the band
+    taken = {(p.image_a, p.image_b) for p in labelled}
+    drawn = [(p.image_a, p.image_b) for p in top.pairs]
+    assert not taken & set(drawn) and len(set(drawn)) == 100  # new pairs, each once
+    assert all(p.stratum == "topup_band" for p in top.pairs)
+    assert all(p.weight == pytest.approx(top.in_band_unlabelled / 100) for p in top.pairs)
+    assert lab.topup_sample(table, labelled, rule) == top  # seed 20261013: reproducible
+    assert lab.topup_sample(table, labelled, rule, seed=1).pairs != top.pairs
+    enough = _labelled(table, [*inside[:30].tolist(), *outside[:268].tolist()])
+    assert not lab.topup_sample(table, enough, rule).needed  # 30 in the band: no top-up
+    assert lab.topup_sample(table, enough, rule).pairs == ()
+    every = lab.topup_sample(table, labelled, rule, size=10_000)
+    assert len(every.pairs) == every.in_band_unlabelled  # fewer than asked: all of them
+    centre = lab.topup_sample(table, labelled, cand.JoinRule("max", 0.95, 0.65))
+    assert all(abs(max(p.cos_full, p.cos_centre) - 0.95) <= 0.03 + 1e-6 for p in centre.pairs)
+    edge = np.array([0.92, 0.98, 0.9199, 0.9801], dtype=np.float32)
+    assert lab.in_band(edge, 0.95).tolist() == [True, True, False, False]  # edges inside
+    from medcompress.data.embeddings import count_pairs_in_band
+
+    emb = {"full": np.eye(3, dtype=np.float32), "centre": np.eye(3, dtype=np.float32)}
+    emb["full"][1] = emb["full"][0]
+    assert count_pairs_in_band(emb, "full", 0.9, 1.1) == 1
+    assert count_pairs_in_band(emb, "max", -0.1, 0.1) == 2
+    assert count_pairs_in_band(emb, "centre", -0.1, 0.1) == 3
+
+
+def test_the_third_member_and_the_unsure_analysis(tmp_path: Path) -> None:
+    ids = list(range(1, 11))
+    first = {i: "different" for i in ids}
+    second = dict(first)
+    first[1] = second[1] = "same_scene"
+    first[2], second[2] = "same_scene", "unsure"  # disagreement
+    first[3] = second[3] = "unsure"
+    first[4], second[4] = "different", "unsure"  # disagreement
+    adj = lab.adjudicate(first, second, {}, ids)
+    assert adj.kappa == pytest.approx(0.33 / 0.53) and not adj.all_pairs  # kappa 0.62
+    assert adj.required == (2, 4) and adj.missing == (2, 4)
+    with pytest.raises(lab.LabelError, match="not to be decided"):
+        lab.adjudicate(first, second, {5: "same_scene"}, ids)
+    adj = lab.adjudicate(first, second, {2: "same_scene", 4: "unsure"}, ids)
+    assert adj.missing == () and (adj.final[1], adj.final[2], adj.final[4]) == (
+        "same_scene", "same_scene", "unsure")  # fmt: skip
+    assert np.flatnonzero(lab.truth_of(first, second, ids)).tolist() == [0]  # before
+    truth = lab.truth_from(adj.final, ids)
+    unsure = lab.truth_from(adj.final, ids, unsure_positive=True)
+    assert np.flatnonzero(truth).tolist() == [0, 1]  # primary: same_scene only
+    assert np.flatnonzero(unsure).tolist() == [0, 1, 2, 3]
+    # kappa below 0.40: the third member decides every pair, agreed ones too
+    poor_first = {i: "same_scene" if i % 2 else "different" for i in ids}
+    poor_second = {i: "same_scene" if i <= 5 else "different" for i in ids}
+    poor = lab.adjudicate(poor_first, poor_second, {}, ids)
+    assert poor.kappa == pytest.approx(0.2) and poor.all_pairs and poor.required == tuple(ids)
+    decided = lab.adjudicate(poor_first, poor_second, {i: "different" for i in ids}, ids)
+    assert not lab.truth_from(decided.final, ids).any()
+    # the unsure analysis: the same precision, the sensitivity over same_scene + unsure
+    cosines = [0.99, 0.97, 0.80, 0.96, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+    pairs = [_pair(i, c) for i, c in zip(ids, cosines, strict=True)]
+    rule = cand.JoinRule("full", 0.95)
+    primary = lab.score_rule(rule, pairs, truth)
+    analysis = lab.score_rule(rule, pairs, truth, sensitivity_truth=unsure)
+    assert primary.sensitivity[0] == 1.0 and primary.precision[0] == pytest.approx(2 / 3)
+    assert analysis.precision == primary.precision and analysis.sensitivity[0] == 0.75
+    path = lab.write_adjudication_template([4, 2], tmp_path / "private")
+    assert path.read_text().splitlines() == ["pair_id,rater_3", "2,", "4,"]
+    with pytest.raises(ValueError, match="private"):
+        lab.write_adjudication_template([2], REPO / "tmp_adjudication")
+    three = _third(tmp_path / "r3.csv", {2: "same_scene", 4: "Unsure"})
+    assert lab.read_third(three) == {2: "same_scene", 4: "unsure"}
+
+
+def test_the_label_commitments(tmp_path: Path) -> None:
+    from medcompress.utils.bundles import file_sha256
+
+    ids = [1, 2, 3]
+    one = _labels(tmp_path / "r1.csv", ids, ["same_scene", "different", "unsure"], [""] * 3)
+    both = _labels(tmp_path / "both.csv", ids, ["different"] * 3, ["different"] * 3)
+    commitments = tmp_path / "commitments.csv"
+    row = lab.add_commitment(commitments, one, role="rater_1", round_="first")
+    assert row["labels"] == "3" and row["sha256"] == file_sha256(one) and row["file"] == "r1.csv"
+    with pytest.raises(lab.LabelError, match="already committed"):
+        lab.add_commitment(commitments, one, role="rater_1", round_="first")
+    with pytest.raises(lab.LabelError, match="rater_2 labels too"):
+        lab.add_commitment(commitments, both, role="rater_1", round_="topup")
+    with pytest.raises(lab.LabelError, match="needs the columns"):
+        lab.add_commitment(commitments, one, role="rater_3", round_="first")
+    assert lab.check_commitments([one], commitments)[0]["role"] == "rater_1"
+    one.write_text(one.read_text().replace("unsure", "different"))  # changed after the commit
+    with pytest.raises(lab.LabelError, match="not in"):
+        lab.check_commitments([one], commitments)
+    assert commitments.read_text().splitlines()[0] == ",".join(lab.COMMITMENT_FIELDS)
+    repo_file = REPO / lab.COMMITMENTS_FILE  # committed with the header only, before any label
+    assert repo_file.read_text().splitlines()[0] == ",".join(lab.COMMITMENT_FIELDS)
+
+
+def test_the_topup_step_and_the_rule_chosen_again(tmp_path: Path) -> None:
+    from medcompress.config import ConfigError
+    from medcompress.data.embed_step import embed_step, score_labels_step, topup_step
+    from medcompress.data.prepare import labelled_rule
+    from medcompress.utils.io import append_results
+
+    def quiet(_: str) -> None:
+        return None
+
+    data = _dataset(tmp_path, overlay=False, lookalike=True)
+    out = tmp_path / "embed"
+    wide = {"band": 0.5, "min_in_band": 1000, "pairs": 5, "seed": 1}  # always needed here
+    config = {**CONFIG, "near_duplicates": {**CONFIG["near_duplicates"],
+                                            "labelling": {"topup": wide}}}  # fmt: skip
+    embed_step(data, config, out, TinyEmbedder(), split_seed=3, close_bits=4, mask_threshold=4,
+               log=quiet)  # fmt: skip
+    path = out / "label_pairs.csv"  # keep the positives and every other negative
+    with path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        fields, rows = reader.fieldnames, list(reader)
+    pairs = {p.pair_id: p for p in lab.read_pairs(path)}
+    kept = [r for r in rows if _same(pairs[int(r["pair_id"])]) == "same_scene" or
+            int(r["pair_id"]) % 2]  # fmt: skip
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(kept)
+    labelled = lab.read_pairs(path)
+    labels = _fake_labels(out, tmp_path / "labels.csv")
+    first = score_labels_step(out, [labels], config, log=quiet)
+    assert first.chosen is not None and first.topup_required
+    results = tmp_path / "results"
+    append_results(first.labels.rows, results / "data" / "near_duplicate_labels.csv")
+    with pytest.raises(ConfigError, match="top-up"):
+        labelled_rule(results)  # run 4 waits for the top-up
+    assert labelled_rule(results, for_topup=True) == first.chosen
+    result, top = topup_step(out, data, tmp_path / "topup", results, config, log=quiet)
+    start = max(p.pair_id for p in labelled) + 1
+    assert top.needed and [p.pair_id for p in top.pairs] == list(range(start, start + 5))
+    assert not {(p.image_a, p.image_b) for p in labelled} & {(p.image_a, p.image_b)
+                                                             for p in top.pairs}  # fmt: skip
+    assert (tmp_path / "topup" / "labels_template.csv").is_file()
+    assert sorted((tmp_path / "topup" / "label_sheets").glob("*.png"))
+    counts = {r["metric"]: r["value"] for r in result.rows}
+    assert counts["topup:drawn"] == 5 and counts["topup:needed"] == 1
+    assert counts["topup:in_band_pairs_all_images"] >= counts["topup:in_band_candidates_unlabelled"]
+    assert counts["topup:first_rule:threshold"] == first.chosen.threshold
+    extra = _fake_labels(tmp_path / "topup", tmp_path / "topup_labels.csv")
+    again = score_labels_step(out, [labels, extra], config, topup_dir=tmp_path / "topup",
+                              log=quiet)  # fmt: skip
+    assert again.chosen is not None and not again.topup_required  # chosen again, once
+    values = {r["metric"]: r["value"] for r in again.labels.rows}
+    assert values["labels:pairs:topup"] == 5 and values["labels:pairs"] == len(labelled) + 5
+    target = results / "data" / "near_duplicate_labels.csv"
+    target.unlink()
+    append_results(again.labels.rows, target)
+    assert labelled_rule(results) == again.chosen
+    with pytest.raises(lab.LabelError, match="only once"):
+        topup_step(out, data, tmp_path / "topup2", results, config, log=quiet)
+
+
 # ------------------------------------------------------------------ the steps, run 4, cards
 
 
@@ -298,15 +487,38 @@ def _run(*args: str) -> subprocess.CompletedProcess:
     )  # fmt: skip
 
 
+def _same(p: lab.LabelPair) -> str:
+    a, b = Path(p.image_a).stem, Path(p.image_b).stem
+    return "same_scene" if a[:3] == b[:3] and a.startswith("s") else "different"
+
+
 def _fake_labels(embed_dir: Path, path: Path) -> Path:
     pairs = lab.read_pairs(embed_dir / "label_pairs.csv")
+    return _labels(path, [p.pair_id for p in pairs], [_same(p) for p in pairs],
+                   [_same(p) for p in pairs])  # fmt: skip
 
-    def same(p: lab.LabelPair) -> str:
-        a, b = Path(p.image_a).stem, Path(p.image_b).stem
-        return "same_scene" if a[:3] == b[:3] and a.startswith("s") else "different"
 
-    return _labels(path, [p.pair_id for p in pairs], [same(p) for p in pairs],
-                   [same(p) for p in pairs])  # fmt: skip
+def _pin(embed_dir: Path) -> None:
+    """Record the tiny stand-in's output as made with the model pinned in the real config."""
+    from medcompress.config import config_root, load_config
+    from medcompress.utils.bundles import EMBED_KIND, write_bundle_manifest
+
+    dataset = load_config(config_root() / "data" / "kvasir_vqa_x1.yaml")["dataset"]
+    pinned = dataset["near_duplicates"]["embedding"]
+    path = embed_dir / "embeddings.json"
+    info = json.loads(path.read_text())
+    info.update({k: pinned[k] for k in ("model", "revision", "licence")})
+    path.write_text(json.dumps(info))
+    write_bundle_manifest(embed_dir, kind=EMBED_KIND, meta={})
+
+
+def _third(path: Path, labels: dict[int, str]) -> Path:
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["pair_id", "rater_3"])
+        for pid, label in sorted(labels.items()):
+            writer.writerow([pid, label])
+    return path
 
 
 def test_embed_label_and_run_4_end_to_end(tmp_path: Path) -> None:
@@ -324,12 +536,60 @@ def test_embed_label_and_run_4_end_to_end(tmp_path: Path) -> None:
     rows = (results / "data" / "near_duplicate_embed.csv").read_text()
     assert "embed:candidate_pairs:knn_full" in rows and ".jpg" not in rows
     labels = _fake_labels(out, tmp_path / "labels.csv")
-    scored = _run("score-labels", "--embed-dir", str(out), "--labels", str(labels),
-                  "--results-root", str(results))  # fmt: skip
+    refused = _run("score-labels", "--embed-dir", str(out), "--labels", str(labels),
+                   "--results-root", str(results))  # fmt: skip
+    assert refused.returncode == 5 and "pinned" in refused.stderr  # not the pinned model
+    _pin(out)
+
+    # two raters, each committing their own file; one disagreement for the third member
+    pairs = lab.read_pairs(out / "label_pairs.csv")
+    ids, truth = [p.pair_id for p in pairs], [_same(p) for p in pairs]
+    disputed = ids[0]
+    second = ["unsure" if i == disputed else t for i, t in zip(ids, truth, strict=True)]
+    one = _labels(tmp_path / "labels_rater_1.csv", ids, truth, [""] * len(ids))
+    two = _labels(tmp_path / "labels_rater_2.csv", ids, [""] * len(ids), second)
+    commitments = tmp_path / "commitments.csv"
+    for path, role in ((one, "rater_1"), (two, "rater_2")):
+        done = _run("commit-labels", "--labels", str(path), "--role", role, "--round", "first",
+                    "--commitments", str(commitments))  # fmt: skip
+        assert done.returncode == 0 and "SHA-256" in done.stdout, done.stderr
+    base = ("score-labels", "--embed-dir", str(out), "--results-root", str(results),
+            "--commitments", str(commitments))  # fmt: skip
+    no_dir = _run(*base, "--labels", str(one), str(two))
+    assert no_dir.returncode == 5 and "--private-dir" in no_dir.stderr
+    private = tmp_path / "adjudication"
+    pending = _run(*base, "--private-dir", str(private), "--labels", str(one), str(two))
+    assert pending.returncode == 4, pending.stdout + pending.stderr
+    assert "ADJUDICATION NEEDED: 1 pairs" in pending.stdout
+    assert not (results / "data" / "near_duplicate_labels.csv").exists()  # nothing written yet
+    listed = (private / "adjudication_template.csv").read_text().splitlines()
+    assert listed == ["pair_id,rater_3", f"{disputed},"]
+    three = _third(tmp_path / "labels_rater_3.csv", {disputed: truth[0]})
+    unknown = _run(*base, "--private-dir", str(private), "--labels", str(one), str(two),
+                   str(three))  # fmt: skip
+    assert unknown.returncode == 5 and "not in" in unknown.stderr  # not committed yet
+    done = _run("commit-labels", "--labels", str(three), "--role", "rater_3", "--round", "first",
+                "--commitments", str(commitments))  # fmt: skip
+    assert done.returncode == 0, done.stderr
+    scored = _run(*base, "--private-dir", str(private), "--labels", str(one), str(two),
+                  str(three))  # fmt: skip
     assert scored.returncode == 0, scored.stdout + scored.stderr
-    assert "chosen rule" in scored.stdout
+    assert "matches the commitment of rater_1" in scored.stdout and "chosen rule" in scored.stdout
+    assert "unsure analysis" in scored.stdout
     chosen = (results / "data" / "near_duplicate_labels.csv").read_text()
     assert "labels:chosen:view_code" in chosen and "labels:kappa" in chosen
+    from medcompress.data.prepare import labels_values
+
+    values = labels_values(results)
+    assert values["labels:adjudicated"] == 1 and values["labels:kappa"] < 1.0
+    assert values["labels:topup_required"] == 0 and values["labels:pairs:topup"] == 0
+    assert "labels:unsure_analysis:chosen:sensitivity" in values
+    assert values["labels:positives"] == truth.count("same_scene")
+    topped = _run("topup-labels", "--data-root", str(data), "--embed-dir", str(out), "--out-dir",
+                  str(tmp_path / "topup"), "--results-root", str(results))  # fmt: skip
+    assert topped.returncode == 0, topped.stdout + topped.stderr
+    assert "no candidate pair is left in the band" in topped.stdout  # every candidate labelled
+    assert "topup:drawn" in (results / "data" / "near_duplicate_topup.csv").read_text()
     assert (
         "rule:full:0.50:sensitivity" in (results / "data" / "near_duplicate_rules.csv").read_text()
     )
@@ -429,6 +689,11 @@ def test_the_runner_plans_of_amendment_3(tmp_path: Path) -> None:
     files = [Path("/kaggle/input/l/a.csv"), Path("/kaggle/input/l/b.csv")]
     scored = build_plan("RC-D1-label", embed_dir=Path("/kaggle/input/e"), labels=files)
     assert scored.steps[0].argv[-3:] == ("--labels", *(str(f) for f in files))
+    assert "--commitments" in scored.steps[0].argv and "--private-dir" in scored.steps[0].argv
+    assert "--topup-dir" not in scored.steps[0].argv
+    again = build_plan("RC-D1-label", embed_dir=Path("/kaggle/input/e"), labels=files,
+                       topup_dir=Path("/kaggle/input/t"))  # fmt: skip
+    assert "--topup-dir" in again.steps[0].argv
     run4 = build_plan("RC-D1", embed_dir=Path("/kaggle/input/e"))
     prepare_step = next(s for s in run4.steps if s.label == "prepare")
     assert "--embed-dir" in prepare_step.argv

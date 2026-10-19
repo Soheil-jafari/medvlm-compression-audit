@@ -18,6 +18,23 @@
    simpler rule (one view before a crop combination), then the views in the order full,
    centre, max, then the lower threshold (it catches more copies the labels did not show).
 
+Recorded with D02 amendment 3 on 2026-10-19, after RC-D1-embed and before any label exists:
+
+5. **Top-up** (:func:`topup_sample`): if fewer than 30 labelled pairs lie within +-0.03 of the
+   chosen cosine threshold (in the chosen view), 100 more candidate pairs are drawn from that
+   band, seed 20261013, leaving out the pairs already labelled; both raters label them and the
+   rule is chosen again, once, on all labels by the same criterion.
+6. **Disagreements** (:func:`adjudicate`): the third team member decides every pair the two
+   raters label differently, and every pair of a labelling round whose Cohen's kappa is below
+   0.40. A decided pair is positive only if the third member calls it ``same_scene``.
+7. **Unsure** (:func:`truth_from`): primary, ``unsure`` counts as not ``same_scene``. In a
+   sensitivity analysis it counts as not ``same_scene`` for precision and as ``same_scene``
+   for sensitivity (the less favourable reading of each).
+8. **Blinding** (:func:`add_commitment`, :func:`check_commitments`): the raters see no score;
+   each commits the SHA-256 of their own label file to the repository before the labels are
+   discussed (the commit order is in the history), and the scoring step checks the files
+   against these commitments.
+
 Only aggregate numbers are committed. The sheets, the pair list and the filled label files
 name or show images: they stay private.
 """
@@ -33,6 +50,7 @@ from pathlib import Path
 import numpy as np
 
 from medcompress.data.candidates import RULE_VIEWS, CandidateTable, JoinRule
+from medcompress.utils.bundles import file_sha256
 
 LABELS: tuple[str, ...] = ("same_scene", "different", "unsure")
 SAMPLE_SEED = 20261012
@@ -42,6 +60,22 @@ LABEL_THUMB = (480, 384)
 """Each image of a labelling sheet fits this box: large enough to judge mucosa and edges."""
 COSINE_BIN_EDGES: tuple[float, ...] = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90,
                                        0.95, 1.01)  # fmt: skip
+TOPUP_SEED = 20261013
+TOPUP_BAND = 0.03
+"""Half-width of the band around the chosen cosine threshold (the top-up, step 5)."""
+TOPUP_MIN_IN_BAND = 30
+"""A top-up is drawn if fewer labelled pairs than this lie in the band."""
+TOPUP_PAIRS = 100
+TOPUP_STRATUM = "topup_band"
+BAND_TOLERANCE = 1e-6
+"""The cosines are float32: a pair on the band's edge counts as inside."""
+ADJUDICATE_ALL_BELOW_KAPPA = 0.40
+"""If a round's Cohen's kappa (three labels) is below this, the third member decides every pair
+of that round, not only the disagreements."""
+ROLES: tuple[str, ...] = ("rater_1", "rater_2", "rater_3")
+ROUNDS: tuple[str, ...] = ("first", "topup")
+COMMITMENTS_FILE = Path("docs/runs/RC-D1-label_commitments.csv")
+COMMITMENT_FIELDS: tuple[str, ...] = ("round", "role", "file", "sha256", "labels")
 
 
 def _cosine_strata() -> list[tuple[str, int]]:
@@ -138,6 +172,80 @@ def stratum_sizes(table: CandidateTable) -> dict[str, int]:
     """How many candidate pairs each stratum holds."""
     strata = assign_strata(table)
     return {name: int(np.sum(strata == name)) for name, _ in STRATA}
+
+
+# ------------------------------------------------------------------ the top-up (step 5)
+
+
+def in_band(cos: np.ndarray, threshold: float, band: float = TOPUP_BAND) -> np.ndarray:
+    """Which cosines lie within ``threshold +- band`` (edges included)."""
+    return np.abs(np.asarray(cos, dtype=np.float64) - threshold) <= band + BAND_TOLERANCE
+
+
+def labelled_in_band(pairs: Sequence[LabelPair], rule: JoinRule, band: float = TOPUP_BAND) -> int:
+    """How many labelled pairs lie within ``band`` of the rule's threshold, in its view."""
+    return int(in_band(pair_cosines(pairs, rule.view), rule.threshold, band).sum())
+
+
+@dataclass(frozen=True)
+class TopUp:
+    """The top-up of D02 amendment 3 (step 5 above) for one chosen rule.
+
+    ``in_band_labelled``: labelled pairs in the band; ``in_band_unlabelled``: candidate pairs
+    in the band not labelled yet (what the top-up draws from); ``pairs``: the pairs drawn
+    (none if the top-up is not needed), numbered after the labelled ones, each weighted
+    ``in_band_unlabelled / drawn`` within the band."""
+
+    rule: JoinRule
+    band: float
+    min_in_band: int
+    in_band_labelled: int
+    in_band_unlabelled: int
+    pairs: tuple[LabelPair, ...]
+
+    @property
+    def needed(self) -> bool:
+        return self.in_band_labelled < self.min_in_band
+
+
+def topup_sample(
+    table: CandidateTable,
+    labelled: Sequence[LabelPair],
+    rule: JoinRule,
+    *,
+    band: float = TOPUP_BAND,
+    min_in_band: int = TOPUP_MIN_IN_BAND,
+    size: int = TOPUP_PAIRS,
+    seed: int = TOPUP_SEED,
+) -> TopUp:
+    """If fewer than ``min_in_band`` labelled pairs lie within ``band`` of the rule's cosine
+    threshold (in its view), draw ``size`` candidate pairs from that band at random (``seed``),
+    leaving out the pairs already labelled (by their two images). Only the candidate pairs and
+    their scores are used: no label, and no new embedding."""
+    count = labelled_in_band(labelled, rule, band)
+    taken = {tuple(sorted((p.image_a, p.image_b))) for p in labelled}
+    members = [
+        int(k) for k in np.flatnonzero(in_band(table.cosine(rule.view), rule.threshold, band))
+        if tuple(sorted((table.images[table.a[k]], table.images[table.b[k]]))) not in taken
+    ]  # fmt: skip
+    if count >= min_in_band or not members:
+        return TopUp(rule, band, min_in_band, count, len(members), ())
+    rng = np.random.default_rng(seed)
+    take = min(size, len(members))
+    picked = np.sort(rng.choice(np.array(members), size=take, replace=False))
+    order = rng.permutation(take)
+    start = max((p.pair_id for p in labelled), default=0) + 1
+    pairs = []
+    for offset, position in enumerate(order):
+        k = int(picked[position])
+        pairs.append(
+            LabelPair(
+                start + offset, k, table.images[table.a[k]], table.images[table.b[k]],
+                TOPUP_STRATUM, len(members) / take, int(table.bits[k]), float(table.crop[k]),
+                float(table.cos_full[k]), float(table.cos_centre[k]),
+            )
+        )  # fmt: skip
+    return TopUp(rule, band, min_in_band, count, len(members), tuple(pairs))
 
 
 PAIR_FIELDS = ("pair_id", "image_a", "image_b", "stratum", "weight", "bits", "crop",
@@ -278,21 +386,35 @@ class RuleScore:
     precision: tuple[float, float, float]
 
 
-def score_rule(rule: JoinRule, pairs: Sequence[LabelPair], truth: np.ndarray) -> RuleScore:
-    """Sensitivity and precision of ``rule`` on the labelled pairs (Wilson intervals)."""
+def score_rule(
+    rule: JoinRule,
+    pairs: Sequence[LabelPair],
+    truth: np.ndarray,
+    *,
+    sensitivity_truth: np.ndarray | None = None,
+) -> RuleScore:
+    """Sensitivity and precision of ``rule`` on the labelled pairs (Wilson intervals).
+    ``sensitivity_truth``: other positives for the sensitivity only (the unsure analysis);
+    ``true_positive`` and ``positives`` then count those."""
     joined = _joins(rule, pairs)
     tp = int(np.sum(joined & truth))
+    positives = truth if sensitivity_truth is None else sensitivity_truth
+    found = int(np.sum(joined & positives))
     return RuleScore(
-        rule, int(joined.sum()), tp, int(truth.sum()),
-        wilson(tp, int(truth.sum())), wilson(tp, int(joined.sum())),
+        rule, int(joined.sum()), found, int(positives.sum()),
+        wilson(found, int(positives.sum())), wilson(tp, int(joined.sum())),
     )  # fmt: skip
 
 
+def pair_cosines(pairs: Sequence[LabelPair], view: str) -> np.ndarray:
+    """The cosine of each labelled pair in ``view`` (``full``, ``centre`` or ``max``)."""
+    full = np.array([p.cos_full for p in pairs], dtype=np.float64)
+    centre = np.array([p.cos_centre for p in pairs], dtype=np.float64)
+    return {"full": full, "centre": centre, "max": np.maximum(full, centre)}[view]
+
+
 def _joins(rule: JoinRule, pairs: Sequence[LabelPair]) -> np.ndarray:
-    full = np.array([p.cos_full for p in pairs])
-    centre = np.array([p.cos_centre for p in pairs])
-    cos = {"full": full, "centre": centre, "max": np.maximum(full, centre)}[rule.view]
-    joined = cos >= rule.threshold
+    joined = pair_cosines(pairs, rule.view) >= rule.threshold
     if rule.crop_threshold is not None:
         joined |= np.array([p.crop for p in pairs]) >= rule.crop_threshold
     return joined
@@ -364,5 +486,163 @@ def choose_rule(
 
 
 def truth_of(first: Mapping[int, str], second: Mapping[int, str], ids: Sequence[int]) -> np.ndarray:
-    """A pair is positive when both raters call it ``same_scene``."""
+    """A pair is positive when both raters call it ``same_scene`` (before any adjudication)."""
     return np.array([first[i] == "same_scene" and second[i] == "same_scene" for i in ids])
+
+
+# ------------------------------------------------------------------ disagreements (step 6)
+
+
+def read_third(*files: Path) -> dict[int, str]:
+    """The third member's labels by pair id (the ``rater_3`` column of any of ``files``)."""
+    third: dict[int, str] = {}
+    for path in files:
+        with Path(path).open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                value = (row.get("rater_3") or "").strip()
+                if value:
+                    pid = int(row["pair_id"])
+                    if pid in third and third[pid] != _label(value):
+                        raise LabelError(f"pair {pid}: two different rater_3 labels")
+                    third[pid] = _label(value)
+    return third
+
+
+@dataclass(frozen=True)
+class Adjudication:
+    """One labelling round after the third member: ``final`` is the label each pair counts
+    with (the raters' common label, or the third member's), ``required`` the pairs the third
+    member decides, ``missing`` those without a third label yet, ``kappa`` the round's Cohen's
+    kappa before adjudication and ``all_pairs`` whether it was below 0.40 (every pair decided)."""
+
+    ids: tuple[int, ...]
+    kappa: float
+    all_pairs: bool
+    required: tuple[int, ...]
+    missing: tuple[int, ...]
+    final: Mapping[int, str]
+
+
+def adjudicate(
+    first: Mapping[int, str],
+    second: Mapping[int, str],
+    third: Mapping[int, str],
+    ids: Sequence[int],
+    *,
+    below: float = ADJUDICATE_ALL_BELOW_KAPPA,
+) -> Adjudication:
+    """Step 6 (module docstring) for one round of pairs ``ids``. A third label on a pair that
+    is not to be decided is refused: the third member labels only the pairs asked for."""
+    kappa = cohen_kappa([first[i] for i in ids], [second[i] for i in ids], LABELS)
+    all_pairs = not math.isnan(kappa) and kappa < below
+    required = tuple(ids) if all_pairs else tuple(i for i in ids if first[i] != second[i])
+    asked = set(required)
+    extra = sorted(i for i in ids if i in third and i not in asked)
+    if extra:
+        raise LabelError(
+            f"rater_3 labelled {len(extra)} pairs that are not to be decided (first: {extra[0]})"
+        )
+    missing = tuple(i for i in required if i not in third)
+    final = {i: (third[i] if i in asked and i in third else first[i]) for i in ids}
+    return Adjudication(tuple(ids), kappa, all_pairs, required, missing, final)
+
+
+def truth_from(
+    final: Mapping[int, str], ids: Sequence[int], *, unsure_positive: bool = False
+) -> np.ndarray:
+    """Primary: a pair is positive only if its label is ``same_scene`` (both raters, or the
+    third member). ``unsure_positive``: ``unsure`` counts as positive too (the sensitivity
+    side of the unsure analysis)."""
+    positive = ("same_scene", "unsure") if unsure_positive else ("same_scene",)
+    return np.array([final[i] in positive for i in ids], dtype=bool)
+
+
+def write_adjudication_template(ids: Sequence[int], out_dir: Path) -> Path:
+    """The pairs the third member decides: ``pair_id, rater_3`` (no score, no rater's label).
+    It is derived from the labels, so it stays private."""
+    from medcompress.config import repo_root
+
+    out_dir = Path(out_dir).resolve()
+    if out_dir.is_relative_to(repo_root().resolve()):
+        raise ValueError(f"the adjudication list comes from the labels; keep it private: {out_dir}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "adjudication_template.csv"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["pair_id", "rater_3"])
+        for pid in sorted(ids):
+            writer.writerow([pid, ""])
+    return path
+
+
+# ------------------------------------------------------------------ blinding (step 8)
+
+
+def check_label_file(path: Path, role: str) -> int:
+    """A rater's own file: only the ``role`` column is filled, with known labels. Returns how
+    many labels it holds."""
+    if role not in ROLES:
+        raise LabelError(f"unknown role {role!r}; use one of {ROLES}")
+    with Path(path).open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        columns = reader.fieldnames or []
+        if "pair_id" not in columns or role not in columns:
+            raise LabelError(f"{path} needs the columns pair_id and {role}")
+        filled = 0
+        for row in reader:
+            for other in ROLES:
+                if other != role and (row.get(other) or "").strip():
+                    raise LabelError(f"{path} holds {other} labels too: each rater commits their "
+                                     "own file, with only their own column filled")  # fmt: skip
+            if (row.get(role) or "").strip():
+                _label(row[role])
+                filled += 1
+    if filled == 0:
+        raise LabelError(f"{path} holds no {role} label")
+    return filled
+
+
+def read_commitments(path: Path) -> list[dict[str, str]]:
+    """The committed label-file hashes (empty if the file does not exist)."""
+    if not Path(path).is_file():
+        return []
+    with Path(path).open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def add_commitment(commitments: Path, path: Path, *, role: str, round_: str) -> dict[str, str]:
+    """Check ``path`` as ``role``'s file of round ``round_`` and add its SHA-256 to
+    ``commitments``. One file per role and round: a second one is refused."""
+    if round_ not in ROUNDS:
+        raise LabelError(f"unknown round {round_!r}; use one of {ROUNDS}")
+    labels = check_label_file(path, role)
+    rows = read_commitments(commitments)
+    if any(r["round"] == round_ and r["role"] == role for r in rows):
+        raise LabelError(f"{role} already committed a file for round {round_}: a new file needs "
+                         "a recorded decision")  # fmt: skip
+    row = {"round": round_, "role": role, "file": Path(path).name, "sha256": file_sha256(path),
+           "labels": str(labels)}  # fmt: skip
+    commitments = Path(commitments)
+    commitments.parent.mkdir(parents=True, exist_ok=True)
+    new = not commitments.is_file() or not commitments.read_text(encoding="utf-8").strip()
+    with commitments.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=COMMITMENT_FIELDS)
+        if new:
+            writer.writeheader()
+        writer.writerow(row)
+    return row
+
+
+def check_commitments(files: Sequence[Path], commitments: Path) -> list[dict[str, str]]:
+    """Every label file must match a committed SHA-256; returns the matching rows, in order."""
+    rows = read_commitments(commitments)
+    by_hash = {r["sha256"]: r for r in rows}
+    matched = []
+    for path in files:
+        digest = file_sha256(path)
+        if digest not in by_hash:
+            raise LabelError(f"{Path(path).name} (SHA-256 {digest[:12]}...) is not in "
+                             f"{commitments}: it was changed after it was committed, or never "
+                             "committed (D02 amendment 3, blinding)")  # fmt: skip
+        matched.append(by_hash[digest])
+    return matched

@@ -46,11 +46,10 @@ dataset:
     rule: labelled                        # read from results/data/near_duplicate_labels.csv
                                           # (labels:chosen:*), written by RC-D1-label's scoring
     embedding:
-      model: facebook/dinov2-small        # UNVERIFIED proposal (DINOv2-small): RC-D1-embed reads
-                                          # the hub record, prints id, revision and licence, and
-                                          # stops if the hub has no such model
-      revision: TODO                      # pinned from RC-D1-embed's printout (the commit hash)
-      licence: TODO                       # from the hub record, printed by RC-D1-embed
+      model: facebook/dinov2-small        # DINOv2-small; read from the hub by RC-D1-embed
+                                          # (Kaggle T4, 2026-10-19, commit cb5de07)
+      revision: ed25f3a31f01632728cabb09d1542f84ab7b0056  # the hub commit RC-D1-embed printed
+      licence: apache-2.0                 # the hub record's licence, as RC-D1-embed printed it
       side: 224                           # each view resized to 224 x 224 (aspect not kept)
       centre_fraction: 0.60               # the centre view: the central 60 % of width and height
       batch_size: 32
@@ -61,6 +60,11 @@ dataset:
     labelling:
       seed: 20261012                      # the sample of about 300 pairs (data/labelling.py)
       min_precision: 0.5                  # rule choice: highest sensitivity with precision >= 0.5
+      topup:                              # D02 amendment 3, recorded 2026-10-19 before any label:
+        band: 0.03                        # if fewer than min_in_band labelled pairs lie within
+        min_in_band: 30                   # +-band of the chosen threshold (chosen view), draw
+        pairs: 100                        # this many candidate pairs from the band, leaving out
+        seed: 20261013                    # labelled pairs; the rule is chosen again once
     strict_margin: 0.05                   # strict test subset: the most similar training image is
                                           # below the rule's threshold minus 0.05 (cosine; and the
                                           # crop level minus 0.05 if the rule has one)

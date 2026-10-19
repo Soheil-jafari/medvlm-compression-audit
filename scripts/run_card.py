@@ -62,6 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--labels", type=Path, nargs="+", default=(), help="RC-D1-label: the filled label files"
     )
+    parser.add_argument(
+        "--topup-dir", type=Path, default=None, help="RC-D1-label: the top-up's output, if any"
+    )
     parser.add_argument("--allow-blocked", action="store_true", help="tests only")
     parser.add_argument("--dry-run", action="store_true", help="print the plan, run nothing")
     return parser
@@ -111,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
             args.card, args.seed, variants=args.variant, budgets=args.budget,
             out=out or Path("/kaggle/working"), kvasir_seg=args.kvasir_seg,
             data_root=args.data_root, external_images=args.external_images,
-            embed_dir=args.embed_dir, labels=args.labels,
+            embed_dir=args.embed_dir, labels=args.labels, topup_dir=args.topup_dir,
         )  # fmt: skip
         status = card_status(card_file(plan.card, REPO / "docs" / "runs"))
     except CardError as exc:

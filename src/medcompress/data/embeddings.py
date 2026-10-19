@@ -274,6 +274,26 @@ def pairs_at_or_above(
     return np.concatenate(a_out), np.concatenate(b_out), np.concatenate(c_out).astype(np.float32)
 
 
+def count_pairs_in_band(
+    embeddings: Mapping[str, np.ndarray],
+    view: str,
+    low: float,
+    high: float,
+    *,
+    block: int = 512,
+) -> int:
+    """How many pairs i < j of all images have a cosine in ``[low, high]`` in ``view``
+    (``full``, ``centre`` or ``max``, the larger of the two): a count, exact."""
+    names = ("full", "centre") if view == "max" else (view,)
+    n = len(embeddings[names[0]])
+    total = 0
+    for start in range(0, n, block):
+        sims = np.max([embeddings[v][start : start + block] @ embeddings[v].T for v in names], 0)
+        rows, cols = np.nonzero((sims >= low) & (sims <= high))
+        total += int(np.sum(cols > rows + start))
+    return total
+
+
 # ------------------------------------------------------------------ the self-check (Kaggle)
 
 

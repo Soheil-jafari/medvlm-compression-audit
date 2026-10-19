@@ -27,13 +27,23 @@ Commands:
            labelling sample, its numbered sheets and the label template, in --out-dir (private,
            outside the repository; upload it as ONE private Kaggle dataset); counts to
            <results_root>/data/near_duplicate_embed.csv
-  score-labels  RC-D1-label: Cohen's kappa, sensitivity and precision of every candidate rule,
-           and the joining rule chosen by the rule fixed in advance; aggregate numbers to
+  score-labels  RC-D1-label: Cohen's kappa, the third member's decisions, sensitivity and
+           precision of every candidate rule, the joining rule chosen by the rule fixed in
+           advance and the unsure analysis; aggregate numbers to
            <results_root>/data/near_duplicate_labels.csv and near_duplicate_rules.csv, which
-           RC-D1 run 4 reads
+           RC-D1 run 4 reads. If the third member has pairs to decide, their list goes to
+           --private-dir and it stops (exit code 4)
+  topup-labels  the top-up of D02 amendment 3: if fewer than 30 labelled pairs lie within
+           +-0.03 of the chosen threshold, 100 more pairs from that band (seed 20261013), with
+           sheets and a template in --out-dir (private); reuses RC-D1-embed's output (no new
+           embedding); counts to <results_root>/data/near_duplicate_topup.csv
+  commit-labels  check one rater's label file and add its SHA-256 to
+           docs/runs/RC-D1-label_commitments.csv (blinding: commit that file before the labels
+           are discussed)
 
-Exit codes: 4 a setting is open (the joining rule before the labels are scored, or no rule
-qualifies), 5 an input check failed, 7 the chaining guard stopped the run (one group holds too
+Exit codes: 4 a setting is open (the joining rule before the labels are scored, no rule
+qualifies, the third member has pairs to decide, or a top-up is required), 5 an input check
+failed, 7 the chaining guard stopped the run (one group holds too
 many images), 8 the embedding model failed the check on synthetic copies.
 
 Example (RC-D1):
@@ -54,7 +64,8 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "src"))
 
 from medcompress.config import config_root, load_config  # noqa: E402
 from medcompress.utils.io import append_results  # noqa: E402
@@ -171,7 +182,7 @@ def counts(args: argparse.Namespace, dataset: dict) -> int:
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
         results_root=args.results_root,
-        embed_dir=_attached(args.embed_dir),
+        embed_dir=_attached(args.embed_dir, dataset),
     )
     if prepared.split_sha256 != shared.meta.get("split_sha256"):
         print(
@@ -279,34 +290,97 @@ def embed(args: argparse.Namespace, dataset: dict) -> int:
 
 
 def score_labels(args: argparse.Namespace, dataset: dict) -> int:
-    """RC-D1-label: kappa, every rule's sensitivity and precision, the chosen rule."""
+    """RC-D1-label: kappa, the third member, every rule's scores, the chosen rule."""
     from medcompress.data.embed_step import score_labels_step
     from medcompress.data.labelling import LabelError
-    from medcompress.utils.bundles import EMBED_KIND, BundleError, verify_bundle
+    from medcompress.utils.bundles import TOPUP_KIND, BundleError, verify_bundle
 
     try:
-        embed_dir = verify_bundle(args.embed_dir, kind=EMBED_KIND).root
-        labels, rules, chosen = score_labels_step(embed_dir, args.labels, dataset)
-    except (BundleError, LabelError) as exc:
+        embed_dir = _embed_output(args.embed_dir, dataset)
+        topup = verify_bundle(args.topup_dir, kind=TOPUP_KIND).root if args.topup_dir else None
+        scoring = score_labels_step(
+            embed_dir, args.labels, dataset, topup_dir=topup, private_dir=args.private_dir,
+            commitments=args.commitments,
+        )  # fmt: skip
+    except (BundleError, LabelError, ValueError) as exc:
         print(f"check failed: {exc}", file=sys.stderr)
         return INPUT_CHECK_FAILED
-    for name, result in (("near_duplicate_labels.csv", labels),
-                         ("near_duplicate_rules.csv", rules)):  # fmt: skip
+    if scoring.adjudication is not None:
+        return SETTING_OPEN  # nothing is written until the third member has decided
+    for name, result in (("near_duplicate_labels.csv", scoring.labels),
+                         ("near_duplicate_rules.csv", scoring.rules)):  # fmt: skip
         target = args.results_root / "data" / name
         target.unlink(missing_ok=True)
         if result.rows:
             append_results(result.rows, target)
             print(f"wrote {len(result.rows)} aggregate rows to {target}")
-    return 0 if chosen is not None else SETTING_OPEN
+    return 0 if scoring.chosen is not None and not scoring.topup_required else SETTING_OPEN
 
 
-def _attached(path: Path | None) -> Path | None:
+def topup_labels(args: argparse.Namespace, dataset: dict) -> int:
+    """The top-up of D02 amendment 3, from RC-D1-embed's output and the first chosen rule."""
+    from medcompress.config import repo_root
+    from medcompress.data.embed_step import topup_step
+    from medcompress.data.labelling import LabelError
+    from medcompress.utils.bundles import TOPUP_KIND, BundleError, write_bundle_manifest
+
+    out = args.out_dir.resolve()
+    if out.is_relative_to(repo_root().resolve()):
+        print(f"--out-dir must be outside the repository: {out}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    try:
+        embed_dir = _embed_output(args.embed_dir, dataset)
+        data_root = _data_folder(args.data_root)
+        result, top = topup_step(embed_dir, data_root, out, args.results_root, dataset)
+    except (BundleError, LabelError) as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    target = args.results_root / "data" / "near_duplicate_topup.csv"
+    target.unlink(missing_ok=True)
+    append_results(result.rows, target)
+    print(f"wrote {len(result.rows)} aggregate rows to {target}")
+    if top.pairs:
+        made = write_bundle_manifest(out, kind=TOPUP_KIND, meta={"pairs": len(top.pairs)})
+        print(f"wrote {out / 'bundle_manifest.json'}: {len(made.files)} files; upload {out} as "
+              "ONE private Kaggle dataset; the raters get only its label_sheets/, "
+              "label_images.csv and labels_template.csv (card RC-D1-label)")  # fmt: skip
+    return 0
+
+
+def commit_labels(args: argparse.Namespace) -> int:
+    """Check a rater's own label file and add its SHA-256 to the commitments file."""
+    from medcompress.data.labelling import LabelError, add_commitment
+
+    try:
+        row = add_commitment(args.commitments, args.labels, role=args.role, round_=args.round)
+    except LabelError as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    print(f"{row['file']}: {row['labels']} labels of {row['role']}, round {row['round']}, "
+          f"SHA-256 {row['sha256']}")  # fmt: skip
+    print(f"now commit {args.commitments} on its own (git add {args.commitments}; git commit -m "
+          f'"Commit the {row["role"]} labels of round {row["round"]}"; git push), then upload '
+          "the label file to the private labels dataset")  # fmt: skip
+    return 0
+
+
+def _attached(path: Path | None, dataset: dict) -> Path | None:
     """RC-D1-embed's output, verified (``None`` if not given)."""
-    if path is None:
-        return None
-    from medcompress.utils.bundles import EMBED_KIND, verify_bundle
+    return None if path is None else _embed_output(path, dataset)
 
-    return verify_bundle(path, kind=EMBED_KIND).root
+
+def _embed_output(path: Path, dataset: dict) -> Path:
+    """RC-D1-embed's output, verified; its recorded model, revision and licence must be the
+    pinned ones of the dataset config."""
+    from medcompress.data.embed_step import pinned_problems
+    from medcompress.utils.bundles import EMBED_KIND, BundleError, verify_bundle
+
+    root = verify_bundle(path, kind=EMBED_KIND).root
+    problems = pinned_problems(root, dataset)
+    if problems:
+        raise BundleError(f"{root} was not made with the pinned embedding model: "
+                          + "; ".join(problems))  # fmt: skip
+    return root
 
 
 def _final_sheet(prepared, sheet_dir: Path, data_root: Path) -> Path:  # type: ignore[no-untyped-def]
@@ -459,8 +533,24 @@ def main(argv: list[str] | None = None) -> int:
     lab = sub.add_parser("score-labels", help="RC-D1-label: kappa, rules, the chosen rule")
     lab.add_argument("--embed-dir", type=Path, required=True, help="RC-D1-embed's output")
     lab.add_argument("--labels", type=Path, nargs="+", required=True,
-                     help="the filled template, or the two raters' copies")  # fmt: skip
+                     help="the raters' files of every round and the third member's")  # fmt: skip
+    lab.add_argument("--topup-dir", type=Path, default=None, help="the top-up's output, if any")
+    lab.add_argument("--private-dir", type=Path, default=None,
+                     help="where the third member's list goes (private)")  # fmt: skip
+    lab.add_argument("--commitments", type=Path, default=None,
+                     help="check every label file against these committed SHA-256")  # fmt: skip
     lab.add_argument("--results-root", type=Path, default=Path("results"))
+    top = sub.add_parser("topup-labels", help="the top-up pairs near the chosen threshold")
+    top.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")
+    top.add_argument("--embed-dir", type=Path, required=True, help="RC-D1-embed's output")
+    top.add_argument("--out-dir", type=Path, required=True, help="private, outside the repo")
+    top.add_argument("--results-root", type=Path, default=Path("results"))
+    com = sub.add_parser("commit-labels", help="add a label file's SHA-256 to the commitments")
+    com.add_argument("--labels", type=Path, required=True, help="your own filled file")
+    com.add_argument("--role", required=True, choices=("rater_1", "rater_2", "rater_3"))
+    com.add_argument("--round", required=True, choices=("first", "topup"))
+    com.add_argument("--commitments", type=Path,
+                     default=REPO / "docs" / "runs" / "RC-D1-label_commitments.csv")  # fmt: skip
     over = sub.add_parser("overlap", help="near-duplicates of an external image folder")
     over.add_argument("--data-root", type=Path, required=True, help="the shared-data dataset")
     over.add_argument(
@@ -482,14 +572,19 @@ def main(argv: list[str] | None = None) -> int:
         return bundle(args, dataset)
     if args.command == "verify":
         return verify(args)
+    if args.command == "commit-labels":
+        return commit_labels(args)
     from medcompress.config import ConfigError
     from medcompress.data.dedup import ChainingError
+    from medcompress.utils.bundles import BundleError
 
     try:
         if args.command == "embed":
             return embed(args, dataset)
         if args.command == "score-labels":
             return score_labels(args, dataset)
+        if args.command == "topup-labels":
+            return topup_labels(args, dataset)
         if args.command == "calibrate":
             return calibrate(args, dataset)
         if args.command == "counts":
@@ -501,6 +596,9 @@ def main(argv: list[str] | None = None) -> int:
     except ChainingError as exc:
         print(f"STOP: {exc}", file=sys.stderr)
         return CHAINING_STOP
+    except BundleError as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
 
 
 def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
@@ -516,7 +614,7 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
         results_root=args.results_root,
-        embed_dir=_attached(args.embed_dir),
+        embed_dir=_attached(args.embed_dir, dataset),
         embedder=make_embedder(args.embedding_model) if args.embedding_model else None,
     )
     hashes = write_private_outputs(prepared, args.private_dir, args.data_root)

@@ -6,11 +6,16 @@ checks the embedding model on synthetic copies, embeds every image in two views,
 candidate pairs, draws the labelling sample and writes, to a private folder, everything the
 labelling, the scoring and run 4 need. Only aggregate counts go to the repository.
 
-``score_labels_step``: reads the two raters' labels, computes Cohen's kappa and the sensitivity
-and precision of every rule of ``candidates.rule_family()``, and chooses the joining rule by the
-rule fixed in advance (``labelling.choose_rule``), with the chaining guard checked over all
-images. The chosen rule is written as numbers to ``results/data/near_duplicate_labels.csv``,
-from which RC-D1 run 4 reads it.
+``score_labels_step``: reads the two raters' labels, computes Cohen's kappa, asks the third
+member to decide the disagreements (every pair of a round whose kappa is below 0.40), computes
+the sensitivity and precision of every rule of ``candidates.rule_family()`` and chooses the
+joining rule by the rule fixed in advance (``labelling.choose_rule``), with the chaining guard
+checked over all images; then the unsure analysis. The chosen rule is written as numbers to
+``results/data/near_duplicate_labels.csv``, from which RC-D1 run 4 reads it, unless a top-up
+is required first.
+
+``topup_step``: the top-up of the amendment (``labelling.topup_sample``) for the chosen rule,
+from RC-D1-embed's candidates (no new embedding): the extra pairs, their sheets and template.
 """
 
 from __future__ import annotations
@@ -41,6 +46,7 @@ from medcompress.data.dedup import CHAIN_MIN_IMAGES
 from medcompress.data.embeddings import (
     Embedder,
     EmbeddingSettings,
+    count_pairs_in_band,
     embed_images,
     load_embeddings,
     save_embeddings,
@@ -48,25 +54,44 @@ from medcompress.data.embeddings import (
     self_check_passes,
 )
 from medcompress.data.labelling import (
+    BAND_TOLERANCE,
     LABELS,
     MIN_PRECISION,
     SAMPLE_SEED,
     STRATA,
+    TOPUP_BAND,
+    TOPUP_MIN_IN_BAND,
+    TOPUP_PAIRS,
+    TOPUP_SEED,
+    Adjudication,
+    LabelError,
+    LabelPair,
+    RuleScore,
+    TopUp,
+    adjudicate,
+    check_commitments,
     choose_rule,
     cohen_kappa,
+    labelled_in_band,
     labelling_sample,
     read_labels,
     read_pairs,
+    read_third,
     score_rule,
     stratum_sizes,
+    topup_sample,
+    truth_from,
     truth_of,
     weighted_scores,
+    write_adjudication_template,
     write_labelling_files,
 )
 from medcompress.data.prepare import (
     _features,
     _row,
     crop_settings,
+    labelled_rule,
+    labels_values,
     near_duplicate_settings,
     prepare,
     score_histogram,
@@ -263,26 +288,95 @@ def _min_precision(dataset_config: Mapping[str, Any]) -> float:
     return float(cfg.get("min_precision", MIN_PRECISION))
 
 
+def topup_settings(dataset_config: Mapping[str, Any]) -> dict[str, float]:
+    """``near_duplicates.labelling.topup``: band, min_in_band, pairs, seed (the top-up)."""
+    labelling = (dataset_config.get("near_duplicates") or {}).get("labelling") or {}
+    cfg = labelling.get("topup") or {}
+    return {
+        "band": float(cfg.get("band", TOPUP_BAND)),
+        "min_in_band": int(cfg.get("min_in_band", TOPUP_MIN_IN_BAND)),
+        "pairs": int(cfg.get("pairs", TOPUP_PAIRS)),
+        "seed": int(cfg.get("seed", TOPUP_SEED)),
+    }
+
+
+def pinned_problems(embed_dir: Path, dataset_config: Mapping[str, Any]) -> list[str]:
+    """Where RC-D1-embed's recorded model, revision and licence differ from the pinned ones of
+    ``near_duplicates.embedding`` (nothing is checked while a value is ``TODO``)."""
+    info = json.loads((Path(embed_dir) / "embeddings.json").read_text(encoding="utf-8"))
+    cfg = (dataset_config.get("near_duplicates") or {}).get("embedding") or {}
+    pinned = {key: cfg.get(key) for key in ("model", "revision", "licence")}
+    if pinned["revision"] in (None, "TODO"):
+        return []
+    return [
+        f"{key}: {info.get(key)!r} in {embed_dir}, {value!r} pinned in the config"
+        for key, value in pinned.items()
+        if value not in (None, "TODO") and str(info.get(key, "")).lower() != str(value).lower()
+    ]
+
+
+@dataclass(frozen=True)
+class Scoring:
+    """What RC-D1-label's scoring gives: the rows of the labels and rules files, the chosen
+    rule (``None`` if none qualifies or the third member has pairs to decide), whether the
+    top-up is required, and the private list of pairs for the third member (if any)."""
+
+    labels: StepResult
+    rules: StepResult
+    chosen: JoinRule | None
+    topup_required: bool = False
+    adjudication: Path | None = None
+
+
+def _round_pairs(embed_dir: Path, topup_dir: Path | None) -> dict[str, list[LabelPair]]:
+    rounds = {"first": read_pairs(Path(embed_dir) / "label_pairs.csv")}
+    if topup_dir is not None:
+        rounds["topup"] = read_pairs(Path(topup_dir) / "label_pairs.csv")
+        clash = {p.pair_id for p in rounds["first"]} & {p.pair_id for p in rounds["topup"]}
+        if clash:
+            raise LabelError(f"the top-up reuses {len(clash)} pair numbers of the first round")
+    return rounds
+
+
 def score_labels_step(
     embed_dir: Path,
     label_files: Sequence[Path],
     dataset_config: Mapping[str, Any],
     *,
+    topup_dir: Path | None = None,
+    private_dir: Path | None = None,
+    commitments: Path | None = None,
     log: Callable[[str], None] = print,
-) -> tuple[StepResult, StepResult, JoinRule | None]:
-    """RC-D1-label's scoring (module docstring). Returns (the labels file rows, the rules file
-    rows, the chosen rule or ``None``)."""
+) -> Scoring:
+    """RC-D1-label's scoring (module docstring). ``label_files``: the raters' files of every
+    round and the third member's files (column ``rater_3``); ``topup_dir``: the top-up's output
+    (its pairs are scored with the first round's, and the rule is chosen again on all labels);
+    ``private_dir``: where the list of pairs for the third member is written; ``commitments``:
+    the committed SHA-256 of each label file, checked first."""
     embed_dir = Path(embed_dir)
-    pairs = read_pairs(embed_dir / "label_pairs.csv")
-    ids = [p.pair_id for p in pairs]
-    first, second = read_labels(ids, *label_files)
-    truth = truth_of(first, second, ids)
     lines: list[str] = []
 
     def say(text: str) -> None:
         lines.append(text)
         log(text)
 
+    if commitments is not None:
+        for path, match in zip(label_files, check_commitments(label_files, commitments),
+                               strict=True):  # fmt: skip
+            say(f"{Path(path).name}: matches the commitment of {match['role']}, round "
+                f"{match['round']} (SHA-256 {match['sha256'][:12]}...)")  # fmt: skip
+    rounds = _round_pairs(embed_dir, topup_dir)
+    pairs = [p for round_pairs in rounds.values() for p in round_pairs]
+    ids = [p.pair_id for p in pairs]
+    first, second = read_labels(ids, *label_files)
+    third = read_third(*label_files)
+    unknown = sorted(set(third) - set(ids))
+    if unknown:
+        raise LabelError(f"rater_3 labelled {len(unknown)} unknown pairs (first: {unknown[0]})")
+    decided: dict[str, Adjudication] = {
+        name: adjudicate(first, second, third, [p.pair_id for p in round_pairs])
+        for name, round_pairs in rounds.items()
+    }
     a = [first[i] for i in ids]
     b = [second[i] for i in ids]
     kappa = cohen_kappa(a, b, LABELS)
@@ -292,19 +386,56 @@ def score_labels_step(
         ("same", "not"),
     )
     either = sum(1 for x, y in zip(a, b, strict=True) if "same_scene" in (x, y))
+    both = truth_of(first, second, ids)
+    say(f"{len(ids)} pairs; Cohen's kappa before adjudication {kappa:.3f} (same scene vs "
+        f"the rest {binary:.3f}); both same_scene {int(both.sum())}; either rater "
+        f"{either}")  # fmt: skip
+    for name, adj in decided.items():
+        why = ("kappa below 0.40: the third member decides every pair" if adj.all_pairs
+               else "the third member decides the disagreements")  # fmt: skip
+        say(f"round {name}: {len(adj.ids)} pairs, kappa {adj.kappa:.3f}; {why}: "
+            f"{len(adj.required)} pairs ({len(adj.missing)} still without a third "
+            "label)")  # fmt: skip
+    missing = [i for adj in decided.values() for i in adj.missing]
+    if missing:
+        if private_dir is None:
+            raise LabelError(f"{len(missing)} pairs need the third member's label: pass "
+                             "--private-dir to write their list")  # fmt: skip
+        path = write_adjudication_template(missing, private_dir)
+        say(f"ADJUDICATION NEEDED: {len(missing)} pairs for the third member in {path} "
+            "(private, no score, no rater's label); score again with their file added to "
+            "--labels")  # fmt: skip
+        return Scoring(StepResult(tuple(lines), (), {}), StepResult((), (), {}), None,
+                       adjudication=path)  # fmt: skip
+
+    final = {i: label for adj in decided.values() for i, label in adj.final.items()}
+    truth = truth_from(final, ids)
+    unsure_truth = truth_from(final, ids, unsure_positive=True)
     rows: list[dict[str, Any]] = [
         _row("labels:pairs", len(ids)),
         _row("labels:kappa", kappa),
         _row("labels:kappa_same_scene_vs_rest", binary),
         _row("labels:agreement", sum(1 for x, y in zip(a, b, strict=True) if x == y) / len(ids)),
-        _row("labels:positives_both_same_scene", int(truth.sum())),
+        _row("labels:positives_both_same_scene", int(both.sum())),
         _row("labels:either_same_scene", either),
+        _row("labels:adjudicated", sum(len(adj.required) for adj in decided.values())),
+        _row("labels:positives", int(truth.sum())),
+        _row("labels:positives_unsure_as_same_scene", int(unsure_truth.sum())),
     ]
+    for name in ("first", "topup"):
+        adj_ = decided.get(name)
+        rows.append(_row(f"labels:pairs:{name}", len(adj_.ids) if adj_ else 0))
+        if adj_ is not None:
+            rows += [_row(f"labels:kappa:{name}", adj_.kappa),
+                     _row(f"labels:adjudicated:{name}", len(adj_.required)),
+                     _row(f"labels:adjudicated_all:{name}", int(adj_.all_pairs))]  # fmt: skip
     for rater, labels in (("rater_1", a), ("rater_2", b)):
         for label in LABELS:
             rows.append(_row(f"labels:{rater}:{label}", sum(1 for x in labels if x == label)))
-    say(f"{len(ids)} pairs; Cohen's kappa {kappa:.3f} (same scene vs the rest {binary:.3f});"
-        f" positives (both same_scene) {int(truth.sum())}; either rater {either}")  # fmt: skip
+    for label in LABELS:
+        rows.append(_row(f"labels:final:{label}", sum(1 for x in final.values() if x == label)))
+    say(f"after adjudication: {int(truth.sum())} positives (same_scene); "
+        f"{int(unsure_truth.sum())} with unsure counted as same_scene")  # fmt: skip
 
     scores = [score_rule(rule, pairs, truth) for rule in rule_family()]
     rule_rows: list[dict[str, Any]] = []
@@ -318,14 +449,18 @@ def score_labels_step(
 
     embeddings, images, crop_pairs = _embed_inputs(embed_dir, dataset_config)
     settings = near_duplicate_settings(dataset_config, close_bits=4, confirm_threshold=1.0)
+    guarded: dict[JoinRule, tuple[bool, int]] = {}
 
     def guard(rule: JoinRule) -> tuple[bool, int]:
-        groups = component_groups(images, *joined_pairs_all(rule, embeddings, crop_pairs))
-        largest = largest_group(groups)
-        ok = largest < CHAIN_MIN_IMAGES or largest <= settings.max_group_fraction * len(images)
-        return ok, largest
+        if rule not in guarded:
+            groups = component_groups(images, *joined_pairs_all(rule, embeddings, crop_pairs))
+            largest = largest_group(groups)
+            ok = largest < CHAIN_MIN_IMAGES or largest <= settings.max_group_fraction * len(images)
+            guarded[rule] = (ok, largest)
+        return guarded[rule]
 
-    chosen, checks = choose_rule(scores, guard, min_precision=_min_precision(dataset_config))
+    min_precision = _min_precision(dataset_config)
+    chosen, checks = choose_rule(scores, guard, min_precision=min_precision)
     for rule, ok, largest in checks:
         rule_rows.append(_row(f"rule:{rule.label}:largest_group", largest))
         rule_rows.append(_row(f"rule:{rule.label}:guard_ok", int(ok)))
@@ -335,36 +470,143 @@ def score_labels_step(
     if chosen is None:
         say("NO rule has precision >= the minimum and passes the guard: report (a decision is "
             "needed, D02 amendment 3)")  # fmt: skip
-        return StepResult(tuple(lines), tuple(rows), {}), StepResult((), tuple(rule_rows), {}), None
+        return Scoring(StepResult(tuple(lines), tuple(rows), {}),
+                       StepResult((), tuple(rule_rows), {}), None)  # fmt: skip
     rows += [_row(f"labels:chosen:{k}", v) for k, v in chosen.rule.code().items()]
-    for name, (value, low, high) in (("sensitivity", chosen.sensitivity),
-                                     ("precision", chosen.precision)):  # fmt: skip
-        row = _row(f"labels:chosen:{name}", value)
-        row.update(ci_low=low, ci_high=high)
-        rows.append(row)
-    weighted = weighted_scores(chosen.rule, pairs, truth)
+    rows += _score_rows("labels:chosen", chosen)
+    first_round = len(rounds["first"])  # the stratified design: the first round only
+    weighted = weighted_scores(chosen.rule, rounds["first"], truth[:first_round])
     for name, (value, low, high) in weighted.items():
         row = _row(f"labels:chosen:{name}_weighted", value)
         row.update(ci_low=low, ci_high=high)
         rows.append(row)
-    largest = next(lg for rule, ok, lg in checks if rule == chosen.rule)
+    largest = guard(chosen.rule)[1]
+    top = topup_settings(dataset_config)
+    in_band = labelled_in_band(pairs, chosen.rule, top["band"])
+    required = False
+    if topup_dir is None:  # the same draw as topup-labels: needed, and pairs left to draw
+        table = CandidateTable.load(embed_dir / EMBED_FILES["candidates"])
+        draw = topup_sample(
+            table, rounds["first"], chosen.rule, band=top["band"],
+            min_in_band=int(top["min_in_band"]), size=int(top["pairs"]), seed=int(top["seed"]),
+        )  # fmt: skip
+        required = draw.needed and bool(draw.pairs)
+        if draw.needed and not draw.pairs:
+            say("fewer than the minimum labelled pairs near the threshold, but no candidate "
+                "pair is left in the band: no top-up, the rule stands")  # fmt: skip
     rows += [
         _row("labels:chosen:largest_group", largest),
         _row("labels:chosen:largest_fraction", largest / len(images)),
-        _row("labels:min_precision", _min_precision(dataset_config)),
+        _row("labels:min_precision", min_precision),
+        _row("labels:in_band_labelled", in_band),
+        _row("labels:topup_required", int(required)),
     ]
     sens, prec = chosen.sensitivity, chosen.precision
     say(f"chosen rule: {chosen.rule.label}: sensitivity {sens[0]:.3f} "
         f"({sens[1]:.3f}-{sens[2]:.3f}), precision {prec[0]:.3f} ({prec[1]:.3f}-{prec[2]:.3f}) "
         "on the labelled pairs "
         f"({chosen.true_positive} of {chosen.positives} positives joined, {chosen.joined} joined); "
-        f"over all candidates (weighted): sensitivity {weighted['sensitivity'][0]:.3f}, precision "
-        f"{weighted['precision'][0]:.3f}; largest group {largest}")  # fmt: skip
-    return (
+        f"over all candidates (weighted, first round): sensitivity "
+        f"{weighted['sensitivity'][0]:.3f}, precision {weighted['precision'][0]:.3f}; "
+        f"largest group {largest}")  # fmt: skip
+
+    # the unsure analysis: unsure is not same_scene for precision, same_scene for sensitivity
+    analysis = [score_rule(r, pairs, truth, sensitivity_truth=unsure_truth) for r in rule_family()]
+    as_chosen = next(s for s in analysis if s.rule == chosen.rule)
+    rows += _score_rows("labels:unsure_analysis:chosen", as_chosen)
+    other, _ = choose_rule(analysis, guard, min_precision=min_precision)
+    if other is not None:
+        rows += [_row(f"labels:unsure_analysis:rule:{k}", v) for k, v in other.rule.code().items()]
+        rows += _score_rows("labels:unsure_analysis:rule", other)
+    same = other is not None and other.rule == chosen.rule
+    rows.append(_row("labels:unsure_analysis:same_rule", int(same)))
+    say(f"unsure analysis (sensitivity with unsure as same_scene): the chosen rule's sensitivity "
+        f"{as_chosen.sensitivity[0]:.3f}; the rule it would choose: "
+        f"{other.rule.label if other else 'none'}")  # fmt: skip
+    if required:
+        say(f"TOP-UP REQUIRED: {in_band} labelled pairs within +-{top['band']:.2f} of "
+            f"{chosen.rule.threshold:.2f} ({chosen.rule.view} view), fewer than "
+            f"{top['min_in_band']}: run topup-labels, label its pairs, score again (D02 "
+            "amendment 3); run 4 waits")  # fmt: skip
+    return Scoring(
         StepResult(tuple(lines), tuple(rows), {}),
         StepResult((), tuple(rule_rows), {}),
         chosen.rule,
+        topup_required=required,
     )
+
+
+def _score_rows(prefix: str, score: RuleScore) -> list[dict[str, Any]]:
+    out = []
+    for name, (value, low, high) in (("sensitivity", score.sensitivity),
+                                     ("precision", score.precision)):  # fmt: skip
+        row = _row(f"{prefix}:{name}", value)
+        row.update(ci_low=low, ci_high=high)
+        out.append(row)
+    return out
+
+
+def topup_step(
+    embed_dir: Path,
+    data_root: Path,
+    out_dir: Path,
+    results_root: Path,
+    dataset_config: Mapping[str, Any],
+    *,
+    log: Callable[[str], None] = print,
+) -> tuple[StepResult, TopUp]:
+    """The top-up (``labelling.topup_sample``) for the rule chosen on the first round, read
+    from the committed labels file. Writes the extra pairs, their sheets and template to
+    ``out_dir`` (private) when the top-up is needed; refuses if a top-up was scored already
+    (the rule is chosen again only once)."""
+    embed_dir, out_dir = Path(embed_dir), Path(out_dir)
+    values = labels_values(results_root)
+    if values.get("labels:pairs:topup", 0.0) > 0:
+        raise LabelError("the top-up was scored already: the rule is chosen again only once "
+                         "(D02 amendment 3)")  # fmt: skip
+    rule = labelled_rule(results_root, for_topup=True)
+    cfg = topup_settings(dataset_config)
+    table = CandidateTable.load(embed_dir / EMBED_FILES["candidates"])
+    labelled = read_pairs(embed_dir / "label_pairs.csv")
+    top = topup_sample(
+        table, labelled, rule, band=cfg["band"], min_in_band=int(cfg["min_in_band"]),
+        size=int(cfg["pairs"]), seed=int(cfg["seed"]),
+    )  # fmt: skip
+    embeddings, _, _ = _embed_inputs(embed_dir, dataset_config)
+    low, high = rule.threshold - cfg["band"], rule.threshold + cfg["band"]
+    every = count_pairs_in_band(embeddings, rule.view, low - BAND_TOLERANCE,
+                                high + BAND_TOLERANCE)  # fmt: skip
+    rows = [_row(f"topup:first_rule:{k}", v) for k, v in rule.code().items()]
+    rows += [
+        _row("topup:band", cfg["band"]),
+        _row("topup:min_in_band", cfg["min_in_band"]),
+        _row("topup:seed", cfg["seed"]),
+        _row("topup:in_band_labelled", top.in_band_labelled),
+        _row("topup:in_band_candidates_unlabelled", top.in_band_unlabelled),
+        _row("topup:in_band_pairs_all_images", every),
+        _row("topup:needed", int(top.needed)),
+        _row("topup:drawn", len(top.pairs)),
+    ]
+    lines = [
+        f"rule chosen on the first round: {rule.label}; {top.in_band_labelled} labelled pairs "
+        f"within +-{cfg['band']:.2f} of {rule.threshold:.2f} ({rule.view} view); in the band: "
+        f"{top.in_band_unlabelled} candidate pairs not labelled, {every} pairs of all images"
+    ]
+    files: dict[str, Path] = {}
+    if not top.needed:
+        lines.append(f"no top-up: at least {cfg['min_in_band']} labelled pairs in the band; the "
+                     "rule stands")  # fmt: skip
+    elif not top.pairs:
+        lines.append("fewer than the minimum labelled pairs near the threshold, but no candidate "
+                     "pair is left in the band: no top-up, the rule stands")  # fmt: skip
+    else:
+        files = write_labelling_files(list(top.pairs), data_root, out_dir)
+        lines.append(f"top-up: {len(top.pairs)} pairs to label (pairs {top.pairs[0].pair_id} to "
+                     f"{top.pairs[-1].pair_id}, seed {cfg['seed']}): {files['sheets']}, "
+                     f"template {files['template']}")  # fmt: skip
+    for line in lines:
+        log(line)
+    return StepResult(tuple(lines), tuple(rows), files), top
 
 
 def _embed_inputs(
@@ -382,8 +624,11 @@ def _embed_inputs(
 
 __all__ = [
     "CandidateTable",
+    "Scoring",
     "SelfCheckError",
     "StepResult",
     "embed_step",
+    "pinned_problems",
     "score_labels_step",
+    "topup_step",
 ]
