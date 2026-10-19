@@ -53,12 +53,14 @@ The appendix item reports them next to the published adapter's test results.
   2. Candidates: pairs within 12 bits.
   3. Confirmation on the centre of the image: the central 60 % of width and height, grey-scale,
      32 x 32 pixels, with a Gaussian blur (4 px) subtracted; the measure is the highest Pearson
-     correlation over shifts of up to 3 px (5.6 % of the side). Pairs at or above the
-     threshold **[RC-D1 calibration]** `min_correlation` are joined. The threshold is chosen
-     on the data before the split, from the distribution over all candidate pairs and a
-     contact sheet checked by eye (RC-D1 section 3a).
-  4. Pairs within 4 bits are always joined; union-find over all joined pairs gives the groups.
-     The run stops if one group holds more than 5 % of the images (chaining guard).
+     correlation over shifts of up to 3 px (5.6 % of the side). Candidate pairs at or above
+     **0.65** are joined, and no others: nothing is joined on the dHash alone, also not at 0-4
+     bits. The threshold was chosen on the data before the split (calibration step,
+     2026-10-19): the valley of the bimodal distribution of the 5-8 bit pairs, which 2 of 2,000
+     random pairs reach. The calibration also showed 0-4 bit pairs of clearly different images
+     (the same lumen position and overlays), so the automatic join of run 2 was dropped.
+  4. Union-find over the joined pairs gives the groups. The run stops if one group holds more
+     than 10 % of the images (chaining guard; below 0.60 the largest group jumps above 30 %).
   5. Whole groups are assigned to train / validation / test = 70 / 15 / 15 % of the images,
      seed 20261012, stratified by the answer values of the finding question and by the
      Kvasir-SEG mask (`data/splits.py: assign_groups_stratified`).
@@ -66,15 +68,19 @@ The appendix item reports them next to the published adapter's test results.
   `image_fraction:<split>`.
 - **Groups:** **[RC-D1]** `groups:total`, `groups:multi_image`, `groups:largest`,
   `groups:largest_fraction`, `groups:size:*`; pairs **[RC-D1]**
-  `near_duplicates:joined_pairs:always` and `:confirmed`.
+  `near_duplicates:candidate_pairs`, `:joined_pairs`.
 - **Near-duplicates of training images in validation and test:** 0 by construction
-  (**[RC-D1]** `val_test_near_duplicates_of_train`, `val_test_confirmed_duplicates_of_train`).
-  Reported, not filtered: the dHash distances above 4 bits (**[RC-D1]**
-  `min_distance_to_train:<split>:5` ... `:17`), each held-out image's highest crop correlation
-  with a training image (**[RC-D1]** `max_score_to_train:<split>:*`), and the held-out images
-  whose crop correlation with a training image beyond 12 bits reaches the threshold
-  (**[RC-D1]** `similar_to_train_beyond_candidates:<split>`). The 24 most similar pairs across
-  splits are checked by eye on a contact sheet (kept private).
+  (**[RC-D1]** `val_test_confirmed_duplicates_of_train`). Reported, not filtered: the 0-4 bit
+  pairs the crop left apart (**[RC-D1]** `near_duplicates:close_pairs_not_joined`, in all and
+  across splits) and the held-out images with a training image within 4 bits (**[RC-D1]**
+  `val_test_close_dhash_to_train`); the dHash distance of each held-out image to the training
+  split (**[RC-D1]** `min_distance_to_train:<split>:*`); its highest crop correlation with a
+  training image (**[RC-D1]** `max_score_to_train:<split>:*`); and the held-out images whose
+  crop correlation with a training image beyond 12 bits reaches the threshold (**[RC-D1]**
+  `similar_to_train_beyond_candidates:<split>`). The 24 most similar pairs across splits by the
+  crop, the 24 closest by the dHash, and the closest 0-4 bit pairs left apart are checked by
+  eye on a contact sheet (kept private). If same-scene pairs are seen there, near-duplicates are
+  detected again with a pre-registered stronger measure (decisions log, 2026-10-19).
 - **Limitation: no patient identifiers.** HyperKvasir, the source of the Kvasir-VQA images, has
   no patient IDs, only image IDs. The grouping joins identical images and adjacent frames of
   one scene, but images of the same patient taken at different moments (another part of the

@@ -219,7 +219,53 @@ Applied in `data/dedup.py` (`two_stage_groups`, `crop_similarity`), `data/prepar
 exit code 7 for the guard), `configs/data/kvasir_vqa_x1.yaml` (`near_duplicates`) and run card
 RC-D1 (calibration step, run 3).
 
-Chosen threshold (filled after the calibration step): `min_correlation` = TODO; reason: TODO.
+### Final values (2026-10-19, Soheil), before any model result
+
+From the calibration step (Kaggle CPU, 2026-10-19, commit 73f31bc;
+`results/data/near_duplicate_calibration.csv`, commit b4cf740). It ran with the rule of that
+commit, in which pairs within 4 bits were still joined automatically:
+- 211,329 candidate pairs within 12 bits.
+- The crop correlation of the 5-8 bit pairs is bimodal: one mode at 0.15-0.30 (different
+  images), one at 0.80-0.90 (same scene), with the valley at 0.60-0.70 (bins 0.60: 731,
+  0.65: 671, 0.70: 809).
+- Random controls (2,000 pairs beyond 12 bits): median 0.137, 99th percentile 0.420, maximum
+  0.808; 2 of 2,000 reach 0.65.
+- Largest group: 2,059 images (31.9 %) at 0.55, 428 (6.6 %) at 0.60, 349 (5.4 %) at 0.65, 335
+  (5.2 %) at 0.70 and 0.75, 321 (5.0 %) at 0.80.
+- The contact sheet at the provisional proposal 0.80:
+  - just below 0.80 (not joined): 1 of 8 pairs is the same scene (7 bits, practically
+    identical colon frames), so 0.80 misses it;
+  - just above 0.80 (joined): 2 of 8 are the same scene; 6 of 8 are different images, mostly
+    pale oesophagus images with a similar texture;
+  - the four 0-4 bit pairs with the lowest correlation (r = 0.009, 0.042, 0.063, 0.065) are
+    all clearly different images: the automatic join links unrelated images and feeds
+    chaining;
+  - random controls: all different.
+
+Reasoning: a missed duplicate leaks test images into training (expensive); a wrong join only
+puts two images in the same split (cheap, as long as no giant group forms). So the threshold
+goes to the valley, not to 0.80, and the automatic join is removed.
+
+**Final values:**
+1. `min_correlation` = **0.65**: the valley of the bimodal 5-8 bit distribution; 2 of 2,000
+   random controls reach it.
+2. **No automatic join within 4 bits.** Every candidate pair within 12 bits, 0-4 bits
+   included, is joined only if its crop correlation is at least 0.65. The 0-4 bit pairs that
+   are not joined are reported: their number, in all and across splits, and a band of the
+   final contact sheet (`--close-bits 4` names that band; `--dedup-threshold` is its old name).
+3. **Chaining guard at 10 %** of all images (was 5 %); the jump above 30 % below 0.60 shows
+   what real chaining looks like. The run STOPS (exit code 7) above 10 %, as before. With the
+   automatic join removed, the largest group at 0.65 can only be smaller than or equal to the
+   calibration's 349 (fewer pairs are joined).
+4. **The deciding check** stays the final contact sheet, now with the 24 most similar
+   cross-split pairs by the crop correlation and the 24 closest by the dHash distance (and the
+   0-4 bit pairs left apart). If a person sees same-scene pairs there, the next step is a
+   stronger near-duplicate measure, pre-registered as the fallback in the decisions log
+   (2026-10-19): embeddings from a small pretrained vision model, compared by cosine
+   similarity, run on CPU. It is not implemented now.
+
+Applied in `configs/data/kvasir_vqa_x1.yaml` (`near_duplicates`), `data/dedup.py`,
+`data/prepare.py`, `scripts/prepare_data.py`, `cards.py` and run card RC-D1 (run 3).
 
 ## Answer format for the inbox
 

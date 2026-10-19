@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-10-18, iteration 52 (interactive run mode)
+**Last updated:** 2026-10-19, iteration 53 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S03 + S05: the RC-D1 calibration step, then RC-D1 run 3 (two-stage near-duplicate grouping, D02 amendment 2); RC-TT0 (teacher feasibility, does not wait for RC-D1); then RC-TT1 (our teacher's training, after run 3), all Soheil
+**Current stage:** S03 + S05: RC-D1 run 3 (two-stage near-duplicate grouping, threshold 0.65, D02 amendment 2 final values); then RC-TT1 (our teacher's training: N = 38,000, the published LoRA targets), all Soheil. The calibration step and RC-TT0 are done (2026-10-19)
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -22,9 +22,13 @@
    2026-10-18 (iteration 52): RC-D1 run 2's 4-bit groups missed adjacent frames, so the
    grouping has two stages (D02 amendment 2): dHash candidates within 12 bits, confirmed by a
    crop correlation whose threshold comes from the calibration step; a chaining guard; a final
-   contact sheet. Next: read the calibration printout and sheet, write the chosen
-   `min_correlation` into the dataset config and D02, then read RC-D1 run 3 (label values,
-   finding list, `max_new_tokens`), RC-TT0's rule 3 and RC-TT1's progress. RC-L1 needs code
+   contact sheet.
+   2026-10-19 (iteration 53): final values from the calibration (threshold 0.65, no join on
+   the dHash alone, guard 10 %, the final sheet as the deciding check, an embedding fallback
+   pre-registered); a T4 x2 hour counts once, so RC-TT1 trains on 38,000 examples; RC-TT1 uses
+   the published adapter's target modules (which ones is printed at its start: the hub cannot
+   be reached from here). Next: read RC-D1 run 3 (final sheet, label values, finding list,
+   `max_new_tokens`), then RC-TT1's target printout and progress. RC-L1 needs code
    first (run identities, parent from config, cache extension, comparison rows); the A1/A2 reuse
    of E7's effects waits on the team (freeze list item 15).
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
@@ -47,14 +51,14 @@ cards for the team (decision of 2026-10-12).
 | 2 | Optional: full names for the copyright line in `LICENSE` and `CITATION.cff` | team | 2026-10-12 |
 | 2b | CI on `main` is red (import error fixed on `research-loop` in a7ec704); merging `research-loop` into `main` turns it green | Soheil | 2026-10-12 |
 | 4 | Each member confirms own access to Kvasir-VQA-x1 and Kvasir-SEG (inbox) | all | 2026-10-12 |
-| 5 | Run the RC-D1 **calibration step** (RC-D1-calibrate) and paste back the printout and the contact sheet; after the threshold is committed, RC-D1 **run 3**, make its shared data ONE private dataset, share it, commit `results/data/summary.csv`, attach the final contact sheet to the report. RC-TT0 (T4 x2) can run any time; then RC-TT1 with run 3's shared data | Soheil | 2026-10-18 |
+| 5 | Run RC-D1 **run 3**, make its shared data ONE private dataset, share it, commit `results/data/summary.csv`, attach the final contact sheet (three bands) to the report with what you see in each band; then RC-TT1 with run 3's shared data, and paste its `published target_modules` line | Soheil | 2026-10-19 |
 | 7 | Tell Amir and Farzan that the staged selection was replaced by one student with checks (D05 amendment) | Soheil | 2026-10-12 |
 | 8 | Confirm the fixed training pool (one pool from `seeds.data_split` for E1, E2, E4 and the recoveries; the teacher cache holds only that pool) | Soheil | 2026-10-12 |
 | 10 | Answer the [team] items of the pre-registration draft (comparator rule, headline accuracy for H1/H4, finding thresholds, prevalence cut points, cap, tiers, training pool, A3 ranking, reuse of E7 for `A4:n128` and `A5:logprob_drop`, H2 matching, McNemar on the majority answer) | all | 2026-10-12 |
 | 11 | Choose the rented timing GPU and the precision (`hardware.final_timing`, `hardware.precision`) | team | 2026-10-12 |
 | 12 | Run RC-X1 part A: EndoBench terms, format and overlap (no GPU) | Farzan | 2026-10-12 |
 | 13 | Approve the freeze list in the inbox (19 items with recommendations; the RC-D1 and RC-B0 items follow their runs) | Soheil, then Amir and Farzan | 2026-10-17 |
-| 14 | Check on Kaggle: whether a T4 x2 session counts once or twice against the weekly quota; the session time limit; whether a stopped version keeps its output | team | 2026-10-17 |
+| 14 | Check on Kaggle: the session time limit; whether a stopped version keeps its output (a T4 x2 session counts once: measured 2026-10-19) | team | 2026-10-17 |
 | 15 | Add Amir and Farzan as collaborators on GitHub (`research-loop`) and on each private Kaggle dataset (`docs/team_setup.md`) | Soheil | 2026-10-17 |
 
 ## Stages

@@ -127,8 +127,8 @@ the rest runs.
 ## 8. GPU hours
 
 Each person has 30 Kaggle GPU hours per week (decision of 2026-10-17). Kaggle shows what is
-left. Not known yet: whether a T4 x2 session counts once or twice (TODO: check on Kaggle and
-write the answer in the inbox). Write the GPU hours a session used into its report;
+left. A T4 x2 session counts **once** against the quota (measured 2026-10-19: a 17-minute
+T4 x2 session used 16 minutes). Write the GPU hours a session used into its report;
 `docs/schedule.md` is corrected from these numbers.
 
 ## 9. Questions

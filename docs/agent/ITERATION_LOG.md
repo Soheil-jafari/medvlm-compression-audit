@@ -1091,3 +1091,29 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: choose `min_correlation` from the calibration printout and sheet; then RC-D1 run 3.
 - Needs the team: the calibration step and run 3 (Soheil); RC-TT0 can run now.
+
+## Iteration 53: 2026-10-19 (interactive)
+- Stage / item: S03 and S05, from the calibration step (commit b4cf740) and RC-TT0 (commit
+  3afb035), checked against the committed files.
+- Did:
+  - **D02 amendment 2, final values:** `min_correlation` 0.65; no pair joined on the dHash
+    alone (the 0-4 bit pairs left apart are counted, in all and across splits, and shown);
+    the chaining guard at 10 %. `--close-bits` names the reported 0-4 bit band
+    (`--dedup-threshold` still works). The final contact sheet has three bands: the 24 most
+    similar cross-split pairs by the crop, the 24 closest by the dHash, and the 0-4 bit pairs
+    left apart. The calibration command follows the final rule.
+  - **RC-TT1:** a T4 x2 hour counts once (config), so N = 38,000 from the committed RC-TT0 file
+    (2,375 updates; about 14.7 h, an estimate). The LoRA uses the published adapter's target
+    modules inside the decoder layers (`layer_modules`), read at the start and printed; the run
+    stops before training if a name matches no layer there, or if the file's rank, alpha or
+    dropout differ from RC-TT0's. The published module list could not be read here (the hub is
+    not reachable from the agent's session); the RC-TT0 printout was not committed.
+  - Regenerated the summary tables from the newly committed result files (the paper test
+    failed on the base commit).
+  - Docs: RC-D1 (run 3, the calibration record), RC-TT0 (done), RC-TT1, D01 amendment 2, D02
+    final values, the decisions log (with the embedding fallback), STATUS, the schedule, the
+    data card, the pre-registration, the session-limit line of every card.
+- Verified: ruff check, ruff format, pytest on CPU.
+- Commit: see `git log` on `research-loop`.
+- Next: RC-D1 run 3's final contact sheet and counts; RC-TT1's target printout.
+- Needs the team: RC-D1 run 3, then RC-TT1 (Soheil); the Kaggle session time limit.

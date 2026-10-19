@@ -17,7 +17,8 @@
 
   Each step runs in a process of its own, as in RC-S0b. An out-of-memory error is a result.
 - Who: **Soheil**.
-- Status: `ready`
+- Status: `done` (result file committed 2026-10-19, commit 3afb035; the run report is not
+  committed). Read in section 5.
 
 ## 2. Requirements
 
@@ -31,8 +32,9 @@
   - **Setup:** (a) unless (a) runs out of memory or is more than 2x slower per example than
     (b). Within a setup, the faster variant that ran.
   - **N:** the largest multiple of 1,000 training examples whose projected time (warm step time
-    x N) is at most **15 GPU hours**. A T4 x2 hour counts as 2 GPU hours until the team has
-    checked Kaggle's rule (TODO: verify). The other reading is printed and stored next to it.
+    x N) is at most **15 GPU hours**. The run counted a T4 x2 hour as 2 GPU hours, and printed
+    and stored the other reading next to it. Measured 2026-10-19: a T4 x2 hour counts **once**,
+    so RC-TT1 uses the other reading (38,000).
   - **Cap:** one pass over the training split's QA rows; RC-TT1 applies it, because it knows
     the split.
 - LoRA settings: rank 16, alpha 32, dropout 0.05 (D06), unless the published
@@ -57,9 +59,8 @@
 - **Hand-offs it writes:** none (its result file reaches RC-TT1 through git).
 - **Results to commit:** the copies under `/kaggle/working/results_to_commit/`
   (`docs/team_setup.md`).
-- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit,
-  and whether a T4 x2 session counts once or twice against the weekly quota. This card uses
-  T4 x2.
+- **Session limits:** a T4 x2 session counts **once** against the weekly quota (measured
+  2026-10-19). The session time limit is unknown here (TODO: the team checks on Kaggle).
 
 ## 3. Commands
 
@@ -98,9 +99,17 @@ rows are replaced, and rule 3 is applied again. To reprint the rule from the com
 
 - `rule_setup_fp16_2gpu` is 1 for setup (a) and 0 for (b). `rule_gradient_checkpointing` is 0
   or 1.
-- `rule_n_examples` is N: a T4 x2 hour is counted twice. `rule_n_examples_if_t4x2_counts_once`
-  is the other reading. RC-TT1 uses the first unless it is run with `--t4x2-counts-once` after
-  the team has checked Kaggle's rule.
+- `rule_n_examples` is N with a T4 x2 hour counted twice (19,000 in the committed run).
+  `rule_n_examples_if_t4x2_counts_once` is the other reading (38,000). A T4 x2 hour counts once
+  (measured 2026-10-19), so RC-TT1 uses 38,000 (`rule.t4x2_counts_twice: false`).
+- The committed run: setup (a) `fp16_2gpu` without gradient checkpointing, 1.39 s per example;
+  peak GPU memory 22.9 GB over the two T4s (18.1 GB with checkpointing); (b) ran too (1.59 s,
+  11.8 GB). `lora_from_published` 1: rank 16, alpha 64, dropout 0.05 from the published
+  `adapter_config.json`. `lora_targets_match` 0: its `target_modules` value is neither the
+  string `all-linear` nor exactly the list of the seven decoder projections (the check of that
+  commit did not parse a regular expression). The value itself is in the run's printout of the
+  `lora_config` step, which is not committed; RC-TT1 reads, prints and uses it (D01,
+  2026-10-19).
 - `rule_projected_wall_hours` and `rule_projected_gpu_hours` are **estimates**: the warm step
   time at micro-batch 1 x N. The real run steps the optimizer only every 16 examples, so it
   should be slightly faster.

@@ -6,40 +6,58 @@
 - Experiment: E0's adapter. Qwen2.5-VL-7B-Instruct at its pinned revision, with a new LoRA
   trained on **our training split only**, at image side 672 (the students' input).
 - What the run does:
-  1. Reads the setup, gradient checkpointing, N and the LoRA settings from RC-TT0's committed
-     `results/smoke/RC-TT0/teacher_training.csv`. No number is typed by hand.
-  2. Takes the first N examples of one seeded order of the training split, stratified by
+  1. Reads the setup, gradient checkpointing, N and the LoRA rank, alpha and dropout from
+     RC-TT0's committed `results/smoke/RC-TT0/teacher_training.csv` (commit 3afb035). No number
+     is typed by hand. A T4 x2 hour counts **once** against the Kaggle quota (measured
+     2026-10-19), so N is RC-TT0's `rule_n_examples_if_t4x2_counts_once`: **38,000**.
+     `configs/teacher_training.yaml` (`rule.t4x2_counts_twice: false`) says so; no flag is
+     needed.
+  2. Reads the published adapter's `adapter_config.json` at its pinned revision, prints its
+     `target_modules` as written, and puts the LoRA on those modules inside the language
+     model's decoder layers; the vision tower stays frozen (D01, 2026-10-19). It counts the
+     adapted linear layers per target and **stops before training** if a published target
+     matches none there, or if the file's rank, alpha or dropout differ from RC-TT0's.
+  3. Takes the first N examples of one seeded order of the training split, stratified by
      question type, so rare types are included. N is capped at one pass over the split.
-  3. Trains, saving its state about every 30 minutes (an estimate from RC-TT0's step time).
-  4. When started again, continues from the furthest saved state it finds, also one in a
+  4. Trains, saving its state about every 30 minutes (every 81 updates; an estimate from
+     RC-TT0's step time).
+  5. When started again, continues from the furthest saved state it finds, also one in a
      previous notebook version's output attached as input.
-  5. Writes the adapter as a hand-off: ONE private dataset, whose manifest holds the SHA-256
+  6. Writes the adapter as a hand-off: ONE private dataset, whose manifest holds the SHA-256
      of every file, the commit, the config hash, N, the steps and the setup.
-  6. Runs the teacher's validation evaluation and Gate 1. Both wait cleanly while the finding
+  7. Runs the teacher's validation evaluation and Gate 1. Both wait cleanly while the finding
      list is still open; RC-E0a and RC-E0b then run them.
 - Who: **Soheil**.
-- Status: `ready` (it stops with a clear message until RC-TT0's result file is committed).
+- Status: `ready`; it waits for RC-D1 run 3's shared data (RC-TT0's result file is committed).
 
 ## 2. Requirements
 
 - RC-D1 **run 3** done: its shared-data dataset (image-disjoint split with the two-stage
   near-duplicate grouping, D02 amendment 2) attached. Not run 2's: its 4-bit groups missed
   adjacent frames, so its validation and test images have copies in its training split.
-- RC-TT0 done, and its `results/smoke/RC-TT0/teacher_training.csv` committed.
+- RC-TT0 done: `results/smoke/RC-TT0/teacher_training.csv` is committed (commit 3afb035). It
+  gives setup (a), fp16 over two T4s, without gradient checkpointing; 1.39 s per example (warm
+  step); LoRA rank 16, alpha 64, dropout 0.05, read from the published `adapter_config.json`.
 - Platform: Kaggle notebook, **GPU T4 x2** (setup b uses one of them), Internet **on** (model
   download).
 - Recipe:
   - from the SimulaMet `args.json` where it applies: lr 2e-5, cosine schedule, 3 % warm-up,
     weight decay 0.1;
-  - LoRA on the language model, vision tower frozen; rank, alpha and dropout from RC-TT0;
+  - LoRA on the published adapter's target modules inside the language model, vision tower
+    frozen; rank 16, alpha 64, dropout 0.05 from RC-TT0 (the published values);
   - 16 examples per update (micro-batch 1 x 16, like the students);
   - fp16 with loss scaling and fp32 LoRA weights;
   - answers only, no distillation.
 
   The settings are in `configs/teacher_training.yaml`.
-- Runtime: at most 15 GPU hours by rule 3, as RC-TT0 projected (an **estimate**). Not known
-  here: the Kaggle session time limit, and whether a stopped version keeps its output
-  (TODO: check on Kaggle). The run resumes either way (section 3).
+- Runtime (**estimates** from RC-TT0's warm step time): N = 38,000 examples, 2,375 updates of
+  16, about **14.7 hours** of wall time on T4 x2, which is about 14.7 GPU hours of quota
+  (counted once), within rule 3's 15. The real run steps the optimizer only every 16
+  examples, so it may be a little faster. Not known here: the Kaggle session time limit, and
+  whether a stopped version keeps its output (TODO: check on Kaggle). If a session is shorter
+  than the run, it takes more than one session; it resumes (section 3).
+- The LoRA targets were timed by RC-TT0 as D06's seven projections of the language model. If the
+  published targets are a different set, the step time may differ from the estimate above.
 - **Quality rule** (rule 3, pre-registered):
   - The teacher must pass Gate 1 (D04 thresholds unchanged).
   - Once E1 seed 0 exists, its validation macro balanced accuracy must be at least E1 seed 0's
@@ -69,17 +87,23 @@
   RC-E0b, RC-E9 and RC-R1 attach it with `--from`.
 - **Results to commit:** the copies under `/kaggle/working/results_to_commit/`
   (`docs/team_setup.md`).
-- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit,
-  and whether a T4 x2 session counts once or twice against the weekly quota. This card uses
-  T4 x2. The training saves its state about every 30 minutes and continues from it (section 3).
+- **Session limits:** a T4 x2 session counts **once** against the weekly quota (measured
+  2026-10-19: a 17-minute T4 x2 session used 16 minutes). The session time limit is unknown
+  here (TODO: the team checks on Kaggle). The training saves its state about every 30 minutes
+  and continues from it (section 3).
 
 ## 3. Commands
 
-First a dry run, which prints N, the updates and the projected hours and loads no model:
+First a dry run, which prints N, the updates and the projected hours and loads no model. It
+must say `N = 38000 ... (a T4 x2 hour counted once)` and `2375 updates of 16`:
 
 ```bash
 python scripts/train_teacher.py --data-root /kaggle/input/<shared-data> --dry-run
 ```
+
+The training run then prints `published target_modules (as written): ...`, the target names
+and `adapted linear layers per target: ...` before the first update. If the hub cannot be
+reached, give a downloaded copy with `--published-adapter-config <path>`.
 
 **Start** (Save & Run All with the notebook above, or by hand in a T4 x2 session):
 
@@ -105,8 +129,10 @@ python scripts/train_teacher.py --data-root /kaggle/input/<shared-data> --extend
 
 ## 4. What to commit back
 
-- `results/E0/nobudget/seed0/metrics.csv`: the `teacher_*` training rows, and the E0
-  validation and Gate 1 rows if they ran.
+- `results/E0/nobudget/seed0/metrics.csv`: the `teacher_*` training rows (with
+  `teacher_lora_rank`, `_alpha`, `_dropout`, `teacher_lora_adapted_layers`,
+  `teacher_lora_target:<name>` and `teacher_t4x2_counts_once`), and the E0 validation and
+  Gate 1 rows if they ran.
 - The run report (`docs/runs/reports/`).
 - The hand-off folder `E0_teacher_adapter`, made ONE private dataset. Write its name in the
   report. Never commit the adapter.
@@ -115,7 +141,8 @@ python scripts/train_teacher.py --data-root /kaggle/input/<shared-data> --extend
 
 | Check | Where | Pass if |
 |---|---|---|
-| Plan followed | `teacher_train_steps` | `ceil(N / 16)`, N as RC-TT0's `rule_n_examples` (capped at the training rows) |
+| Plan followed | `teacher_train_steps`, `teacher_n_examples` | 2,375 and 38,000 (`ceil(N / 16)`, N as RC-TT0's `rule_n_examples_if_t4x2_counts_once`, capped at the training rows) |
+| Published targets used | `teacher_lora_target:<name>` | every published target adapts at least one layer (a projection of the decoder: 28, one per decoder layer) |
 | Training sane | `teacher_train_loss_final` | finite |
 | Hand-off intact | `python scripts/handoff.py verify /kaggle/input/<teacher-adapter>` | prints OK |
 
@@ -126,6 +153,8 @@ python scripts/train_teacher.py --data-root /kaggle/input/<shared-data> --extend
 - Hardware and library versions:
 - Sessions used (one line each: start step, end step, wall time):
 - N, steps, final loss, peak memory:
+- The printed `published target_modules (as written)` line and `adapted linear layers per
+  target` line:
 - Name of the private teacher-adapter dataset:
 - Validation and Gate 1 (ran, or waited on the finding list):
 - Anything unusual:

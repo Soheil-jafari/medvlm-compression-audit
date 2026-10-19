@@ -31,7 +31,7 @@ terms takes as long as it takes.
   - overlap
 - **Hand-offs it writes:** none (its results reach the others through git).
 - **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
-- **Session limits (unknown here; TODO: the team checks on Kaggle):** the session time limit, and whether a T4 x2 session counts once or twice against the weekly quota. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
+- **Session limits:** a T4 x2 session counts **once** against the weekly quota (measured 2026-10-19: a 17-minute T4 x2 session used 16 minutes). The session time limit is unknown here (TODO: the team checks on Kaggle). A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
 
 ## 3. Steps
 
@@ -63,9 +63,10 @@ python scripts/prepare_data.py overlap --data-root /kaggle/working/data \
 python -m pytest -q tests/test_results.py                  # must pass before you commit
 ```
 
-The threshold 4 (of 64 bits) is RC-D1's always-joined distance. Since D02 amendment 2, RC-D1
-also joins pairs within 12 bits whose crop correlation reaches `min_correlation`; this overlap
-count still uses the dHash alone (open: whether RC-X1 uses the same two stages, decisions log).
+The threshold 4 (of 64 bits) was RC-D1's always-joined distance until 2026-10-19. Since D02
+amendment 2, RC-D1 joins a pair within 12 bits only if its crop correlation is at least 0.65;
+this overlap count still uses the dHash alone (open: whether RC-X1 uses the same two stages,
+decisions log).
 
 ## 4. What to commit back
 

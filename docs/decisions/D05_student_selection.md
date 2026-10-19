@@ -350,8 +350,8 @@ answer lengths that fix `teacher_cache.max_new_tokens` (`T`).
 | Training-length check | the cache for 20,000 more examples, 1,875 updates x u, one scoring run, one recovery, four evaluations |
 
 The team states the GPU hours it has (90 Kaggle GPU hours per week, 30 per person, stated
-2026-10-17; whether a T4 x2 session counts once or twice against the Kaggle quota is still to be
-checked on Kaggle, TODO: verify) and picks
+2026-10-17; a T4 x2 session counts once against the Kaggle quota, measured 2026-10-19) and
+picks
 the **largest side whose projected total fits**. If the micro-batch of 4 does not fit one T4 at
 that side, the D06 amendment proposal applies (micro-batch 2 or 1, accumulation 8 or 16, 16
 examples per update, or gradient checkpointing at 4 x 4; D06 memo). Nothing in this rule reads a real image or a result of the
