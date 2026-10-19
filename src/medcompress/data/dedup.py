@@ -9,11 +9,12 @@ preregistration; removed counts go into the data card.
 Fingerprint: difference hash (dHash) of a grey-scale image resized to 9 x 8, giving
 64 bits as 16 hex characters; distance = number of differing bits (Hamming).
 
-Two-stage grouping (D02 amendment 2 of 2026-10-18): the dHash alone joins images that look
-alike only at 9 x 8 pixels (colour, lumen position, the text and the green box drawn on the
-image), and misses adjacent frames of one scene. Pairs within ``candidate_bits`` are therefore
-checked with a finer measure on the centre of the image, where no overlay is drawn
-(:class:`CropSettings`, :func:`crop_similarity`).
+Two-stage grouping (D02 amendment 2 of 2026-10-18, final values 2026-10-19): the dHash alone
+joins images that look alike only at 9 x 8 pixels (colour, lumen position, the text and the
+green box drawn on the image), and misses adjacent frames of one scene. Every pair within
+``candidate_bits`` is therefore checked with a finer measure on the centre of the image, where
+no overlay is drawn (:class:`CropSettings`, :func:`crop_similarity`), and joined only if that
+measure says so: also at 0-4 bits, which the calibration showed can be different images.
 """
 
 from __future__ import annotations
@@ -290,21 +291,23 @@ class CropSettings:
 class NearDuplicateSettings:
     """Both stages: dHash candidates, the crop confirmation, and the chaining guard.
 
-    Pairs within ``always_join_bits`` are always joined (as in RC-D1 run 2); pairs within
-    ``candidate_bits`` are joined when their crop correlation is at least ``min_correlation``.
-    The run stops if the largest group holds more than ``max_group_fraction`` of all images.
+    Every pair within ``candidate_bits`` is joined when, and only when, its crop correlation is
+    at least ``min_correlation`` (no pair is joined on the dHash alone since 2026-10-19).
+    ``close_bits`` only names the band of very close pairs that is reported separately (the
+    pairs within it that are not joined). The run stops if the largest group holds more than
+    ``max_group_fraction`` of all images.
     """
 
     min_correlation: float
-    always_join_bits: int = 4
     candidate_bits: int = 12
-    max_group_fraction: float = 0.05
+    max_group_fraction: float = 0.10
+    close_bits: int = 4
     crop: CropSettings = CropSettings()
 
     def rows(self) -> dict[str, float]:
         """The settings, as the aggregate rows of ``summary.csv`` record them."""
         return {
-            "always_join_bits": self.always_join_bits,
+            "close_bits": self.close_bits,
             "candidate_bits": self.candidate_bits,
             "min_correlation": self.min_correlation,
             "max_group_fraction": self.max_group_fraction,
@@ -494,16 +497,16 @@ def joined_pairs(
     scores: Sequence[float],
     settings: NearDuplicateSettings,
 ) -> list[bool]:
-    """Which candidate pairs are joined: within ``always_join_bits``, or confirmed by the crop."""
-    return [
-        d <= settings.always_join_bits or s >= settings.min_correlation
-        for (_, _, d), s in zip(candidates, scores, strict=True)
-    ]
+    """Which candidate pairs are joined: those whose crop correlation reaches the threshold,
+    at any dHash distance within the candidates (``candidates`` gives the order)."""
+    if len(candidates) != len(scores):
+        raise ValueError("one score per candidate pair")
+    return [float(s) >= settings.min_correlation for s in scores]
 
 
 CHAIN_MIN_IMAGES = 3
 """Chaining (a~b and b~c joining a and c) needs at least three images, so a group of one or two
-never stops the run. This matters only for tiny sets: at 6,449 images, 5 % is 322 images."""
+never stops the run. This matters only for tiny sets: at 6,449 images, 10 % is 644 images."""
 
 
 def check_chaining(groups: Mapping[str, str], max_fraction: float) -> None:
@@ -532,8 +535,7 @@ def two_stage_groups(
     """Candidates by dHash, confirmation by the crop, union-find, then the chaining guard.
 
     1. candidates: pairs within ``settings.candidate_bits``;
-    2. joined: pairs within ``always_join_bits``, and candidates whose crop correlation is at
-       least ``min_correlation``;
+    2. joined: the candidates whose crop correlation is at least ``min_correlation``;
     3. union-find over the joined pairs (:func:`union_groups`);
     4. :class:`ChainingError` if the largest group holds more than ``max_group_fraction``.
     """

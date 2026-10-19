@@ -12,9 +12,15 @@ teacher_training:
   max_grad_norm: 1.0                      # D06 (the students' value)
   batch_size: 1                           # micro-batch 1 x 16 accumulation = 16 per update, as
   grad_accumulation: 16                   # the students (D06 amendment 2026-10-17)
-  target_modules: [decoder_attention, decoder_mlp]   # the language model; vision tower frozen
+  target_modules: published               # D01, 2026-10-19: the target_modules of the published
+                                          # adapter_config.json (pinned revision), read on Kaggle
+                                          # by RC-TT1, printed and recorded, and applied inside the
+                                          # language model's decoder layers; vision tower frozen
+  feasibility_target_modules: [decoder_attention, decoder_mlp]   # what RC-TT0 timed (D06: the
+                                          # seven projections of the language model)
   lora_default: {rank: 16, alpha: 32, dropout: 0.05}  # D06; replaced by the published
                                           # adapter_config.json when RC-TT0 can read it there
+                                          # (it could: rank 16, alpha 64, dropout 0.05)
   checkpoint_minutes: 30                  # resume state about every 30 minutes (estimate from
                                           # RC-TT0's step time)
   rule:                                   # rule 3, pre-registered 2026-10-18 before any result
@@ -22,9 +28,10 @@ teacher_training:
     example_step: 1000                    # N is a multiple of 1,000 training examples
     slower_factor: 2.0                    # QLoRA (nf4, 1 x T4) only if fp16 over 2 x T4 runs out
                                           # of memory or is more than 2x slower per example
-    t4x2_counts_twice: true               # a T4 x2 hour counts as 2 GPU hours until the team has
-                                          # checked Kaggle's rule (TODO: verify); the other
-                                          # reading is printed next to it
+    t4x2_counts_twice: false              # measured 2026-10-19: a 17-minute T4 x2 session used
+                                          # 16 minutes of quota, so a T4 x2 hour counts ONCE.
+                                          # RC-TT0's committed file has both readings; RC-TT1
+                                          # uses this one (N = 38,000)
   quality:                                # rule 3, quality part
     margin_over_e1_seed0: 0.02            # validation macro balanced accuracy >= E1 seed 0 + 0.02
     extension_fraction: 0.5               # if Gate 1 or the margin fails: once more, +50 % of N

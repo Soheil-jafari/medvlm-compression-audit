@@ -1,8 +1,9 @@
-"""Two-stage near-duplicate grouping (D02 amendment 2 of 2026-10-18) on synthetic images (CPU).
+"""Two-stage near-duplicate grouping (D02 amendment 2 of 2026-10-18, final values 2026-10-19)
+on synthetic images (CPU).
 
 The candidate stage (dHash), the confirmation by the crop (identical and shifted copies joined,
-different images not, overlays ignored), the chaining guard, determinism, the calibration step
-and the final contact sheet.
+different images not, overlays ignored; no automatic join at 0-4 bits), the chaining guard at
+10 %, determinism, the calibration step and the final contact sheet.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from medcompress.data.dedup import (
     cross_similarity_matrix,
     hamming_distance,
     image_features,
+    joined_pairs,
     near_duplicate_groups,
     two_stage_groups,
     union_groups,
@@ -167,44 +169,64 @@ def test_the_crop_ignores_the_overlays(tmp_path: Path) -> None:
     assert grouping.groups["b_overlay.jpg"] != grouping.groups["c_overlay.jpg"]
 
 
-def test_a_pair_within_the_always_joined_distance_is_joined_whatever_its_crop() -> None:
-    rng = np.random.default_rng(0)
-    signatures = {k: rng.normal(size=(CROP.grid, CROP.grid)) for k in "abc"}
-    fingerprints = {"a": _fp(0), "b": _fp(0b1111), "c": _fp(0b1111_1111)}  # a-b 4, a-c 8 bits
-    settings = NearDuplicateSettings(min_correlation=0.99, max_group_fraction=1.0)
+def _lookalike(seed: int) -> Image.Image:
+    """A strong left-to-right brightness ramp with faint detail of its own: two of them have
+    the same 9 x 8 dHash, like the lumen and the overlays in the calibration, but different
+    mucosa."""
+    rng = np.random.default_rng(seed)
+    ramp = np.tile(np.linspace(30, 220, W), (H, 1))
+    small = rng.integers(0, 255, size=(24, 30), dtype=np.uint8)
+    texture = np.asarray(Image.fromarray(small).resize((W, H), Image.Resampling.BICUBIC), float)
+    grey = np.clip(ramp + 0.25 * (texture - 127), 0, 255).astype(np.uint8)
+    return Image.fromarray(np.stack([grey] * 3, axis=-1))
+
+
+def test_pairs_within_four_bits_are_joined_only_by_the_crop(tmp_path: Path) -> None:
+    fingerprints, signatures = _features(
+        {"l1.jpg": _lookalike(1), "l2.jpg": _lookalike(2), "l1_copy.png": _lookalike(1)},
+        tmp_path,
+    )
+    assert hamming_distance(fingerprints["l1.jpg"], fingerprints["l2.jpg"]) <= 4
+    assert crop_similarity(signatures["l1.jpg"], signatures["l2.jpg"], CROP) < 0.3
+    settings = NearDuplicateSettings(min_correlation=0.65, max_group_fraction=1.0)
     grouping = two_stage_groups(fingerprints, signatures, settings)
-    assert grouping.groups == {"a": "a", "b": "a", "c": "a"}  # b-c is 4 bits too
-    assert max(grouping.scores) < 0.99  # unrelated crops: joined by the 4-bit rule only
-    stricter = NearDuplicateSettings(min_correlation=0.99, always_join_bits=3)
-    assert len(set(two_stage_groups(fingerprints, signatures, stricter).groups.values())) == 3
+    assert grouping.groups["l2.jpg"] == "l2.jpg"  # close by the dHash, apart by the crop
+    assert grouping.groups["l1_copy.png"] == "l1.jpg"  # a copy: joined by the crop
+    assert all(d <= 4 for _, _, d in grouping.candidates) and sum(grouping.joined) == 1
+    # synthetic scores, 0 bits apart: only the crop decides
+    rng = np.random.default_rng(0)
+    unrelated = {k: rng.normal(size=(CROP.grid, CROP.grid)) for k in "abc"}
+    same = {"a": _fp(0), "b": _fp(0), "c": _fp(0b1111)}
+    apart = two_stage_groups(same, unrelated, NearDuplicateSettings(min_correlation=0.65))
+    assert apart.groups == {"a": "a", "b": "b", "c": "c"} and not any(apart.joined)
+    assert joined_pairs([("a", "b", 0), ("a", "c", 12)], [0.64, 0.65], settings) == [False, True]
 
 
 # ------------------------------------------------------------------ the chaining guard
 
 
-def test_the_chaining_guard_stops_a_group_of_more_than_five_percent() -> None:
+def test_the_chaining_guard_stops_a_group_of_more_than_ten_percent() -> None:
     rng = np.random.default_rng(1)
     shared = rng.normal(size=(CROP.grid, CROP.grid))
     fingerprints, signatures = {}, {}
     for k in range(100):
         fingerprints[f"img{k:03d}"] = f"{int(rng.integers(0, 2**63)):016x}"
         signatures[f"img{k:03d}"] = rng.normal(size=(CROP.grid, CROP.grid))
-    for k in range(5):  # a chain: each 2 bits from the next, the same crop (a~b~c...)
+    for k in range(10):  # a chain: each 2 bits from the next, the same crop (a~b~c...)
         fingerprints[f"img{k:03d}"] = _fp((1 << (2 * k)) - 1)
         signatures[f"img{k:03d}"] = shared
-    settings = NearDuplicateSettings(min_correlation=0.9)
+    settings = NearDuplicateSettings(min_correlation=0.65)  # the guard's default: 10 %
+    assert settings.max_group_fraction == 0.10
     groups = two_stage_groups(fingerprints, signatures, settings).groups
-    assert len({groups[f"img{k:03d}"] for k in range(5)}) == 1  # 5 of 100: not more than 5 %
-    for k in range(5, 8):  # three more links: 8 of 100 images in one group
-        fingerprints[f"img{k:03d}"] = _fp((1 << (2 * k)) - 1)
-        signatures[f"img{k:03d}"] = shared
-    with pytest.raises(ChainingError, match=r"8 of 100 images \(8.0%\), more than 5%.*STOP"):
+    assert len({groups[f"img{k:03d}"] for k in range(10)}) == 1  # 10 of 100: not more than 10 %
+    fingerprints["img010"], signatures["img010"] = _fp((1 << 20) - 1), shared  # 11 of 100
+    with pytest.raises(ChainingError, match=r"11 of 100 images \(11.0%\), more than 10%.*STOP"):
         two_stage_groups(fingerprints, signatures, settings)
-    loose = NearDuplicateSettings(min_correlation=0.9, max_group_fraction=0.10)
-    assert max(two_stage_groups(fingerprints, signatures, loose).sizes.values()) == 8
-    check_chaining({"a": "a", "b": "a", "c": "c"}, 0.05)  # a pair alone cannot chain
+    loose = NearDuplicateSettings(min_correlation=0.65, max_group_fraction=0.20)
+    assert max(two_stage_groups(fingerprints, signatures, loose).sizes.values()) == 11
+    check_chaining({"a": "a", "b": "a", "c": "c"}, 0.10)  # a pair alone cannot chain
     with pytest.raises(ChainingError):
-        check_chaining({"a": "a", "b": "a", "c": "a", "d": "d"}, 0.05)
+        check_chaining({"a": "a", "b": "a", "c": "a", "d": "d"}, 0.10)
 
 
 # ------------------------------------------------------------------ determinism
@@ -240,19 +262,22 @@ def test_the_grouping_and_the_measure_are_deterministic_and_symmetric(tmp_path: 
 ABNORMAL = "Are there any abnormalities in the image? Check all that are present."
 
 
-def _dataset(root: Path, *, overlay: bool = True, chain: int = 0) -> Path:
+def _dataset(root: Path, *, overlay: bool = True, chain: int = 0, lookalike: bool = False) -> Path:
     """12 scenes; scene 0 also as a shifted copy and (``overlay``) an overlaid copy, in the
     official test split; scene 1 also as a brighter copy, in the train split. ``chain`` more
-    shifted copies of scene 0 make its group larger."""
+    shifted copies of scene 0 make its group larger. ``lookalike``: two different images with
+    the same dHash (one train, one test), which the crop keeps apart."""
     data = root / "data"
     images = {f"s{k:02d}": _view(_scene(100 + k)) for k in range(12)}
+    if lookalike:
+        images["l1"], images["l2"] = _lookalike(1), _lookalike(2)
     images["s00_shift"] = _view(_scene(100), dx=6, dy=3)
     if overlay:
         images["s00_overlay"] = _overlay(_view(_scene(100)))
     images["s01_bright"] = _view(_scene(101)).point(lambda v: min(255, int(v * 1.1) + 8))
     for k in range(chain):
         images[f"s00_chain{k}"] = _view(_scene(100), dx=-2 * k, dy=k)
-    test_only = {"s00", "s00_shift", "s00_overlay", "s05", "s06"}
+    test_only = {"s00", "s00_shift", "s00_overlay", "s05", "s06", "l2"}
     rows: dict[str, list[dict]] = {"train": [], "test": []}
     for k, (name, image) in enumerate(sorted(images.items())):
         _save(image, data / "kvasir_vqa_x1" / "images" / f"{name}.jpg")
@@ -280,24 +305,26 @@ def _run(*args: str) -> subprocess.CompletedProcess:
 def test_prepare_groups_in_two_stages_and_reports_the_checks(tmp_path: Path) -> None:
     from medcompress.data.prepare import prepare
 
-    data = _dataset(tmp_path)  # a group of 3 in 15 images: the guard is loosened here
+    data = _dataset(tmp_path, lookalike=True)  # a group of 3 in 17 images: guard loosened here
     config = {"name": "Kvasir-VQA-x1", "label_mapping": None,
               "near_duplicates": {"max_group_fraction": 0.5}}  # fmt: skip
     prepared = prepare(
-        data, config, split_seed=3, dedup_threshold=4, mask_threshold=4, confirm_threshold=0.9
+        data, config, split_seed=3, close_bits=4, mask_threshold=4, confirm_threshold=0.9
     )
     split_of = {s.image_path: name for name, rows in prepared.splits.items() for s in rows}
     image = "kvasir_vqa_x1/images/{}.jpg".format
     assert split_of[image("s00")] == split_of[image("s00_shift")] == split_of[image("s00_overlay")]
     assert split_of[image("s01")] == split_of[image("s01_bright")]
     metrics = {r["metric"]: r["value"] for r in prepared.rows}
-    assert metrics["groups:total"] == 12 and metrics["groups:largest"] == 3
+    metrics = {r["metric"]: r["value"] for r in prepared.rows}
+    assert metrics["groups:total"] == 14 and metrics["groups:largest"] == 3
     assert metrics["groups:size:3"] == 1 and metrics["groups:size:2"] == 1
-    assert metrics["groups:size:1"] == 10
+    assert metrics["groups:size:1"] == 12  # l1 and l2 included: the crop keeps them apart
     assert metrics["near_duplicates:min_correlation"] == 0.9
     assert metrics["near_duplicates:crop_fraction"] == 0.6
+    assert metrics["near_duplicates:close_bits"] == 4
+    assert metrics["near_duplicates:close_pairs_not_joined"] >= 1  # l1 and l2
     assert metrics["val_test_confirmed_duplicates_of_train"] == 0
-    assert metrics["val_test_near_duplicates_of_train"] == 0
     for split in ("val", "test"):
         assert sum(v for k, v in metrics.items() if k.startswith(f"max_score_to_train:{split}:")) \
             == metrics[f"images:{split}"]  # fmt: skip
@@ -306,33 +333,64 @@ def test_prepare_groups_in_two_stages_and_reports_the_checks(tmp_path: Path) -> 
     scores = [t.score for t in prepared.top_cross_split]
     assert scores == sorted(scores, reverse=True) and scores[0] < 0.9  # no duplicate crosses
     assert all(t.first_split != t.second_split for t in prepared.top_cross_split)
+    nearest = prepared.closest_dhash_cross_split
+    assert 0 < len(nearest) <= 24 and [t.bits for t in nearest] == sorted(t.bits for t in nearest)
+    assert all(t.first_split != t.second_split for t in nearest)
+    apart = prepared.close_not_joined
+    assert all(t.bits <= 4 and t.score < 0.9 and t.first_split != t.second_split for t in apart)
+    assert len(apart) == metrics["near_duplicates:close_pairs_not_joined:cross_split"]
+    l1, l2 = split_of[image("l1")], split_of[image("l2")]
+    pair = {image("l1"), image("l2")}
+    assert any({t.first, t.second} == pair for t in apart) == (l1 != l2)
+    assert metrics["val_test_close_dhash_to_train"] == int(l1 != l2 and "train" in {l1, l2})
     again = prepare(
-        data, config, split_seed=3, dedup_threshold=4, mask_threshold=4, confirm_threshold=0.9
+        data, config, split_seed=3, close_bits=4, mask_threshold=4, confirm_threshold=0.9
     )
     assert again.split_sha256 == prepared.split_sha256 and again.rows == prepared.rows
 
 
-def test_the_cli_waits_for_the_threshold_stops_on_chaining_and_draws_the_final_sheet(
-    tmp_path: Path,
-) -> None:
-    data = _dataset(tmp_path, overlay=False)  # groups of 2 at most: the guard holds at 5 %
+def test_the_threshold_is_required_before_a_split() -> None:
+    from medcompress.config import ConfigError
+    from medcompress.data.prepare import near_duplicate_settings
+
+    with pytest.raises(ConfigError, match="calibrate"):
+        near_duplicate_settings({"near_duplicates": {"min_correlation": "TODO"}}, close_bits=4)
+    chosen = near_duplicate_settings({"near_duplicates": {"min_correlation": 0.65}}, close_bits=4)
+    assert (chosen.min_correlation, chosen.max_group_fraction, chosen.close_bits) == (0.65, 0.1, 4)
+    assert near_duplicate_settings({}, close_bits=4, confirm_threshold=0.8).min_correlation == 0.8
+
+
+def test_the_committed_settings_are_the_decided_ones() -> None:
+    from medcompress.config import config_root, load_config
+    from medcompress.data.prepare import near_duplicate_settings
+
+    dataset = load_config(config_root() / "data" / "kvasir_vqa_x1.yaml")["dataset"]
+    decided = near_duplicate_settings(dataset, close_bits=4)  # D02 amendment 2, 2026-10-19
+    assert decided.min_correlation == 0.65 and decided.max_group_fraction == 0.10
+    assert decided.candidate_bits == 12 and decided.crop == CROP
+
+
+def test_the_cli_stops_on_chaining_and_draws_the_final_sheet(tmp_path: Path) -> None:
+    data = _dataset(tmp_path, overlay=False, lookalike=True)  # groups of 2 at most
     common = ("prepare", "--data-root", str(data), "--private-dir", str(tmp_path / "private"),
-              "--split-seed", "3", "--dedup-threshold", "4", "--mask-threshold", "4",
+              "--split-seed", "3", "--close-bits", "4", "--mask-threshold", "4",
               "--results-root", str(tmp_path / "results"))  # fmt: skip
-    waiting = _run(*common)  # the committed config still has min_correlation: TODO
-    assert waiting.returncode == 4 and "calibrate" in waiting.stderr
     sheets = tmp_path / "sheets"
-    done = _run(*common, "--confirm-threshold", "0.9", "--sheet-dir", str(sheets))
+    done = _run(*common, "--sheet-dir", str(sheets))  # the committed threshold, 0.65
     assert done.returncode == 0, done.stderr
     assert "confirmed duplicate in train: 0" in done.stdout
+    assert "pairs within 4 bits not joined: 1" in done.stdout  # l1 and l2
     assert (sheets / "rc_d1_final_cross_split_pairs.png").is_file()
     saved = json.loads((tmp_path / "private" / "near_duplicates.json").read_text())
-    assert saved["min_correlation"] == 0.9 and saved["candidate_bits"] == 12
+    assert saved["min_correlation"] == 0.65 and saved["max_group_fraction"] == 0.10
+    old_flag = _run(*common[:7], "--dedup-threshold", "4", *common[9:],
+                    "--confirm-threshold", "0.65")  # fmt: skip
+    assert old_flag.returncode == 0, old_flag.stderr  # the old name of --close-bits still works
 
-    chained = _dataset(tmp_path / "chained")  # 3 of 15 images in one group: over 5 %
+    chained = _dataset(tmp_path / "chained")  # 3 of 15 images in one group: over 10 %
     stopped = _run("prepare", "--data-root", str(chained), "--private-dir",
                    str(tmp_path / "chained" / "private"), "--split-seed", "3",
-                   "--dedup-threshold", "4", "--mask-threshold", "4", "--confirm-threshold", "0.9",
+                   "--close-bits", "4", "--mask-threshold", "4", "--confirm-threshold", "0.9",
                    "--results-root", str(tmp_path / "chained" / "results"))  # fmt: skip
     assert stopped.returncode == 7 and "STOP" in stopped.stderr and "3 of 15" in stopped.stderr
     assert not (tmp_path / "chained" / "private" / "splits.json").exists()
@@ -345,7 +403,7 @@ def test_the_calibration_prints_the_distribution_and_draws_the_sheet(tmp_path: P
     data = _dataset(tmp_path, overlay=False)
     results, sheets = tmp_path / "results", tmp_path / "sheets"
     done = _run("calibrate", "--data-root", str(data), "--split-seed", "20261012",
-                "--dedup-threshold", "4", "--sheet-dir", str(sheets),
+                "--close-bits", "4", "--sheet-dir", str(sheets),
                 "--results-root", str(results))  # fmt: skip
     assert done.returncode == 0, done.stderr
     out = done.stdout
@@ -360,7 +418,7 @@ def test_the_calibration_prints_the_distribution_and_draws_the_sheet(tmp_path: P
     assert ".jpg" not in rows  # aggregate counts only, no image name
 
     given = _run("calibrate", "--data-root", str(data), "--split-seed", "20261012",
-                 "--dedup-threshold", "4", "--sheet-dir", str(sheets),
+                 "--close-bits", "4", "--sheet-dir", str(sheets),
                  "--results-root", str(results), "--threshold", "0.72")  # fmt: skip
     assert given.returncode == 0 and "drawn at the given threshold 0.72" in given.stdout
     assert "      0.72" in given.stdout  # the given value is added to the table
@@ -374,8 +432,8 @@ def test_the_calibration_and_the_pure_function_agree(tmp_path: Path) -> None:
     data = _dataset(tmp_path, overlay=False, chain=1)  # scene 0: a copy and a shifted copy
     config = {"name": "Kvasir-VQA-x1", "label_mapping": None,
               "near_duplicates": {"max_group_fraction": 0.5}}  # fmt: skip
-    first = calibrate(data, config, dedup_threshold=4, seed=5)
-    assert first == calibrate(data, config, dedup_threshold=4, seed=5)  # deterministic
+    first = calibrate(data, config, close_bits=4, seed=5)
+    assert first == calibrate(data, config, close_bits=4, seed=5)  # deterministic
     metrics = {r["metric"]: r["value"] for r in first.rows}
     assert metrics["calibration:images"] == 15
     proposal = metrics["calibration:provisional_proposal"]

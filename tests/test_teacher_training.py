@@ -17,6 +17,12 @@ from medcompress.utils.io import append_results
 
 REPO = Path(__file__).resolve().parents[1]
 SETTINGS = load_config("teacher_training.yaml")["teacher_training"]
+SWIFT_STYLE = (
+    r"^(model)(?!.*\.(visual|merger)).*\."
+    r"(down_proj|gate_proj|k_proj|o_proj|q_proj|up_proj|v_proj)$"
+)
+"""A regular expression of the form ms-swift writes as ``target_modules`` (made up for the test;
+the published file's own value is printed by RC-TT0 and RC-TT1)."""
 
 
 def _measured(
@@ -45,15 +51,26 @@ def test_rule_3_prefers_fp16_over_two_t4s_unless_it_fails_or_is_twice_as_slow() 
         pick(None, None, None, None)
 
 
+def _twice() -> dict:
+    """The settings as RC-TT0 ran them (a T4 x2 hour counted twice until it was checked)."""
+    return {**SETTINGS, "rule": {**SETTINGS["rule"], "t4x2_counts_twice": True}}
+
+
 def test_rule_3_sizes_n_by_15_gpu_hours_in_steps_of_1000() -> None:
     assert tt.rule_examples(2.0, 2, budget_gpu_hours=15, step=1000) == 13000  # 13,500 fit
     assert tt.rule_examples(2.0, 1, budget_gpu_hours=15, step=1000) == 27000
-    rows, chosen, n, n_once = tt.rule_rows(_measured(2.0, 3.0, 2.0, 2.5), SETTINGS)
+    rows, chosen, n, n_once = tt.rule_rows(_measured(2.0, 3.0, 2.0, 2.5), _twice())
     values = {r["metric"]: r["value"] for r in rows}
     assert chosen.name == "fp16_2gpu" and (n, n_once) == (13000, 27000)
-    assert values["rule_gpus_counted"] == 2.0  # a T4 x2 hour counts twice until checked
+    assert values["rule_gpus_counted"] == 2.0  # counted twice, as RC-TT0 ran
     assert values["rule_projected_gpu_hours"] <= 15.0
     assert values["rule_projected_wall_hours"] == pytest.approx(13000 * 2.0 / 3600)
+    # measured 2026-10-19: a T4 x2 hour counts once; the committed config says so
+    assert tt.t4x2_counts_once(SETTINGS) and not tt.t4x2_counts_once(_twice())
+    rows, _, n, n_once = tt.rule_rows(_measured(2.0, 3.0, 2.0, 2.5), SETTINGS)
+    assert (
+        n == n_once == 27000 and {r["metric"]: r["value"] for r in rows}["rule_gpus_counted"] == 1.0
+    )
     with pytest.raises(tt.RuleError, match="not even 1000"):
         tt.rule_rows(_measured(60.0, None, None, None), SETTINGS)
 
@@ -73,7 +90,7 @@ def _full_values() -> dict:
         SETTINGS["lora_default"],
     )  # fmt: skip
     values.update({f"lora_{k}": v for k, v in lora.items()})
-    rows, *_ = tt.rule_rows(values, SETTINGS)
+    rows, *_ = tt.rule_rows(values, _twice())  # as RC-TT0 ran (both readings recorded)
     values.update({r["metric"]: r["value"] for r in rows})
     return values
 
@@ -105,6 +122,35 @@ def test_lora_settings_come_from_the_published_adapter_when_readable() -> None:
     )
     other = tt.lora_settings({"r": 8, "target_modules": ["qkv"]}, default)
     assert other["rank"] == 8 and other["targets_match"] == 0.0
+    assert tt.lora_settings({"target_modules": SWIFT_STYLE}, default)["targets_match"] == 1.0
+
+
+def test_the_published_targets_are_read_and_applied_inside_the_decoder_only() -> None:
+    from medcompress.compression.lora import layer_regex
+
+    regex = SWIFT_STYLE
+    assert tt.published_target_names(regex) == tuple(sorted(tt.LM_TARGETS))
+    assert tt.published_target_names(["model.layers.0.self_attn.q_proj", "v_proj"]) == (
+        "q_proj", "v_proj",
+    )  # fmt: skip
+    assert tt.published_target_names("all-linear") == ("all-linear",)
+    for bad in ("^model\\..*$", [], None):
+        with pytest.raises(tt.RuleError):
+            tt.published_target_names(bad)
+    # the layout of Qwen2.5-VL in recent transformers: the vision blocks have gate/up/down too
+    linear = [f"model.language_model.layers.{i}.self_attn.{p}" for i in range(2)
+              for p in ("q_proj", "k_proj", "v_proj", "o_proj")]  # fmt: skip
+    linear += [f"model.language_model.layers.{i}.mlp.{p}" for i in range(2)
+               for p in ("gate_proj", "up_proj", "down_proj")]  # fmt: skip
+    linear += [f"model.visual.blocks.{i}.mlp.{p}" for i in range(2)
+               for p in ("gate_proj", "up_proj", "down_proj")]  # fmt: skip
+    linear += ["model.visual.blocks.0.attn.qkv", "model.visual.merger.mlp.0", "lm_head"]
+    names = tt.published_target_names(regex)
+    counts = tt.adapted_counts(linear, layer_regex("model.language_model.layers", names), names)
+    assert counts == {name: 2 for name in names}  # 2 decoder layers; no vision block, no head
+    stack = "model.language_model.layers"
+    only_q = tt.adapted_counts(linear, layer_regex(stack, ["q_proj", "qkv"]), ["q_proj", "qkv"])
+    assert only_q == {"q_proj": 2, "qkv": 0}  # qkv is only in the vision tower: the run stops
 
 
 def _sample(i: int, kind: str) -> SimpleNamespace:
@@ -140,7 +186,9 @@ def test_training_settings_follow_the_recipe() -> None:
     )
     assert (fields["batch_size"], fields["grad_accumulation"], fields["kd_weight"]) == (1, 16, 0.0)
     assert fields["checkpoint_every"] == round(30 * 60 / (2.0 * 16))  # about every 30 minutes
-    assert fields["lora"]["target_modules"] == ["decoder_attention", "decoder_mlp"]
+    assert fields["lora"]["target_modules"] == "published"  # D01, 2026-10-19
+    d06 = tt.train_settings(fake, {**SETTINGS, "target_modules": ["decoder_mlp"]}, 13000)
+    assert d06["lora"]["target_modules"] == ["decoder_mlp"]
 
 
 def test_the_cosine_schedule_warms_up_then_decays_to_zero() -> None:
@@ -197,7 +245,8 @@ def test_the_feasibility_script_records_failures_and_applies_rule_3(tmp_path: Pa
         [sys.executable, str(script), "rule", "--csv", str(good)],
         capture_output=True, text=True, cwd=REPO, check=False, timeout=120,
     )  # fmt: skip
-    assert shown.returncode == 0 and "N = 13000" in shown.stdout and "estimates" in shown.stdout
+    assert shown.returncode == 0 and "estimates" in shown.stdout
+    assert "N = 27000" in shown.stdout  # the rule again, with a T4 x2 hour counted once
 
 
 def test_the_training_dry_run_reads_the_plan_and_the_shared_data(tmp_path: Path) -> None:
@@ -219,6 +268,29 @@ def test_the_training_dry_run_reads_the_plan_and_the_shared_data(tmp_path: Path)
     )  # fmt: skip
     assert run.returncode == 0, run.stdout + run.stderr
     assert "setup fp16_2gpu" in run.stdout and "N = " in run.stdout and "estimate" in run.stdout
+    assert "counted once" in run.stdout  # the config, measured 2026-10-19
+    assert "read from the hub when the run starts" in run.stdout
+    published = tmp_path / "adapter_config.json"
+    published.write_text(json.dumps({
+        "r": 16, "lora_alpha": 64, "lora_dropout": 0.05,
+        "target_modules": SWIFT_STYLE,
+    }))  # fmt: skip
+    local = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "train_teacher.py"), "--data-root", str(shared),
+         "--feasibility", str(plan), "--out", str(tmp_path / "out"), "--dry-run",
+         "--published-adapter-config", str(published)],
+        capture_output=True, text=True, cwd=REPO, check=False, timeout=300,
+    )  # fmt: skip
+    assert local.returncode == 0, local.stdout + local.stderr
+    assert "down_proj, gate_proj, k_proj, o_proj, q_proj, up_proj, v_proj" in local.stdout
+    published.write_text(json.dumps({"r": 8, "lora_alpha": 64, "target_modules": "all-linear"}))
+    differ = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "train_teacher.py"), "--data-root", str(shared),
+         "--feasibility", str(plan), "--out", str(tmp_path / "out"), "--dry-run",
+         "--published-adapter-config", str(published)],
+        capture_output=True, text=True, cwd=REPO, check=False, timeout=300,
+    )  # fmt: skip
+    assert differ.returncode == 5 and "differ from the published file" in differ.stderr
     missing = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "train_teacher.py"), "--data-root", str(shared),
          "--feasibility", str(tmp_path / "none.csv"), "--dry-run"],
@@ -247,3 +319,12 @@ def test_our_teacher_adapter_must_be_attached_before_anything_loads(tmp_path: Pa
         check_loadable(attached)  # attached: loadable
     finally:
         del os.environ["MEDCOMPRESS_CHECKPOINT_ROOT"]
+
+
+def test_rc_tt1_reads_n_38000_from_the_committed_rc_tt0_file() -> None:
+    committed = REPO / tt.DEFAULT_CSV  # RC-TT0's run (commit 3afb035)
+    plan = tt.read_plan(committed, t4x2_counts_once=tt.t4x2_counts_once(SETTINGS))
+    assert plan.n_examples == 38000 and plan.setup == "fp16_2gpu"  # a T4 x2 hour counted once
+    assert (plan.lora_rank, plan.lora_alpha, plan.lora_dropout) == (16, 64.0, 0.05)
+    assert plan.lora_from_published and not plan.gradient_checkpointing
+    assert tt.train_settings(plan, SETTINGS, plan.n_examples)["steps"] == 2375

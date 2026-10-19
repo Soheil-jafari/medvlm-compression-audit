@@ -9,18 +9,20 @@ Steps (D02 amendment of 2026-10-18: the official Kvasir-VQA-x1 split is by quest
 image, so it is not used for training or evaluation):
 1. read every question of both official splits of Kvasir-VQA-x1 (``data/kvasir.py``);
 2. fingerprint every image (dHash) and compute its crop signature, then group near-duplicates
-   in two stages (D02 amendment 2 of 2026-10-18, ``dedup.two_stage_groups``): pairs within
-   ``dedup_threshold`` bits are always joined; pairs within ``candidate_bits`` are joined when
-   their crop correlation reaches ``min_correlation``; union-find; the run STOPS if the
-   largest group holds more than ``max_group_fraction`` of the images (chaining guard);
+   in two stages (D02 amendment 2 of 2026-10-18, final values 2026-10-19,
+   ``dedup.two_stage_groups``): every pair within ``candidate_bits`` is joined when, and only
+   when, its crop correlation reaches ``min_correlation`` (no automatic join at 0-4 bits);
+   union-find; the run STOPS if the largest group holds more than ``max_group_fraction`` of the
+   images (chaining guard);
 3. link Kvasir-SEG masks to the images by fingerprint;
 4. assign whole groups to train / validation / test (70 / 15 / 15 % of the images, the
    pre-registered seed), stratified by the answer values of the finding question and by
    the linked masks (``splits.make_image_disjoint_splits``);
-5. check that no validation or test image has a joined pair (within ``dedup_threshold`` bits,
-   or confirmed by the crop) with a training image (none, by construction); count the dHash
-   distances and the crop correlations to the training split (data-card numbers, not
-   filters), and keep the most similar pairs across splits for the final contact sheet;
+5. check that no validation or test image has a joined pair with a training image (none, by
+   construction); count the dHash distances and the crop correlations to the training split,
+   and the pairs within ``close_bits`` that are not joined (data-card numbers, not filters);
+   keep, for the final contact sheet, the most similar pairs across splits by the crop and by
+   the dHash, and the closest not-joined pairs across splits;
 6. count QA rows, images, groups, masked images and positives per split, prevalence and
    lesion-size thresholds on the training split, answer lengths, answer values per split,
    and the overlap of the official split (for the data card and the appendix item).
@@ -84,6 +86,8 @@ class PreparedData:
     split_sha256: str
     near_duplicates: Mapping[str, float] = field(default_factory=dict)
     top_cross_split: tuple[CrossPair, ...] = ()
+    closest_dhash_cross_split: tuple[CrossPair, ...] = ()
+    close_not_joined: tuple[CrossPair, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -149,7 +153,11 @@ the official test-only images at up to 17 bits from a training image)."""
 SCORE_LOW, SCORE_STEP, SCORE_BINS = 0.0, 0.05, 20
 """Crop correlations are counted in bins of 0.05 from 0.00 (``0.95`` holds 0.95 to 1.00)."""
 TOP_CROSS_SPLIT = 24
-"""How many of the most similar cross-split pairs the final contact sheet shows."""
+"""How many of the most similar cross-split pairs the final contact sheet shows (by the crop
+correlation, and again by the dHash distance)."""
+CLOSE_NOT_JOINED_SHOWN = 12
+"""How many of the pairs within ``close_bits`` that are not joined, across splits, the final
+contact sheet shows (the highest crop correlation first)."""
 GROUP_SIZE_BUCKETS: tuple[tuple[str, int, int], ...] = (
     ("1", 1, 1), ("2", 2, 2), ("3", 3, 3), ("4", 4, 4), ("5", 5, 5), ("6_to_10", 6, 10),
     ("11_to_50", 11, 50), ("51_to_100", 51, 100), ("101_or_more", 101, 10**9),
@@ -171,11 +179,12 @@ def crop_settings(dataset_config: Mapping[str, Any]) -> CropSettings:
 def near_duplicate_settings(
     dataset_config: Mapping[str, Any],
     *,
-    dedup_threshold: int,
+    close_bits: int,
     confirm_threshold: float | None = None,
 ) -> NearDuplicateSettings:
-    """Both stages of the grouping (D02 amendment 2). ``dedup_threshold`` (``--dedup-threshold``)
-    is the always-joined distance; ``confirm_threshold`` overrides ``min_correlation``.
+    """Both stages of the grouping (D02 amendment 2). ``close_bits`` (``--close-bits``) is the
+    band of very close dHash pairs reported separately (they are joined only by the crop, like
+    every candidate); ``confirm_threshold`` overrides ``min_correlation``.
 
     Raises :class:`ConfigError` while ``min_correlation`` is open (``TODO``): the calibration
     step comes first.
@@ -191,7 +200,7 @@ def near_duplicate_settings(
     base = NearDuplicateSettings(min_correlation=float(threshold))
     return NearDuplicateSettings(
         min_correlation=float(threshold),
-        always_join_bits=int(dedup_threshold),
+        close_bits=int(close_bits),
         candidate_bits=int(cfg.get("candidate_bits", base.candidate_bits)),
         max_group_fraction=float(cfg.get("max_group_fraction", base.max_group_fraction)),
         crop=crop_settings(dataset_config),
@@ -333,44 +342,55 @@ def _cross_split(
     fingerprints: Mapping[str, str],
     signatures: Mapping[str, np.ndarray],
     settings: NearDuplicateSettings,
-) -> tuple[list[dict[str, Any]], tuple[CrossPair, ...]]:
-    """Crop correlations across splits: the rows after the split, and the most similar pairs.
+) -> tuple[list[dict[str, Any]], tuple[CrossPair, ...], tuple[CrossPair, ...]]:
+    """Crop correlations and dHash distances across splits, after the split.
 
+    Returns the rows, the most similar cross-split pairs by the crop correlation, and the
+    closest by the dHash distance (each :data:`TOP_CROSS_SPLIT`, for the final contact sheet).
     For each validation and test image: its highest correlation with any training image (a
     histogram), and whether a training image *beyond* the candidate distance reaches the
     threshold (the candidate stage would have missed it; a data-card number, not a filter).
     """
     rows: list[dict[str, Any]] = []
-    tops: list[CrossPair] = []
+    by_score: list[CrossPair] = []
+    by_bits: list[CrossPair] = []
     names = list(split_images)
     for i, first in enumerate(names):
         for second in names[i + 1 :]:
             a, b = list(split_images[first]), list(split_images[second])
+            if not a or not b:
+                continue
             matrix = cross_similarity_matrix(
                 [signatures[p] for p in a], [signatures[p] for p in b], settings.crop
             )
-            if matrix.size:
-                flat = matrix.ravel()
-                k = min(TOP_CROSS_SPLIT, flat.size)
-                for index in np.argpartition(-flat, k - 1)[:k]:
-                    r, c = divmod(int(index), len(b))
-                    bits = int(distances_to([fingerprints[a[r]]], fingerprints[b[c]])[0])
-                    tops.append(CrossPair(a[r], first, b[c], second, float(flat[index]), bits))
-            if first != "train":
-                continue
-            train_fp = [fingerprints[p] for p in a]
+            flat = matrix.ravel()
+            k = min(TOP_CROSS_SPLIT, flat.size)
+            for index in np.argpartition(-flat, k - 1)[:k]:
+                r, c = divmod(int(index), len(b))
+                bits = int(distances_to([fingerprints[a[r]]], fingerprints[b[c]])[0])
+                by_score.append(CrossPair(a[r], first, b[c], second, float(flat[index]), bits))
+            first_fp = [fingerprints[p] for p in a]
             best, beyond = [], 0
             for col, path in enumerate(b):
-                scores = matrix[:, col] if len(a) else np.zeros(0)
-                best.append(float(scores.max()) if len(a) else -1.0)
-                far = distances_to(train_fp, fingerprints[path]) > settings.candidate_bits
+                distances = distances_to(first_fp, fingerprints[path])
+                scores = matrix[:, col]
+                near = np.argsort(distances, kind="stable")[: min(TOP_CROSS_SPLIT, len(a))]
+                by_bits += [
+                    CrossPair(a[r], first, path, second, float(scores[r]), int(distances[r]))
+                    for r in near
+                ]
+                best.append(float(scores.max()))
+                far = distances > settings.candidate_bits
                 if far.any() and float(scores[far].max()) >= settings.min_correlation:
                     beyond += 1
+            if first != "train":
+                continue
             for key, value in score_histogram(best).items():
                 rows.append(_row(f"max_score_to_train:{second}:{key}", value))
             rows.append(_row(f"similar_to_train_beyond_candidates:{second}", beyond))
-    tops.sort(key=lambda t: (-t.score, t.first, t.second))
-    top = tuple(tops[:TOP_CROSS_SPLIT])
+    by_score.sort(key=lambda t: (-t.score, t.first, t.second))
+    by_bits.sort(key=lambda t: (t.bits, -t.score, t.first, t.second))
+    top, closest = tuple(by_score[:TOP_CROSS_SPLIT]), tuple(by_bits[:TOP_CROSS_SPLIT])
     if top:
         rows.append(_row("cross_split_top:max_score", top[0].score))
         rows.append(_row("cross_split_top:min_score", top[-1].score))
@@ -378,7 +398,11 @@ def _cross_split(
             _row("cross_split_top:within_candidate_bits",
                  sum(1 for t in top if t.bits <= settings.candidate_bits))
         )  # fmt: skip
-    return rows, top
+    if closest:
+        rows.append(_row("cross_split_closest_dhash:min_bits", closest[0].bits))
+        rows.append(_row("cross_split_closest_dhash:max_bits", closest[-1].bits))
+        rows.append(_row("cross_split_closest_dhash:max_score", max(t.score for t in closest)))
+    return rows, top, closest
 
 
 def prepare(
@@ -386,7 +410,7 @@ def prepare(
     dataset_config: Mapping[str, Any],
     *,
     split_seed: int,
-    dedup_threshold: int,
+    close_bits: int,
     mask_threshold: int,
     confirm_threshold: float | None = None,
 ) -> PreparedData:
@@ -397,7 +421,7 @@ def prepare(
     """
     data_root = Path(data_root)
     settings = near_duplicate_settings(
-        dataset_config, dedup_threshold=dedup_threshold, confirm_threshold=confirm_threshold
+        dataset_config, close_bits=close_bits, confirm_threshold=confirm_threshold
     )
     samples, images, fingerprints, signatures = _features(data_root, dataset_config, settings.crop)
     grouping = two_stage_groups(fingerprints, signatures, settings)
@@ -436,18 +460,26 @@ def prepare(
         for name in split_images
         if name != "train"
     }
-    leaks = sum(1 for d in closest.values() for v in d.values() if v <= dedup_threshold)
+    close = sum(1 for d in closest.values() for v in d.values() if v <= close_bits)
     crossing: dict[str, set[str]] = {name: set() for name in closest}
-    for (a, b, _), keep in zip(grouping.candidates, grouping.joined, strict=True):
-        if keep and split_of[a] != split_of[b]:
+    close_apart: list[CrossPair] = []  # within close_bits, not joined, in different splits
+    for (a, b, d), keep, score in zip(
+        grouping.candidates, grouping.joined, grouping.scores, strict=True
+    ):
+        if split_of[a] == split_of[b]:
+            continue
+        if keep:
             for path, other in ((a, b), (b, a)):
                 if split_of[path] != "train" and split_of[other] == "train":
                     crossing[split_of[path]].add(path)
+        elif d <= close_bits:
+            close_apart.append(CrossPair(a, split_of[a], b, split_of[b], score, d))
     confirmed_leaks = sum(len(v) for v in crossing.values())
-    if leaks or confirmed_leaks:  # impossible by construction: joined pairs share a group
+    if confirmed_leaks:  # impossible by construction: joined pairs share a group
         raise AssertionError(
-            f"{leaks + confirmed_leaks} held-out images are near-duplicates of training images"
+            f"{confirmed_leaks} held-out images have a confirmed duplicate in the training split"
         )
+    close_apart.sort(key=lambda t: (-t.score, t.first, t.second))
 
     areas = {
         img: lesion_area_fraction(load_mask(str(data_root / m))) for img, m in links.links.items()
@@ -464,15 +496,20 @@ def prepare(
 
     rows: list[dict[str, Any]] = [_row("images:all", len(images))]
     rows += group_size_rows(grouping.sizes, len(images))
-    rows.append(_row("grouping_threshold_bits", dedup_threshold))
     rows += [_row(f"near_duplicates:{k}", v) for k, v in settings.rows().items()]
-    always = sum(1 for _, _, d in grouping.candidates if d <= dedup_threshold)
     joined = sum(grouping.joined)
+    close_pairs = [
+        keep for (_, _, d), keep in zip(grouping.candidates, grouping.joined, strict=True)
+        if d <= close_bits
+    ]  # fmt: skip
     rows += [
         _row("near_duplicates:candidate_pairs", len(grouping.candidates)),
-        _row("near_duplicates:joined_pairs:always", always),
-        _row("near_duplicates:joined_pairs:confirmed", joined - always),
+        _row("near_duplicates:joined_pairs", joined),
         _row("near_duplicates:candidate_pairs_not_joined", len(grouping.candidates) - joined),
+        _row("near_duplicates:close_pairs", len(close_pairs)),
+        _row("near_duplicates:close_pairs_joined", sum(close_pairs)),
+        _row("near_duplicates:close_pairs_not_joined", len(close_pairs) - sum(close_pairs)),
+        _row("near_duplicates:close_pairs_not_joined:cross_split", len(close_apart)),
     ]
     for name, members in splits.items():
         in_split = set(split_images[name])
@@ -492,15 +529,15 @@ def prepare(
         )
         for value, count in sorted(per_value.items()):
             rows.append(_row(f"answer_count:{value}:{name}", count))
-    rows.append(_row("val_test_near_duplicates_of_train", leaks))
     rows.append(_row("val_test_confirmed_duplicates_of_train", confirmed_leaks))
     for name, found in crossing.items():
         rows.append(_row(f"confirmed_duplicates_of_train:{name}", len(found)))
+    rows.append(_row("val_test_close_dhash_to_train", close))  # not joined: the crop differs
     for name, distances in closest.items():
-        hist = _histogram(list(distances.values()), dedup_threshold + 1, TAIL_MAX_BITS)
+        hist = _histogram(list(distances.values()), 0, TAIL_MAX_BITS)
         for key, count in hist.items():
             rows.append(_row(f"min_distance_to_train:{name}:{key}", count))
-    cross_rows, top = _cross_split(split_images, fingerprints, signatures, settings)
+    cross_rows, top, nearest = _cross_split(split_images, fingerprints, signatures, settings)
     rows += cross_rows
     rows.append(_row("masks:linked", len(links.links)))
     rows.append(_row("masks:ambiguous", len(links.ambiguous)))
@@ -527,6 +564,8 @@ def prepare(
         split_sha256=split_fingerprint(splits),
         near_duplicates=settings.rows(),
         top_cross_split=top,
+        closest_dhash_cross_split=nearest,
+        close_not_joined=tuple(close_apart[:CLOSE_NOT_JOINED_SHOWN]),
     )
 
 
@@ -538,7 +577,7 @@ the dHash already calls different score."""
 CONTROL_TOLERANCE = 0.001
 """The provisional proposal lets at most this share of the controls score at or above it (2 of
 2,000): a control can itself be a moved frame that the dHash missed."""
-SHEET_PAIRS = {"below": 8, "above": 8, "controls": 4, "always": 4}
+SHEET_PAIRS = {"below": 8, "above": 8, "controls": 4, "close": 4}
 
 
 @dataclass(frozen=True)
@@ -552,8 +591,8 @@ class Calibration:
     crop_fraction: float
 
 
-def _bands(always: int, candidate_bits: int) -> list[tuple[int, int]]:
-    cuts = [(0, always), (always + 1, min(8, candidate_bits)), (max(always + 1, 9), candidate_bits)]
+def _bands(close: int, candidate_bits: int) -> list[tuple[int, int]]:
+    cuts = [(0, close), (close + 1, min(8, candidate_bits)), (max(close + 1, 9), candidate_bits)]
     return [(lo, hi) for lo, hi in cuts if lo <= hi]
 
 
@@ -582,7 +621,7 @@ def calibrate(
     data_root: Path,
     dataset_config: Mapping[str, Any],
     *,
-    dedup_threshold: int,
+    close_bits: int,
     seed: int,
     threshold: float | None = None,
     controls: int = RANDOM_CONTROLS,
@@ -597,12 +636,16 @@ def calibrate(
     it, the provisional proposal is used: the smallest grid value that passes the guard and that
     at most :data:`CONTROL_TOLERANCE` of the controls reach. The proposal is a starting point to
     check by eye on the sheet, not a decision.
+
+    Since 2026-10-19 every candidate is joined only by the crop, also within ``close_bits``;
+    the table counts the pairs within ``close_bits`` that a threshold leaves apart.
     """
     data_root = Path(data_root)
     crop = crop_settings(dataset_config)
     cfg = dataset_config.get("near_duplicates") or {}
-    candidate_bits = int(cfg.get("candidate_bits", 12))
-    max_fraction = float(cfg.get("max_group_fraction", 0.05))
+    base = NearDuplicateSettings(min_correlation=1.0)
+    candidate_bits = int(cfg.get("candidate_bits", base.candidate_bits))
+    max_fraction = float(cfg.get("max_group_fraction", base.max_group_fraction))
     _, images, fingerprints, signatures = _features(data_root, dataset_config, crop)
     candidates = candidate_pairs(fingerprints, threshold=candidate_bits)
     scores = crop_similarities(signatures, [(a, b) for a, b, _ in candidates], crop)
@@ -611,7 +654,7 @@ def calibrate(
     control_bits = [int(distances_to([fingerprints[a]], fingerprints[b])[0]) for a, b in pairs]
     rows: list[dict[str, Any]] = [_row("calibration:images", len(images))]
     settings = NearDuplicateSettings(
-        min_correlation=1.0, always_join_bits=dedup_threshold, candidate_bits=candidate_bits,
+        min_correlation=1.0, close_bits=close_bits, candidate_bits=candidate_bits,
         max_group_fraction=max_fraction, crop=crop,
     )  # fmt: skip
     rows += [
@@ -620,7 +663,7 @@ def calibrate(
     by_bits = Counter(d for _, _, d in candidates)
     for d in range(candidate_bits + 1):
         rows.append(_row(f"calibration:candidate_pairs:bits:{d}", by_bits.get(d, 0)))
-    bands = _bands(dedup_threshold, candidate_bits)
+    bands = _bands(close_bits, candidate_bits)
     columns: dict[str, dict[str, int]] = {}
     for lo, hi in bands:
         chosen = [sc for (_, _, d), sc in zip(candidates, scores, strict=True) if lo <= d <= hi]
@@ -643,7 +686,7 @@ def calibrate(
     grid = sorted(
         set(CALIBRATION_GRID) | ({round(threshold, 4)} if threshold is not None else set())
     )
-    table: list[tuple[float, int, int, int, int, bool, int]] = []
+    table: list[tuple[float, int, int, int, int, int, bool, int]] = []
     for t in grid:
         trial = replace(settings, min_correlation=t)
         joined = joined_pairs(candidates, scores, trial)
@@ -657,14 +700,15 @@ def calibrate(
             guard = True
         except ChainingError:
             guard = False
-        confirmed = sum(1 for (_, _, d), k in zip(candidates, joined, strict=True)
-                        if k and d > dedup_threshold)  # fmt: skip
+        apart = sum(1 for (_, _, d), k in zip(candidates, joined, strict=True)
+                    if not k and d <= close_bits)  # fmt: skip
         at_or_above = int(np.sum(control_scores >= t))
-        table.append((t, confirmed, len(sizes), sum(1 for n in sizes.values() if n > 1),
+        table.append((t, sum(joined), apart, len(sizes), sum(1 for n in sizes.values() if n > 1),
                       largest, guard, at_or_above))  # fmt: skip
         prefix = f"calibration:threshold:{t:.2f}"
         rows += [
-            _row(f"{prefix}:confirmed_pairs", confirmed),
+            _row(f"{prefix}:joined_pairs", sum(joined)),
+            _row(f"{prefix}:close_pairs_not_joined", apart),
             _row(f"{prefix}:groups", len(sizes)),
             _row(f"{prefix}:multi_image_groups", sum(1 for n in sizes.values() if n > 1)),
             _row(f"{prefix}:largest_group", largest),
@@ -680,11 +724,11 @@ def calibrate(
 
     lines = [
         f"Near-duplicate calibration (D02 amendment 2): {len(images)} images",
-        f"settings: always joined <= {dedup_threshold} bits; candidates <= {candidate_bits} bits; "
-        f"crop: the central {crop.crop_fraction:.0%} of width and height, grey, "
-        f"{crop.side} x {crop.side} (area average), Gaussian of {crop.highpass_sigma:g} px "
-        f"subtracted, shifts up to {crop.max_shift} px; measure: the highest Pearson correlation "
-        "over the shifts, both ways round",
+        f"settings: candidates <= {candidate_bits} bits, each joined only by the crop (also "
+        f"within {close_bits} bits); crop: the central {crop.crop_fraction:.0%} of width and "
+        f"height, grey, {crop.side} x {crop.side} (area average), Gaussian of "
+        f"{crop.highpass_sigma:g} px subtracted, shifts up to {crop.max_shift} px; measure: the "
+        "highest Pearson correlation over the shifts, both ways round",
         f"candidate pairs: {len(candidates)}; by dHash distance: "
         + ", ".join(f"{d}: {by_bits.get(d, 0)}" for d in range(candidate_bits + 1)),
         "crop correlation (pairs per bin; a bin holds its value up to the next):",
@@ -698,14 +742,15 @@ def calibrate(
             f"p50 {quantiles['p50']:.3f}, p99 {quantiles['p99']:.3f}, max {quantiles['max']:.3f}"
         )
     lines.append(
-        f"what each threshold gives (confirmed = joined pairs at {dedup_threshold + 1}-"
-        f"{candidate_bits} bits; guard: largest group <= {max_fraction:.0%} of the images):"
+        f"what each threshold gives (joined = candidate pairs at or above it; close apart = "
+        f"pairs within {close_bits} bits left apart; guard: largest group <= {max_fraction:.0%} "
+        "of the images):"
     )
-    lines.append("  threshold  confirmed   groups  multi-image  largest (share)  guard  "
-                 "controls at or above")  # fmt: skip
-    for t, confirmed, groups_n, multi_n, largest, guard, above in table:
+    lines.append("  threshold     joined  close apart   groups  multi-image  largest (share)  "
+                 "guard  controls at or above")  # fmt: skip
+    for t, joined_n, apart, groups_n, multi_n, largest, guard, above in table:
         lines.append(
-            f"  {t:>9.2f}  {confirmed:>9}  {groups_n:>7}  {multi_n:>11}  "
+            f"  {t:>9.2f}  {joined_n:>9}  {apart:>11}  {groups_n:>7}  {multi_n:>11}  "
             f"{largest:>7} ({largest / max(1, len(images)):>5.1%})  "
             f"{'ok' if guard else 'STOP':>5}  {above:>19}"
         )
@@ -726,17 +771,11 @@ def calibrate(
     sheet: list[tuple[str, tuple[tuple[str, str, str], ...]]] = []
     if chosen_t is not None:
         decided = sorted(
-            (float(sc), a, b, d)
-            for (a, b, d), sc in zip(candidates, scores, strict=True)
-            if d > dedup_threshold
+            (float(sc), a, b, d) for (a, b, d), sc in zip(candidates, scores, strict=True)
         )
         under = [x for x in decided if x[0] < chosen_t][::-1][: SHEET_PAIRS["below"]]
         over = [x for x in decided if x[0] >= chosen_t][: SHEET_PAIRS["above"]]
-        weakest = sorted(
-            (float(sc), a, b, d)
-            for (a, b, d), sc in zip(candidates, scores, strict=True)
-            if d <= dedup_threshold
-        )[: SHEET_PAIRS["always"]]
+        close_apart = [x for x in decided if x[0] < chosen_t and x[3] <= close_bits][::-1]
         rng = np.random.default_rng(seed + 1)
         picks = sorted(rng.choice(len(pairs), size=min(SHEET_PAIRS["controls"], len(pairs)),
                                   replace=False).tolist()) if pairs else []  # fmt: skip
@@ -748,16 +787,15 @@ def calibrate(
                 for sc, a, b, d in items
             )
 
-        lo = dedup_threshold + 1
         sheet = [
-            (f"Just below {chosen_t:.2f}: NOT joined (the highest-scoring candidate pairs at "
-             f"{lo}-{candidate_bits} bits under it)", cells(under)),
-            (f"Just above {chosen_t:.2f}: JOINED (the lowest-scoring candidate pairs at "
-             f"{lo}-{candidate_bits} bits at or above it)", cells(over)),
+            (f"Just below {chosen_t:.2f}: NOT joined (the highest-scoring candidate pairs, "
+             f"0-{candidate_bits} bits, under it)", cells(under)),
+            (f"Just above {chosen_t:.2f}: JOINED (the lowest-scoring candidate pairs, "
+             f"0-{candidate_bits} bits, at or above it)", cells(over)),
             (f"Random controls ({len(shown)} of the {len(pairs)} random pairs beyond "
              f"{candidate_bits} bits)", cells(shown)),
-            (f"Always joined (within {dedup_threshold} bits): the pairs with the lowest crop "
-             "correlation", cells(weakest)),
+            (f"Within {close_bits} bits but NOT joined ({len(close_apart)} pairs): the highest "
+             "crop correlation first", cells(close_apart[: SHEET_PAIRS["close"]])),
         ]  # fmt: skip
     return Calibration(tuple(rows), tuple(lines), chosen_t, tuple(sheet), crop.crop_fraction)
 

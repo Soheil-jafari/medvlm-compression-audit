@@ -32,12 +32,19 @@ TARGET_GROUPS: Mapping[str, tuple[str, ...]] = {
 
 @dataclass(frozen=True)
 class LoRAConfig:
-    """LoRA settings. ``target_modules`` are group names from :data:`TARGET_GROUPS`."""
+    """LoRA settings. ``target_modules`` are group names from :data:`TARGET_GROUPS`.
+
+    ``layer_modules``, when given, replaces them: leaf module names (such as ``q_proj``) adapted
+    wherever they occur inside the decoder layers, or ``("all-linear",)`` for every linear layer
+    there. Our teacher uses it for the published adapter's targets (D01, 2026-10-19). The vision
+    tower and the projector stay frozen either way.
+    """
 
     rank: int
     alpha: float
     dropout: float
     target_modules: tuple[str, ...]
+    layer_modules: tuple[str, ...] = ()
 
     def projections(self) -> tuple[str, ...]:
         """The decoder projections the target groups stand for."""
@@ -53,6 +60,41 @@ def target_regex(decoder_path: str, projections: Sequence[str]) -> str:
     return rf"^{re.escape(decoder_path)}\.\d+\.({alternatives})$"
 
 
+def layer_regex(decoder_path: str, names: Sequence[str]) -> str:
+    """Regular expression matching ``<decoder_path>.<layer>.<any path>.<name>`` for ``names``."""
+    alternatives = "|".join(re.escape(n) for n in names)
+    return rf"^{re.escape(decoder_path)}\.\d+\.(?:[^.]+\.)*({alternatives})$"
+
+
+def linear_leaf_names(module: Any, decoder_path: str) -> tuple[str, ...]:
+    """The leaf names of every linear layer inside the decoder layers (``all-linear``)."""
+    import torch
+
+    prefix = decoder_path + "."
+    return tuple(
+        sorted(
+            {
+                name.rsplit(".", 1)[-1]
+                for name, sub in module.named_modules()
+                if name.startswith(prefix) and isinstance(sub, torch.nn.Linear)
+            }
+        )
+    )
+
+
+def lora_target_regex(module: Any, config: LoRAConfig) -> str:
+    """The regular expression :func:`attach_lora` passes to peft for ``module``."""
+    from medcompress.compression.pruning.surgery import find_decoder_stack
+
+    stack = find_decoder_stack(module)
+    if not config.layer_modules:
+        return target_regex(stack.path, config.projections())
+    names = config.layer_modules
+    if tuple(names) == ("all-linear",):
+        names = linear_leaf_names(module, stack.path)
+    return layer_regex(stack.path, names)
+
+
 def attach_lora(wrapper: Any, config: LoRAConfig) -> Any:
     """Freeze the model and attach trainable LoRA adapters to the decoder; returns the wrapper.
 
@@ -61,19 +103,17 @@ def attach_lora(wrapper: Any, config: LoRAConfig) -> Any:
     """
     import peft
 
-    from medcompress.compression.pruning.surgery import find_decoder_stack
-
     module = wrapper.module
     if isinstance(module, peft.PeftModel):
         raise ValueError("an adapter is already attached")
-    stack = find_decoder_stack(module)
+    targets = lora_target_regex(module, config)
     for param in module.parameters():
         param.requires_grad_(False)
     lora = peft.LoraConfig(
         r=config.rank,
         lora_alpha=config.alpha,
         lora_dropout=config.dropout,
-        target_modules=target_regex(stack.path, config.projections()),
+        target_modules=targets,
         bias="none",
     )
     wrapper.module = peft.get_peft_model(module, lora)

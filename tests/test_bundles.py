@@ -66,7 +66,7 @@ def _shared_data(root: Path) -> None:
     _image(data / "kvasir_seg" / "masks" / "s1.jpg", seed=99)
     config = {"name": "Kvasir-VQA-x1", "label_mapping": RULES}
     prepared = prepare(
-        data, config, split_seed=1, dedup_threshold=4, mask_threshold=4, confirm_threshold=0.9
+        data, config, split_seed=1, close_bits=4, mask_threshold=4, confirm_threshold=0.9
     )
     write_private_outputs(prepared, root / "private", data)
 
@@ -165,7 +165,7 @@ def _split_hash(shared: Path, seed: int) -> str:
 
     dataset = load_config(config_root() / "data" / "kvasir_vqa_x1.yaml")["dataset"]
     return prepare(
-        shared / "data", dataset, split_seed=seed, dedup_threshold=4, mask_threshold=4,
+        shared / "data", dataset, split_seed=seed, close_bits=4, mask_threshold=4,
         confirm_threshold=0.9,
     ).split_sha256  # fmt: skip
 
