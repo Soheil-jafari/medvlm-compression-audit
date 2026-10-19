@@ -23,9 +23,18 @@ Commands:
            --sheet-dir, outside the repository); counts to
            <results_root>/data/near_duplicate_calibration.csv. --data-root is a data folder
            (kvasir_vqa_x1/ inside) or a shared-data dataset (verified first)
+  embed    RC-D1-embed (D02 amendment 3): embeddings of every image, the candidate pairs, the
+           labelling sample, its numbered sheets and the label template, in --out-dir (private,
+           outside the repository; upload it as ONE private Kaggle dataset); counts to
+           <results_root>/data/near_duplicate_embed.csv
+  score-labels  RC-D1-label: Cohen's kappa, sensitivity and precision of every candidate rule,
+           and the joining rule chosen by the rule fixed in advance; aggregate numbers to
+           <results_root>/data/near_duplicate_labels.csv and near_duplicate_rules.csv, which
+           RC-D1 run 4 reads
 
-Exit codes: 4 a setting is open (the confirmation threshold before calibration), 5 an input
-check failed, 7 the chaining guard stopped the run (one group holds too many images).
+Exit codes: 4 a setting is open (the joining rule before the labels are scored, or no rule
+qualifies), 5 an input check failed, 7 the chaining guard stopped the run (one group holds too
+many images), 8 the embedding model failed the check on synthetic copies.
 
 Example (RC-D1):
     python scripts/prepare_data.py export --data-root /kaggle/working/medcompress_data/data
@@ -55,6 +64,7 @@ HOST_REPO = "SimulaMet-HOST/Kvasir-VQA"
 SETTING_OPEN = 4
 INPUT_CHECK_FAILED = 5
 CHAINING_STOP = 7
+SELF_CHECK_FAILED = 8
 CALIBRATION_SHEET = "rc_d1_calibration_pairs.png"
 CLOSE_HELP = (
     "dHash bits of the band of very close pairs that is reported (those the crop leaves apart); "
@@ -160,6 +170,8 @@ def counts(args: argparse.Namespace, dataset: dict) -> int:
         close_bits=args.close_bits,
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
+        results_root=args.results_root,
+        embed_dir=_attached(args.embed_dir),
     )
     if prepared.split_sha256 != shared.meta.get("split_sha256"):
         print(
@@ -215,9 +227,93 @@ def calibrate(args: argparse.Namespace, dataset: dict) -> int:
     return 0
 
 
+def embed(args: argparse.Namespace, dataset: dict) -> int:
+    """RC-D1-embed: embeddings, candidates, the labelling sample and sheets (private)."""
+    from medcompress.config import repo_root
+    from medcompress.data.embed_step import SelfCheckError, embed_step
+    from medcompress.data.embeddings import EmbeddingSettings, make_embedder
+    from medcompress.utils.bundles import EMBED_KIND, BundleError, write_bundle_manifest
+
+    out = args.out_dir.resolve()
+    if out.is_relative_to(repo_root().resolve()):
+        print(f"--out-dir must be outside the repository: {out}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    try:
+        data_root = _data_folder(args.data_root)
+    except BundleError as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    settings = EmbeddingSettings.from_config(dataset)
+    model = args.embedding_model or settings.model
+    try:
+        embedder = make_embedder(model, settings.revision)
+    except Exception as exc:  # noqa: BLE001 - the hub record or the model could not be read
+        print(f"the embedding model {model!r} could not be loaded: {type(exc).__name__}: {exc}",
+              file=sys.stderr)  # fmt: skip
+        print("check the model id on the hub; if it is not there, a comparable model is chosen "
+              "and recorded (D02 amendment 3)", file=sys.stderr)  # fmt: skip
+        return INPUT_CHECK_FAILED
+    try:
+        result = embed_step(
+            data_root, dataset, out, embedder, split_seed=args.split_seed,
+            close_bits=args.close_bits, mask_threshold=args.mask_threshold,
+        )  # fmt: skip
+    except SelfCheckError as exc:
+        print(f"STOP: {exc}", file=sys.stderr)
+        return SELF_CHECK_FAILED
+    target = args.results_root / "data" / "near_duplicate_embed.csv"
+    target.unlink(missing_ok=True)
+    append_results(result.rows, target)
+    info = embedder.info
+    made = write_bundle_manifest(
+        out, kind=EMBED_KIND,
+        meta={"model": info.get("model"), "revision": info.get("revision"),
+              "licence": info.get("licence"), "data_split_seed": args.split_seed},
+    )  # fmt: skip
+    print(f"wrote {len(result.rows)} aggregate rows to {target}")
+    print(f"wrote {out / 'bundle_manifest.json'}: {len(made.files)} files; upload {out} as ONE "
+          "private Kaggle dataset (run card RC-D1-embed)")  # fmt: skip
+    print(f"RECORD: model {info.get('model')}, revision {info.get('revision')}, licence "
+          f"{info.get('licence')}")  # fmt: skip
+    return 0
+
+
+def score_labels(args: argparse.Namespace, dataset: dict) -> int:
+    """RC-D1-label: kappa, every rule's sensitivity and precision, the chosen rule."""
+    from medcompress.data.embed_step import score_labels_step
+    from medcompress.data.labelling import LabelError
+    from medcompress.utils.bundles import EMBED_KIND, BundleError, verify_bundle
+
+    try:
+        embed_dir = verify_bundle(args.embed_dir, kind=EMBED_KIND).root
+        labels, rules, chosen = score_labels_step(embed_dir, args.labels, dataset)
+    except (BundleError, LabelError) as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    for name, result in (("near_duplicate_labels.csv", labels),
+                         ("near_duplicate_rules.csv", rules)):  # fmt: skip
+        target = args.results_root / "data" / name
+        target.unlink(missing_ok=True)
+        if result.rows:
+            append_results(result.rows, target)
+            print(f"wrote {len(result.rows)} aggregate rows to {target}")
+    return 0 if chosen is not None else SETTING_OPEN
+
+
+def _attached(path: Path | None) -> Path | None:
+    """RC-D1-embed's output, verified (``None`` if not given)."""
+    if path is None:
+        return None
+    from medcompress.utils.bundles import EMBED_KIND, verify_bundle
+
+    return verify_bundle(path, kind=EMBED_KIND).root
+
+
 def _final_sheet(prepared, sheet_dir: Path, data_root: Path) -> Path:  # type: ignore[no-untyped-def]
-    """Three bands, all pairs across splits: the most similar by the crop, the closest by the
-    dHash, and the closest pairs within ``close_bits`` that the crop left apart."""
+    """Three bands, all pairs across splits. Under the cosine rule of amendment 3: the most
+    similar by the cosine, by the crop, and the closest by the dHash. Under the crop rule:
+    the most similar by the crop, the closest by the dHash, and the closest pairs within
+    ``close_bits`` that the crop left apart."""
     from medcompress.data.contact_sheet import render_pairs
 
     def cells(pairs):  # type: ignore[no-untyped-def]
@@ -231,6 +327,18 @@ def _final_sheet(prepared, sheet_dir: Path, data_root: Path) -> Path:  # type: i
     close = int(prepared.near_duplicates.get("close_bits", 4))
     apart = int(metrics.get("near_duplicates:close_pairs_not_joined", 0))
     across = int(metrics.get("near_duplicates:close_pairs_not_joined:cross_split", 0))
+    if prepared.top_cosine_cross_split:
+        cosine = (
+            (f"1. The {len(prepared.top_cosine_cross_split)} most similar pairs across splits "
+             "by the cosine of the joining rule (caption: crop r, dHash bits, splits): all should "
+             "be different scenes", cells(prepared.top_cosine_cross_split)),
+            (f"2. The {len(prepared.top_cross_split)} most similar pairs across splits by the "
+             "crop correlation: all should be different scenes", cells(prepared.top_cross_split)),
+            (f"3. The {len(prepared.closest_dhash_cross_split)} closest pairs across splits by the"
+             " dHash: all should be different scenes", cells(prepared.closest_dhash_cross_split)),
+        )  # fmt: skip
+        crop = float(prepared.near_duplicates.get("crop_fraction", 0.60))
+        return render_pairs(cosine, sheet_dir / FINAL_SHEET, crop_fraction=crop, columns=3)
     bands = (
         (f"1. The {len(prepared.top_cross_split)} most similar pairs across splits by the crop "
          "correlation: all should be different scenes", cells(prepared.top_cross_split)),
@@ -313,6 +421,8 @@ def main(argv: list[str] | None = None) -> int:
     prep.add_argument(
         "--sheet-dir", type=Path, default=None, help="final contact sheet (outside the repo)"
     )
+    prep.add_argument("--embed-dir", type=Path, default=None, help="RC-D1-embed's output")
+    prep.add_argument("--embedding-model", default=None, help="tests only (tiny)")
     bund = sub.add_parser("bundle", help="manifest of the shared-data folder (data/ + private/)")
     bund.add_argument("--bundle-dir", type=Path, required=True, help="outside the repository")
     ver = sub.add_parser("verify", help="check an attached shared-data dataset")
@@ -325,6 +435,7 @@ def main(argv: list[str] | None = None) -> int:
                      required=True, help="as in the first pass")  # fmt: skip
     cnt.add_argument("--mask-threshold", type=int, required=True, help="as in the first pass")
     cnt.add_argument("--confirm-threshold", type=float, default=None, help="as in the first pass")
+    cnt.add_argument("--embed-dir", type=Path, default=None, help="RC-D1-embed's output")
     cal = sub.add_parser("calibrate", help="choose the crop threshold (before prepare)")
     cal.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")
     cal.add_argument("--results-root", type=Path, default=Path("results"))
@@ -336,6 +447,20 @@ def main(argv: list[str] | None = None) -> int:
         "--threshold", type=float, default=None,
         help="draw the sheet at this value (default: the provisional proposal)",
     )  # fmt: skip
+    emb = sub.add_parser("embed", help="RC-D1-embed: embeddings, candidates, labelling sheets")
+    emb.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")
+    emb.add_argument("--out-dir", type=Path, required=True, help="private, outside the repo")
+    emb.add_argument("--results-root", type=Path, default=Path("results"))
+    emb.add_argument("--split-seed", type=int, required=True, help="to reproduce run 3")
+    emb.add_argument("--close-bits", "--dedup-threshold", dest="close_bits", type=int,
+                     required=True, help=CLOSE_HELP)  # fmt: skip
+    emb.add_argument("--mask-threshold", type=int, required=True, help="to reproduce run 3")
+    emb.add_argument("--embedding-model", default=None, help="tests only (tiny)")
+    lab = sub.add_parser("score-labels", help="RC-D1-label: kappa, rules, the chosen rule")
+    lab.add_argument("--embed-dir", type=Path, required=True, help="RC-D1-embed's output")
+    lab.add_argument("--labels", type=Path, nargs="+", required=True,
+                     help="the filled template, or the two raters' copies")  # fmt: skip
+    lab.add_argument("--results-root", type=Path, default=Path("results"))
     over = sub.add_parser("overlap", help="near-duplicates of an external image folder")
     over.add_argument("--data-root", type=Path, required=True, help="the shared-data dataset")
     over.add_argument(
@@ -361,6 +486,10 @@ def main(argv: list[str] | None = None) -> int:
     from medcompress.data.dedup import ChainingError
 
     try:
+        if args.command == "embed":
+            return embed(args, dataset)
+        if args.command == "score-labels":
+            return score_labels(args, dataset)
         if args.command == "calibrate":
             return calibrate(args, dataset)
         if args.command == "counts":
@@ -376,6 +505,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
     """The first RC-D1 pass: splits, private files, counts and the final contact sheet."""
+    from medcompress.data.embeddings import make_embedder
     from medcompress.data.prepare import prepare, write_private_outputs
 
     prepared = prepare(
@@ -385,6 +515,9 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
         close_bits=args.close_bits,
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
+        results_root=args.results_root,
+        embed_dir=_attached(args.embed_dir),
+        embedder=make_embedder(args.embedding_model) if args.embedding_model else None,
     )
     hashes = write_private_outputs(prepared, args.private_dir, args.data_root)
     summary = args.results_root / "data" / "summary.csv"
@@ -401,6 +534,11 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
         f"{metrics['near_duplicates:close_pairs_not_joined']:.0f} "
         f"({metrics['near_duplicates:close_pairs_not_joined:cross_split']:.0f} across splits)"
     )
+    if "strict_test:images" in metrics:
+        print(f"strict test subset: {metrics['strict_test:images']:.0f} images "
+              f"({metrics['strict_test:image_fraction_of_test']:.1%} of the test images), "
+              f"{metrics['strict_test:qa_rows']:.0f} QA rows; margin "
+              f"{metrics['strict_test:margin']:.2f}")  # fmt: skip
     if args.sheet_dir is not None:
         sheet = _final_sheet(prepared, args.sheet_dir, args.data_root)
         print(f"final contact sheet (private, never commit it; attach it to the report): {sheet}")

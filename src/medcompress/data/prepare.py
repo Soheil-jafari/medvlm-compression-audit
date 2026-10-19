@@ -46,6 +46,7 @@ import numpy as np
 
 from medcompress.config import ConfigError
 from medcompress.data.base import VQASample
+from medcompress.data.candidates import JoinRule, component_groups, crop_pass, joined_pairs_all
 from medcompress.data.dedup import (
     ChainingError,
     CropSettings,
@@ -55,11 +56,20 @@ from medcompress.data.dedup import (
     crop_similarities,
     cross_similarity_matrix,
     distances_to,
+    hamming_distance,
     image_features,
     joined_pairs,
     min_distances,
     two_stage_groups,
     union_groups,
+)
+from medcompress.data.embeddings import (
+    Embedder,
+    EmbeddingSettings,
+    embed_images,
+    load_embeddings,
+    make_embedder,
+    pair_cosines,
 )
 from medcompress.data.kvasir import (
     KvasirVQAx1,
@@ -88,6 +98,10 @@ class PreparedData:
     top_cross_split: tuple[CrossPair, ...] = ()
     closest_dhash_cross_split: tuple[CrossPair, ...] = ()
     close_not_joined: tuple[CrossPair, ...] = ()
+    top_cosine_cross_split: tuple[CrossPair, ...] = ()
+    strict_test_images: tuple[str, ...] = ()
+    """img_ids of the test images whose most similar training image stays below the rule's
+    threshold minus the strict margin (D02 amendment 3; empty under the crop rule)."""
 
 
 @dataclass(frozen=True)
@@ -205,6 +219,71 @@ def near_duplicate_settings(
         max_group_fraction=float(cfg.get("max_group_fraction", base.max_group_fraction)),
         crop=crop_settings(dataset_config),
     )
+
+
+LABELS_FILE = Path("data") / "near_duplicate_labels.csv"
+"""The committed scores of the labelled pairs; ``labels:chosen:*`` hold the chosen rule."""
+STRICT_FILE = "strict_test.json"
+DEFAULT_STRICT_MARGIN = 0.05
+
+
+def labelled_rule(results_root: Path) -> JoinRule:
+    """The joining rule chosen on the labelled pairs (RC-D1-label), from its committed file."""
+    import csv
+
+    path = Path(results_root) / LABELS_FILE
+    if not path.is_file():
+        raise ConfigError(
+            f"{path} is missing: the joining rule comes from the labelled pairs (D02 amendment "
+            "3); run RC-D1-embed, the labelling and RC-D1-label's scoring step first"
+        )
+    with path.open(newline="", encoding="utf-8") as handle:
+        values = {r["metric"]: float(r["value"]) for r in csv.DictReader(handle) if r["value"]}
+    try:
+        return JoinRule.from_code(
+            values["labels:chosen:view_code"],
+            values["labels:chosen:threshold"],
+            values["labels:chosen:crop_threshold"],
+        )
+    except KeyError as exc:
+        raise ConfigError(f"{path} names no chosen rule ({exc}): see RC-D1-label") from exc
+
+
+def join_rule(
+    dataset_config: Mapping[str, Any],
+    *,
+    confirm_threshold: float | None = None,
+    results_root: Path | None = None,
+) -> JoinRule:
+    """The rule that joins images: ``confirm_threshold`` (the crop rule of amendment 2, for
+    reproductions and tests), else ``near_duplicates.rule`` of the dataset config: ``crop``
+    (``min_correlation``) or ``labelled`` (the rule chosen on the labelled pairs)."""
+    if confirm_threshold is not None:
+        return JoinRule("crop", float(confirm_threshold))
+    cfg = dataset_config.get("near_duplicates") or {}
+    if str(cfg.get("rule", "crop")) == "labelled":
+        from medcompress.config import repo_root
+
+        return labelled_rule(Path(results_root) if results_root else repo_root() / "results")
+    threshold = cfg.get("min_correlation")
+    if threshold is None or isinstance(threshold, str):
+        raise ConfigError(
+            "near_duplicates.min_correlation (configs/data/kvasir_vqa_x1.yaml) is still open"
+        )
+    return JoinRule("crop", float(threshold))
+
+
+def strict_margin(dataset_config: Mapping[str, Any]) -> float:
+    """``near_duplicates.strict_margin`` (0.05 by default, D02 amendment 3)."""
+    cfg = dataset_config.get("near_duplicates") or {}
+    return float(cfg.get("strict_margin", DEFAULT_STRICT_MARGIN))
+
+
+def _rule_matrix(rule: JoinRule, emb: Mapping[str, np.ndarray], a: Sequence[int], b: Sequence[int]):  # type: ignore[no-untyped-def]
+    """The cosine of every (row image, column image) pair in the rule's view."""
+    if rule.view == "max":
+        return np.maximum(emb["full"][a] @ emb["full"][b].T, emb["centre"][a] @ emb["centre"][b].T)
+    return emb[rule.view][a] @ emb[rule.view][b].T
 
 
 def score_bin(value: float) -> str:
@@ -337,23 +416,40 @@ def _features(
     return samples, images, fingerprints, signatures
 
 
+@dataclass(frozen=True)
+class _Cross:
+    rows: list[dict[str, Any]]
+    top: tuple[CrossPair, ...]
+    closest: tuple[CrossPair, ...]
+    top_cosine: tuple[CrossPair, ...]
+    strict: tuple[str, ...]
+
+
 def _cross_split(
     split_images: Mapping[str, Sequence[str]],
     fingerprints: Mapping[str, str],
     signatures: Mapping[str, np.ndarray],
     settings: NearDuplicateSettings,
-) -> tuple[list[dict[str, Any]], tuple[CrossPair, ...], tuple[CrossPair, ...]]:
-    """Crop correlations and dHash distances across splits, after the split.
+    rule: JoinRule,
+    emb: Mapping[str, np.ndarray] | None = None,
+    index: Mapping[str, int] | None = None,
+    margin: float = DEFAULT_STRICT_MARGIN,
+) -> _Cross:
+    """Similarities across splits, after the split.
 
-    Returns the rows, the most similar cross-split pairs by the crop correlation, and the
-    closest by the dHash distance (each :data:`TOP_CROSS_SPLIT`, for the final contact sheet).
-    For each validation and test image: its highest correlation with any training image (a
-    histogram), and whether a training image *beyond* the candidate distance reaches the
-    threshold (the candidate stage would have missed it; a data-card number, not a filter).
+    The most similar cross-split pairs by the crop correlation and (under a cosine rule) by
+    the cosine, and the closest by the dHash distance (each :data:`TOP_CROSS_SPLIT`, for the
+    final contact sheet). For each validation and test image: its highest crop correlation
+    (and cosine) with any training image, as histograms. Under the crop rule: whether a
+    training image *beyond* the candidate distance reaches the threshold. Under a cosine rule:
+    the strict test subset, the test images whose most similar training image stays below the
+    rule's threshold minus ``margin`` (and below its crop level minus ``margin``).
     """
     rows: list[dict[str, Any]] = []
     by_score: list[CrossPair] = []
     by_bits: list[CrossPair] = []
+    by_cos: list[CrossPair] = []
+    strict: list[str] = []
     names = list(split_images)
     for i, first in enumerate(names):
         for second in names[i + 1 :]:
@@ -363,14 +459,22 @@ def _cross_split(
             matrix = cross_similarity_matrix(
                 [signatures[p] for p in a], [signatures[p] for p in b], settings.crop
             )
-            flat = matrix.ravel()
-            k = min(TOP_CROSS_SPLIT, flat.size)
-            for index in np.argpartition(-flat, k - 1)[:k]:
-                r, c = divmod(int(index), len(b))
-                bits = int(distances_to([fingerprints[a[r]]], fingerprints[b[c]])[0])
-                by_score.append(CrossPair(a[r], first, b[c], second, float(flat[index]), bits))
+            cosines = None
+            if emb is not None and index is not None:
+                cosines = _rule_matrix(rule, emb, [index[p] for p in a], [index[p] for p in b])
+            k = min(TOP_CROSS_SPLIT, matrix.size)
+            for source, target in ((matrix, by_score), (cosines, by_cos)):
+                if source is None:
+                    continue
+                flat = source.ravel()
+                for position in np.argpartition(-flat, k - 1)[:k]:
+                    r, c = divmod(int(position), len(b))
+                    bits = hamming_distance(fingerprints[a[r]], fingerprints[b[c]])
+                    crop_value = float(matrix[r, c])
+                    score = crop_value if target is by_score else float(flat[position])
+                    target.append(CrossPair(a[r], first, b[c], second, score, bits))
             first_fp = [fingerprints[p] for p in a]
-            best, beyond = [], 0
+            best, best_cos, beyond = [], [], 0
             for col, path in enumerate(b):
                 distances = distances_to(first_fp, fingerprints[path])
                 scores = matrix[:, col]
@@ -380,17 +484,33 @@ def _cross_split(
                     for r in near
                 ]
                 best.append(float(scores.max()))
+                if cosines is not None:
+                    best_cos.append(float(cosines[:, col].max()))
                 far = distances > settings.candidate_bits
-                if far.any() and float(scores[far].max()) >= settings.min_correlation:
+                if (rule.view == "crop" and far.any()
+                        and float(scores[far].max()) >= settings.min_correlation):  # fmt: skip
                     beyond += 1
             if first != "train":
                 continue
             for key, value in score_histogram(best).items():
                 rows.append(_row(f"max_score_to_train:{second}:{key}", value))
-            rows.append(_row(f"similar_to_train_beyond_candidates:{second}", beyond))
+            if rule.view == "crop":
+                rows.append(_row(f"similar_to_train_beyond_candidates:{second}", beyond))
+            else:
+                for key, value in score_histogram(best_cos).items():
+                    rows.append(_row(f"max_cosine_to_train:{second}:{key}", value))
+            if second == "test" and cosines is not None:
+                for col, path in enumerate(b):
+                    below = best_cos[col] < rule.threshold - margin
+                    if rule.crop_threshold is not None:
+                        below = below and best[col] < rule.crop_threshold - margin
+                    if below:
+                        strict.append(path)
     by_score.sort(key=lambda t: (-t.score, t.first, t.second))
+    by_cos.sort(key=lambda t: (-t.score, t.first, t.second))
     by_bits.sort(key=lambda t: (t.bits, -t.score, t.first, t.second))
     top, closest = tuple(by_score[:TOP_CROSS_SPLIT]), tuple(by_bits[:TOP_CROSS_SPLIT])
+    top_cos = tuple(by_cos[:TOP_CROSS_SPLIT])
     if top:
         rows.append(_row("cross_split_top:max_score", top[0].score))
         rows.append(_row("cross_split_top:min_score", top[-1].score))
@@ -402,7 +522,10 @@ def _cross_split(
         rows.append(_row("cross_split_closest_dhash:min_bits", closest[0].bits))
         rows.append(_row("cross_split_closest_dhash:max_bits", closest[-1].bits))
         rows.append(_row("cross_split_closest_dhash:max_score", max(t.score for t in closest)))
-    return rows, top, closest
+    if top_cos:
+        rows.append(_row("cross_split_top_cosine:max", top_cos[0].score))
+        rows.append(_row("cross_split_top_cosine:min", top_cos[-1].score))
+    return _Cross(rows, top, closest, top_cos, tuple(sorted(strict)))
 
 
 def prepare(
@@ -413,19 +536,100 @@ def prepare(
     close_bits: int,
     mask_threshold: int,
     confirm_threshold: float | None = None,
+    rule: JoinRule | None = None,
+    embeddings: Mapping[str, np.ndarray] | None = None,
+    embedder: Embedder | None = None,
+    results_root: Path | None = None,
+    features: tuple[Any, Any, Any, Any] | None = None,
+    embed_dir: Path | None = None,
 ) -> PreparedData:
     """Run steps 1-6 and return the decisions plus the aggregate result rows.
 
-    Raises :class:`ConfigError` while the confirmation threshold is open, and
+    The joining rule is ``rule``, else :func:`join_rule` (``confirm_threshold`` or the dataset
+    config). Under the crop rule of amendment 2, dHash candidates within 12 bits are joined by
+    their crop correlation (RC-D1 run 3). Under a cosine rule (amendment 3), every pair of
+    images is joined whose cosine reaches the threshold (or whose crop correlation reaches the
+    crop level), over all pairs; ``embeddings`` (``{view: (n, dim)}`` in the order of the
+    sorted image paths) are used if given, else computed with ``embedder`` or the configured
+    model, or read from RC-D1-embed's output ``embed_dir`` (checked against the images, the
+    settings and the pinned revision). ``features`` (samples, images, fingerprints,
+    signatures) skips reading the images.
+
+    Raises :class:`ConfigError` while a setting is open, and
     :class:`~medcompress.data.dedup.ChainingError` when the chaining guard stops the run.
     """
     data_root = Path(data_root)
-    settings = near_duplicate_settings(
-        dataset_config, close_bits=close_bits, confirm_threshold=confirm_threshold
+    rule = rule or join_rule(
+        dataset_config, confirm_threshold=confirm_threshold, results_root=results_root
     )
-    samples, images, fingerprints, signatures = _features(data_root, dataset_config, settings.crop)
-    grouping = two_stage_groups(fingerprints, signatures, settings)
-    image_group = grouping.groups
+    settings = near_duplicate_settings(
+        dataset_config, close_bits=close_bits,
+        confirm_threshold=rule.threshold if rule.view == "crop" else 1.0,
+    )  # fmt: skip
+    samples, images, fingerprints, signatures = features or _features(
+        data_root, dataset_config, settings.crop
+    )
+    emb: Mapping[str, np.ndarray] | None = None
+    index = {p: i for i, p in enumerate(images)}
+    if rule.view == "crop":
+        grouping = two_stage_groups(fingerprints, signatures, settings)
+        image_group = grouping.groups
+        joined_list = [(a, b) for (a, b, _), keep in
+                       zip(grouping.candidates, grouping.joined, strict=True) if keep]  # fmt: skip
+        close = [
+            (a, b, d, keep, score)
+            for (a, b, d), keep, score in zip(
+                grouping.candidates, grouping.joined, grouping.scores, strict=True
+            )
+            if d <= close_bits
+        ]
+        group_sizes = grouping.sizes
+        rule_rows = [_row(f"near_duplicates:{k}", v) for k, v in settings.rows().items()]
+        rule_rows += [
+            _row("near_duplicates:candidate_pairs", len(grouping.candidates)),
+            _row("near_duplicates:joined_pairs", len(joined_list)),
+            _row("near_duplicates:candidate_pairs_not_joined",
+                 len(grouping.candidates) - len(joined_list)),
+        ]  # fmt: skip
+    else:
+        if embeddings is None and embed_dir is not None:
+            embeddings, _ = load_embeddings(
+                Path(embed_dir) / "embeddings.npz", images,
+                EmbeddingSettings.from_config(dataset_config),
+            )  # fmt: skip
+        emb = embeddings or _embed(data_root, images, dataset_config, embedder)
+        crop_above = None
+        if rule.crop_threshold is not None:
+            _, _, crop_above = crop_pass(
+                [signatures[p] for p in images], settings.crop, k=0, floor=rule.crop_threshold
+            )
+        ja, jb = joined_pairs_all(rule, emb, crop_above)
+        image_group = component_groups(images, ja, jb)
+        check_chaining(image_group, settings.max_group_fraction)
+        joined_list = [(images[i], images[j]) for i, j in zip(ja, jb, strict=True)]
+        near = candidate_pairs(fingerprints, threshold=close_bits)
+        ia = np.array([index[a] for a, _, _ in near], dtype=np.int64)
+        ib = np.array([index[b] for _, b, _ in near], dtype=np.int64)
+        view = ("full", "centre") if rule.view == "max" else (rule.view,)
+        cos = np.max([pair_cosines(emb[v], ia, ib) for v in view], axis=0) if len(near) else []
+        crops = crop_similarities(signatures, [(a, b) for a, b, _ in near], settings.crop)
+        close = []
+        for k, (a, b, d) in enumerate(near):
+            keep = cos[k] >= rule.threshold or (
+                rule.crop_threshold is not None and crops[k] >= rule.crop_threshold
+            )
+            close.append((a, b, d, bool(keep), float(crops[k])))
+        group_sizes = Counter(image_group.values())
+        rule_rows = [_row(f"near_duplicates:rule:{k}", v) for k, v in rule.code().items()]
+        rule_rows += [
+            _row(f"near_duplicates:{k}", v)
+            for k, v in settings.rows().items()
+            if k not in ("min_correlation", "candidate_bits")
+        ]
+        rule_rows += [
+            _row("near_duplicates:joined_pairs", len(joined_list)),
+            _row("near_duplicates:strict_margin", strict_margin(dataset_config)),
+        ]
 
     seg = load_kvasir_seg(data_root)
     links = link_masks(
@@ -460,20 +664,18 @@ def prepare(
         for name in split_images
         if name != "train"
     }
-    close = sum(1 for d in closest.values() for v in d.values() if v <= close_bits)
+    close_count = sum(1 for d in closest.values() for v in d.values() if v <= close_bits)
     crossing: dict[str, set[str]] = {name: set() for name in closest}
-    close_apart: list[CrossPair] = []  # within close_bits, not joined, in different splits
-    for (a, b, d), keep, score in zip(
-        grouping.candidates, grouping.joined, grouping.scores, strict=True
-    ):
-        if split_of[a] == split_of[b]:
-            continue
-        if keep:
+    for a, b in joined_list:
+        if split_of[a] != split_of[b]:
             for path, other in ((a, b), (b, a)):
                 if split_of[path] != "train" and split_of[other] == "train":
                     crossing[split_of[path]].add(path)
-        elif d <= close_bits:
-            close_apart.append(CrossPair(a, split_of[a], b, split_of[b], score, d))
+    close_apart = [  # within close_bits, not joined, in different splits
+        CrossPair(a, split_of[a], b, split_of[b], score, d)
+        for a, b, d, keep, score in close
+        if not keep and split_of[a] != split_of[b]
+    ]
     confirmed_leaks = sum(len(v) for v in crossing.values())
     if confirmed_leaks:  # impossible by construction: joined pairs share a group
         raise AssertionError(
@@ -495,20 +697,13 @@ def prepare(
     }
 
     rows: list[dict[str, Any]] = [_row("images:all", len(images))]
-    rows += group_size_rows(grouping.sizes, len(images))
-    rows += [_row(f"near_duplicates:{k}", v) for k, v in settings.rows().items()]
-    joined = sum(grouping.joined)
-    close_pairs = [
-        keep for (_, _, d), keep in zip(grouping.candidates, grouping.joined, strict=True)
-        if d <= close_bits
-    ]  # fmt: skip
+    rows += group_size_rows(group_sizes, len(images))
+    rows += rule_rows
+    close_joined = sum(1 for *_, keep, _ in close if keep)
     rows += [
-        _row("near_duplicates:candidate_pairs", len(grouping.candidates)),
-        _row("near_duplicates:joined_pairs", joined),
-        _row("near_duplicates:candidate_pairs_not_joined", len(grouping.candidates) - joined),
-        _row("near_duplicates:close_pairs", len(close_pairs)),
-        _row("near_duplicates:close_pairs_joined", sum(close_pairs)),
-        _row("near_duplicates:close_pairs_not_joined", len(close_pairs) - sum(close_pairs)),
+        _row("near_duplicates:close_pairs", len(close)),
+        _row("near_duplicates:close_pairs_joined", close_joined),
+        _row("near_duplicates:close_pairs_not_joined", len(close) - close_joined),
         _row("near_duplicates:close_pairs_not_joined:cross_split", len(close_apart)),
     ]
     for name, members in splits.items():
@@ -532,13 +727,26 @@ def prepare(
     rows.append(_row("val_test_confirmed_duplicates_of_train", confirmed_leaks))
     for name, found in crossing.items():
         rows.append(_row(f"confirmed_duplicates_of_train:{name}", len(found)))
-    rows.append(_row("val_test_close_dhash_to_train", close))  # not joined: the crop differs
+    rows.append(_row("val_test_close_dhash_to_train", close_count))  # not joined by the rule
     for name, distances in closest.items():
         hist = _histogram(list(distances.values()), 0, TAIL_MAX_BITS)
         for key, count in hist.items():
             rows.append(_row(f"min_distance_to_train:{name}:{key}", count))
-    cross_rows, top, nearest = _cross_split(split_images, fingerprints, signatures, settings)
-    rows += cross_rows
+    margin = strict_margin(dataset_config)
+    cross = _cross_split(split_images, fingerprints, signatures, settings, rule, emb, index, margin)
+    rows += cross.rows
+    strict_ids: tuple[str, ...] = ()
+    if rule.view != "crop":
+        strict_set = set(cross.strict)
+        strict_ids = tuple(sorted(str(Path(p).stem) for p in cross.strict))
+        test_rows = sum(1 for s in splits["test"] if s.image_path in strict_set)
+        rows += [
+            _row("strict_test:images", len(strict_ids)),
+            _row("strict_test:image_fraction_of_test",
+                 len(strict_ids) / max(1, len(split_images["test"]))),
+            _row("strict_test:qa_rows", test_rows),
+            _row("strict_test:margin", margin),
+        ]  # fmt: skip
     rows.append(_row("masks:linked", len(links.links)))
     rows.append(_row("masks:ambiguous", len(links.ambiguous)))
     rows.append(_row("masks:unmatched", links.unmatched_masks))
@@ -562,11 +770,37 @@ def prepare(
         thresholds=thresholds,
         rows=tuple(rows),
         split_sha256=split_fingerprint(splits),
-        near_duplicates=settings.rows(),
-        top_cross_split=top,
-        closest_dhash_cross_split=nearest,
+        near_duplicates=(
+            settings.rows() if rule.view == "crop"
+            else {**{k: v for k, v in settings.rows().items()
+                     if k not in ("min_correlation", "candidate_bits")},
+                  **{f"rule_{k}": v for k, v in rule.code().items()},
+                  "strict_margin": margin}
+        ),
+        top_cross_split=cross.top,
+        closest_dhash_cross_split=cross.closest,
         close_not_joined=tuple(close_apart[:CLOSE_NOT_JOINED_SHOWN]),
-    )
+        top_cosine_cross_split=cross.top_cosine,
+        strict_test_images=strict_ids,
+    )  # fmt: skip
+
+
+def _embed(
+    data_root: Path,
+    images: Sequence[str],
+    dataset_config: Mapping[str, Any],
+    embedder: Embedder | None,
+) -> dict[str, np.ndarray]:
+    """The embeddings of ``images`` with ``embedder`` or the configured model (pinned)."""
+    settings = EmbeddingSettings.from_config(dataset_config)
+    if embedder is None:
+        if not settings.model.startswith("tiny") and settings.revision is None:
+            raise ConfigError(
+                "near_duplicates.embedding.revision is open: pin the revision RC-D1-embed "
+                "printed, or attach RC-D1-embed's output with --embed-dir"
+            )
+        embedder = make_embedder(settings.model, settings.revision)
+    return embed_images([str(Path(data_root) / p) for p in images], embedder, settings)
 
 
 CALIBRATION_GRID: tuple[float, ...] = tuple(round(0.30 + 0.05 * k, 2) for k in range(14))
@@ -828,6 +1062,8 @@ def write_private_outputs(prepared: PreparedData, out_dir: Path, data_root: Path
         (out_dir / "near_duplicates.json").write_text(
             json.dumps(dict(prepared.near_duplicates), sort_keys=True, indent=1)
         )
+    if prepared.strict_test_images:  # D02 amendment 3: the strict test subset (img_ids)
+        (out_dir / STRICT_FILE).write_text(json.dumps(list(prepared.strict_test_images), indent=0))
     hashes = {"split_sha256": prepared.split_sha256}
     for name in ("kvasir_vqa_x1", "kvasir_seg"):
         root = Path(data_root) / name

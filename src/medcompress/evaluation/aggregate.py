@@ -46,7 +46,9 @@ SPLIT_OF_RUN_FILE: dict[str, str] = {
 }
 """Split of the rows in each run file; ``""`` = not tied to a split (footprints, training)."""
 SUMMARY_KEYS: tuple[str, ...] = ("experiment", "budget", "split", "metric")
-SPECIAL_DIRS: tuple[str, ...] = ("comparisons", "selection", "data", "smoke", "summary")
+SPECIAL_DIRS: tuple[str, ...] = (
+    "comparisons", "comparisons_strict", "selection", "data", "smoke", "summary",
+)  # fmt: skip
 SELECTION_ROUNDS: tuple[str, ...] = ("R0", "R1", "R2", "R3")
 _SEED_DIR = re.compile(r"^seed(\d+)$")
 
@@ -77,13 +79,14 @@ def classify_path(path: Path, root: Path) -> ResultFile | None:
     parts = rel.parts
     if not parts or parts[0] == "summary" or path.suffix != ".csv":
         return None
-    if parts[0] == "comparisons":
+    if parts[0] in ("comparisons", "comparisons_strict"):  # strict: D02 amendment 3
         budget = parts[2] if len(parts) == 4 else None
         return ResultFile(
             path,
             kind="comparison",
             relative=rel.as_posix(),
             budget=None if budget == "nobudget" else budget,
+            split="strict_test" if parts[0] == "comparisons_strict" else "",
         )
     if parts[0] == "selection":
         return ResultFile(path, relative=rel.as_posix(), kind="selection", split="val")

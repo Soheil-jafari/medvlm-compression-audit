@@ -10,20 +10,19 @@
     by question, so 3,821 of its 4,058 test images are also training images): near-duplicate
     images are grouped first, and whole groups go to train / validation / test, 70 / 15 / 15 %
     of the images, stratified by finding answer and by Kvasir-SEG mask;
-  - group near-duplicates in **two stages** (D02 amendment 2 of 2026-10-18, final values
-    2026-10-19; run 2 showed that the 4-bit dHash rule misses adjacent frames, and the
-    calibration that it also joins different images, section 5): dHash candidates within 12
-    bits, each joined only if its correlation on the centre of the image, where no overlay is
-    drawn, is at least 0.65;
+  - group near-duplicates by **image embeddings** (D02 amendment 3 of 2026-10-19): a pair of
+    images is joined when the cosine of their embeddings (or their crop correlation) reaches
+    the rule chosen on human labels (RC-D1-embed, RC-D1-label). Runs 2 and 3 showed that the
+    dHash and the crop correlation both miss true copies (section 5);
   - link Kvasir-SEG masks to the VQA images;
   - report **aggregate counts only**, so the finding list, prevalence groups, label rules and
     size thresholds can be pre-registered;
   - write **one shared-data folder** (the images, the rows, Kvasir-SEG and the private RC-D1
     files, with a SHA-256 manifest) that every later card attaches as a private Kaggle dataset.
 - Who: **Soheil** (decision of 2026-10-17).
-- Status: `ready` for **run 3** (section 3b). The calibration step ran on 2026-10-19 and the
-  threshold is decided (section 5). Runs 1 and 2 are recorded in section 5; nothing from them
-  is used.
+- Status: `blocked` for **run 4** (section 3b) until RC-D1-embed has run, the two raters have
+  labelled the pairs, and RC-D1-label's scoring has committed the chosen rule. Runs 1, 2 and 3
+  are recorded in section 5; nothing from them is used (run 3 was not accepted).
 
 ## 2. Requirements
 
@@ -45,59 +44,55 @@
   - The shared-data folder holds copies of these images. It stays a **private** dataset,
     shared with the team's three Kaggle accounts only (Soheil, Amir, Farzan), never public. The
     manifest records both licences and this rule.
-- **Three steps.**
-  1. **Calibration** (CPU; section 3a): **done 2026-10-19** (commit 73f31bc; results in
-     `results/data/near_duplicate_calibration.csv`, commit b4cf740). The threshold 0.65 is in
-     `configs/data/kvasir_vqa_x1.yaml` (`near_duplicates.min_correlation`) with its reason
-     (D02 amendment 2, final values).
-  2. **Run 3** (section 3b): as run 2, with the two-stage grouping. It writes the shared data,
-     the counts and a final contact sheet with three bands of cross-split pairs (section 3b).
-     Attach that sheet to the report. **It is the deciding check:** if a person sees same-scene
-     pairs on it, the next step is the pre-registered fallback (decisions log, 2026-10-19), not
-     a new threshold.
-  3. **Pass 2** (CPU, minutes): the label values of the abnormality question
-     (`configs/data/kvasir_vqa_x1.yaml`, `values: {}`) are still empty, so run 3 writes the
+- **The steps of D02 amendment 3.**
+  1. **RC-D1-embed** (its own card, CPU): embeddings, candidate pairs, about 300 pairs to label
+     on numbered sheets without scores.
+  2. **The labels** (card RC-D1-label): two raters label every pair `same_scene`,
+     `different` or `unsure`, each on their own; then the scoring step computes Cohen's kappa
+     and every rule's sensitivity and precision, and chooses the rule. The chosen rule is
+     committed as numbers in `results/data/near_duplicate_labels.csv`.
+  3. **Run 4** (section 3b): the split with the chosen rule. It writes the shared data, the
+     counts, the strict test subset and a final contact sheet with three bands of cross-split
+     pairs. Attach that sheet to the report and say what you see in each band.
+  4. **Pass 2** (CPU, minutes): the label values of the abnormality question
+     (`configs/data/kvasir_vqa_x1.yaml`, `values: {}`) are still empty, so run 4 writes the
      answer values per split (`answer_count:<rule>:<value>:<split>`) but no `positives:*` or
      `prevalence:*`. The agent proposes the label values from these counts; the team confirms;
-     pass 2 then recounts from the attached shared data with the same settings. It stops if
-     the splits do not hash as in run 3. The splits themselves do not depend on the label
-     values: they are stratified by the raw answer values.
-- Expected runtime of run 3 (**estimate**): about 15 to 25 minutes, as run 2. The export took
-  about 9 minutes in run 1. The calibration step scored the 211,329 candidate pairs (its wall
-  time was not reported); on a 4-core CPU here, 100,000 synthetic pairs took about 7 s and
-  the training-against-held-out matrix about 12 s. Hashing the folder for the manifest: not
-  measured.
+     pass 2 then recounts from the attached shared data with the same settings (attach
+     RC-D1-embed's output too: `--embed-dir`). It stops if the splits do not hash as in run 4.
+- Expected runtime of run 4 (**estimate**): about 20 to 30 minutes with RC-D1-embed's output
+  attached:
+  - the export, about 9 minutes in run 1;
+  - reading, grouping and splitting as in runs 2 and 3, plus the cross-split cosines;
+  - if the chosen rule has a crop part, the all-pairs crop pass (199 s here on 4 CPU cores);
+  - hashing the folder for the manifest (not measured).
+
+  Without the attached embeddings, add the embedding time of RC-D1-embed (about 20 to 50
+  minutes on CPU, an estimate).
 
 Settings (pre-registration items; decided before any model result, D02 amendments of
-2026-10-18, final values 2026-10-19):
+2026-10-18 and 2026-10-19):
 
 | Setting | Value | Why |
 |---|---|---|
 | `--split-seed` | `20261012` | any fixed integer; recorded in the pre-registration |
-| `--close-bits` | `4` | names the band of very close pairs (0-4 of 64 dHash bits) that is reported; since 2026-10-19 they are **not** joined automatically (the calibration showed 0-4 bit pairs of different images). `--dedup-threshold` is its old name and still works |
-| `candidate_bits` | `12` | every pair within 12 bits, 0-4 bits included, is a candidate for the crop check |
-| `crop_fraction` | `0.60` | the central 60 % of width and of height: 20 % is cut from each side, where the text (top left), the green box (bottom left) and the black border are drawn |
-| `crop_side` | `32` | the crop, grey-scale, area-averaged to 32 x 32 pixels |
-| `crop_highpass_sigma` | `4.0` | a Gaussian blur of 4 px (at 32) is subtracted: the measure follows the mucosa's detail, not the lighting or the lumen position, which made unrelated images look alike at 9 x 8 |
-| `crop_max_shift` | `3` | the crop of one image is compared with the other shifted by up to 3 px (5.6 % of the image side) each way: adjacent frames move a little |
-| measure | highest Pearson correlation over the shifts, both ways round | insensitive to brightness and contrast; 1.0 for identical crops |
-| `min_correlation` | `0.65` | candidate pairs at or above it are joined: the valley of the bimodal 5-8 bit distribution; 2 of 2,000 random controls reach it (calibration, section 5) |
-| `max_group_fraction` | `0.10` | chaining guard: run 3 STOPS (exit code 7) if one group holds more than 10 % of the images (644 of 6,449); a group needs at least 3 images to chain. Below 0.60 the largest group jumps above 30 %: that is what chaining looks like |
+| `near_duplicates.rule` | `labelled` | the joining rule is read from `results/data/near_duplicate_labels.csv` (`labels:chosen:*`), written by RC-D1-label's scoring; run 4 stops with exit code 4 until it is committed |
+| the rule family | a cosine of at least t (0.50 to 0.99 by 0.01) in the full view, the centre view or the larger of the two, alone or OR a crop correlation of at least 0.65 or 0.80 (450 rules) | fixed in advance; the choice is the highest sensitivity with precision >= 0.5 on the labels, within the guard (card RC-D1-label) |
+| `near_duplicates.embedding` | model: proposal DINOv2-small, revision and licence as RC-D1-embed prints them (pinned before run 4); two views (whole image; central 60 %), 224 x 224, the model's own normalisation, the pooled output, L2-normalised | `data/embeddings.py` |
+| `max_group_fraction` | `0.10` | chaining guard: run 4 STOPS (exit code 7) if one group holds more than 10 % of the images (644 of 6,449); a group needs at least 3 images to chain |
+| `strict_margin` | `0.05` | the strict test subset: the test images whose most similar training image stays below the chosen threshold minus 0.05 (and below its crop level minus 0.05, if the rule has one) |
+| `--close-bits` | `4` | names the band of very close pairs (0-4 of 64 dHash bits) that is reported; nothing is joined on the dHash alone |
+| crop measure | the central 60 %, grey, 32 x 32, a 4 px blur subtracted, shifts up to 3 px; highest Pearson correlation | the crop part of a combined rule and the sheet's crop band (D02 amendment 2) |
 | `--mask-threshold` | `4` | max differing bits to link a Kvasir-SEG image to a VQA image |
 | split ratios | 70 / 15 / 15 % of the images | `split_ratios` in `configs/data/kvasir_vqa_x1.yaml` |
 
-The crop settings, the threshold and the guard are in `configs/data/kvasir_vqa_x1.yaml`
-(`near_duplicates`); the seed and the two bit settings are on the command line.
-
-How the groups are made (`data/dedup.py: two_stage_groups`, CPU-tested):
-1. Candidates: every pair of images within 12 bits of the 64-bit dHash.
-2. Joined: every candidate whose crop correlation is at least 0.65, and no other pair. Nothing
-   is joined on the dHash alone; the 0-4 bit pairs left apart are counted and shown.
-3. Union-find over the joined pairs: if a~b and b~c, a, b and c are one group.
-4. The chaining guard: STOP and report if the largest group holds more than 10 % of the images.
-
-From the calibration (with the old automatic join), the largest group at 0.65 was 349 images
-(5.4 %). Without the automatic join it can only be smaller or equal: fewer pairs are joined.
+How the groups are made (`data/candidates.py`, `data/prepare.py`, CPU-tested):
+1. The chosen rule is applied to **all pairs** of the 6,449 images, not only to candidates:
+   every pair whose cosine in the rule's view reaches the threshold (and, for a combined rule,
+   every pair whose crop correlation reaches the crop level) is joined.
+2. The joined pairs make groups (connected components): if a~b and b~c, a, b and c are one
+   group.
+3. The chaining guard: STOP and report if the largest group holds more than 10 % of the images.
 
 How the groups are split (`data/splits.py: assign_groups_stratified`, CPU-tested; unchanged):
 1. The groups are put in a seeded order.
@@ -110,12 +105,11 @@ How the groups are split (`data/splits.py: assign_groups_stratified`, CPU-tested
 Checks after the split (in `summary.csv`, section 3b):
 - no validation or test image has a joined pair with a training image (zero by construction;
   the run stops otherwise);
-- the pairs within 4 bits that are not joined, in all and across splits, and the held-out
-  images with a training image within 4 bits (reported, not filtered);
-- the dHash tail (0 to 17 bits) and the crop-correlation tail to the training split;
-- how many validation and test images have a training image **beyond 12 bits** whose crop
-  correlation reaches the threshold: pairs the candidate stage cannot see. A number for the
-  data card, not a filter.
+- the pairs within 4 bits that are not joined, in all and across splits (reported);
+- for each held-out image: its dHash distance, crop correlation and cosine to the training
+  split (histograms);
+- the **strict test subset** (pre-registered sensitivity analysis): its images and QA rows.
+  The comparisons are reported again on it (`scripts/09_compare_arms.py --strict`).
 
 Limitation: HyperKvasir has no patient IDs. Images of the same patient taken at different
 moments can still fall into different splits (data card).
@@ -164,19 +158,33 @@ into validation or test (expensive); a wrong join only puts two images in the sa
 (cheap, as long as no giant group forms). So the threshold sits in the valley of the bimodal
 5-8 bit distribution, not at the provisional proposal 0.80, which missed a same-scene pair.
 
-### 3b. Run 3
+### 3b. Run 4 (after RC-D1-label)
 
-Attach Kvasir-SEG only (not run 2's shared data: the copy step looks for a folder with
-`images/` and `masks/` under `/kaggle/input`). Internet on.
+Before it: the chosen rule is committed (`results/data/near_duplicate_labels.csv`), and the
+agent has pinned the embedding revision RC-D1-embed printed.
 
-**Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-D1"`,
-`SEED = None`, `DATA = None`, `FROM = []`, `EXTRA = []`. The runner finds the attached Kvasir-SEG
-folder itself, runs the five steps below and prints section 5. Or by hand, in one CPU notebook:
+Attach Kvasir-SEG and RC-D1-embed's dataset (not run 2's or run 3's shared data: the copy step
+looks for a folder with `images/` and `masks/` under `/kaggle/input`). Internet on (the export).
+
+**Unattended (Save & Run All):** `notebooks/run_card.ipynb`, cell 1:
+
+```python
+CARD = "RC-D1"
+SEED = None
+DATA = None
+FROM = []
+COMMIT = None
+EXTRA = ["--embed-dir", "/kaggle/input/rc-d1-embed"]
+```
+
+The runner finds the attached Kvasir-SEG folder itself, runs the five steps below (the export,
+the Kvasir-SEG copy, `prepare` with the chosen rule and the attached embeddings, the bundle and
+its check) and prints section 5. Or by hand, in one CPU notebook:
 
 ```bash
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 5
-grep -E "min_correlation:|max_group_fraction:" configs/data/kvasir_vqa_x1.yaml  # 0.65, 0.10
+grep "labels:chosen" results/data/near_duplicate_labels.csv  # the chosen rule must be there
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps && pip install -q datasets
 
 export SHARED=/kaggle/working/medcompress_data                # data/ + private/, outside the repo
@@ -191,6 +199,7 @@ copy_kvasir_seg(Path('$SEG'), Path('$SHARED/data'))"
 
 python scripts/prepare_data.py prepare --data-root $SHARED/data --private-dir $SHARED/private \
     --split-seed 20261012 --close-bits 4 --mask-threshold 4 \
+    --embed-dir /kaggle/input/rc-d1-embed \
     --sheet-dir /kaggle/working/rc_d1_sheets                  # exit 7 = the chaining guard: STOP
 python scripts/prepare_data.py bundle --bundle-dir $SHARED    # SHA-256 manifest of every file
 python scripts/prepare_data.py verify --data-root $SHARED     # must print OK
@@ -198,44 +207,45 @@ python -m pytest -q tests/test_results.py                     # must pass before
 ```
 
 If `prepare` stops with exit code 7 ("STOP: the largest near-duplicate group holds ..."), do
-not change any setting: paste the message back. Exit code 4 means the clone does not hold the
-threshold (an old commit).
+not change any setting: paste the message back. Exit code 4 means the chosen rule is not
+committed yet, or the attached embeddings do not fit the pinned revision.
 
 **Paste back:**
 - the line `groups ..., largest ... (...%); held-out images with a confirmed duplicate in
   train: 0; pairs within 4 bits not joined: ... (... across splits)`;
+- the line `strict test subset: ... images (...% of the test images), ... QA rows; margin 0.05`;
 - the hashes printed at the end (`split_sha256`, manifests, the bundle's file count);
 - the final contact sheet `/kaggle/working/rc_d1_sheets/rc_d1_final_cross_split_pairs.png`,
   attached to the report (private; **never commit it**), with one line per band: how many
   pairs, if any, show the same scene.
 
-The final contact sheet has three bands, all pairs across splits, each with its crop
+The final contact sheet has three bands, all pairs across splits, each with its score, crop
 correlation, dHash distance and splits:
-1. the 24 most similar pairs by the crop correlation;
-2. the 24 closest pairs by the dHash distance;
-3. the 0-4 bit pairs the crop left apart: the count in all and across splits in the title, and
-   the 12 across splits with the highest crop correlation.
+1. the 24 with the highest cosine in the chosen rule's view;
+2. the 24 with the highest crop correlation;
+3. the 24 closest by the dHash distance.
 
-All of them should be different scenes. **This sheet is the deciding check.** If a person sees
-same-scene pairs on it, the split is not used: the next step is the pre-registered fallback
-(embeddings from a small pretrained vision model, compared by cosine similarity on CPU;
-decisions log, 2026-10-19), not another threshold.
+All should be different scenes. **It is the deciding check.** If same-scene pairs appear,
+report them: the split is not accepted, and the team decides what follows (D02 amendment 3
+fixes no further fallback).
 
-What `results/data/summary.csv` holds after run 3 (aggregate counts only; experiment `DATA`):
+What `results/data/summary.csv` holds after run 4 (aggregate counts only; experiment `DATA`):
 
 | Rows | What |
 |---|---|
 | `images:all`, `groups:total`, `groups:multi_image`, `groups:largest`, `groups:largest_fraction`, `images_in_multi_image_groups`, `groups:size:<1, 2, 3, 4, 5, 6_to_10, 11_to_50, 51_to_100, 101_or_more>`, `groups:<split>` | the near-duplicate groups |
-| `near_duplicates:<setting>` | the settings used (`close_bits`, `candidate_bits`, `min_correlation`, `max_group_fraction`, the crop) |
-| `near_duplicates:candidate_pairs`, `:joined_pairs`, `:candidate_pairs_not_joined` | the two stages |
+| `near_duplicates:rule:view_code`, `:rule:threshold`, `:rule:crop_threshold` | the chosen rule (view 1 full, 2 centre, 3 the larger; crop -1 = none) |
+| `near_duplicates:<setting>`, `near_duplicates:strict_margin` | the settings used (`close_bits`, `max_group_fraction`, the crop) |
+| `near_duplicates:joined_pairs` | the pairs the rule joins over all pairs of images |
 | `near_duplicates:close_pairs`, `:close_pairs_joined`, `:close_pairs_not_joined`, `:close_pairs_not_joined:cross_split` | the 0-4 bit pairs, and those the crop left apart (in all and across splits) |
 | `qa_rows:<split>`, `images:<split>`, `image_fraction:<split>`, `masked_images:<split>` | the size of each split |
 | `val_test_confirmed_duplicates_of_train`, `confirmed_duplicates_of_train:<val/test>` | must be 0 |
 | `val_test_close_dhash_to_train` | held-out images with a training image within 4 bits that the crop left apart (reported, not filtered) |
 | `min_distance_to_train:<val/test>:0` ... `:17`, `:18_or_more` | the dHash distance of each held-out image to the training split |
 | `max_score_to_train:<val/test>:<bin>` | each held-out image's highest crop correlation with a training image, in bins of 0.05 |
-| `similar_to_train_beyond_candidates:<val/test>` | held-out images with a training image beyond 12 bits at or above the threshold (not filtered) |
-| `cross_split_top:max_score`, `:min_score`, `:within_candidate_bits`; `cross_split_closest_dhash:min_bits`, `:max_bits`, `:max_score` | bands 1 and 2 of the final contact sheet |
+| `max_cosine_to_train:<val/test>:<bin>` | each held-out image's highest cosine (the rule's view) with a training image, in bins of 0.05 |
+| `strict_test:images`, `:image_fraction_of_test`, `:qa_rows`, `:margin` | the strict test subset (its img_ids are in the private `strict_test.json`) |
+| `cross_split_top_cosine:max`, `:min`; `cross_split_top:max_score`, `:min_score`, `:within_candidate_bits`; `cross_split_closest_dhash:min_bits`, `:max_bits`, `:max_score` | the three bands of the final contact sheet |
 | `answer_count:<rule>:<value>` and `answer_count:<rule>:<value>:<split>` | the answer values of the finding question, overall and per split (images) |
 | `positives:<finding>:<split>`, `prevalence:<finding>` | after the label values are filled (pass 2) |
 | `answer_words:p50/p90/p99/max` | on the training split (sets `max_new_tokens`, D04) |
@@ -243,12 +253,13 @@ What `results/data/summary.csv` holds after run 3 (aggregate counts only; experi
 | `official:images:*`, `official:test_rows:*`, `official:test_only_min_distance_to_train:*` | the official split's overlap (data card, appendix item) |
 
 **Pass 2** (after the agent has committed the label values and the team has confirmed them), a
-new CPU notebook with run 3's shared data attached:
+new CPU notebook with run 4's shared data and RC-D1-embed's dataset attached:
 
 ```bash
-python scripts/run_card.py --card RC-D1-counts --data-root /kaggle/input/<shared-data>
+python scripts/run_card.py --card RC-D1-counts --data-root /kaggle/input/<shared-data> \
+    --embed-dir /kaggle/input/rc-d1-embed
 # by hand: python scripts/prepare_data.py counts --data-root /kaggle/input/<shared-data> \
-#     --split-seed 20261012 --close-bits 4 --mask-threshold 4
+#     --split-seed 20261012 --close-bits 4 --mask-threshold 4 --embed-dir /kaggle/input/rc-d1-embed
 ```
 
 ## 4. Make the shared data a private Kaggle dataset, and what to commit back
@@ -256,13 +267,13 @@ python scripts/run_card.py --card RC-D1-counts --data-root /kaggle/input/<shared
 Upload, step by step. Kaggle's button names may differ slightly; the dataset must stay
 **Private** throughout.
 
-1. Run run 3 with **Save Version -> Save & Run All** (the unattended notebook), so that
+1. Run run 4 with **Save Version -> Save & Run All** (the unattended notebook), so that
    `/kaggle/working/medcompress_data/` is saved in the version's output.
 2. Open the finished version, then its **Output** tab, and create a dataset from the
    `medcompress_data` folder (**New Dataset**). Name it, for example, `medcompress-data`, and set
-   **Private**. Do not use a public dataset, and do not upload it anywhere else. If run 2's
-   dataset exists, give run 3's a new name (for example `medcompress-data-run3`) or delete run
-   2's, so nobody attaches run 2's splits by mistake.
+   **Private**. Do not use a public dataset, and do not upload it anywhere else. If the
+   datasets of runs 2 or 3 exist, give run 4's a new name (for example `medcompress-data-run4`)
+   or delete the old ones, so nobody attaches their splits by mistake.
 3. On the dataset's page, open its settings (**Sharing** / **Collaborators**). Add Amir's and
    Farzan's Kaggle usernames with view access. Keep it Private.
 4. Check it from a new notebook: **Add Input** -> the dataset, then run
@@ -379,14 +390,40 @@ them.
   forms). The automatic join within 4 bits is removed; the guard is 10 %.
 - Overlays inside the yellow box: not stated in the report (add it if checked).
 
-### Run 3
+### Run 3 (2026-10-19, Soheil, Kaggle CPU, commit 103fbb0): crop rule 0.65; NOT accepted, nothing committed
+
+- `split_sha256` 4a595fdf... (the rest was not reported).
+- Images 4,515 / 967 / 967; QA rows 102,639 / 30,438 / 26,130; masked images 658 / 143 / 209.
+- Groups 4,176; the largest 241 images (3.7 %). Joined pairs 18,034. Pairs within 4 bits not
+  joined: 929 (252 across splits).
+- `similar_to_train_beyond_candidates`: validation 125, test 119.
+- Cross-split crop scores, top 24: 0.781 to 0.893. The closest cross-split pairs by dHash: 1-2
+  bits, with crop scores of at most 0.588.
+- Visual check of the final sheet (pairs across splits):
+  - band 1 (the 24 highest crop scores, all at 14-32 bits, so never candidates): 3 the same
+    scene (#1, r = 0.893, 19 bits, identical frames; #4, r = 0.837, 14 bits, and #6,
+    r = 0.833, 15 bits, the same polyp with the same instrument); 21 different (similar wall
+    texture; some training images recur). Likely cause: Kvasir-VQA mixes HyperKvasir and
+    Kvasir-Instrument, so the same frame may exist at another size or crop, and its dHash
+    changes.
+  - band 2 (the 24 closest by dHash, 1-2 bits, crop 0.20-0.59): about 5 likely the same scene
+    (#1, #8, #9, #10, #11), about 5 unsure, the rest different;
+  - band 3 (within 4 bits, not joined, crop 0.50-0.64): about 9 of 12 the same scene (#1, #2,
+    #3, #4, #7, #9, #10, #11, #12). The crop correlation under-scores true copies when the
+    mucosa is smooth or slightly blurred, or when the highlights move (the blur subtraction
+    amplifies them).
+- Conclusion: both measures miss true duplicates; the split is not clean. Hence D02 amendment
+  3 (embeddings, a rule chosen on human labels).
+
+### Run 4
 
 - Run by / date:
-- Commit actually used (it must contain `min_correlation: 0.65`):
+- Commit actually used (it must hold the chosen rule in `results/data/near_duplicate_labels.csv`
+  and the pinned embedding revision):
+- RC-D1-embed's dataset attached (name):
 - Hardware / library versions (`pip freeze | grep -E "datasets|pillow|numpy"`):
 - Wall time:
-- The line `groups ..., largest ...; held-out images with a confirmed duplicate in train: ...;
-  pairs within 4 bits not joined: ...`:
+- The `groups ...` line and the `strict test subset ...` line:
 - Hashes printed at the end (`split_sha256`, manifest hashes, the bundle's file count):
 - The final contact sheet: attached (yes / no); same-scene pairs seen in band 1, band 2,
   band 3 (number, or none):

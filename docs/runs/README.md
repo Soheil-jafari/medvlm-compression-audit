@@ -16,10 +16,12 @@ set up an account: `docs/team_setup.md`. Who runs what, week by week: `docs/sche
 
 | Card | Stage | What | Who | Status |
 |---|---|---|---|---|
-| [RC-D1](RC-D1_data_preparation.md) | S03 | Data preparation: download, image-disjoint re-split of all images (70/15/15 by near-duplicate group), mask links, aggregate counts, the shared-data dataset; pass 2 recounts after the label values | Soheil | **ready: run 3** (two-stage near-duplicate grouping, threshold 0.65, D02 amendment 2; calibration step done 2026-10-19); runs 1 and 2 not used |
+| [RC-D1](RC-D1_data_preparation.md) | S03 | Data preparation: download, image-disjoint re-split of all images (70/15/15 by near-duplicate group), mask links, aggregate counts, the shared-data dataset; pass 2 recounts after the label values | Soheil | blocked: **run 4** waits for RC-D1-embed and RC-D1-label (D02 amendment 3); runs 1-3 not used (run 3 not accepted) |
+| [RC-D1-embed](RC-D1-embed_embeddings_and_labelling_sheets.md) | S03 | Embeddings (proposal DINOv2-small, verified on the hub), candidate pairs, about 300 pairs to label on score-free sheets (CPU) | Soheil | **ready** |
+| [RC-D1-label](RC-D1-label_rater_instructions.md) | S03 | Two raters label the pairs; kappa, every rule's sensitivity and precision, the joining rule chosen by the rule fixed in advance (CPU) | two raters; scoring Soheil | ready after RC-D1-embed |
 | [RC-M1](RC-M1_model_smoke_test.md) | S04 | GPU smoke test: load pair, score probes, remove one layer | Soheil | done 2026-10-15 |
 | [RC-TT0](RC-TT0_teacher_feasibility.md) | S05 | Our teacher: feasibility of one LoRA step of the 7B (fp16 on 2 x T4, QLoRA on 1 x T4), then rule 3 (setup and N) | Soheil | done 2026-10-19 (result file committed) |
-| [RC-TT1](RC-TT1_teacher_training.md) | S05 | Our teacher: LoRA training on our training split (resumable), hand-off, validation | Soheil | ready (needs RC-D1 run 3; N = 38,000, published LoRA targets) |
+| [RC-TT1](RC-TT1_teacher_training.md) | S05 | Our teacher: LoRA training on our training split (resumable), hand-off, validation | Soheil | blocked (needs RC-D1 run 4; N = 38,000, published LoRA targets) |
 | [RC-E0a](RC-E0a_gate1_teacher_image_reliance.md) | S05 | Gate 1: teacher image-reliance checks (validation), with our teacher adapter | Soheil | blocked (RC-TT1, RC-D1 both passes, finding list; image side and RC-M1 met) |
 | [RC-E0b](RC-E0b_teacher_cache_and_E0_evaluation.md) | S05 | Teacher cache (train; its first 100 answers are timed) and E0 validation metrics, with our teacher adapter | Soheil | blocked (RC-TT1, Gate 1 verdict, RC-D1, open settings; image side met) |
 | [RC-S0](RC-S0_student_feasibility.md) | S05b | Student checks: feasibility of Qwen2.5-VL-3B and the fallback Qwen3-VL-2B on one T4 | Soheil | done 2026-10-16 (both pass G1) |

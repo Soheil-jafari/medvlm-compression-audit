@@ -198,7 +198,7 @@ def external_table(summary: pd.DataFrame) -> str:
 
 def setup_data_table(rows: pd.DataFrame) -> str:
     """T1: aggregate data statistics from ``results/data/summary.csv`` (metric, value)."""
-    data = rows[rows["source"].str.startswith("data/")] if not rows.empty else rows
+    data = rows[rows["source"] == "data/summary.csv"] if not rows.empty else rows
     body = [
         [latex_escape(str(r["metric"])), fmt_value(r["value"], 4)] for r in data.to_dict("records")
     ]

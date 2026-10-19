@@ -40,6 +40,8 @@ SHARED_DATA_DIR = "medcompress_data"
 """Folder under ``--out`` where RC-D1 writes the shared data (``data/`` + ``private/``)."""
 SHEET_DIR = "rc_d1_sheets"
 """Folder under ``--out`` for the contact sheets (private outputs, never committed)."""
+EMBED_DIR = "rc_d1_embed"
+"""Folder under ``--out`` where RC-D1-embed writes its private output (D02 amendment 3)."""
 
 
 class CardError(ValueError):
@@ -224,6 +226,8 @@ def build_plan(
     kvasir_seg: Path | None = None,
     data_root: Path | None = None,
     external_images: Path | None = None,
+    embed_dir: Path | None = None,
+    labels: Sequence[Path] = (),
 ) -> CardPlan:
     """The plan of ``card`` (for ``seed`` where the card is split by seed)."""
     card = card.upper()
@@ -242,6 +246,8 @@ def build_plan(
             f"copy_kvasir_seg(Path({str(kvasir_seg)!r}), Path({str(shared / 'data')!r}))",
         )
         sheets = ("--sheet-dir", str(Path(out) / SHEET_DIR))
+        if embed_dir is not None:  # run 4: RC-D1-embed's embeddings, not computed again
+            sheets = (*sheets, "--embed-dir", str(embed_dir))
         return CardPlan(
             card, "Data preparation, first pass", 0,
             (
@@ -260,6 +266,47 @@ def build_plan(
             notes=(f"upload {shared} as ONE private Kaggle dataset (card section 4)",
                    f"attach {Path(out) / SHEET_DIR / 'rc_d1_final_cross_split_pairs.png'} to "
                    "the report; never commit it"),
+        )  # fmt: skip
+    if card == "RC-D1-EMBED":
+        _no_seed(card, seed)
+        target = ("--out-dir", str(Path(out) / EMBED_DIR))
+        steps = []
+        if data_root is None:  # export the images and copy Kvasir-SEG first (as RC-D1)
+            shared = Path(out) / SHARED_DATA_DIR
+            data_root = shared / "data"
+            source = kvasir_seg or Path("/kaggle/input")
+            copy = (
+                "-c",
+                "import sys; sys.path.insert(0, 'src'); from pathlib import Path; "
+                "from medcompress.utils.kaggle import copy_kvasir_seg; "
+                f"copy_kvasir_seg(Path({str(source)!r}), Path({str(data_root)!r}))",
+            )
+            steps += [
+                Step("export", _script("prepare_data.py", "export", "--data-root", str(data_root)),
+                     inputs=False),
+                Step("copy Kvasir-SEG", copy, inputs=False),
+            ]  # fmt: skip
+        steps.append(
+            Step("embed", _script("prepare_data.py", "embed", "--data-root", str(data_root),
+                                  *target, *RC_D1_SETTINGS), inputs=False)
+        )  # fmt: skip
+        return CardPlan(
+            "RC-D1-embed", "Embeddings, candidates and the labelling sheets (CPU)", 0,
+            tuple(steps), internet=True,
+            notes=(f"upload {Path(out) / EMBED_DIR} as ONE private Kaggle dataset; the raters "
+                   "need its label_sheets/ and labels_template.csv (card RC-D1-label)",),
+        )  # fmt: skip
+    if card == "RC-D1-LABEL":
+        _no_seed(card, seed)
+        if embed_dir is None or not labels:
+            raise CardError("RC-D1-label needs --embed-dir (RC-D1-embed's dataset) and --labels")
+        return CardPlan(
+            "RC-D1-label", "Scores of the labelled pairs and the joining rule (CPU)", 0,
+            (Step("score the labels",
+                  _script("prepare_data.py", "score-labels", "--embed-dir", str(embed_dir),
+                          "--labels", *(str(p) for p in labels)), inputs=False),),
+            notes=("commit results/data/near_duplicate_labels.csv and near_duplicate_rules.csv: "
+                   "RC-D1 run 4 reads the chosen rule from them",),
         )  # fmt: skip
     if card == "RC-D1-CALIBRATE":
         _no_seed(card, seed)
@@ -302,6 +349,8 @@ def build_plan(
         counts = _script(
             "prepare_data.py", "counts", "--data-root", str(data_root), *RC_D1_SETTINGS
         )
+        if embed_dir is not None:  # run 4's groups need RC-D1-embed's embeddings
+            counts = (*counts, "--embed-dir", str(embed_dir))
         return CardPlan(
             card, "Data preparation, second pass (counts with the label values)", 0,
             (Step("counts", counts, inputs=False),),
@@ -480,16 +529,21 @@ def build_plan(
 
 
 RUNNABLE_CARDS: tuple[str, ...] = (
-    "RC-D1-calibrate", "RC-D1", "RC-D1-counts", "RC-E0a", "RC-E0b", "RC-E1", "RC-E2", "RC-B0",
-    "RC-E3", "RC-E4", "RC-E9", "RC-G2", "RC-E5", "RC-E6", "RC-E7", "RC-E8", "RC-A1", "RC-A2",
-    "RC-A3", "RC-A4", "RC-A5", "RC-A6", "RC-R1", "RC-C1", "RC-X1", "RC-TT0", "RC-TT1",
+    "RC-D1-calibrate", "RC-D1-embed", "RC-D1-label", "RC-D1", "RC-D1-counts", "RC-E0a",
+    "RC-E0b", "RC-E1", "RC-E2", "RC-B0", "RC-E3", "RC-E4", "RC-E9", "RC-G2", "RC-E5", "RC-E6",
+    "RC-E7", "RC-E8", "RC-A1", "RC-A2", "RC-A3", "RC-A4", "RC-A5", "RC-A6", "RC-R1", "RC-C1",
+    "RC-X1", "RC-TT0", "RC-TT1",
 )  # fmt: skip
 
 
 def card_file(card: str, runs_dir: Path) -> Path:
     """The markdown card of ``card`` (``RC-D1-calibrate`` and ``RC-D1-counts`` are part of
-    RC-D1)."""
-    base = "RC-D1" if card.upper().startswith("RC-D1") else card
+    RC-D1; ``RC-D1-embed`` and ``RC-D1-label`` have cards of their own)."""
+    upper = card.upper()
+    if upper in ("RC-D1-EMBED", "RC-D1-LABEL"):
+        base = "RC-D1-" + upper.rsplit("-", 1)[1].lower()
+    else:
+        base = "RC-D1" if upper.startswith("RC-D1") else card
     matches = sorted(Path(runs_dir).glob(f"{base}_*.md"))
     if len(matches) != 1:
         raise CardError(f"no single card file for {card} in {runs_dir}")

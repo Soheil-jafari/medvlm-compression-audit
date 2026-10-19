@@ -376,7 +376,9 @@ def test_the_cli_stops_on_chaining_and_draws_the_final_sheet(tmp_path: Path) -> 
               "--split-seed", "3", "--close-bits", "4", "--mask-threshold", "4",
               "--results-root", str(tmp_path / "results"))  # fmt: skip
     sheets = tmp_path / "sheets"
-    done = _run(*common, "--sheet-dir", str(sheets))  # the committed threshold, 0.65
+    waiting = _run(*common)  # the committed rule is now the labelled one (D02 amendment 3)
+    assert waiting.returncode == 4 and "labelled pairs" in waiting.stderr
+    done = _run(*common, "--sheet-dir", str(sheets), "--confirm-threshold", "0.65")  # run 3
     assert done.returncode == 0, done.stderr
     assert "confirmed duplicate in train: 0" in done.stdout
     assert "pairs within 4 bits not joined: 1" in done.stdout  # l1 and l2
@@ -467,7 +469,8 @@ def test_the_runner_plans_the_calibration_and_the_final_sheet(tmp_path: Path) ->
     assert card_file("RC-D1-calibrate", REPO / "docs" / "runs").name.startswith("RC-D1_")
     dry = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "run_card.py"), "--card", "RC-D1-calibrate",
-         "--data-root", str(shared), "--out", str(tmp_path), "--dry-run"],
+         "--data-root", str(shared), "--out", str(tmp_path), "--dry-run",
+         "--allow-blocked"],  # the calibration is done; the RC-D1 card now waits for run 4
         capture_output=True, text=True, cwd=REPO, check=False, timeout=120,
     )  # fmt: skip
     assert dry.returncode == 0, dry.stderr

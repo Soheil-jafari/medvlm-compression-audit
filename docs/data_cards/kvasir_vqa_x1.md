@@ -1,7 +1,8 @@
 # Data card: Kvasir-VQA-x1 (with Kvasir-VQA images and Kvasir-SEG masks)
 
 > No images, no patient identifiers, no per-image rows. Counts marked **[RC-D1]** come from
-> `results/data/summary.csv` once RC-D1 run 3 is committed.
+> `results/data/summary.csv` once RC-D1 run 4 is committed, and from
+> `results/data/near_duplicate_labels.csv` (RC-D1-label).
 
 | Field | Value |
 |---|---|
@@ -37,56 +38,63 @@ or test set". RC-D1 run 1 (2026-10-16/17) counted:
   image-disjoint test split. Hence the image-disjoint re-split (D02 amendment) and our own
   teacher adapter (D01 amendment), both 2026-10-18.
 
-RC-D1 run 3 writes these numbers again from the code (`official:*` rows in `summary.csv`).
+RC-D1 run 4 writes these numbers again from the code (`official:*` rows in `summary.csv`).
 The appendix item reports them next to the published adapter's test results.
 
-## Our splits (RC-D1 run 3)
+## Our splits (RC-D1 run 4)
 
-- **Why two stages (D02 amendment 2).** RC-D1 run 2 grouped images within 4 dHash bits only.
-  A look at the pairs showed that this misses real duplicates: at 5-6 bits, 3 of 8 pairs were
-  the same scene, and at 7-8 bits, 2 to 3 of 8. At 9-12 bits, 0 of 4 were; those pairs looked
-  alike only at 9 x 8 pixels (colour, lumen position, and the text and green box drawn on the
-  image). 1,038 of run 2's 1,931 validation and test images had a training image within 8
-  bits. A larger dHash threshold alone would chain unrelated images.
+- **Why embeddings (D02 amendments 2 and 3).**
+  - RC-D1 run 2 grouped images within 4 dHash bits only; that missed adjacent frames.
+  - Run 3 joined dHash candidates by a crop correlation of at least 0.65. Its final contact
+    sheet still showed same-scene pairs across splits:
+    - 3 of the 24 highest crop scores, at 14-32 bits, where the dHash never looked;
+    - about 5 of the 24 closest by dHash;
+    - about 9 of 12 pairs within 4 bits that the crop measure left apart.
+  - The likely causes: Kvasir-VQA mixes HyperKvasir and Kvasir-Instrument, so one frame can
+    exist at another size or crop; and the crop correlation under-scores copies of smooth or
+    blurred mucosa, or when the highlights move.
 - **Method:**
-  1. Every image of both official splits is fingerprinted (dHash, 64 bits).
-  2. Candidates: pairs within 12 bits.
-  3. Confirmation on the centre of the image: the central 60 % of width and height, grey-scale,
-     32 x 32 pixels, with a Gaussian blur (4 px) subtracted; the measure is the highest Pearson
-     correlation over shifts of up to 3 px (5.6 % of the side). Candidate pairs at or above
-     **0.65** are joined, and no others: nothing is joined on the dHash alone, also not at 0-4
-     bits. The threshold was chosen on the data before the split (calibration step,
-     2026-10-19): the valley of the bimodal distribution of the 5-8 bit pairs, which 2 of 2,000
-     random pairs reach. The calibration also showed 0-4 bit pairs of clearly different images
-     (the same lumen position and overlays), so the automatic join of run 2 was dropped.
-  4. Union-find over the joined pairs gives the groups. The run stops if one group holds more
-     than 10 % of the images (chaining guard; below 0.60 the largest group jumps above 30 %).
+  1. Every image is embedded by a small pretrained self-supervised vision model (proposal
+     DINOv2-small; id, revision and licence: **[RC-D1-embed]**). Two views: the whole image
+     and the central 60 % of width and height, 224 x 224. The features are L2-normalised and
+     compared by cosine.
+  2. About 300 candidate pairs, stratified with the border zones oversampled, are labelled
+     by two raters, independently, as same scene, different or unsure, on sheets without
+     scores. Agreement: Cohen's kappa **[RC-D1-label]** `labels:kappa`.
+  3. The joining rule is chosen on these labels by a rule fixed in advance: the highest
+     sensitivity with precision >= 0.5, with no group over 10 % of the images. The chosen
+     rule: **[RC-D1-label]** `labels:chosen:*`.
+     - On the labelled pairs: sensitivity **[RC-D1-label]** `labels:chosen:sensitivity` and
+       precision `labels:chosen:precision`, with Wilson 95 % intervals.
+     - Weighted to all candidate pairs: `labels:chosen:sensitivity_weighted` and
+       `:precision_weighted`.
+  4. The rule is applied to all pairs of images; the joined pairs form groups.
   5. Whole groups are assigned to train / validation / test = 70 / 15 / 15 % of the images,
      seed 20261012, stratified by the answer values of the finding question and by the
      Kvasir-SEG mask (`data/splits.py: assign_groups_stratified`).
+  6. A contact sheet of the closest cross-split pairs (by cosine, crop correlation and dHash)
+     is checked by eye (kept private).
+- **Strict test subset** (a pre-registered sensitivity analysis): the test images whose most
+  similar training image is below the chosen threshold minus 0.05: **[RC-D1]**
+  `strict_test:images`, `strict_test:qa_rows`. The main comparisons are reported on it too.
 - **Images and QA rows per split:** **[RC-D1]** `images:<split>`, `qa_rows:<split>`,
   `image_fraction:<split>`.
 - **Groups:** **[RC-D1]** `groups:total`, `groups:multi_image`, `groups:largest`,
-  `groups:largest_fraction`, `groups:size:*`; pairs **[RC-D1]**
-  `near_duplicates:candidate_pairs`, `:joined_pairs`.
+  `groups:largest_fraction`, `groups:size:*`; joined pairs **[RC-D1]**
+  `near_duplicates:joined_pairs`.
 - **Near-duplicates of training images in validation and test:** 0 by construction
   (**[RC-D1]** `val_test_confirmed_duplicates_of_train`). Reported, not filtered: the 0-4 bit
-  pairs the crop left apart (**[RC-D1]** `near_duplicates:close_pairs_not_joined`, in all and
-  across splits) and the held-out images with a training image within 4 bits (**[RC-D1]**
-  `val_test_close_dhash_to_train`); the dHash distance of each held-out image to the training
-  split (**[RC-D1]** `min_distance_to_train:<split>:*`); its highest crop correlation with a
-  training image (**[RC-D1]** `max_score_to_train:<split>:*`); and the held-out images whose
-  crop correlation with a training image beyond 12 bits reaches the threshold (**[RC-D1]**
-  `similar_to_train_beyond_candidates:<split>`). The 24 most similar pairs across splits by the
-  crop, the 24 closest by the dHash, and the closest 0-4 bit pairs left apart are checked by
-  eye on a contact sheet (kept private). If same-scene pairs are seen there, near-duplicates are
-  detected again with a pre-registered stronger measure (decisions log, 2026-10-19).
+  pairs the rule left apart (**[RC-D1]** `near_duplicates:close_pairs_not_joined`, in all and
+  across splits); each held-out image's dHash distance, crop correlation and cosine to the
+  training split (**[RC-D1]** `min_distance_to_train:*`, `max_score_to_train:*`,
+  `max_cosine_to_train:*`).
 - **Limitation: no patient identifiers.** HyperKvasir, the source of the Kvasir-VQA images, has
   no patient IDs, only image IDs. The grouping joins identical images and adjacent frames of
   one scene, but images of the same patient taken at different moments (another part of the
   bowel, another angle) can still fall into different splits. Validation and
   test are therefore image-disjoint and near-duplicate-disjoint, **not patient-disjoint**, and
-  results on them may be optimistic by an unknown amount.
+  results on them may be optimistic by an unknown amount. The near-duplicate rule itself misses
+  some copies: its sensitivity on the labelled pairs is reported above, with its interval.
 - **Kvasir-SEG masks per split:** **[RC-D1]** `masked_images:<split>`; links
   `masks:linked/ambiguous/unmatched`.
 - **Split hash:** **[RC-D1]** `split_sha256` (printed by `prepare_data.py bundle`).

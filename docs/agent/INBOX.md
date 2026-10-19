@@ -99,6 +99,7 @@ Example: `- 2026-10-20 (Soheil): D01 decided: endoscopy, Qwen2.5-VL-7B -> 3B. Lo
 ## Handled
 
 <!-- - YYYY-MM-DD (name): note -> iteration N, what was done -->
+- 2026-10-19 (Soheil, in the session): RC-D1 run 3 not accepted; D02 amendment 3 (embeddings, the rule chosen on human labels, run 4, the strict test subset) -> iteration 54.
 - 2026-10-19 (Soheil, in the session): calibration results and D02 amendment 2 final values (0.65, no automatic join, guard 10 %, the final sheet as the deciding check, the embedding fallback); T4 x2 counts once (N = 38,000); RC-TT1 on the published target modules -> iteration 53.
 - 2026-10-18 (Soheil, in the session): RC-D1 run 2 result; D02 amendment 2 (two-stage near-duplicate detection, calibration step, run 3) -> iteration 52, code, tests, RC-D1, RC-TT0, RC-TT1, data card, D02, log, pre-registration.
 - 2026-10-18 (Soheil, in the session): RC-D1 run 1 findings; D02 and D01 amendments, rule 3, the appendix item -> iteration 51.

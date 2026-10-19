@@ -64,9 +64,9 @@ python -m pytest -q tests/test_results.py                  # must pass before yo
 ```
 
 The threshold 4 (of 64 bits) was RC-D1's always-joined distance until 2026-10-19. Since D02
-amendment 2, RC-D1 joins a pair within 12 bits only if its crop correlation is at least 0.65;
-this overlap count still uses the dHash alone (open: whether RC-X1 uses the same two stages,
-decisions log).
+amendment 3, RC-D1 joins images by the cosine of their embeddings, with the rule chosen on
+human labels; this overlap count still uses the dHash alone (open: whether RC-X1 uses the same
+measure, decisions log).
 
 ## 4. What to commit back
 

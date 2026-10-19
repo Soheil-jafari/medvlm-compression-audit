@@ -28,13 +28,14 @@
   7. Runs the teacher's validation evaluation and Gate 1. Both wait cleanly while the finding
      list is still open; RC-E0a and RC-E0b then run them.
 - Who: **Soheil**.
-- Status: `ready`; it waits for RC-D1 run 3's shared data (RC-TT0's result file is committed).
+- Status: `blocked`: it waits for RC-D1 run 4's shared data (RC-TT0's result file is committed).
 
 ## 2. Requirements
 
-- RC-D1 **run 3** done: its shared-data dataset (image-disjoint split with the two-stage
-  near-duplicate grouping, D02 amendment 2) attached. Not run 2's: its 4-bit groups missed
-  adjacent frames, so its validation and test images have copies in its training split.
+- RC-D1 **run 4** done: its shared-data dataset (image-disjoint split, near-duplicates by
+  embeddings with the rule chosen on human labels, D02 amendment 3) attached. Not run 2's or
+  run 3's: their groups missed true copies, so their validation and test images have copies in
+  their training split.
 - RC-TT0 done: `results/smoke/RC-TT0/teacher_training.csv` is committed (commit 3afb035). It
   gives setup (a), fp16 over two T4s, without gradient checkpointing; 1.39 s per example (warm
   step); LoRA rank 16, alpha 64, dropout 0.05, read from the published `adapter_config.json`.
@@ -72,7 +73,7 @@
 
 - **Who:** Soheil.
 - **Kaggle settings:** GPU T4 x2; Internet on.
-- **Attach (Add Input), all private datasets:** the shared data of RC-D1 run 3. To resume, also the
+- **Attach (Add Input), all private datasets:** the shared data of RC-D1 run 4. To resume, also the
   output of the stopped notebook version. For `--extend`, also the teacher adapter hand-off.
 - **Checks before anything runs:** `--data-root /kaggle/input/<shared-data>` is verified
   (the SHA-256 of every file), and the run stops if a file differs. The plan is read from

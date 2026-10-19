@@ -30,6 +30,8 @@ EXTRA = {
     "kvasir_seg": Path("/kaggle/input/kvasir-seg"),
     "data_root": Path("/kaggle/input/data"),
     "external_images": Path("/kaggle/input/endobench"),
+    "embed_dir": Path("/kaggle/input/rc-d1-embed"),
+    "labels": (Path("/kaggle/input/rc-d1-labels/labels_rater_1.csv"),),
 }
 SPLIT = {"RC-E1", "RC-E2", "RC-E3", "RC-E4", "RC-E5", "RC-E6", "RC-E7", "RC-E8"} | {
     f"RC-A{n}" for n in range(1, 7)

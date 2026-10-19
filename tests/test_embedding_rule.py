@@ -1,0 +1,438 @@
+"""Near-duplicates by embeddings and human labels (D02 amendment 3 of 2026-10-19), on CPU.
+
+The real model (DINOv2-small, proposed) runs on Kaggle; here a numpy stand-in
+(``embeddings.TinyEmbedder``) checks the pipeline: the views, the self-check on synthetic
+copies (shifted, blurred, rescaled, brightened copies near, different images not), the
+candidates, the rules, the labelling sample and sheets, the scores and the rule choice, run 4
+with the chosen rule, the strict test subset, and the runner plans.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+from PIL import Image
+
+from medcompress.data import candidates as cand
+from medcompress.data import labelling as lab
+from medcompress.data.dedup import CropSettings, union_groups
+from medcompress.data.embeddings import (
+    EmbeddingSettings,
+    TinyEmbedder,
+    embed_images,
+    knn_pairs,
+    l2_normalise,
+    normalise,
+    pairs_at_or_above,
+    self_check,
+    self_check_passes,
+    synthetic_variants,
+    view_images,
+)
+
+REPO = Path(__file__).resolve().parents[1]
+SETTINGS = EmbeddingSettings(model="tiny", side=224, centre_fraction=0.60, batch_size=4)
+CONFIG = {
+    "name": "Kvasir-VQA-x1",
+    "label_mapping": None,
+    "near_duplicates": {
+        "max_group_fraction": 0.5,
+        "candidates": {"knn_k": 3, "dhash_bits": 12, "crop_k": 2},
+        "embedding": {"model": "tiny", "side": 224, "centre_fraction": 0.60, "batch_size": 4},
+    },
+}
+
+
+def _dataset(root: Path, **kwargs) -> Path:  # type: ignore[no-untyped-def]
+    from test_near_duplicates import _dataset as make
+
+    return make(root, **kwargs)
+
+
+# ------------------------------------------------------------------ embeddings
+
+
+def test_the_two_views_and_the_normalisation() -> None:
+    image = Image.new("RGB", (300, 200), (255, 0, 0))
+    image.paste((0, 255, 0), (0, 0, 50, 30))  # an overlay in the top-left corner
+    views = view_images(image, SETTINGS)
+    assert {k: v.size for k, v in views.items()} == {"full": (224, 224), "centre": (224, 224)}
+    assert views["full"].getpixel((5, 5))[1] > 200  # the full view keeps the corner overlay
+    assert views["centre"].getpixel((5, 5)) == (255, 0, 0)  # the central 60 % leaves it out
+    array = normalise(views["centre"], (0.5, 0.5, 0.5), (0.25, 0.25, 0.25))
+    assert array.shape == (3, 224, 224) and array.dtype == np.float32
+    assert np.allclose(array[0], 2.0) and np.allclose(array[1], -2.0)
+    unit = l2_normalise(np.array([[3.0, 4.0], [0.0, 0.0]]))
+    assert np.allclose(unit, [[0.6, 0.8], [0.0, 0.0]])
+
+
+def test_copies_are_near_in_cosine_and_different_images_are_not() -> None:
+    result = self_check(TinyEmbedder(), SETTINGS)
+    for view, scores in result.items():
+        copies = {k: v for k, v in scores.items() if k.startswith("copy:")}
+        others = [v for k, v in scores.items() if k.startswith("different:")]
+        assert set(copies) == {"copy:shifted", "copy:blurred", "copy:rescaled", "copy:brightened"}
+        assert min(copies.values()) > max(others), (view, scores)
+    assert self_check_passes(result)
+    assert not self_check_passes({"full": {"copy:a": 0.3, "different:b": 0.4}})
+    assert set(synthetic_variants()) >= {"original", "different:0"}
+
+
+def test_embeddings_are_deterministic_and_unit_length(tmp_path: Path) -> None:
+    paths = []
+    for name, image in synthetic_variants().items():
+        paths.append(tmp_path / f"{name.replace(':', '_')}.png")
+        image.save(paths[-1])
+    first = embed_images(paths, TinyEmbedder(), SETTINGS)
+    second = embed_images(list(reversed(paths)), TinyEmbedder(), SETTINGS)
+    for view in ("full", "centre"):
+        assert first[view].shape == (len(paths), 64)
+        assert np.allclose(np.linalg.norm(first[view], axis=1), 1.0, atol=1e-5)
+        assert np.array_equal(first[view], second[view][::-1])
+
+
+def test_knn_and_the_exact_pairs_above_a_threshold() -> None:
+    rng = np.random.default_rng(3)
+    emb = l2_normalise(rng.normal(size=(40, 8)))
+    sims = emb @ emb.T
+    pairs = knn_pairs(emb, 2, block=7)
+    for i in range(40):
+        row = sims[i].copy()
+        row[i] = -np.inf
+        for j in np.argsort(-row, kind="stable")[:2]:
+            assert (min(i, j), max(i, j)) in pairs
+    assert all(i < j for i, j in pairs)
+    a, b, c = pairs_at_or_above(emb, 0.5, block=9)
+    expected = {(i, j) for i in range(40) for j in range(i + 1, 40) if sims[i, j] >= 0.5}
+    assert set(zip(a.tolist(), b.tolist(), strict=True)) == expected
+    assert np.allclose(c, sims[a, b], atol=1e-6)
+
+
+# ------------------------------------------------------------------ candidates and rules
+
+
+def _table(tmp_path: Path) -> tuple[cand.CandidateTable, cand.CropPairs, dict, list[str]]:
+    from medcompress.data.prepare import _features, crop_settings
+
+    data = _dataset(tmp_path, chain=1, lookalike=True)
+    _, images, fingerprints, signatures = _features(data, CONFIG, crop_settings(CONFIG))
+    emb = embed_images([str(data / p) for p in images], TinyEmbedder(), SETTINGS)
+    table, crop_pairs = cand.build_candidates(
+        images, fingerprints, signatures, emb, CropSettings(), knn_k=3, dhash_bits=12,
+        crop_k=2, crop_floor=0.65, extra=[(images[0], images[-1])],
+    )  # fmt: skip
+    return table, crop_pairs, emb, images
+
+
+def test_the_candidates_carry_every_source_and_all_four_scores(tmp_path: Path) -> None:
+    table, crop_pairs, emb, images = _table(tmp_path)
+    assert len(table) > 0 and np.all(table.a < table.b)
+    pairs = list(zip(table.a.tolist(), table.b.tolist(), strict=True))
+    assert pairs == sorted(set(pairs))
+    for source in ("knn_full", "knn_centre", "dhash", "crop_knn", "run3_band"):
+        assert table.has(source).any(), source
+    k = int(np.flatnonzero(table.has("run3_band"))[0])
+    assert (table.a[k], table.b[k]) == (0, len(images) - 1)
+    assert np.allclose(table.cos_full, np.sum(emb["full"][table.a] * emb["full"][table.b], 1))
+    assert np.all(table.cos_max >= table.cos_centre)
+    assert np.all(crop_pairs.value >= 0.65) and np.all(crop_pairs.a < crop_pairs.b)
+    saved = cand.CandidateTable.load(table.save(tmp_path / "c.npz"))
+    assert saved.images == table.images and np.array_equal(saved.crop, table.crop)
+
+
+def test_the_rule_family_is_fixed_and_a_rule_reads_back_from_its_numbers() -> None:
+    family = cand.rule_family()
+    assert len(family) == 3 * 50 * 3  # 3 views x 0.50..0.99 x (alone, or crop 0.65, or 0.80)
+    assert family[0] == cand.JoinRule("full", 0.50)
+    rule = cand.JoinRule("max", 0.88, 0.65)
+    assert rule.label == "max:0.88:or_crop:0.65" and rule.complexity == 1
+    assert cand.JoinRule.from_code(**rule.code()) == rule
+    assert cand.JoinRule.from_code(2.0, 0.91, -1.0) == cand.JoinRule("centre", 0.91)
+
+
+def test_a_rule_over_all_pairs_and_its_groups(tmp_path: Path) -> None:
+    table, crop_pairs, emb, images = _table(tmp_path)
+    rule = cand.JoinRule("centre", 0.95, 0.80)
+    a, b = cand.joined_pairs_all(rule, emb, crop_pairs)
+    sims = emb["centre"] @ emb["centre"].T
+    by_cos = {(i, j) for i in range(len(images)) for j in range(i + 1, len(images))
+              if sims[i, j] >= 0.95}  # fmt: skip
+    by_crop = {(i, j) for i, j, v in zip(crop_pairs.a, crop_pairs.b, crop_pairs.value,
+                                         strict=True) if v >= 0.80}  # fmt: skip
+    assert set(zip(a.tolist(), b.tolist(), strict=True)) == by_cos | by_crop
+    groups = cand.component_groups(images, a, b)
+    expected = union_groups(images, ((images[i], images[j]) for i, j in by_cos | by_crop))
+    assert groups == expected and cand.largest_group(groups) >= 2
+    joined = rule.joins(table)  # the same rule on the candidate pairs
+    for k in np.flatnonzero(joined):
+        assert groups[images[table.a[k]]] == groups[images[table.b[k]]]
+    with pytest.raises(ValueError, match="crop level"):
+        cand.joined_pairs_all(cand.JoinRule("full", 0.9, 0.5), emb, crop_pairs)
+
+
+# ------------------------------------------------------------------ labelling
+
+
+def test_the_labelling_sample_is_stratified_seeded_and_weighted(tmp_path: Path) -> None:
+    table, *_ = _table(tmp_path)
+    strata = lab.assign_strata(table)
+    assert set(strata.tolist()) <= {name for name, _ in lab.STRATA}
+    pairs = lab.labelling_sample(table, seed=11)
+    assert [p.pair_id for p in pairs] == list(range(1, len(pairs) + 1))
+    assert lab.labelling_sample(table, seed=11) == pairs
+    sizes = lab.stratum_sizes(table)
+    quotas = dict(lab.STRATA)
+    for name, size in sizes.items():
+        drawn = [p for p in pairs if p.stratum == name]
+        quota = quotas[name]
+        assert len(drawn) == (size if quota is None else min(quota, size)), name
+        assert all(p.weight == pytest.approx(size / len(drawn)) for p in drawn)
+    assert all(p.stratum == "run3_band" for p in pairs if (p.image_a, p.image_b) ==
+               (table.images[0], table.images[-1]))  # fmt: skip
+    assert sum(q for _, q in lab.STRATA if q) == 242  # + all run-3 pairs: about 300
+
+
+def test_the_sheets_show_no_score_and_the_files_round_trip(tmp_path: Path) -> None:
+    table, *_ = _table(tmp_path)
+    data = tmp_path / "data"
+    pairs = lab.labelling_sample(table)
+    files = lab.write_labelling_files(pairs, data, tmp_path / "out")
+    sheets = sorted(files["sheets"].glob("*.png"))
+    assert len(sheets) == -(-len(pairs) // lab.PAIRS_PER_SHEET)
+    with files["template"].open() as handle:
+        rows = list(csv.reader(handle))
+    assert rows[0] == ["pair_id", "rater_1", "rater_2"] and len(rows) == len(pairs) + 1
+    assert all(r[1:] == ["", ""] for r in rows[1:])
+    assert ".jpg" not in files["template"].read_text()  # no image name in the template
+    back = lab.read_pairs(files["pairs"])
+    assert [(p.pair_id, p.image_a, p.stratum) for p in back] == [
+        (p.pair_id, p.image_a, p.stratum) for p in pairs
+    ]
+    with pytest.raises(ValueError, match="outside the repo"):
+        lab.write_labelling_files(pairs, data, REPO / "tmp_labels")
+
+
+def _labels(path: Path, ids: list[int], first: list[str], second: list[str]) -> Path:
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["pair_id", "rater_1", "rater_2"])
+        for row in zip(ids, first, second, strict=True):
+            writer.writerow(row)
+    return path
+
+
+def test_the_label_files_are_read_and_checked(tmp_path: Path) -> None:
+    ids = [1, 2, 3]
+    both = _labels(tmp_path / "both.csv", ids, ["same_scene", "different", "unsure"],
+                   ["Same scene", "different", "same_scene"])  # fmt: skip
+    first, second = lab.read_labels(ids, both)
+    assert first == {1: "same_scene", 2: "different", 3: "unsure"}
+    assert second[1] == "same_scene" and second[3] == "same_scene"
+    one = _labels(tmp_path / "r1.csv", ids, ["same_scene"] * 3, [""] * 3)
+    two = _labels(tmp_path / "r2.csv", ids, [""] * 3, ["different"] * 3)
+    first, second = lab.read_labels(ids, one, two)
+    assert set(first.values()) == {"same_scene"} and set(second.values()) == {"different"}
+    with pytest.raises(lab.LabelError, match="rater_2 has no label for 3"):
+        lab.read_labels(ids, one)
+    bad = _labels(tmp_path / "bad.csv", ids, ["same", "different", "unsure"], ["x"] * 3)
+    with pytest.raises(lab.LabelError, match="unknown label"):
+        lab.read_labels(ids, bad)
+
+
+def test_kappa_and_wilson() -> None:
+    a = ["same_scene", "different", "different", "unsure"]
+    assert lab.cohen_kappa(a, a, lab.LABELS) == 1.0
+    first = ["same_scene"] * 5 + ["different"] * 5
+    second = ["same_scene"] * 4 + ["different"] * 4 + ["same_scene", "different"]
+    # observed 0.8, chance 0.5: kappa 0.6
+    assert lab.cohen_kappa(first, second, lab.LABELS) == pytest.approx(0.6)
+    p, low, high = lab.wilson(5, 10)
+    assert (
+        p == 0.5
+        and low == pytest.approx(0.2366, abs=1e-4)
+        and high == pytest.approx(0.7634, abs=1e-4)
+    )
+    assert np.isnan(lab.wilson(0, 0)[0])
+
+
+def _pair(pid: int, cos: float, crop: float = 0.2, stratum: str = "s", weight: float = 1.0):  # type: ignore[no-untyped-def]
+    return lab.LabelPair(pid, pid, f"a{pid}", f"b{pid}", stratum, weight, 8, crop, cos, cos)
+
+
+def test_the_rule_choice_fixed_in_advance() -> None:
+    cosines = [0.99, 0.95, 0.93, 0.90, 0.85, 0.80, 0.70, 0.60]
+    truth = np.array([True, True, True, False, True, False, False, False])
+    pairs = [_pair(i + 1, c) for i, c in enumerate(cosines)]
+    rules = [cand.JoinRule("full", t) for t in (0.95, 0.90, 0.85, 0.84, 0.70, 0.55)]
+    scores = [lab.score_rule(r, pairs, truth) for r in rules]
+    s85 = scores[2]
+    assert (s85.sensitivity[0], s85.precision[0]) == (1.0, 0.8)
+    assert scores[5].precision[0] == 0.5  # 4 of 8
+    chosen, checks = lab.choose_rule(scores, lambda r: (True, 2))
+    # 0.85 and 0.84 tie (sensitivity 1.0, precision 0.8): the lower threshold catches more
+    assert chosen is not None and chosen.rule == cand.JoinRule("full", 0.84)
+    chosen, checks = lab.choose_rule(scores, lambda r: (r.threshold >= 0.86, 99))
+    assert chosen.rule == cand.JoinRule("full", 0.90)  # the guard turns down every lower one
+    assert [c[0].threshold for c in checks] == [0.84, 0.85, 0.70, 0.55, 0.90]
+    strict = lab.choose_rule(scores, lambda r: (True, 2), min_precision=0.95)[0]
+    assert strict.rule == cand.JoinRule("full", 0.95)
+    assert lab.choose_rule(scores, lambda r: (False, 99))[0] is None
+    equal = lab.weighted_scores(rules[2], pairs, truth, resamples=50)
+    assert equal["sensitivity"][0] == pytest.approx(1.0)
+    assert equal["precision"][0] == pytest.approx(0.8)
+
+
+# ------------------------------------------------------------------ the steps, run 4, cards
+
+
+def _run(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "prepare_data.py"), *args],
+        capture_output=True, text=True, cwd=REPO, check=False, timeout=600,
+    )  # fmt: skip
+
+
+def _fake_labels(embed_dir: Path, path: Path) -> Path:
+    pairs = lab.read_pairs(embed_dir / "label_pairs.csv")
+
+    def same(p: lab.LabelPair) -> str:
+        a, b = Path(p.image_a).stem, Path(p.image_b).stem
+        return "same_scene" if a[:3] == b[:3] and a.startswith("s") else "different"
+
+    return _labels(path, [p.pair_id for p in pairs], [same(p) for p in pairs],
+                   [same(p) for p in pairs])  # fmt: skip
+
+
+def test_embed_label_and_run_4_end_to_end(tmp_path: Path) -> None:
+    from medcompress.data.prepare import prepare, write_private_outputs
+
+    data = _dataset(tmp_path, overlay=False, lookalike=True)
+    results, out = tmp_path / "results", tmp_path / "embed"
+    common = ("--split-seed", "3", "--close-bits", "4", "--mask-threshold", "4")
+    done = _run("embed", "--data-root", str(data), "--out-dir", str(out), "--results-root",
+                str(results), *common, "--embedding-model", "tiny")  # fmt: skip
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "run 3 reproduced" in done.stdout and "pairs to label" in done.stdout
+    assert "RECORD: model tiny" in done.stdout
+    assert (out / "bundle_manifest.json").is_file() and (out / "labels_template.csv").is_file()
+    rows = (results / "data" / "near_duplicate_embed.csv").read_text()
+    assert "embed:candidate_pairs:knn_full" in rows and ".jpg" not in rows
+    labels = _fake_labels(out, tmp_path / "labels.csv")
+    scored = _run("score-labels", "--embed-dir", str(out), "--labels", str(labels),
+                  "--results-root", str(results))  # fmt: skip
+    assert scored.returncode == 0, scored.stdout + scored.stderr
+    assert "chosen rule" in scored.stdout
+    chosen = (results / "data" / "near_duplicate_labels.csv").read_text()
+    assert "labels:chosen:view_code" in chosen and "labels:kappa" in chosen
+    assert (
+        "rule:full:0.50:sensitivity" in (results / "data" / "near_duplicate_rules.csv").read_text()
+    )
+
+    from medcompress.evaluation.aggregate import validate_results_tree
+
+    assert validate_results_tree(results) == []
+    config = {**CONFIG, "near_duplicates": {**CONFIG["near_duplicates"], "rule": "labelled"}}
+    prepared = prepare(
+        data, config, split_seed=3, close_bits=4, mask_threshold=4,
+        results_root=results, embed_dir=out,
+    )  # fmt: skip
+    metrics = {r["metric"]: r["value"] for r in prepared.rows}
+    assert metrics["val_test_confirmed_duplicates_of_train"] == 0
+    assert metrics["near_duplicates:rule:view_code"] in (1.0, 2.0, 3.0)
+    assert "strict_test:images" in metrics and metrics["strict_test:margin"] == 0.05
+    assert len(prepared.top_cosine_cross_split) > 0
+    assert all(t.first_split != t.second_split for t in prepared.top_cosine_cross_split)
+    split_of = {s.image_path: n for n, rows_ in prepared.splits.items() for s in rows_}
+    image = "kvasir_vqa_x1/images/{}.jpg".format
+    assert split_of[image("s00")] == split_of[image("s00_shift")]
+    test_ids = {Path(p).stem for p, n in split_of.items() if n == "test"}
+    assert set(prepared.strict_test_images) <= test_ids
+    again = prepare(
+        data, config, split_seed=3, close_bits=4, mask_threshold=4,
+        results_root=results, embedder=TinyEmbedder(),
+    )  # fmt: skip
+    assert again.split_sha256 == prepared.split_sha256  # attached or computed: the same split
+    write_private_outputs(prepared, tmp_path / "private", data)
+    strict_file = tmp_path / "private" / "strict_test.json"
+    if prepared.strict_test_images:
+        assert json.loads(strict_file.read_text()) == list(prepared.strict_test_images)
+    cli = _run("prepare", "--data-root", str(data), "--private-dir", str(tmp_path / "p2"),
+               "--results-root", str(results), *common, "--embed-dir", str(out),
+               "--sheet-dir", str(tmp_path / "sheets"))  # fmt: skip
+    assert cli.returncode == 0, cli.stdout + cli.stderr  # the real config: rule labelled
+    assert "strict test subset" in cli.stdout
+    assert (tmp_path / "sheets" / "rc_d1_final_cross_split_pairs.png").is_file()
+
+
+def test_run_4_waits_for_the_labels_and_the_guard_stops_chaining(tmp_path: Path) -> None:
+    from medcompress.config import ConfigError
+    from medcompress.data.dedup import ChainingError
+    from medcompress.data.prepare import join_rule, prepare
+
+    labelled = {"near_duplicates": {"rule": "labelled"}}
+    with pytest.raises(ConfigError, match="labelled pairs"):
+        join_rule(labelled, results_root=tmp_path)
+    assert join_rule(labelled, confirm_threshold=0.65) == cand.JoinRule("crop", 0.65)
+    data = _dataset(tmp_path, chain=2)  # scene 0 in 5 of 17 images
+    tight = {**CONFIG, "near_duplicates": {**CONFIG["near_duplicates"], "max_group_fraction": 0.1}}
+    with pytest.raises(ChainingError, match="STOP"):
+        prepare(data, tight, split_seed=3, close_bits=4, mask_threshold=4,
+                rule=cand.JoinRule("full", 0.6), embedder=TinyEmbedder())  # fmt: skip
+
+
+def test_the_strict_subset_restricts_the_comparisons() -> None:
+    from medcompress.evaluation.compare_stage import Arm, ArmOutcomes, ProbeTable, restrict
+
+    ids = np.array(["im1:a", "im1:b", "im2:a", "im3:a"])
+    table = ProbeTable(
+        keys=ids, images=ids, findings=("polyp",), codes=np.zeros(4, int),
+        truth=np.array([True, False, True, False]), small=np.zeros(4, bool),
+        rare=np.zeros(4, bool), audit_keys=np.array(["im2:a", "im3:a"]),
+        audit_images=np.array(["im2:a", "im3:a"]),
+    )  # fmt: skip
+    arm = ArmOutcomes(Arm("E2"), (0,), np.arange(4.0), np.ones(4), np.ones(4, bool),
+                      np.array([0.5, -0.5]))  # fmt: skip
+    small, (out,) = restrict(table, [arm], {"im2", "im3"})
+    assert small.keys.tolist() == ["im2:a", "im3:a"] and out.correct.tolist() == [2.0, 3.0]
+    assert small.audit_keys.tolist() == ["im2:a", "im3:a"]
+    assert out.audit_effect.tolist() == [0.5, -0.5]
+
+
+def test_strict_comparisons_are_read_as_their_own_split(tmp_path: Path) -> None:
+    from medcompress.evaluation.aggregate import classify_path
+
+    path = tmp_path / "comparisons_strict" / "E7_vs_best" / "B2" / "comparison.csv"
+    found = classify_path(path, tmp_path)
+    assert found is not None and found.kind == "comparison" and found.split == "strict_test"
+    main = classify_path(tmp_path / "comparisons" / "E7_vs_best" / "B2" / "comparison.csv",
+                         tmp_path)  # fmt: skip
+    assert main is not None and main.split == ""
+
+
+def test_the_runner_plans_of_amendment_3(tmp_path: Path) -> None:
+    from medcompress.cards import CardError, build_plan, card_file
+
+    attached = build_plan("RC-D1-embed", data_root=Path("/kaggle/input/medcompress-data"))
+    assert [s.label for s in attached.steps] == ["embed"] and attached.internet
+    argv = attached.steps[0].argv
+    assert argv[:2] == ("scripts/prepare_data.py", "embed") and "--out-dir" in argv
+    fresh = build_plan("RC-D1-embed")
+    assert [s.label for s in fresh.steps] == ["export", "copy Kvasir-SEG", "embed"]
+    with pytest.raises(CardError, match="--embed-dir"):
+        build_plan("RC-D1-label")
+    files = [Path("/kaggle/input/l/a.csv"), Path("/kaggle/input/l/b.csv")]
+    scored = build_plan("RC-D1-label", embed_dir=Path("/kaggle/input/e"), labels=files)
+    assert scored.steps[0].argv[-3:] == ("--labels", *(str(f) for f in files))
+    run4 = build_plan("RC-D1", embed_dir=Path("/kaggle/input/e"))
+    prepare_step = next(s for s in run4.steps if s.label == "prepare")
+    assert "--embed-dir" in prepare_step.argv
+    runs = REPO / "docs" / "runs"
+    assert card_file("RC-D1-embed", runs).name.startswith("RC-D1-embed_")
+    assert card_file("RC-D1-label", runs).name.startswith("RC-D1-label_")
+    assert card_file("RC-D1", runs).name.startswith("RC-D1_")

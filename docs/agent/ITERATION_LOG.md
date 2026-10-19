@@ -1117,3 +1117,31 @@ Append-only, newest at the bottom. One entry per iteration:
 - Commit: see `git log` on `research-loop`.
 - Next: RC-D1 run 3's final contact sheet and counts; RC-TT1's target printout.
 - Needs the team: RC-D1 run 3, then RC-TT1 (Soheil); the Kaggle session time limit.
+
+## Iteration 54: 2026-10-19 (interactive)
+- Stage / item: S03, D02 amendment 3 (RC-D1 run 3 not accepted: same-scene pairs across splits
+  that both the dHash and the crop correlation missed).
+- Did:
+  - `data/embeddings.py`: two views (whole image, central 60 %), 224 x 224, the model's own
+    normalisation, pooled output, L2, cosine; the hub model loaded at a resolved revision with
+    its licence recorded; a numpy stand-in for CPU tests; a self-check on synthetic shifted,
+    blurred, rescaled and brightened copies; exact all-pairs search above a threshold.
+  - `data/candidates.py`: candidates from cosine k-NN (k = 20, both views), dHash within 12
+    bits, the 5 highest crop correlations per image (one all-pairs pass) and run 3's sheet
+    pairs; the 450 rules; a rule applied to all pairs; connected-component groups.
+  - `data/labelling.py`: the stratified sample (about 300 pairs, seed 20261012, weights),
+    numbered sheets without scores, the template, reading the labels, Cohen's kappa, Wilson
+    intervals, weighted estimates with a stratified bootstrap, the rule choice with the guard.
+  - `data/embed_step.py`, `prepare_data.py embed` and `score-labels`; `prepare` runs run 4 with
+    the chosen rule (read from the committed labels file), the bands by cosine, crop and dHash,
+    and the strict test subset (margin 0.05); `09_compare_arms.py --strict` reports the
+    comparisons on it (`results/comparisons_strict/`).
+  - Run cards RC-D1-embed and RC-D1-label (rater instructions); RC-D1 run 4; RC-TT1 waits for
+    it. D02, the decisions log, the pre-registration, the data card, the schedule and STATUS.
+  - The paper's data table reads `data/summary.csv` only, as its docstring said.
+- Verified: ruff check, ruff format, pytest on CPU; the candidate step timed here at full scale
+  (199 s for 6,449 synthetic signatures, 4 cores).
+- Commit: see `git log` on `research-loop`.
+- Next: pin the embedding model's revision and licence from RC-D1-embed's printout; the labels'
+  scores; run 4.
+- Needs the team: RC-D1-embed (Soheil), a second rater, RC-D1-label, run 4.

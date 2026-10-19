@@ -267,6 +267,98 @@ goes to the valley, not to 0.80, and the automatic join is removed.
 Applied in `configs/data/kvasir_vqa_x1.yaml` (`near_duplicates`), `data/dedup.py`,
 `data/prepare.py`, `scripts/prepare_data.py`, `cards.py` and run card RC-D1 (run 3).
 
+## Amendment 3 (2026-10-19, Soheil): embeddings, with the rule set from human labels
+
+Decided before any model result, from RC-D1 run 3 (Kaggle CPU, commit 103fbb0; **not
+accepted**, nothing committed):
+- `split_sha256` 4a595fdf...; images 4,515 / 967 / 967; QA rows 102,639 / 30,438 / 26,130;
+  masked images 658 / 143 / 209.
+- Groups 4,176, the largest 241 (3.7 %); joined pairs 18,034; 929 pairs within 4 bits not
+  joined (252 across splits).
+- `similar_to_train_beyond_candidates`: validation 125, test 119.
+- Cross-split crop scores, top 24: 0.781 to 0.893. The closest cross-split pairs by dHash:
+  1-2 bits, crop at most 0.588.
+- The final sheet, by eye:
+  - the 24 highest crop scores (14-32 bits, never candidates): 3 the same scene;
+  - the 24 closest by dHash: about 5 the same scene, about 5 unsure;
+  - 12 pairs within 4 bits that the crop left apart: about 9 the same scene.
+
+  Likely causes: Kvasir-VQA mixes HyperKvasir and Kvasir-Instrument, so the same frame can
+  exist at another size or crop (its dHash changes); and the crop correlation under-scores
+  copies of smooth or blurred mucosa, or when the highlights move.
+
+Both measures miss true duplicates, so the split is not clean.
+
+**Decision.** The pre-registered fallback becomes the **primary** joining measure, and its rule
+is set from human labels, not from score distributions.
+1. **Embeddings** (`data/embeddings.py`):
+   - the model: a small pretrained self-supervised vision model, proposal DINOv2-small from
+     the Hugging Face hub (`facebook/dinov2-small`, **not verified from the agent's session**:
+     RC-D1-embed reads the hub record, prints the id, the revision and the licence, and stops if
+     there is no such model; a comparable model is then chosen and named here);
+   - two views of every image, each resized to 224 x 224 (aspect not kept, the same for every
+     image): `full`, the whole image with its border and overlays; `centre`, the central 60 %
+     of width and height, which leaves out the corner overlays. Both are tested on the labels;
+   - the model's own normalisation; the pooled output, L2-normalised; cosine similarity;
+   - CPU: about 20 to 50 minutes for 6,449 images x 2 views (an **estimate** from the model's
+     size; not measured; the run prints its speed). A GPU is used if the notebook has one;
+   - a check before the run: synthetic shifted, blurred, rescaled and brightened copies must be
+     nearer to their original than different images, in both views (else STOP, exit code 8).
+2. **Candidates** (`data/candidates.py`): the 20 nearest neighbours of every image by cosine
+   (each view); every pair within 12 dHash bits; the 5 highest crop correlations of every image
+   at any distance; and the pairs of run 3's final sheet, reproduced from the same data, code
+   and seed (its split hash is checked against `4a595fdf`).
+3. **The labelled set** (`data/labelling.py`), seed 20261012, about 300 pairs from a partition
+   of the candidates:
+   - all run-3 sheet pairs;
+   - 20 + 20 pairs within 0-2 and 3-4 dHash bits;
+   - 25 + 25 + 20 pairs at crop correlation 0.50-0.65, 0.65-0.80 and 0.80 or more;
+   - 12 pairs in each 0.05-wide bin of the larger cosine, from below 0.50 to 1.00, which
+     oversamples the rare high-cosine pairs;
+   - drawn at random within each stratum; each pair weighs its stratum's size over the pairs
+     drawn;
+   - numbered side-by-side sheets without any score, and a CSV template (`pair_id, rater_1,
+     rater_2`, labels `same_scene / different / unsure`);
+   - two team members label independently (card RC-D1-label says what counts as the same
+     scene). The scoring computes Cohen's kappa and, for every rule, the sensitivity and
+     precision for "same scene" with Wilson 95 % intervals; a pair is positive when both raters
+     call it `same_scene`.
+
+   Only aggregate numbers are committed; never images, image names, labels per pair or sheets.
+4. **The rule, fixed in advance:**
+   - the family: a cosine of at least t, t from 0.50 to 0.99 by 0.01, in the full view, the
+     centre view or the larger of the two, alone or OR a crop correlation of at least 0.65 or
+     0.80 (450 rules);
+   - the choice: the highest sensitivity among the rules with precision >= 0.5 on the labelled
+     set whose largest group over all images stays within the guard (10 %);
+   - ties go to the higher precision, then to one view before a crop combination, then to the
+     view order full, centre, larger, then to the **lower** threshold. Catching copies counts
+     more than precision: a wrong join only keeps two images together;
+   - the chosen rule's sensitivity and precision with intervals go to the data card, and also
+     weighted to all candidate pairs (stratified bootstrap intervals).
+5. **Run 4:**
+   - the chosen rule over **all** pairs of images, exactly (not only candidates); connected
+     components; the same stratified 70 / 15 / 15 split with seed 20261012; the guard at 10 %;
+   - the final cross-split sheet, checked by eye: the 24 highest cosines, the 24 highest crop
+     correlations, the 24 closest by dHash;
+   - the **strict test subset** (pre-registered sensitivity analysis): the test images whose
+     most similar training image is below the chosen threshold minus **0.05** (cosine units;
+     for a combined rule also below its crop level minus 0.05). The main comparisons are
+     reported again on it (`scripts/09_compare_arms.py --strict`, `results/comparisons_strict/`);
+   - no patient IDs exist in HyperKvasir: the splits are not patient-disjoint, which the
+     limitations say.
+
+RC-TT1 (our teacher's training) waits for run 4.
+
+Applied in `configs/data/kvasir_vqa_x1.yaml` (`near_duplicates.rule`, `embedding`,
+`candidates`, `labelling`, `strict_margin`), `data/embeddings.py`, `data/candidates.py`,
+`data/labelling.py`, `data/embed_step.py`, `data/prepare.py`, `evaluation/compare_stage.py`,
+`scripts/prepare_data.py` (`embed`, `score-labels`), `cards.py`, and run cards RC-D1-embed,
+RC-D1-label and RC-D1 (run 4).
+
+Recorded later, from the runs: the model id, revision and licence (RC-D1-embed); the kappa,
+the chosen rule and its sensitivity and precision (RC-D1-label); run 4's counts.
+
 ## Answer format for the inbox
 
 `- YYYY-MM-DD (name): D02 decided: Q1 <A|B>, Q2 <match|probes>, Q3 <EndoBench|ColonEval|none>, Q4 <x1 only|add ColonVQA>, Q5 <later|drop>.`
