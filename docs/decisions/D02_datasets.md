@@ -292,10 +292,10 @@ Both measures miss true duplicates, so the split is not clean.
 **Decision.** The pre-registered fallback becomes the **primary** joining measure, and its rule
 is set from human labels, not from score distributions.
 1. **Embeddings** (`data/embeddings.py`):
-   - the model: a small pretrained self-supervised vision model, proposal DINOv2-small from
-     the Hugging Face hub (`facebook/dinov2-small`, **not verified from the agent's session**:
-     RC-D1-embed reads the hub record, prints the id, the revision and the licence, and stops if
-     there is no such model; a comparable model is then chosen and named here);
+   - the model: a small pretrained self-supervised vision model, DINOv2-small from the
+     Hugging Face hub (`facebook/dinov2-small`); RC-D1-embed read its hub record. Pinned below
+     (additions of 2026-10-19): revision `ed25f3a31f01632728cabb09d1542f84ab7b0056`, licence
+     `apache-2.0` (the hub record);
    - two views of every image, each resized to 224 x 224 (aspect not kept, the same for every
      image): `full`, the whole image with its border and overlays; `centre`, the central 60 %
      of width and height, which leaves out the corner overlays. Both are tested on the labels;
@@ -356,8 +356,85 @@ Applied in `configs/data/kvasir_vqa_x1.yaml` (`near_duplicates.rule`, `embedding
 `scripts/prepare_data.py` (`embed`, `score-labels`), `cards.py`, and run cards RC-D1-embed,
 RC-D1-label and RC-D1 (run 4).
 
-Recorded later, from the runs: the model id, revision and licence (RC-D1-embed); the kappa,
-the chosen rule and its sensitivity and precision (RC-D1-label); run 4's counts.
+Recorded later, from the runs: the kappa, the chosen rule and its sensitivity and precision
+(RC-D1-label); run 4's counts. The model id, revision and licence are recorded below.
+
+### Amendment 3, additions (2026-10-19, Soheil), after RC-D1-embed and before any label
+
+**RC-D1-embed** (Kaggle T4, 2026-10-19, commit cb5de07), as reported from its printout:
+- run 3 reproduced: `split_sha256` 4a595fdf...;
+- model `facebook/dinov2-small` at revision `ed25f3a31f01632728cabb09d1542f84ab7b0056`,
+  licence `apache-2.0` (the hub record);
+- 6,449 images, two views, embedded in 143 s on the GPU;
+- 366,028 candidate pairs; 298 pairs to label;
+- self-check (cosine to the original):
+  - synthetic copies: 0.937-0.995 (full view), 0.988-0.999 (centre view);
+  - synthetic different images: 0.843-0.937 (full), 0.879-0.942 (centre).
+
+The cosines are compressed into the high range. The decision boundary is therefore likely high
+(around 0.95, Soheil's reading), where the sample has only 24 of its 298 pairs (the bins
+0.90-0.95 and 0.95-1.00).
+
+Recorded now, before any label exists:
+
+1. **Pinned:** `near_duplicates.embedding` in `configs/data/kvasir_vqa_x1.yaml` holds the model,
+   the revision and the licence above. Run 4, the scoring step and the top-up refuse an
+   RC-D1-embed output whose recorded model, revision or licence differ (exit code 5).
+2. **Adaptive top-up** (`labelling.topup_sample`, `prepare_data.py topup-labels`):
+   - after the first 298 pairs are labelled and the rule is chosen: if fewer than **30**
+     labelled pairs lie within **+-0.03** of the chosen cosine threshold (in the chosen view;
+     the band's edges included), **100** more pairs are drawn from that band;
+   - drawn at random, seed **20261013**, from RC-D1-embed's candidate pairs (the population of
+     the first sample), leaving out the pairs already labelled; if the band holds fewer, all of
+     them; if it holds none, there is no top-up and the rule stands;
+   - numbered after the first pairs (299 on), on new sheets without scores; both raters label
+     them under the same instructions and the same blinding;
+   - the rule is then chosen again, **once**, on all labels (the first pairs and the top-up),
+     by the same criterion. No second top-up;
+   - the scoring step says when the top-up is required (exit code 4); run 4 waits until the
+     rule is chosen again. The command reuses RC-D1-embed's outputs: no new embedding run;
+   - the weighted estimates over all candidates use the first pairs only (their stratified
+     design covers every candidate). The top-up pairs count in the labelled-pair sensitivity
+     and precision and in the choice;
+   - reported (`results/data/near_duplicate_topup.csv`): the first rule, the labelled pairs in
+     the band, the candidate pairs in the band and the pairs of all images in the band.
+3. **Disagreements** (`labelling.adjudicate`):
+   - the **third team member** (not one of the two raters) decides:
+     - every pair the two raters label differently, `unsure` included;
+     - and, if a round's Cohen's kappa (three labels, before adjudication) is **below 0.40**,
+       every pair of that round. This is the agent's reading of "if kappa < 0.40": the third
+       member then decides the agreed pairs too. A round is the first pairs, or the top-up;
+   - a decided pair is positive only if the third member calls it `same_scene`;
+   - the third member gets only the list of pair numbers (written privately by the scoring
+     step) and the sheets: no score and neither rater's label;
+   - reported: Cohen's kappa before adjudication (all pairs and per round) and the number of
+     decided pairs (`labels:kappa`, `labels:kappa:<round>`, `labels:adjudicated`).
+4. **Unsure:**
+   - **primary rule:** a pair is a copy only if it is `same_scene` for both raters, or for the
+     third member where they decided. `unsure` counts as not `same_scene`. The rule chosen
+     this way sets run 4;
+   - **sensitivity analysis:** `unsure` counts as not `same_scene` for the precision and as
+     `same_scene` for the sensitivity (the less favourable reading of each). Reported: the
+     chosen rule's sensitivity and precision this way, and the rule this way would choose
+     (`labels:unsure_analysis:*`). It does not change run 4.
+5. **Rater blinding:**
+   - the raters see no score: they get the sheets, `label_images.csv` and the template only,
+     never `label_pairs.csv` or the candidate files;
+   - they do not discuss labels until both label files are committed;
+   - per-pair labels never enter the repository, so "committed" means a commitment of the file:
+     each rater runs `prepare_data.py commit-labels` on their own file. It checks that only
+     their column is filled and adds the file's SHA-256 to
+     `docs/runs/RC-D1-label_commitments.csv`. The rater commits that change alone;
+   - the commit order is in the history and goes into the run report;
+   - the scoring step checks every label file against these hashes (`--commitments`): a file
+     changed after its commitment is refused (exit code 5);
+   - the same holds for the top-up round and for the third member's file.
+
+Applied in `configs/data/kvasir_vqa_x1.yaml` (`embedding`, `labelling.topup`),
+`data/labelling.py`, `data/embed_step.py`, `data/embeddings.py`, `data/prepare.py`,
+`utils/bundles.py`, `scripts/prepare_data.py` (`topup-labels`, `commit-labels`,
+`score-labels --topup-dir --private-dir --commitments`), `cards.py`, `scripts/run_card.py`,
+and the run cards RC-D1-embed (report) and RC-D1-label.
 
 ## Answer format for the inbox
 
