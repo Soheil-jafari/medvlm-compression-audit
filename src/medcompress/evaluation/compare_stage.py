@@ -49,6 +49,10 @@ from medcompress.evaluation.statistics import (
 )
 from medcompress.registry import BUDGET_IDS, PRIMARY_BUDGET, REGISTRY
 
+STRICT_FILE = "strict_test.json"
+"""RC-D1 run 4's strict test subset (D02 amendment 3): img_ids, in the private folder."""
+STRICT_DIR = "comparisons_strict"
+
 OUTCOMES_FILE = "outcomes_test.npz"
 CHOICES_FILE = "choices.json"
 COMPARISON_FILE = "comparison.csv"
@@ -235,6 +239,45 @@ def arm_outcomes(
         majority=hits > 0.5,
         audit_effect=np.mean(effect, axis=0),
     )
+
+
+def image_of(sample_ids: np.ndarray) -> np.ndarray:
+    """The img_id of each sample id (``<img_id>:<hash>``)."""
+    return np.array([str(s).split(":", 1)[0] for s in sample_ids])
+
+
+def strict_images(private_root: Path) -> set[str]:
+    """The img_ids of the strict test subset written by RC-D1 run 4."""
+    import json
+
+    path = Path(private_root) / STRICT_FILE
+    if not path.is_file():
+        raise ConfigError(
+            f"{path} is missing: the strict test subset comes from RC-D1 run 4 (D02 amendment 3)"
+        )
+    return set(json.loads(path.read_text(encoding="utf-8")))
+
+
+def restrict(
+    table: ProbeTable, outcomes: Sequence[ArmOutcomes], keep_images: set[str]
+) -> tuple[ProbeTable, list[ArmOutcomes]]:
+    """The probe table and every arm's outcomes on the probes (and lesion-mask audit probes)
+    of ``keep_images`` only: the strict-test sensitivity analysis (pre-registered)."""
+    from dataclasses import replace
+
+    keep = np.isin(image_of(table.images), list(keep_images))
+    audit = np.isin(image_of(table.audit_images), list(keep_images))
+    small = replace(
+        table, keys=table.keys[keep], images=table.images[keep], codes=table.codes[keep],
+        truth=table.truth[keep], small=table.small[keep], rare=table.rare[keep],
+        audit_keys=table.audit_keys[audit], audit_images=table.audit_images[audit],
+    )  # fmt: skip
+    arms = [
+        replace(o, correct=o.correct[keep], confidence=o.confidence[keep],
+                majority=o.majority[keep], audit_effect=o.audit_effect[audit])
+        for o in outcomes
+    ]  # fmt: skip
+    return small, arms
 
 
 # ------------------------------------------------------------------- metrics
@@ -496,8 +539,10 @@ def load_arms(
     return found, incomplete
 
 
-def write_comparisons(rows: Sequence[Mapping[str, Any]], results_root: Path) -> list[Path]:
-    """Write the rows to ``comparisons/<name>/<budget|nobudget>/comparison.csv`` (replaced)."""
+def write_comparisons(
+    rows: Sequence[Mapping[str, Any]], results_root: Path, folder: str = "comparisons"
+) -> list[Path]:
+    """Write the rows to ``<folder>/<name>/<budget|nobudget>/comparison.csv`` (replaced)."""
     from medcompress.utils.io import append_results
 
     grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
@@ -505,7 +550,7 @@ def write_comparisons(rows: Sequence[Mapping[str, Any]], results_root: Path) -> 
         grouped.setdefault((str(row["experiment"]), str(row["budget"])), []).append(row)
     written = []
     for (name, budget), group in sorted(grouped.items()):
-        path = Path(results_root) / "comparisons" / name.replace(":", "-")
+        path = Path(results_root) / folder / name.replace(":", "-")
         path = path / (budget or "nobudget") / COMPARISON_FILE
         path.unlink(missing_ok=True)
         append_results(group, path)
@@ -519,8 +564,12 @@ def run_comparisons(
     results_root: Path | None = None,
     output_root: Path | None = None,
     n_resamples: int | None = None,
+    strict: bool = False,
 ) -> list[Path]:
     """Stage entry point for ``scripts/09_compare_arms.py`` (see the module docstring).
+
+    ``strict``: the same comparisons on the strict test subset only (D02 amendment 3, the
+    pre-registered sensitivity analysis), written to ``comparisons_strict/``.
 
     Needs the frozen pre-registration (the test split), the evaluation settings and the
     committed results (validation rows for the comparator, efficiency and budget rows for H2).
@@ -551,6 +600,11 @@ def run_comparisons(
     )
     arms = list(found)
     outcomes = [arm_outcomes(a, seeds_of[a.label.partition(":")[0]], found[a], table) for a in arms]
+    folder = "comparisons"
+    if strict:
+        keep = strict_images(Path(config["paths"]["private_root"]))
+        table, outcomes = restrict(table, outcomes, keep)
+        folder = STRICT_DIR
     index = {a: i for i, a in enumerate(arms)}
     scorer = Scorer(table, headline, int(settings.n_bins))
     observed, draws = metric_table(scorer, outcomes, n_resamples=resamples)
@@ -567,6 +621,7 @@ def run_comparisons(
         "n_rare_positives": int(table.rare.sum()),
         "arms": [a.name for a in arms],
         "incomplete": incomplete,
+        "subset": "strict test (D02 amendment 3)" if strict else "test",
     }
 
     # H1: every compressed arm against E2
@@ -638,8 +693,8 @@ def run_comparisons(
     if len(ranked) >= 2:
         rows += tau_rows(observed, draws, ranked, alpha)
 
-    written = write_comparisons(rows, results_root)
-    choices_path = results_root / "comparisons" / CHOICES_FILE
+    written = write_comparisons(rows, results_root, folder)
+    choices_path = results_root / folder / CHOICES_FILE
     write_json(choices, choices_path)
     print(f"compared {len(arms)} arms on {len(table.keys)} probes; wrote {len(written)} files")
     return [*written, choices_path]

@@ -376,7 +376,9 @@ def test_the_cli_stops_on_chaining_and_draws_the_final_sheet(tmp_path: Path) -> 
               "--split-seed", "3", "--close-bits", "4", "--mask-threshold", "4",
               "--results-root", str(tmp_path / "results"))  # fmt: skip
     sheets = tmp_path / "sheets"
-    done = _run(*common, "--sheet-dir", str(sheets))  # the committed threshold, 0.65
+    waiting = _run(*common)  # the committed rule is now the labelled one (D02 amendment 3)
+    assert waiting.returncode == 4 and "labelled pairs" in waiting.stderr
+    done = _run(*common, "--sheet-dir", str(sheets), "--confirm-threshold", "0.65")  # run 3
     assert done.returncode == 0, done.stderr
     assert "confirmed duplicate in train: 0" in done.stdout
     assert "pairs within 4 bits not joined: 1" in done.stdout  # l1 and l2

@@ -36,11 +36,34 @@ dataset:
     crop_side: 32                         # grey-scale, area-averaged to 32 x 32 pixels
     crop_highpass_sigma: 4.0              # a Gaussian blur of 4 px (at 32) is subtracted
     crop_max_shift: 3                     # px at 32 (5.6 % of the image side), in each direction
-    min_correlation: 0.65                 # highest Pearson correlation over the shifts; from the
-                                          # calibration step (2026-10-19): the valley of the
-                                          # bimodal 5-8 bit distribution; 2 of 2,000 controls
+    min_correlation: 0.65                 # the crop rule of amendment 2 (RC-D1 run 3, NOT
+                                          # accepted); kept only to reproduce run 3's sheet pairs
     max_group_fraction: 0.10              # chaining guard: STOP if one group holds more images
                                           # (was 0.05; below 0.60 the largest group jumps > 30 %)
+    # D02 amendment 3 (2026-10-19, before any model result): run 3 showed copies that both the
+    # crop correlation and the dHash missed. The joining measure is now the cosine of embeddings,
+    # with the rule chosen on human labels (RC-D1-embed, RC-D1-label), then RC-D1 run 4.
+    rule: labelled                        # read from results/data/near_duplicate_labels.csv
+                                          # (labels:chosen:*), written by RC-D1-label's scoring
+    embedding:
+      model: facebook/dinov2-small        # UNVERIFIED proposal (DINOv2-small): RC-D1-embed reads
+                                          # the hub record, prints id, revision and licence, and
+                                          # stops if the hub has no such model
+      revision: TODO                      # pinned from RC-D1-embed's printout (the commit hash)
+      licence: TODO                       # from the hub record, printed by RC-D1-embed
+      side: 224                           # each view resized to 224 x 224 (aspect not kept)
+      centre_fraction: 0.60               # the centre view: the central 60 % of width and height
+      batch_size: 32
+    candidates:                           # pairs for the labels (the rule itself is applied to
+      knn_k: 20                           # all pairs): the 20 nearest by cosine, per view;
+      dhash_bits: 12                      # dHash within 12 bits;
+      crop_k: 5                           # the 5 highest crop correlations; and run 3's sheet
+    labelling:
+      seed: 20261012                      # the sample of about 300 pairs (data/labelling.py)
+      min_precision: 0.5                  # rule choice: highest sensitivity with precision >= 0.5
+    strict_margin: 0.05                   # strict test subset: the most similar training image is
+                                          # below the rule's threshold minus 0.05 (cosine; and the
+                                          # crop level minus 0.05 if the rule has one)
   official_split_note: "by question, not by image: 3,821 of the 4,058 official test images are training images (RC-D1 run 1); used only for the data card and the appendix item"
   label_mapping:                          # per-image finding labels from the source Kvasir-VQA questions
     status: TODO                          # values filled from the RC-D1 answer counts, then pre-registered
@@ -50,4 +73,4 @@ dataset:
         mode: multi_label
         values: {}                        # answer value -> finding id, e.g. "polyp": polyp
         none_values: ["none", "no"]
-  notes: "D02 amendments of 2026-10-18: the official split is by question, so all images are re-split by image (splits_used), with two-stage near-duplicate groups (near_duplicates)."
+  notes: "D02 amendments of 2026-10-18/19: the official split is by question, so all images are re-split by image (splits_used); near-duplicate groups by the embedding rule chosen on human labels (near_duplicates, amendment 3)."

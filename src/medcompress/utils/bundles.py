@@ -40,6 +40,9 @@ steps it starts then check only the manifest of that bundle, not every file agai
 dataset is read-only)."""
 FORMAT_VERSION = 1
 DATA_KIND = "data"
+EMBED_KIND = "near_duplicates"
+"""RC-D1-embed's private output (embeddings, candidates, the labelling sheets), D02 amendment 3:
+verified and read in place by the scoring step and RC-D1 run 4."""
 HANDOFF_KINDS: tuple[str, ...] = (
     "teacher_adapter",
     "teacher_cache",
@@ -206,8 +209,10 @@ def write_bundle_manifest(
     root = Path(root).resolve()
     if root.is_relative_to(repo_root().resolve()):
         raise BundleError(f"a shared folder must be outside the repository: {root}")
-    if kind != DATA_KIND and kind not in HANDOFF_KINDS:
-        raise BundleError(f"unknown kind {kind!r}; use {DATA_KIND} or one of {HANDOFF_KINDS}")
+    if kind not in (DATA_KIND, EMBED_KIND) and kind not in HANDOFF_KINDS:
+        raise BundleError(
+            f"unknown kind {kind!r}; use {DATA_KIND}, {EMBED_KIND} or one of {HANDOFF_KINDS}"
+        )
     files = {p.relative_to(root).as_posix(): file_sha256(p) for p in _files_under(root)}
     if not files:
         raise BundleError(f"{root} holds no files")
