@@ -219,12 +219,39 @@ must be logged here.
 
   Recorded in D01, D02, the dataset and teacher configs, RC-D1, RC-TT0, RC-TT1, the data card,
   the pre-registration draft, the schedule and every card's session-limit line.
+- **2026-10-19 (Soheil, from RC-D1 run 3), D02 amendment 3: embeddings with a rule set from
+  human labels,** before any model result.
+  - Run 3 (crop rule 0.65) is not accepted. Its final sheet showed same-scene pairs across
+    splits that both earlier measures missed: 3 of the 24 highest crop scores (14-32 bits),
+    about 5 of the 24 closest by dHash, about 9 of 12 pairs within 4 bits left apart.
+  - The pre-registered fallback becomes the primary measure: the cosine of embeddings from a
+    small pretrained self-supervised model. The proposal is DINOv2-small; its id, revision and
+    licence are verified on the hub by RC-D1-embed. Two views: the whole image and the central
+    60 %.
+  - Candidates: 20 nearest neighbours per view, dHash within 12 bits, the 5 highest crop
+    correlations per image, and run 3's sheet pairs.
+  - About 300 candidate pairs, stratified with the border zones oversampled, are labelled by
+    two raters on sheets without scores. Kappa is reported. Each of 450 rules gets its
+    sensitivity and precision with Wilson intervals.
+  - The rule, fixed in advance: the highest sensitivity with precision >= 0.5 within the 10 %
+    guard; ties to the higher precision, the simpler rule, then the lower threshold.
+  - Run 4 applies it to all pairs. The final sheet bands: highest cosine, highest crop, closest
+    dHash.
+  - Strict test subset: the most similar training image below the threshold minus 0.05; the
+    main comparisons are reported again on it.
+  - No patient IDs: a stated limitation. RC-TT1 waits for run 4.
+
+  Recorded in D02, the dataset config, RC-D1-embed, RC-D1-label, RC-D1, RC-TT1, the data card,
+  the pre-registration draft, the schedule and STATUS.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
 | Kaggle session time limit | the session time limit, and whether a stopped version keeps its output (unknown here); the T4 x2 quota rule is settled (counts once, 2026-10-19). RC-TT1 needs about 14.7 h (estimate) | team (check on Kaggle) | before RC-TT1 |
+| Embedding model record (D02 amendment 3) | the hub id, the revision and the licence of the proposed DINOv2-small, as RC-D1-embed prints them (the agent's session cannot reach the hub); pinned before run 4. If the hub has no such model, a comparable one is chosen | Soheil, with the agent | after RC-D1-embed |
+| The two raters (RC-D1-label) | who labels the about 300 pairs, each on their own (proposal: Soheil and one of Amir or Farzan) | team | before RC-D1-label |
+| Kappa too low (agent proposal) | the rule is chosen whatever the kappa (pre-registered). A kappa below about 0.4 would be a reason to talk before run 4; not pre-registered | team | after RC-D1-label |
 | Published target modules | which modules the published `adapter_config.json` names (RC-TT0's printout is not committed; RC-TT1 prints it). If a name is outside the language model, RC-TT1 stops and the team decides | Soheil | at RC-TT1's start |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
 | Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |

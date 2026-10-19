@@ -25,7 +25,7 @@
 - Platform: Kaggle notebook, **GPU T4 x2**, Internet **on**.
 - Dataset access: none (synthetic images).
 - **Does not wait for RC-D1.** It uses synthetic images only and attaches no dataset, so it can
-  run before, or while, RC-D1's calibration step and run 3 run. RC-TT1 waits for RC-D1 run 3.
+  run before, or while, RC-D1 runs. RC-TT1 waits for RC-D1 run 4 (D02 amendment 3).
 - Installs as in RC-S0b: if Kaggle's torchao is below 0.16.0, uninstall it first;
   `requirements/train.txt` brings `optimum>=1.24.0` and `bitsandbytes==0.50.2`, which NF4 needs.
 - Rule 3, as written before any result:

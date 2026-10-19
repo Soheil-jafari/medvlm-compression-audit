@@ -469,7 +469,8 @@ def test_the_runner_plans_the_calibration_and_the_final_sheet(tmp_path: Path) ->
     assert card_file("RC-D1-calibrate", REPO / "docs" / "runs").name.startswith("RC-D1_")
     dry = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "run_card.py"), "--card", "RC-D1-calibrate",
-         "--data-root", str(shared), "--out", str(tmp_path), "--dry-run"],
+         "--data-root", str(shared), "--out", str(tmp_path), "--dry-run",
+         "--allow-blocked"],  # the calibration is done; the RC-D1 card now waits for run 4
         capture_output=True, text=True, cwd=REPO, check=False, timeout=120,
     )  # fmt: skip
     assert dry.returncode == 0, dry.stderr

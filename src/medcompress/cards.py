@@ -349,6 +349,8 @@ def build_plan(
         counts = _script(
             "prepare_data.py", "counts", "--data-root", str(data_root), *RC_D1_SETTINGS
         )
+        if embed_dir is not None:  # run 4's groups need RC-D1-embed's embeddings
+            counts = (*counts, "--embed-dir", str(embed_dir))
         return CardPlan(
             card, "Data preparation, second pass (counts with the label values)", 0,
             (Step("counts", counts, inputs=False),),

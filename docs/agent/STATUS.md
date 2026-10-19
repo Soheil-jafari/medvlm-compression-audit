@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-10-19, iteration 53 (interactive run mode)
+**Last updated:** 2026-10-19, iteration 54 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S03 + S05: RC-D1 run 3 (two-stage near-duplicate grouping, threshold 0.65, D02 amendment 2 final values); then RC-TT1 (our teacher's training: N = 38,000, the published LoRA targets), all Soheil. The calibration step and RC-TT0 are done (2026-10-19)
+**Current stage:** S03 + S05: D02 amendment 3 (near-duplicates by embeddings, the rule chosen on human labels): RC-D1-embed, then two raters label about 300 pairs, RC-D1-label's scoring, RC-D1 run 4; then RC-TT1 (N = 38,000, the published LoRA targets). Run 3 was not accepted; RC-TT0 is done
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -27,8 +27,14 @@
    the dHash alone, guard 10 %, the final sheet as the deciding check, an embedding fallback
    pre-registered); a T4 x2 hour counts once, so RC-TT1 trains on 38,000 examples; RC-TT1 uses
    the published adapter's target modules (which ones is printed at its start: the hub cannot
-   be reached from here). Next: read RC-D1 run 3 (final sheet, label values, finding list,
-   `max_new_tokens`), then RC-TT1's target printout and progress. RC-L1 needs code
+   be reached from here).
+   2026-10-19 (iteration 54): run 3 not accepted (both measures missed copies); D02 amendment
+   3: embeddings (proposal DINOv2-small, checked on the hub by RC-D1-embed), candidates, a
+   stratified sample of about 300 pairs on score-free sheets, two raters, kappa and every
+   rule's sensitivity and precision, the rule chosen by a rule fixed in advance, run 4 over all
+   pairs, the strict test subset. Next: pin the model revision and record the licence from
+   RC-D1-embed's printout; then the labels' scores; then run 4 (final sheet, label values,
+   finding list, `max_new_tokens`); then RC-TT1's target printout and progress. RC-L1 needs code
    first (run identities, parent from config, cache extension, comparison rows); the A1/A2 reuse
    of E7's effects waits on the team (freeze list item 15).
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
@@ -51,7 +57,7 @@ cards for the team (decision of 2026-10-12).
 | 2 | Optional: full names for the copyright line in `LICENSE` and `CITATION.cff` | team | 2026-10-12 |
 | 2b | CI on `main` is red (import error fixed on `research-loop` in a7ec704); merging `research-loop` into `main` turns it green | Soheil | 2026-10-12 |
 | 4 | Each member confirms own access to Kvasir-VQA-x1 and Kvasir-SEG (inbox) | all | 2026-10-12 |
-| 5 | Run RC-D1 **run 3**, make its shared data ONE private dataset, share it, commit `results/data/summary.csv`, attach the final contact sheet (three bands) to the report with what you see in each band; then RC-TT1 with run 3's shared data, and paste its `published target_modules` line | Soheil | 2026-10-19 |
+| 5 | Run **RC-D1-embed** (paste its printout; upload its output as ONE private dataset); label the about 300 pairs with a second rater (card RC-D1-label); run its scoring and commit the two results files; then RC-D1 **run 4**, share its data, commit `results/data/summary.csv`, attach the final contact sheet with what you see in each band; then RC-TT1 with run 4's shared data | Soheil, a second rater | 2026-10-19 |
 | 7 | Tell Amir and Farzan that the staged selection was replaced by one student with checks (D05 amendment) | Soheil | 2026-10-12 |
 | 8 | Confirm the fixed training pool (one pool from `seeds.data_split` for E1, E2, E4 and the recoveries; the teacher cache holds only that pool) | Soheil | 2026-10-12 |
 | 10 | Answer the [team] items of the pre-registration draft (comparator rule, headline accuracy for H1/H4, finding thresholds, prevalence cut points, cap, tiers, training pool, A3 ranking, reuse of E7 for `A4:n128` and `A5:logprob_drop`, H2 matching, McNemar on the majority answer) | all | 2026-10-12 |
