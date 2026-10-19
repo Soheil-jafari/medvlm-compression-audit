@@ -104,7 +104,7 @@ def _lora_config_rows() -> list[dict]:
     print(
         f"LoRA for our teacher: rank {chosen['rank']}, alpha {chosen['alpha']}, dropout "
         f"{chosen['dropout']} ({'published' if chosen['from_published'] else 'D06 default'}); "
-        f"targets: the language model's linear layers (match {chosen['targets_match']})"
+        f"published targets are D06's seven projections: {chosen['targets_match']}"
     )
     return [_row(f"lora_{k}", v) for k, v in chosen.items()]
 
@@ -130,7 +130,7 @@ def _setup_rows(step: str, rank: int, alpha: float, dropout: float) -> list[dict
         )
 
     lora = {"rank": rank, "alpha": alpha, "dropout": dropout}
-    lora["target_modules"] = cfg["target_modules"]
+    lora["target_modules"] = cfg["feasibility_target_modules"]  # D06's, as RC-TT0 timed
     return lora_step_rows(
         build, [TrainExample("tt0-0", image, QUESTION, ANSWER_TEXT)], 1, setup, lora=lora,
         learning_rate=float(cfg["learning_rate"]), gradient_checkpointing=gc,

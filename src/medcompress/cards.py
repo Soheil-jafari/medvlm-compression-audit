@@ -30,10 +30,11 @@ ABLATION_VARIANTS: dict[str, tuple[str | None, ...]] = {
     "A6": ("layers_only", "heads_channels"),
 }
 RC_D1_SETTINGS: tuple[str, ...] = (
-    "--split-seed", "20261012", "--dedup-threshold", "4", "--mask-threshold", "4",
+    "--split-seed", "20261012", "--close-bits", "4", "--mask-threshold", "4",
 )  # fmt: skip
-"""RC-D1's pre-registered settings (card section 2). The crop settings and the confirmation
-threshold of D02 amendment 2 are in ``configs/data/kvasir_vqa_x1.yaml`` (``near_duplicates``)."""
+"""RC-D1's pre-registered settings (card section 2). The crop settings, the confirmation
+threshold and the chaining guard of D02 amendment 2 are in ``configs/data/kvasir_vqa_x1.yaml``
+(``near_duplicates``); ``--close-bits`` only names the 0-4 bit band that is reported."""
 REFERENCE_FILE = "results/E2/nobudget/seed0/efficiency.csv"
 SHARED_DATA_DIR = "medcompress_data"
 """Folder under ``--out`` where RC-D1 writes the shared data (``data/`` + ``private/``)."""

@@ -24,19 +24,23 @@ dataset:
                                           # duplicates (near_duplicates below, transitive) go
                                           # whole, stratified by finding answer and by
                                           # Kvasir-SEG mask; seed seeds.data_split (data/prepare.py)
-  near_duplicates:                        # D02 amendment 2 (2026-10-18), before any model result.
-                                          # Pairs within --dedup-threshold (4) bits are always one
-                                          # group, as in run 2. Pairs within candidate_bits are one
-                                          # group when their crop correlation is >= min_correlation
+  near_duplicates:                        # D02 amendment 2 (2026-10-18; final values 2026-10-19,
+                                          # before any model result). EVERY pair within
+                                          # candidate_bits, 0-4 bits included, is one group only
+                                          # if its crop correlation is >= min_correlation; nothing
+                                          # is joined on the dHash alone. --close-bits 4 only names
+                                          # the 0-4 bit band that is reported (pairs left apart)
     candidate_bits: 12                    # 64-bit dHash distance of the candidate pairs
     crop_fraction: 0.60                   # the central 60 % of width and of height (20 % cut per
                                           # side: the text, the green box, the black border)
     crop_side: 32                         # grey-scale, area-averaged to 32 x 32 pixels
     crop_highpass_sigma: 4.0              # a Gaussian blur of 4 px (at 32) is subtracted
     crop_max_shift: 3                     # px at 32 (5.6 % of the image side), in each direction
-    min_correlation: TODO                 # highest Pearson correlation over the shifts; chosen
-                                          # from `prepare_data.py calibrate` (RC-D1 section 3a)
-    max_group_fraction: 0.05              # chaining guard: STOP if one group holds more images
+    min_correlation: 0.65                 # highest Pearson correlation over the shifts; from the
+                                          # calibration step (2026-10-19): the valley of the
+                                          # bimodal 5-8 bit distribution; 2 of 2,000 controls
+    max_group_fraction: 0.10              # chaining guard: STOP if one group holds more images
+                                          # (was 0.05; below 0.60 the largest group jumps > 30 %)
   official_split_note: "by question, not by image: 3,821 of the 4,058 official test images are training images (RC-D1 run 1); used only for the data card and the appendix item"
   label_mapping:                          # per-image finding labels from the source Kvasir-VQA questions
     status: TODO                          # values filled from the RC-D1 answer counts, then pre-registered

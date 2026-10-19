@@ -154,7 +154,7 @@ def test_prepare_end_to_end(tmp_path: Path) -> None:
         data,
         {"name": "Kvasir-VQA-x1", "label_mapping": RULES},
         split_seed=1,
-        dedup_threshold=4,
+        close_bits=4,
         mask_threshold=4,
         confirm_threshold=0.9,
     )
@@ -168,7 +168,7 @@ def test_prepare_end_to_end(tmp_path: Path) -> None:
     assert sum(metrics[f"qa_rows:{n}"] for n in ("train", "val", "test")) == 4
     assert metrics["masks:linked"] >= 1 and metrics["groups:total"] == 3
     assert metrics["groups:multi_image"] == 1 and metrics["images_in_multi_image_groups"] == 2
-    assert metrics["val_test_near_duplicates_of_train"] == 0
+    assert metrics["val_test_confirmed_duplicates_of_train"] == 0
     assert metrics["answer_count:abnormalities:polyp"] == 2
     assert (metrics["official:images:train"], metrics["official:images:test"]) == (2, 2)
     assert metrics["official:images:both"] == 0 and metrics["official:images:test_only"] == 2
@@ -176,7 +176,7 @@ def test_prepare_end_to_end(tmp_path: Path) -> None:
     assert metrics["official:test_only_min_distance_to_train:0"] == 1  # a4 is a copy of a1
     again = prepare(
         data, {"name": "Kvasir-VQA-x1", "label_mapping": RULES},
-        split_seed=1, dedup_threshold=4, mask_threshold=4, confirm_threshold=0.9,
+        split_seed=1, close_bits=4, mask_threshold=4, confirm_threshold=0.9,
     )  # fmt: skip
     assert again.split_sha256 == prepared.split_sha256  # deterministic by seed
     hashes = write_private_outputs(prepared, tmp_path / "private", data)
@@ -197,7 +197,7 @@ def test_load_prepared_rebuilds_the_prepared_splits(tmp_path: Path) -> None:
     _layout(data)
     config = {"name": "Kvasir-VQA-x1", "label_mapping": RULES}
     prepared = prepare(
-        data, config, split_seed=1, dedup_threshold=4, mask_threshold=4, confirm_threshold=0.9
+        data, config, split_seed=1, close_bits=4, mask_threshold=4, confirm_threshold=0.9
     )
     write_private_outputs(prepared, tmp_path / "private", data)
 

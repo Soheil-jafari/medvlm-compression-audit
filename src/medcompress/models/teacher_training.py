@@ -12,9 +12,14 @@ step of the 7B in two setups, each with and without gradient checkpointing:
 * setup (a) ``fp16_2gpu`` unless it runs out of memory or is more than ``slower_factor`` (2x)
   slower per example than (b) ``nf4_1gpu``; within a setup the faster variant that ran;
 * ``N`` = the largest multiple of 1,000 training examples whose projected time, from the
-  warm step time, is at most 15 GPU hours. A T4 x2 hour counts twice until the team has
-  checked Kaggle's rule; the other reading is recorded too. The cap is one pass over the
+  warm step time, is at most 15 GPU hours. RC-TT0 recorded both readings of a T4 x2 hour
+  (counted twice, and once); measured on 2026-10-19, it counts **once** against the Kaggle
+  quota, so RC-TT1 uses that reading (:func:`t4x2_counts_once`). The cap is one pass over the
   training split's QA rows, applied by the training run, which knows the split.
+
+The LoRA targets are the published adapter's (``adapter_config.json``, D01 of 2026-10-19),
+read on Kaggle and applied inside the language model's decoder layers
+(:func:`published_target_names`, ``compression/lora.py: layer_regex``).
 
 The examples are taken in one seeded order stratified by question type (:func:`teacher_order`),
 so the N examples of any size, and the +50 % extension of the quality rule, are prefixes of
@@ -27,6 +32,7 @@ import csv
 import json
 import math
 import random
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -212,14 +218,59 @@ LM_TARGETS = frozenset(
 )
 
 
+def published_target_names(spec: Any) -> tuple[str, ...]:
+    """The leaf module names in the published ``target_modules`` of ``adapter_config.json``.
+
+    - ``"all-linear"`` -> ``("all-linear",)``;
+    - a list -> the last path component of each entry (``model.layers.0.self_attn.q_proj`` ->
+      ``q_proj``), sorted and unique;
+    - a regular expression (as ms-swift writes one, for example
+      ``^(model)(?!...).*\\.(down_proj|...|v_proj)$``) -> the names of its last group of plain
+      alternatives.
+
+    Raises :class:`RuleError` if no names can be read: a person then decides (D01).
+    """
+    if isinstance(spec, str) and spec.strip() == "all-linear":
+        return ("all-linear",)
+    if isinstance(spec, str):
+        for group in reversed(re.findall(r"\(([^()]*)\)", spec)):
+            names = group.removeprefix("?:").split("|")
+            if names and all(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", n) for n in names):
+                return tuple(sorted(set(names)))
+        raise RuleError(f"no module names could be read from target_modules {spec!r}")
+    if isinstance(spec, list | tuple) and spec:
+        return tuple(sorted({str(n).rsplit(".", 1)[-1] for n in spec}))
+    raise RuleError(f"target_modules {spec!r} names no module")
+
+
+def adapted_counts(linear_names: Iterable[str], regex: str, names: Sequence[str]) -> dict[str, int]:
+    """How many linear layers of the model each target name adapts (0: the name matches none).
+
+    ``linear_names`` are the full names of the model's linear layers, ``regex`` the one passed
+    to peft (``compression/lora.py: lora_target_regex``).
+    """
+    pattern = re.compile(regex)
+    counts = {name: 0 for name in names}
+    for full in linear_names:
+        if pattern.fullmatch(full):
+            leaf = full.rsplit(".", 1)[-1]
+            counts[leaf] = counts.get(leaf, 0) + 1
+    return counts
+
+
+def t4x2_counts_once(settings: Mapping[str, Any]) -> bool:
+    """Whether a T4 x2 hour counts once against the Kaggle quota (``rule.t4x2_counts_twice``)."""
+    return not bool(settings["rule"].get("t4x2_counts_twice", True))
+
+
 def lora_settings(
     published: Mapping[str, Any] | None, default: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Rank, alpha and dropout: the published adapter's if it can be read, else D06's.
 
     ``published`` is the published ``adapter_config.json`` (``None`` if it could not be read).
-    ``targets_match`` says whether its target modules are the language model's linear layers
-    (``all-linear`` or the seven projections), which are the targets used here
+    ``targets_match`` says whether its target modules are the seven projections of the language
+    model (``all-linear``, a list or a regular expression over them), D06's targets
     (``decoder_attention`` + ``decoder_mlp``, the vision tower frozen).
     """
     if not published:
@@ -230,11 +281,11 @@ def lora_settings(
             "from_published": 0.0,
             "targets_match": -1.0,  # not known
         }
-    targets = published.get("target_modules")
-    if isinstance(targets, str):
-        match = targets == "all-linear" or set(targets.split("|")) <= LM_TARGETS
-    else:
-        match = set(targets or ()) == LM_TARGETS
+    try:
+        names = published_target_names(published.get("target_modules"))
+    except RuleError:
+        names = ()
+    match = names == ("all-linear",) or set(names) == LM_TARGETS
     return {
         "rank": int(published.get("r", default["rank"])),
         "alpha": float(published.get("lora_alpha", default["alpha"])),
@@ -302,7 +353,11 @@ def train_settings(plan: TeacherPlan, settings: Mapping[str, Any], n: int) -> di
         "mode": "sft",
         "lora": {
             "rank": plan.lora_rank, "alpha": plan.lora_alpha, "dropout": plan.lora_dropout,
-            "target_modules": list(settings["target_modules"]),
+            "target_modules": (
+                settings["target_modules"]
+                if isinstance(settings["target_modules"], str)  # "published"
+                else list(settings["target_modules"])
+            ),
         },
         "steps": steps,
         "learning_rate": float(settings["learning_rate"]),

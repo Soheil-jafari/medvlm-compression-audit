@@ -193,13 +193,39 @@ must be logged here.
 
   Recorded in D02, the dataset config, RC-D1, RC-TT0, RC-TT1, RC-E0a, RC-E0b, RC-X1, the data
   card and the pre-registration draft.
+- **2026-10-19 (Soheil, from the RC-D1 calibration step and RC-TT0), before any model
+  result:**
+  1. *D02 amendment 2, final values.* `min_correlation` = 0.65, the valley of the bimodal 5-8
+     bit distribution (2 of 2,000 random controls reach it); 0.80 missed a same-scene pair and
+     joined 6 different-image pairs out of 8.
+  2. *No automatic join within 4 bits:* the four 0-4 bit pairs with the lowest crop correlation
+     were clearly different images. Every candidate within 12 bits is joined only by the crop;
+     the 0-4 bit pairs left apart are counted and shown on the final contact sheet.
+  3. *Chaining guard at 10 %* of the images (was 5 %): the largest group jumps above 30 % below
+     0.60, which is what chaining looks like. STOP (exit code 7) above 10 %.
+  4. *The deciding check* is the final contact sheet of run 3: the 24 most similar cross-split
+     pairs by the crop correlation and the 24 closest by the dHash.
+     **Pre-registered fallback:** if a person sees same-scene pairs there, near-duplicates are
+     detected again with embeddings from a small pretrained vision model, compared by cosine
+     similarity, run on CPU; its threshold is calibrated the same way (distribution, contact
+     sheet, random controls) before any model result. Not implemented now.
+  5. *T4 x2 counts once* against the Kaggle quota (measured: a 17-minute T4 x2 session used 16
+     minutes). RC-TT1 uses N = 38,000 (RC-TT0's reading for "counts once").
+  6. *Our teacher's LoRA:* the published target modules, with the published rank 16, alpha 64
+     and dropout 0.05 (D01 amendment 2). RC-TT0 found the published `target_modules` not equal
+     to D06's seven projections as written (`lora_targets_match` 0); the value itself is
+     printed by RC-TT1 before training, which stops if a name matches no layer of the language
+     model.
+
+  Recorded in D01, D02, the dataset and teacher configs, RC-D1, RC-TT0, RC-TT1, the data card,
+  the pre-registration draft, the schedule and every card's session-limit line.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| T4 x2 and the quota | whether a T4 x2 session counts once or twice against the weekly Kaggle quota (rule 3 counts it twice until checked: N doubles if it counts once), and the session time limit (both unknown here) | team (check on Kaggle) | before RC-TT1 |
-| Confirmation threshold (D02 amendment 2) | `near_duplicates.min_correlation`, from the RC-D1 calibration step's printout and contact sheet; the value and the reason go into D02 and the dataset config before run 3 | Soheil, with the agent | before RC-D1 run 3 |
+| Kaggle session time limit | the session time limit, and whether a stopped version keeps its output (unknown here); the T4 x2 quota rule is settled (counts once, 2026-10-19). RC-TT1 needs about 14.7 h (estimate) | team (check on Kaggle) | before RC-TT1 |
+| Published target modules | which modules the published `adapter_config.json` names (RC-TT0's printout is not committed; RC-TT1 prints it). If a name is outside the language model, RC-TT1 stops and the team decides | Soheil | at RC-TT1's start |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
 | Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |
 | Recovery steps | 25 % of 625 = 156.25; proposal 157 = `ceil(2,500 / 16)` (D06 memo) | team | before RC-E5 |

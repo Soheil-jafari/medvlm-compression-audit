@@ -6,11 +6,11 @@ measurements at the decided image side 672 (synthetic probes) and the decided re
 it is written as a symbol and stays **unknown** until the named run measures it.
 
 Budget: 90 Kaggle GPU hours per week, 30 per person (Soheil, Amir, Farzan; decision of
-2026-10-17). Two things are not known here (TODO: the team checks on Kaggle):
-- whether a T4 x2 session counts once or twice against the weekly quota (cards on T4 x2:
-  RC-E0a, RC-E0b, RC-E9, RC-R1's teacher pass, RC-L1's cache extension);
-- the session time limit. Training saves its state every 50 updates and continues from it
-  (`docs/team_setup.md`).
+2026-10-17). A T4 x2 session counts **once** against the weekly quota (measured 2026-10-19: a
+17-minute T4 x2 session used 16 minutes), so the hours of the cards on T4 x2 (RC-TT1, RC-E0a,
+RC-E0b, RC-E9, RC-R1's teacher pass, RC-L1's cache extension) count as written. Not known here:
+the session time limit (TODO: the team checks on Kaggle). Training saves its state and continues
+from it (`docs/team_setup.md`).
 
 ## 1. Measured inputs (RC-S0b run 2, side 672, `results/smoke/RC-S0b/`)
 
@@ -26,6 +26,7 @@ Budget: 90 Kaggle GPU hours per week, 30 per person (Soheil, Amir, Farzan; decis
 
 | Run | Known part | Unknown part |
 |---|---|---|
+| RC-TT1, our teacher (RC-TT0, 2026-10-19) | 38,000 examples x 1.39 s = **14.7 h** on T4 x2, counted once: 14.7 GPU hours (2,375 updates) | model load, saves, the validation pass |
 | E1 or E2 training, one seed | 625 updates x 13.6 s = **2.4 h** | model load, saves |
 | Recovery of one pruned run | 157 updates x 13.6 s = **0.6 h** (rounding of 156.25 still open) | |
 | Clinical scoring, proposed mix (E7, and as the code stands A1, A2, A5) | 108 units x 640 probes x 0.414 s = **7.9 h** | the method (D07 section 1) and the probe count are not frozen |
@@ -86,7 +87,7 @@ are given against the 30 h each person has. The unknown parts are named next to 
 | Week | Soheil | Farzan | Amir | Known GPU h (S / F / A) |
 |---|---|---|---|---|
 | 1 | RC-D1 calibration step, then run 3 = pass 1 (CPU; D02 amendment 2); share the dataset; RC-D1 pass 2 (CPU) once the label values are confirmed; RC-TT0 does not wait for RC-D1 | account setup; RC-X1 part A (CPU) once the shared data is shared | account setup; attach and verify the shared data | 0 / 0 / 0 |
-| 2 | RC-TT0 (minutes) and RC-TT1, our teacher's training (at most 15 GPU hours by rule 3, an estimate); then RC-E0a Gate 1 and RC-E0b cache with our adapter (T4 x2); RC-E1 seed 0 | RC-E1 seed 1 | RC-E1 seed 2 | up to 15 + 2.4 + G + C + 2 V / 2.4 + V / 2.4 + V |
+| 2 | RC-TT1, our teacher's training (14.7 h on T4 x2, counted once; more than one session if the session limit is shorter; RC-TT0 done 2026-10-19); then RC-E0a Gate 1 and RC-E0b cache with our adapter (T4 x2); RC-E1 seed 0 | RC-E1 seed 1 | RC-E1 seed 2 | 14.7 + 2.4 + G + C + 2 V / 2.4 + V / 2.4 + V |
 | 3 | RC-E2 seed 0 | RC-E2 seed 1 | RC-E2 seed 2; RC-B0 (minutes, E2 seed 0 hand-off). Then B1-B3 and the **freeze** | 2.4 + V / 2.4 + V / 2.4 + V |
 | 4 | RC-E3 seed 0; RC-E4 seed 0; RC-R1 | RC-E9 (T4 x2) | RC-G2 (5 runs) | 5.5-9.1 + 4 V + 11 T / 1-2 + V + T (teacher) / 10.9 + 5 V + 5 S |
 | 5 | RC-E3 seeds 1, 2; RC-E4 seeds 1, 2 | RC-E5, E6, E7 seed 1 (15 runs) | RC-E5, E6, E7 seed 0 (10 runs; G2's 5 reused) | 11.1-18.2 + 8 V + 8 T / 16.8 + 15 V + 15 T + 15 S / 5.9 + 10 V + 15 T + 10 S |
@@ -98,8 +99,9 @@ are given against the 30 h each person has. The unknown parts are named next to 
 Known totals per person, all weeks: Soheil about 87 to 98 h (plus G, C, 2 C), Farzan about
 85 h, Amir about 113 h, before the evaluation passes. Weeks 5 to 8 are the tight ones: if V
 and T turn out to be an hour or more each, the grid and the ablations each stretch by about a
-week. If C is more than about 25 h, Soheil's week 2 spills into week 3 and everything after it
-moves with it.
+week. Soheil's week 2 holds RC-TT1 (about 14.7 h) and E1 seed 0 (2.4 h): if G, C and the two
+validation passes need more than the remaining 12.9 h, it spills into week 3 and everything
+after it moves with it.
 
 ## 5. What runs in parallel
 
@@ -119,7 +121,7 @@ not for the comparisons (H1-H4).
 Things that change this schedule when they become known:
 - C (RC-E0b's first 100 answers);
 - V (RC-E1's first validation step);
-- the session time limit and the T4 x2 quota rule (Kaggle);
+- the session time limit (Kaggle; the T4 x2 quota rule is settled: counts once);
 - the D07 scoring method;
 - the A1/A2 reuse decision.
 

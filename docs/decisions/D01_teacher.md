@@ -130,6 +130,42 @@ the teacher.
    labelled "has seen these images in training", next to our teacher. The overlap counts of
    the official split go into the data card. The published adapter has no other use.
 
+## Amendment 2 (2026-10-19, Soheil): RC-TT0's results; the published targets; N
+
+From RC-TT0 (`results/smoke/RC-TT0/teacher_training.csv`, commit 3afb035):
+- `lora_rank` 16, `lora_alpha` 64.0, `lora_dropout` 0.05, `lora_from_published` 1: the
+  published `adapter_config.json` was read. D06's defaults were rank 16, alpha 32, dropout 0.05,
+  so only alpha changes (32 -> 64).
+- `lora_targets_match` 0: the published `target_modules` value is neither the string
+  `all-linear` nor exactly the list of D06's targets, the seven projections of the language
+  model (`q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`). The check
+  of that commit did not parse a regular expression, so a regular expression over those seven
+  also gives 0. The `args.json` read on 2026-10-12 says "all-linear" with the vision encoder
+  frozen. The value itself is in RC-TT0's printout of the `lora_config` step, which is not
+  committed, and the hub cannot be reached from the agent's session: **which modules it names
+  is open until RC-TT1 prints it** (or the RC-TT0 printout is pasted).
+- Setup (a), fp16 over two T4s, without gradient checkpointing: 1.39 s per example (warm).
+- A T4 x2 hour counts once against the Kaggle quota (measured 2026-10-19: a 17-minute T4 x2
+  session used 16 minutes of quota).
+
+**Decision.**
+1. RC-TT1 uses the **published target modules**, with the published rank 16, alpha 64 and
+   dropout 0.05, in line with the amendment of 2026-10-18 (item 2 of that day in the decisions
+   log, item 1 above): the recipe follows the published one where it applies. The run reads `adapter_config.json` at the pinned revision,
+   prints `target_modules` as written, and adapts those module names inside the language
+   model's decoder layers; the vision tower and the projector stay frozen, as the published
+   `args.json` froze the vision encoder. It records the adapted layers per name, and stops
+   before any training if a name matches no linear layer there (a decision is then needed),
+   or if the file's rank, alpha or dropout differ from RC-TT0's.
+2. N = **38,000** examples (RC-TT0's `rule_n_examples_if_t4x2_counts_once`): rule 3 with a
+   T4 x2 hour counted once. 2,375 updates of 16; about 14.7 h of wall time and of quota
+   (**estimate** from RC-TT0's warm step time), within the 15 GPU hours of rule 3.
+
+Applied in `configs/teacher_training.yaml` (`target_modules: published`,
+`rule.t4x2_counts_twice: false`), `models/teacher_training.py` (`published_target_names`,
+`adapted_counts`, `t4x2_counts_once`), `compression/lora.py` (`layer_modules`, `layer_regex`),
+`scripts/train_teacher.py` and run card RC-TT1.
+
 ## Answer format for the inbox
 
 `- YYYY-MM-DD (name): D01 decided: <T1 | T2 | T3 | T4 | T5>.`

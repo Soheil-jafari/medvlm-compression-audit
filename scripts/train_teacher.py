@@ -2,7 +2,12 @@
 """Train our teacher adapter (run card RC-TT1): rule 3's setup and N from RC-TT0, resumable.
 
 Reads the setup (fp16 over two T4s, or QLoRA on one), the gradient checkpointing, N and the
-LoRA settings from RC-TT0's committed result file; no number is typed by hand. Trains
+LoRA rank, alpha and dropout from RC-TT0's committed result file; no number is typed by hand.
+N is the reading for a T4 x2 hour counted once (measured 2026-10-19; `rule.t4x2_counts_twice`
+in configs/teacher_training.yaml). The LoRA targets are the published adapter's: its
+adapter_config.json is read at the start (pinned revision), printed, applied inside the
+language model's decoder layers (the vision tower stays frozen) and recorded; the run stops if
+a published target matches no linear layer there. Trains
 Qwen2.5-VL-7B-Instruct (pinned) with a new LoRA on the first N examples of our training split
 (a seeded order stratified by question type), saving its state about every 30 minutes. Run
 again, it continues from the furthest saved state it finds: the local one, or one in a
@@ -39,10 +44,13 @@ from medcompress.models.teacher_training import (  # noqa: E402
     NF4,
     RESUME_DIR,
     RuleError,
+    adapted_counts,
     extension_size,
     find_resume_states,
+    published_target_names,
     read_plan,
     saved_step,
+    t4x2_counts_once,
     teacher_order,
     train_settings,
     training_size,
@@ -64,7 +72,11 @@ def build_parser() -> argparse.ArgumentParser:
     )  # fmt: skip
     parser.add_argument(
         "--t4x2-counts-once", action="store_true",
-        help="only once the team has checked that Kaggle counts a T4 x2 hour once",
+        help="kept for old commands; the config says so since 2026-10-19",
+    )  # fmt: skip
+    parser.add_argument(
+        "--published-adapter-config", type=Path, default=None,
+        help="a local copy of the published adapter_config.json (default: read from the hub)",
     )  # fmt: skip
     parser.add_argument(
         "--extend", action="store_true",
@@ -100,6 +112,21 @@ def _restore_state(local: Path, roots: list[Path]) -> str:
     return f"continuing from step {here} saved locally" if here else "starting from step 0"
 
 
+def _published_config(settings: dict, local: Path | None) -> dict:
+    """The published adapter_config.json: a local copy, or the pinned revision on the hub."""
+    if local is not None:
+        return json.loads(Path(local).read_text(encoding="utf-8"))
+    from huggingface_hub import hf_hub_download
+
+    from medcompress.config import load_config
+
+    published = load_config(settings["published_adapter"])["model"]
+    path = hf_hub_download(
+        published["adapter"], "adapter_config.json", revision=published["adapter_revision"]
+    )
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
 def _evaluate(script: str, data_root: Path, *extra: str) -> int:
     command = [sys.executable, str(REPO / "scripts" / script), "--exp", "E0", "--seed", "0",
                "--data-root", str(data_root), *extra]  # fmt: skip
@@ -109,8 +136,12 @@ def _evaluate(script: str, data_root: Path, *extra: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear procedure
     args = build_parser().parse_args(argv)
+    from medcompress.config import load_config
+
+    settings = load_config("teacher_training.yaml")["teacher_training"]
+    once = args.t4x2_counts_once or t4x2_counts_once(settings)
     try:
-        plan = read_plan(args.feasibility, t4x2_counts_once=args.t4x2_counts_once)
+        plan = read_plan(args.feasibility, t4x2_counts_once=once)
     except RuleError as exc:
         print(exc, file=sys.stderr)
         return CONFIG_INCOMPLETE
@@ -119,7 +150,6 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
     out = args.out.resolve()
     _session_env(out)
 
-    from medcompress.config import load_config
     from medcompress.utils.bundles import BundleError, attach_data, attach_handoff
 
     config = load_config("experiments/E0.yaml")
@@ -130,8 +160,32 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
     except BundleError as exc:
         print(f"[inputs] check failed: {exc}", file=sys.stderr)
         return INPUT_CHECK_FAILED
-    settings = load_config("teacher_training.yaml")["teacher_training"]
     paths = config["paths"]
+    targets, published_spec = None, None
+    if settings["target_modules"] == "published":
+        if args.dry_run and args.published_adapter_config is None:
+            print("LoRA targets: the published adapter's, read from the hub when the run starts")
+        else:
+            try:
+                published = _published_config(settings, args.published_adapter_config)
+                published_spec = published.get("target_modules")
+                targets = published_target_names(published_spec)
+            except (OSError, ValueError, RuleError) as exc:
+                print(f"the published adapter_config.json could not be used: {exc}",
+                      file=sys.stderr)  # fmt: skip
+                return INPUT_CHECK_FAILED
+            print(f"published target_modules (as written): {published_spec}")
+            print(f"LoRA targets inside the decoder layers: {', '.join(targets)}")
+            mismatch = [
+                (key, published.get(key), mine)
+                for key, mine in (("r", plan.lora_rank), ("lora_alpha", plan.lora_alpha),
+                                  ("lora_dropout", plan.lora_dropout))
+                if key in published and float(published[key]) != float(mine)
+            ]  # fmt: skip
+            if mismatch:
+                print(f"RC-TT0's LoRA values differ from the published file: {mismatch}",
+                      file=sys.stderr)  # fmt: skip
+                return INPUT_CHECK_FAILED
 
     from medcompress.compression.distillation.offline_kd import TrainConfig, data_seed
     from medcompress.compression.lora import LoRAConfig
@@ -150,15 +204,17 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
     lora = fields.pop("lora")
     core = {k: fields.pop(k) for k in ("mode", "steps", "learning_rate", "batch_size",
             "grad_accumulation", "kd_weight", "kd_temperature", "data_subset")}  # fmt: skip
+    groups = () if lora["target_modules"] == "published" else tuple(lora["target_modules"])
     cfg = TrainConfig(
         lora=LoRAConfig(int(lora["rank"]), float(lora["alpha"]), float(lora["dropout"]),
-                        tuple(lora["target_modules"])),
+                        groups, layer_modules=tuple(targets or ())),
         extra=fields, **core,
     )  # fmt: skip
     hours = size * plan.seconds_per_example / 3600
     print(
         f"teacher plan (RC-TT0, rule 3): setup {plan.setup}, gradient checkpointing "
         f"{'on' if plan.gradient_checkpointing else 'off'}, N = {n} of {len(train)} training rows"
+        f" (a T4 x2 hour counted {'once' if once else 'twice'})"
         + (f"; extension: {size} more examples" if args.extend else "")
     )
     print(
@@ -191,6 +247,25 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
         base, device_map="auto" if fp16 else {"": 0}, quantization=None if fp16 else NF4,
         image_longest_side=side,
     )  # fmt: skip
+    counts: dict[str, int] = {}
+    if targets:  # check the published targets on the loaded model before any training
+        import torch
+
+        from medcompress.compression.lora import lora_target_regex
+
+        regex = lora_target_regex(model.module, cfg.lora)
+        linear = [name for name, sub in model.module.named_modules()
+                  if isinstance(sub, torch.nn.Linear)]  # fmt: skip
+        names = targets if targets != ("all-linear",) else ()
+        counts = adapted_counts(linear, regex, names)
+        print("adapted linear layers per target: "
+              + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))  # fmt: skip
+        empty = sorted(k for k, v in counts.items() if v == 0)
+        if empty or not counts:
+            print(f"published targets that match no linear layer of the language model: "
+                  f"{empty or 'all'}; a decision is needed (D01), nothing was trained",
+                  file=sys.stderr)  # fmt: skip
+            return CONFIG_INCOMPLETE
     adapter_dir = checkpoint_root / ADAPTER_DIR
     if args.extend:
         import peft
@@ -215,6 +290,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
         "train_rows": len(train), "steps": result.steps, "examples_seen": result.examples_seen,
         "seconds": result.seconds, "final_loss": result.final_loss(),
         "peak_gpu_bytes": result.peak_gpu_bytes, "lora": lora, "settings": cfg.extra,
+        "published_target_modules": published_spec, "target_names": list(targets or ()),
+        "adapted_per_target": counts, "t4x2_counts_once": once,
         "feasibility_sha256": _sha256(args.feasibility),
     }  # fmt: skip
     (target / "teacher_training.json").write_text(json.dumps(record, indent=1, default=str))
@@ -235,7 +312,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
             ("setup_fp16_2gpu", float(fp16)),
             ("gradient_checkpointing", float(plan.gradient_checkpointing)),
             ("train_peak_gpu_bytes", float(result.peak_gpu_bytes or 0)),
+            ("lora_rank", float(plan.lora_rank)), ("lora_alpha", float(plan.lora_alpha)),
+            ("lora_dropout", float(plan.lora_dropout)),
+            ("lora_adapted_layers", float(sum(counts.values()))),
+            ("t4x2_counts_once", float(once)),
         )
+    ]  # fmt: skip
+    rows += [
+        {"experiment": "E0", "budget": "", "seed": 0, "metric": f"teacher_lora_target:{name}",
+         "value": float(value)}
+        for name, value in sorted(counts.items())
     ]  # fmt: skip
     upsert_results(rows, run.run_dir(REPO / "results") / "metrics.csv")
     name = "E0_teacher_adapter_extended" if args.extend else "E0_teacher_adapter"

@@ -30,10 +30,10 @@ check failed, 7 the chaining guard stopped the run (one group holds too many ima
 Example (RC-D1):
     python scripts/prepare_data.py export --data-root /kaggle/working/medcompress_data/data
     python scripts/prepare_data.py calibrate --data-root /kaggle/working/medcompress_data/data \\
-        --split-seed 20261012 --dedup-threshold 4 --sheet-dir /kaggle/working/rc_d1_sheets
+        --split-seed 20261012 --close-bits 4 --sheet-dir /kaggle/working/rc_d1_sheets
     python scripts/prepare_data.py prepare --data-root /kaggle/working/medcompress_data/data \\
         --private-dir /kaggle/working/medcompress_data/private --split-seed 20261012 \\
-        --dedup-threshold 4 --mask-threshold 4 --sheet-dir /kaggle/working/rc_d1_sheets
+        --close-bits 4 --mask-threshold 4 --sheet-dir /kaggle/working/rc_d1_sheets
     python scripts/prepare_data.py bundle --bundle-dir /kaggle/working/medcompress_data
     python scripts/prepare_data.py verify --data-root /kaggle/working/medcompress_data
 """
@@ -56,6 +56,10 @@ SETTING_OPEN = 4
 INPUT_CHECK_FAILED = 5
 CHAINING_STOP = 7
 CALIBRATION_SHEET = "rc_d1_calibration_pairs.png"
+CLOSE_HELP = (
+    "dHash bits of the band of very close pairs that is reported (those the crop leaves apart); "
+    "no pair is joined on the dHash alone (D02 amendment 2, 2026-10-19)"
+)
 FINAL_SHEET = "rc_d1_final_cross_split_pairs.png"
 
 
@@ -153,7 +157,7 @@ def counts(args: argparse.Namespace, dataset: dict) -> int:
         shared.root / "data",
         dataset,
         split_seed=args.split_seed,
-        dedup_threshold=args.dedup_threshold,
+        close_bits=args.close_bits,
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
     )
@@ -195,7 +199,7 @@ def calibrate(args: argparse.Namespace, dataset: dict) -> int:
         print(f"check failed: {exc}", file=sys.stderr)
         return INPUT_CHECK_FAILED
     result = run_calibration(
-        data_root, dataset, dedup_threshold=args.dedup_threshold, seed=args.split_seed,
+        data_root, dataset, close_bits=args.close_bits, seed=args.split_seed,
         threshold=args.threshold,
     )  # fmt: skip
     print("\n".join(result.lines))
@@ -212,16 +216,32 @@ def calibrate(args: argparse.Namespace, dataset: dict) -> int:
 
 
 def _final_sheet(prepared, sheet_dir: Path, data_root: Path) -> Path:  # type: ignore[no-untyped-def]
+    """Three bands, all pairs across splits: the most similar by the crop, the closest by the
+    dHash, and the closest pairs within ``close_bits`` that the crop left apart."""
     from medcompress.data.contact_sheet import render_pairs
 
-    cells = tuple(
-        (str(data_root / t.first), str(data_root / t.second),
-         f"r={t.score:.3f}  {t.bits} bits  {t.first_split} / {t.second_split}")
-        for t in prepared.top_cross_split
+    def cells(pairs):  # type: ignore[no-untyped-def]
+        return tuple(
+            (str(data_root / t.first), str(data_root / t.second),
+             f"r={t.score:.3f}  {t.bits} bits  {t.first_split} / {t.second_split}")
+            for t in pairs
+        )  # fmt: skip
+
+    metrics = {r["metric"]: r["value"] for r in prepared.rows}
+    close = int(prepared.near_duplicates.get("close_bits", 4))
+    apart = int(metrics.get("near_duplicates:close_pairs_not_joined", 0))
+    across = int(metrics.get("near_duplicates:close_pairs_not_joined:cross_split", 0))
+    bands = (
+        (f"1. The {len(prepared.top_cross_split)} most similar pairs across splits by the crop "
+         "correlation: all should be different scenes", cells(prepared.top_cross_split)),
+        (f"2. The {len(prepared.closest_dhash_cross_split)} closest pairs across splits by the "
+         "dHash: all should be different scenes", cells(prepared.closest_dhash_cross_split)),
+        (f"3. Within {close} bits but not joined: {apart} pairs, {across} of them across splits; "
+         f"the {len(prepared.close_not_joined)} across splits with the highest crop correlation",
+         cells(prepared.close_not_joined)),
     )  # fmt: skip
-    title = f"The {len(cells)} most similar pairs across splits (crop correlation)"
     crop = float(prepared.near_duplicates.get("crop_fraction", 0.60))
-    return render_pairs(((title, cells),), sheet_dir / FINAL_SHEET, crop_fraction=crop, columns=3)
+    return render_pairs(bands, sheet_dir / FINAL_SHEET, crop_fraction=crop, columns=3)
 
 
 def verify(args: argparse.Namespace) -> int:
@@ -283,7 +303,8 @@ def main(argv: list[str] | None = None) -> int:
     prep.add_argument("--private-dir", type=Path, required=True, help="outside the repository")
     prep.add_argument("--results-root", type=Path, default=Path("results"))
     prep.add_argument("--split-seed", type=int, required=True, help="pre-registered seed")
-    prep.add_argument("--dedup-threshold", type=int, required=True, help="max Hamming distance")
+    prep.add_argument("--close-bits", "--dedup-threshold", dest="close_bits", type=int,
+                      required=True, help=CLOSE_HELP)  # fmt: skip
     prep.add_argument("--mask-threshold", type=int, required=True, help="max Hamming distance")
     prep.add_argument(
         "--confirm-threshold", type=float, default=None,
@@ -300,14 +321,16 @@ def main(argv: list[str] | None = None) -> int:
     cnt.add_argument("--data-root", type=Path, required=True, help="the shared-data dataset")
     cnt.add_argument("--results-root", type=Path, default=Path("results"))
     cnt.add_argument("--split-seed", type=int, required=True, help="as in the first pass")
-    cnt.add_argument("--dedup-threshold", type=int, required=True, help="as in the first pass")
+    cnt.add_argument("--close-bits", "--dedup-threshold", dest="close_bits", type=int,
+                     required=True, help="as in the first pass")  # fmt: skip
     cnt.add_argument("--mask-threshold", type=int, required=True, help="as in the first pass")
     cnt.add_argument("--confirm-threshold", type=float, default=None, help="as in the first pass")
     cal = sub.add_parser("calibrate", help="choose the crop threshold (before prepare)")
     cal.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")
     cal.add_argument("--results-root", type=Path, default=Path("results"))
     cal.add_argument("--split-seed", type=int, required=True, help="seeds the random controls")
-    cal.add_argument("--dedup-threshold", type=int, required=True, help="always-joined bits")
+    cal.add_argument("--close-bits", "--dedup-threshold", dest="close_bits", type=int,
+                     required=True, help=CLOSE_HELP)  # fmt: skip
     cal.add_argument("--sheet-dir", type=Path, required=True, help="outside the repository")
     cal.add_argument(
         "--threshold", type=float, default=None,
@@ -359,7 +382,7 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
         args.data_root,
         dataset,
         split_seed=args.split_seed,
-        dedup_threshold=args.dedup_threshold,
+        close_bits=args.close_bits,
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
     )
@@ -373,7 +396,10 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
     print(
         f"groups {metrics['groups:total']:.0f}, largest {metrics['groups:largest']:.0f} "
         f"({metrics['groups:largest_fraction']:.1%}); held-out images with a confirmed "
-        f"duplicate in train: {metrics['val_test_confirmed_duplicates_of_train']:.0f}"
+        f"duplicate in train: {metrics['val_test_confirmed_duplicates_of_train']:.0f}; pairs "
+        f"within {prepared.near_duplicates['close_bits']:.0f} bits not joined: "
+        f"{metrics['near_duplicates:close_pairs_not_joined']:.0f} "
+        f"({metrics['near_duplicates:close_pairs_not_joined:cross_split']:.0f} across splits)"
     )
     if args.sheet_dir is not None:
         sheet = _final_sheet(prepared, args.sheet_dir, args.data_root)
