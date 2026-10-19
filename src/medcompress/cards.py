@@ -41,6 +41,7 @@ SHARED_DATA_DIR = "medcompress_data"
 SHEET_DIR = "rc_d1_sheets"
 """Folder under ``--out`` for the contact sheets (private outputs, never committed)."""
 EMBED_DIR = "rc_d1_embed"
+ADJUDICATION_DIR = "rc_d1_adjudication"
 """Folder under ``--out`` where RC-D1-embed writes its private output (D02 amendment 3)."""
 
 
@@ -228,6 +229,7 @@ def build_plan(
     external_images: Path | None = None,
     embed_dir: Path | None = None,
     labels: Sequence[Path] = (),
+    topup_dir: Path | None = None,
 ) -> CardPlan:
     """The plan of ``card`` (for ``seed`` where the card is split by seed)."""
     card = card.upper()
@@ -300,13 +302,19 @@ def build_plan(
         _no_seed(card, seed)
         if embed_dir is None or not labels:
             raise CardError("RC-D1-label needs --embed-dir (RC-D1-embed's dataset) and --labels")
+        extra = ("--topup-dir", str(topup_dir)) if topup_dir is not None else ()
         return CardPlan(
             "RC-D1-label", "Scores of the labelled pairs and the joining rule (CPU)", 0,
             (Step("score the labels",
                   _script("prepare_data.py", "score-labels", "--embed-dir", str(embed_dir),
+                          *extra, "--private-dir", str(Path(out) / ADJUDICATION_DIR),
+                          "--commitments", "docs/runs/RC-D1-label_commitments.csv",
                           "--labels", *(str(p) for p in labels)), inputs=False),),
             notes=("commit results/data/near_duplicate_labels.csv and near_duplicate_rules.csv: "
-                   "RC-D1 run 4 reads the chosen rule from them",),
+                   "RC-D1 run 4 reads the chosen rule from them",
+                   f"exit code 4: the third member has pairs to decide (the list is in "
+                   f"{Path(out) / ADJUDICATION_DIR}), or a top-up is required (topup-labels, "
+                   "card RC-D1-label section 3b)"),
         )  # fmt: skip
     if card == "RC-D1-CALIBRATE":
         _no_seed(card, seed)

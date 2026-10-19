@@ -32,8 +32,13 @@
    3: embeddings (proposal DINOv2-small, checked on the hub by RC-D1-embed), candidates, a
    stratified sample of about 300 pairs on score-free sheets, two raters, kappa and every
    rule's sensitivity and precision, the rule chosen by a rule fixed in advance, run 4 over all
-   pairs, the strict test subset. Next: pin the model revision and record the licence from
-   RC-D1-embed's printout; then the labels' scores; then run 4 (final sheet, label values,
+   pairs, the strict test subset.
+   2026-10-19 (iteration 55): RC-D1-embed ran (T4, 143 s; 366,028 candidates; 298 pairs to
+   label); DINOv2-small pinned at ed25f3a3..., apache-2.0. Recorded before any label: the
+   top-up near the chosen threshold, the third member for disagreements (all pairs of a round
+   below kappa 0.40), the unsure analysis, and rater blinding with committed SHA-256s.
+   `results/data/near_duplicate_embed.csv` is not on the branch yet. Next: the labels and
+   their scores (RC-D1-label); then run 4 (final sheet, label values,
    finding list, `max_new_tokens`); then RC-TT1's target printout and progress. RC-L1 needs code
    first (run identities, parent from config, cache extension, comparison rows); the A1/A2 reuse
    of E7's effects waits on the team (freeze list item 15).

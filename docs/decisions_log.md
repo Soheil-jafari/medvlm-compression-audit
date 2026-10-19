@@ -243,15 +243,41 @@ must be logged here.
 
   Recorded in D02, the dataset config, RC-D1-embed, RC-D1-label, RC-D1, RC-TT1, the data card,
   the pre-registration draft, the schedule and STATUS.
+- **2026-10-19 (Soheil, from RC-D1-embed), D02 amendment 3 additions,** before any label.
+  - RC-D1-embed ran on a Kaggle T4 (commit cb5de07). Run 3 reproduced (`split_sha256`
+    4a595fdf...). 6,449 images, two views, in 143 s on the GPU. 366,028 candidate pairs; 298
+    pairs to label.
+  - Self-check cosines: copies 0.937-0.995 (full) and 0.988-0.999 (centre); different images
+    0.843-0.937 (full) and 0.879-0.942 (centre). The cosines are compressed into the high
+    range; the boundary is likely near 0.95, where the sample has 24 of 298 pairs.
+  - Pinned: `facebook/dinov2-small`, revision `ed25f3a31f01632728cabb09d1542f84ab7b0056`,
+    licence apache-2.0 (the hub record).
+  - Top-up: if fewer than 30 labelled pairs lie within +-0.03 of the chosen threshold, 100
+    more candidate pairs from that band (seed 20261013, labelled pairs left out). Both raters
+    label them; the rule is chosen again once on all labels by the same criterion
+    (`topup-labels`, no new embedding run).
+  - Disagreements: the third team member decides every pair the raters label differently, and
+    every pair of a round whose kappa is below 0.40 (agent's reading). A decided pair is
+    positive only if `same_scene`. Kappa before adjudication and the number decided are
+    reported.
+  - Unsure: primary, not `same_scene`. Sensitivity analysis: not `same_scene` for the
+    precision, `same_scene` for the sensitivity.
+  - Blinding: no scores for the raters; no talk about labels until both files are committed.
+    The files themselves stay private, so each rater commits the file's SHA-256
+    (`commit-labels`, `docs/runs/RC-D1-label_commitments.csv`); the scoring checks the files
+    against it and the run report records the commit order.
+
+  Recorded in D02, the dataset config, RC-D1-embed (report), RC-D1-label and the
+  pre-registration draft.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
 | Kaggle session time limit | the session time limit, and whether a stopped version keeps its output (unknown here); the T4 x2 quota rule is settled (counts once, 2026-10-19). RC-TT1 needs about 14.7 h (estimate) | team (check on Kaggle) | before RC-TT1 |
-| Embedding model record (D02 amendment 3) | the hub id, the revision and the licence of the proposed DINOv2-small, as RC-D1-embed prints them (the agent's session cannot reach the hub); pinned before run 4. If the hub has no such model, a comparable one is chosen | Soheil, with the agent | after RC-D1-embed |
-| The two raters (RC-D1-label) | who labels the about 300 pairs, each on their own (proposal: Soheil and one of Amir or Farzan) | team | before RC-D1-label |
-| Kappa too low (agent proposal) | the rule is chosen whatever the kappa (pre-registered). A kappa below about 0.4 would be a reason to talk before run 4; not pre-registered | team | after RC-D1-label |
+| RC-D1-embed counts file | `results/data/near_duplicate_embed.csv` (aggregate counts of RC-D1-embed) was not on `research-loop` when the additions of 2026-10-19 were recorded; commit it from the run's output | Soheil | before RC-D1-label |
+| The two raters and the third member (RC-D1-label) | who labels the 298 pairs, each on their own (proposal: Soheil and one of Amir or Farzan), and who is the third team member deciding the disagreements (the one who is not a rater) | team | before RC-D1-label |
+| Kappa below 0.40: what the third member decides | the agent read "if kappa < 0.40" as: the third member then decides every pair of that round, the agreed pairs too. The other reading (only the disagreements) differs only when kappa < 0.40; confirm before the labels are scored | Soheil | before RC-D1-label's scoring |
 | Published target modules | which modules the published `adapter_config.json` names (RC-TT0's printout is not committed; RC-TT1 prints it). If a name is outside the language model, RC-TT1 stops and the team decides | Soheil | at RC-TT1's start |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
 | Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |

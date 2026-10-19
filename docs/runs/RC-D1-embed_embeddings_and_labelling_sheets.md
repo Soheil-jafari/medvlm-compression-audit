@@ -18,9 +18,10 @@
      its `split_sha256` starts with run 3's `4a595fdf`. The pairs of run 3's final contact
      sheet become candidates.
   3. Loads the embedding model from the Hugging Face hub and prints its id, the revision (the
-     commit hash the hub resolved) and the licence of its hub record. The proposal is
-     DINOv2-small (`facebook/dinov2-small`, **not verified from the agent's session**). If the
-     hub has no such model, the run stops and a comparable model is chosen and recorded.
+     commit hash the hub resolved) and the licence of its hub record: DINOv2-small
+     (`facebook/dinov2-small`), now pinned at revision
+     `ed25f3a31f01632728cabb09d1542f84ab7b0056`, licence `apache-2.0` (the hub record, read by
+     the run of 2026-10-19).
   4. Checks the model on synthetic copies: a shifted, a blurred, a rescaled and a brightened
      copy must each be nearer to the original than three different scenes, in both views. If
      not, it stops (exit code 8).
@@ -48,7 +49,7 @@
      The pairs are numbered in a random order and drawn side by side on sheets **without any
      score**.
 - Who: **Soheil**.
-- Status: `ready`
+- Status: `done` (Kaggle T4, 2026-10-19, commit cb5de07; report in section 6)
 
 ## 2. Requirements
 
@@ -125,8 +126,9 @@ Paste back these printed lines:
 - `candidate pairs: ...`;
 - `... pairs to label`.
 
-The agent then pins the revision and records the model id and the licence in
-`configs/data/kvasir_vqa_x1.yaml` (`near_duplicates.embedding`) and in D02.
+The revision, the model id and the licence are pinned in `configs/data/kvasir_vqa_x1.yaml`
+(`near_duplicates.embedding`) and in D02 (additions of 2026-10-19). A run with another model,
+revision or licence is refused by the scoring, the top-up and run 4.
 
 Commit `results/data/near_duplicate_embed.csv` (aggregate counts only). Upload the output
 folder as ONE private dataset (section 2), then hand the sheets to the raters (RC-D1-label).
@@ -142,12 +144,25 @@ folder as ONE private dataset (section 2), then hand the sheets to the raters (R
 
 ## 6. Run report (filled by the person who ran it)
 
-- Run by / date:
-- Commit actually used:
-- Input (which shared data, or the export):
-- Model id, revision and licence as printed:
-- Self-check lines:
-- Embedding time (the printed seconds) and device:
-- Candidate pairs per source; pairs to label:
-- Name of the private dataset with the output, and who it is shared with:
-- Anything unusual:
+Run of 2026-10-19, as reported by Soheil from the printout:
+- Run by / date: reported by Soheil, 2026-10-19
+- Commit actually used: cb5de07
+- Input (which shared data, or the export): not reported here; run 3 reproduced
+  (`split_sha256` 4a595fdf...), so its sheet pairs are among the candidates
+- Model id, revision and licence as printed: `facebook/dinov2-small`, revision
+  `ed25f3a31f01632728cabb09d1542f84ab7b0056`, licence `apache-2.0` (the hub record)
+- Self-check lines (cosine to the original):
+  - synthetic copies: 0.937-0.995 (full), 0.988-0.999 (centre);
+  - synthetic different images: 0.843-0.937 (full), 0.879-0.942 (centre).
+
+  The cosines are compressed into the high range; the decision boundary is likely high
+  (around 0.95). The sample has only 24 of its 298 pairs there (bins 0.90-0.95 and
+  0.95-1.00), hence the top-up of D02 amendment 3 (card RC-D1-label, section 3b).
+- Embedding time (the printed seconds) and device: 143 s for 6,449 images, two views, on a T4
+  GPU. The CPU estimate of section 2 (20 to 50 minutes) was not tested.
+- Candidate pairs per source; pairs to label: 366,028 candidate pairs (per source: not reported
+  here); 298 pairs to label
+- Name of the private dataset with the output, and who it is shared with: not reported here
+- `results/data/near_duplicate_embed.csv`: not on `research-loop` when this was recorded
+  (2026-10-19); to commit from the run's output
+- Anything unusual: none reported

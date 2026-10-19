@@ -54,13 +54,18 @@ The appendix item reports them next to the published adapter's test results.
     exist at another size or crop; and the crop correlation under-scores copies of smooth or
     blurred mucosa, or when the highlights move.
 - **Method:**
-  1. Every image is embedded by a small pretrained self-supervised vision model (proposal
-     DINOv2-small; id, revision and licence: **[RC-D1-embed]**). Two views: the whole image
-     and the central 60 % of width and height, 224 x 224. The features are L2-normalised and
-     compared by cosine.
-  2. About 300 candidate pairs, stratified with the border zones oversampled, are labelled
-     by two raters, independently, as same scene, different or unsure, on sheets without
-     scores. Agreement: Cohen's kappa **[RC-D1-label]** `labels:kappa`.
+  1. Every image is embedded by DINOv2-small (`facebook/dinov2-small`, revision
+     `ed25f3a31f01632728cabb09d1542f84ab7b0056`, licence apache-2.0 per the hub record;
+     RC-D1-embed, 2026-10-19). Two views: the whole image and the central 60 % of width and
+     height, 224 x 224. The features are L2-normalised and compared by cosine.
+  2. 298 candidate pairs, stratified with the border zones oversampled, are labelled by two
+     raters, independently, as same scene, different or unsure, on sheets without scores. If
+     fewer than 30 labelled pairs lie within 0.03 of the chosen threshold, 100 more from that
+     band are labelled and the rule is chosen again once. Agreement before adjudication:
+     Cohen's kappa **[RC-D1-label]** `labels:kappa`. A third team member decides the
+     disagreements: **[RC-D1-label]** `labels:adjudicated` pairs. `unsure` counts as not the
+     same scene (a sensitivity analysis counts it the less favourable way:
+     `labels:unsure_analysis:*`).
   3. The joining rule is chosen on these labels by a rule fixed in advance: the highest
      sensitivity with precision >= 0.5, with no group over 10 % of the images. The chosen
      rule: **[RC-D1-label]** `labels:chosen:*`.

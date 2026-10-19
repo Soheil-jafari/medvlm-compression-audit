@@ -227,8 +227,8 @@ STRICT_FILE = "strict_test.json"
 DEFAULT_STRICT_MARGIN = 0.05
 
 
-def labelled_rule(results_root: Path) -> JoinRule:
-    """The joining rule chosen on the labelled pairs (RC-D1-label), from its committed file."""
+def labels_values(results_root: Path) -> dict[str, float]:
+    """The numbers of RC-D1-label's committed labels file, by metric."""
     import csv
 
     path = Path(results_root) / LABELS_FILE
@@ -238,7 +238,19 @@ def labelled_rule(results_root: Path) -> JoinRule:
             "3); run RC-D1-embed, the labelling and RC-D1-label's scoring step first"
         )
     with path.open(newline="", encoding="utf-8") as handle:
-        values = {r["metric"]: float(r["value"]) for r in csv.DictReader(handle) if r["value"]}
+        return {r["metric"]: float(r["value"]) for r in csv.DictReader(handle) if r["value"]}
+
+
+def labelled_rule(results_root: Path, *, for_topup: bool = False) -> JoinRule:
+    """The joining rule chosen on the labelled pairs (RC-D1-label), from its committed file.
+    While the scoring says a top-up is required, only the top-up step may read it."""
+    path = Path(results_root) / LABELS_FILE
+    values = labels_values(results_root)
+    if values.get("labels:topup_required", 0.0) > 0 and not for_topup:
+        raise ConfigError(
+            f"{path}: the top-up of D02 amendment 3 is required (too few labelled pairs near "
+            "the chosen threshold): run topup-labels, label its pairs and score again"
+        )
     try:
         return JoinRule.from_code(
             values["labels:chosen:view_code"],
