@@ -742,7 +742,8 @@ def test_score_labels_without_a_third_member_on_the_command_line(tmp_path: Path)
     assert scored.returncode == 0, scored.stdout + scored.stderr
     assert "matches the commitment of rater_2" in scored.stdout
     assert "no third member" in scored.stdout and "chosen rule" in scored.stdout
-    assert "either-rater analysis" in scored.stdout and "top-up: not needed" in scored.stdout
+    assert "either-rater analysis" in scored.stdout  # every candidate is labelled here:
+    assert "top-up: not possible, no candidate pair is left in the band" in scored.stdout
     assert "ADJUDICATION" not in scored.stdout
     from medcompress.data.prepare import labels_values
 

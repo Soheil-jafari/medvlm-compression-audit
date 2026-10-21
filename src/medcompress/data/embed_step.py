@@ -635,9 +635,17 @@ def score_labels_step(
         say(f"either-rater analysis (same_scene for either rater): the chosen rule's sensitivity "
             f"{either_chosen.sensitivity[0]:.3f}, precision {either_chosen.precision[0]:.3f}; "
             f"the rule it would choose: {alt.rule.label if alt else 'none'}")  # fmt: skip
-        say(f"top-up: {'REQUIRED' if required else 'not needed'} ({in_band} labelled pairs "
-            f"within +-{top['band']:.2f} of {chosen.rule.threshold:.2f}, {chosen.rule.view} "
-            f"view; the minimum is {top['min_in_band']})")  # fmt: skip
+        if required:
+            state = "REQUIRED"
+        elif topup_dir is not None:
+            state = "scored already (the rule is chosen again only once)"
+        elif in_band < top["min_in_band"]:
+            state = "not possible, no candidate pair is left in the band"
+        else:
+            state = "not needed"
+        say(f"top-up: {state} ({in_band} labelled pairs within +-{top['band']:.2f} of "
+            f"{chosen.rule.threshold:.2f}, {chosen.rule.view} view; the minimum is "
+            f"{top['min_in_band']})")  # fmt: skip
     if required:
         say(f"TOP-UP REQUIRED: {in_band} labelled pairs within +-{top['band']:.2f} of "
             f"{chosen.rule.threshold:.2f} ({chosen.rule.view} view), fewer than "

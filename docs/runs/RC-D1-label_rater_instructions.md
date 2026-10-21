@@ -202,7 +202,8 @@ PY
 9. **Is a top-up required?** If fewer than **30** labelled pairs lie within **+-0.03** of the
    chosen threshold (in the chosen view), it prints `TOP-UP REQUIRED`, writes the files with
    `labels:topup_required` = 1 and stops with exit code 4. Run 4 waits. Go to section 3b.
-   Either way it prints a `top-up:` line.
+   Either way it prints a `top-up:` line: `REQUIRED`, `not needed`, or `not possible` (no
+   unlabelled candidate pair left in the band; the rule then stands).
 
 If no rule qualifies, it says so and stops with exit code 4: the team decides.
 
