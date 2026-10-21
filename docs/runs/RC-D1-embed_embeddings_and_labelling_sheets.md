@@ -158,11 +158,13 @@ Run of 2026-10-19, as reported by Soheil from the printout:
   The cosines are compressed into the high range; the decision boundary is likely high
   (around 0.95). The sample has only 24 of its 298 pairs there (bins 0.90-0.95 and
   0.95-1.00), hence the top-up of D02 amendment 3 (card RC-D1-label, section 3b).
-- Embedding time (the printed seconds) and device: 143 s for 6,449 images, two views, on a T4
-  GPU. The CPU estimate of section 2 (20 to 50 minutes) was not tested.
-- Candidate pairs per source; pairs to label: 366,028 candidate pairs (per source: not reported
-  here); 298 pairs to label
+- Embedding time (the printed seconds) and device: reported as 143 s for 6,449 images, two
+  views, on a T4; the committed counts file says 156 s (`embed:seconds` 156.28), so the file
+  may come from another run of the card or the printout was misread. The other counts agree.
+  The CPU estimate of section 2 (20 to 50 minutes) was not tested.
+- Candidate pairs per source; pairs to label: 366,028 candidate pairs; per source (from the
+  committed counts file): `knn_full` 97,040, `knn_centre` 98,578, `dhash` 211,329, `crop_knn`
+  26,290, `run3_band` 56 (all five above 0); 298 pairs to label
 - Name of the private dataset with the output, and who it is shared with: not reported here
-- `results/data/near_duplicate_embed.csv`: not on `research-loop` when this was recorded
-  (2026-10-19); to commit from the run's output
+- `results/data/near_duplicate_embed.csv`: committed on 2026-10-20 (commit 69799ff)
 - Anything unusual: none reported
