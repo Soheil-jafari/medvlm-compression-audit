@@ -338,38 +338,18 @@ def _round_pairs(embed_dir: Path, topup_dir: Path | None) -> dict[str, list[Labe
     return rounds
 
 
-def score_labels_step(
-    embed_dir: Path,
-    label_files: Sequence[Path],
-    dataset_config: Mapping[str, Any],
-    *,
-    topup_dir: Path | None = None,
-    private_dir: Path | None = None,
-    commitments: Path | None = None,
-    log: Callable[[str], None] = print,
-) -> Scoring:
-    """RC-D1-label's scoring (module docstring). ``label_files``: the raters' files of every
-    round and the third member's files (column ``rater_3``); ``topup_dir``: the top-up's output
-    (its pairs are scored with the first round's, and the rule is chosen again on all labels);
-    ``private_dir``: where the list of pairs for the third member is written; ``commitments``:
-    the committed SHA-256 of each label file, checked first."""
-    embed_dir = Path(embed_dir)
-    lines: list[str] = []
-
-    def say(text: str) -> None:
-        lines.append(text)
-        log(text)
-
-    if commitments is not None:
-        for path, match in zip(label_files, check_commitments(label_files, commitments),
-                               strict=True):  # fmt: skip
-            say(f"{Path(path).name}: matches the commitment of {match['role']}, round "
-                f"{match['round']} (SHA-256 {match['sha256'][:12]}...)")  # fmt: skip
-    rounds = _round_pairs(embed_dir, topup_dir)
-    pairs = [p for round_pairs in rounds.values() for p in round_pairs]
-    ids = [p.pair_id for p in pairs]
-    first, second = read_labels(ids, *label_files)
-    third = read_third(*label_files)
+def _adjudicated_labels(
+    first: Mapping[int, str],
+    second: Mapping[int, str],
+    third: Mapping[int, str],
+    rounds: Mapping[str, Sequence[LabelPair]],
+    private_dir: Path | None,
+    say: Callable[[str], None],
+) -> Path | tuple[list[dict[str, Any]], np.ndarray, np.ndarray]:
+    """D02 amendment 3: the kappa before adjudication, the third member's decisions, the
+    positives. Returns the rows and the two truths, or the private list of pairs still to be
+    decided."""
+    ids = [p.pair_id for round_pairs in rounds.values() for p in round_pairs]
     unknown = sorted(set(third) - set(ids))
     if unknown:
         raise LabelError(f"rater_3 labelled {len(unknown)} unknown pairs (first: {unknown[0]})")
@@ -405,8 +385,7 @@ def score_labels_step(
         say(f"ADJUDICATION NEEDED: {len(missing)} pairs for the third member in {path} "
             "(private, no score, no rater's label); score again with their file added to "
             "--labels")  # fmt: skip
-        return Scoring(StepResult(tuple(lines), (), {}), StepResult((), (), {}), None,
-                       adjudication=path)  # fmt: skip
+        return path
 
     final = {i: label for adj in decided.values() for i, label in adj.final.items()}
     truth = truth_from(final, ids)
@@ -436,6 +415,126 @@ def score_labels_step(
         rows.append(_row(f"labels:final:{label}", sum(1 for x in final.values() if x == label)))
     say(f"after adjudication: {int(truth.sum())} positives (same_scene); "
         f"{int(unsure_truth.sum())} with unsure counted as same_scene")  # fmt: skip
+    return rows, truth, unsure_truth
+
+
+def _two_rater_labels(
+    first: Mapping[int, str],
+    second: Mapping[int, str],
+    rounds: Mapping[str, Sequence[LabelPair]],
+    kappa_pairs: tuple[int, int],
+    say: Callable[[str], None],
+) -> tuple[list[dict[str, Any]], np.ndarray, np.ndarray, np.ndarray]:
+    """D02 amendment 4: two raters, no third member. Cohen's kappa on the pairs numbered
+    ``kappa_pairs`` (both ends included: the pairs both raters labelled blind), reported only.
+    Returns the rows and three truths: primary (both ``same_scene``), the unsure analysis's
+    sensitivity side (both ``same_scene`` or ``unsure``) and either rater ``same_scene``."""
+    ids = [p.pair_id for round_pairs in rounds.values() for p in round_pairs]
+    low, high = kappa_pairs
+    blind = [i for i in ids if low <= i <= high]
+    if not blind:
+        raise LabelError(f"no labelled pair is numbered {low} to {high} (--kappa-pairs)")
+
+    def agreement(pick: Sequence[int]) -> tuple[float, float, float]:
+        a, b = [first[i] for i in pick], [second[i] for i in pick]
+        binary = cohen_kappa(["same" if x == "same_scene" else "not" for x in a],
+                             ["same" if x == "same_scene" else "not" for x in b],
+                             ("same", "not"))  # fmt: skip
+        raw = sum(1 for x, y in zip(a, b, strict=True) if x == y) / len(pick)
+        return cohen_kappa(a, b, LABELS), binary, raw
+
+    kappa, binary, raw = agreement(blind)
+    both = truth_of(first, second, ids)
+    unsure_truth = np.array([first[i] in ("same_scene", "unsure") and
+                             second[i] in ("same_scene", "unsure") for i in ids])  # fmt: skip
+    either_truth = np.array([first[i] == "same_scene" or second[i] == "same_scene" for i in ids])
+    rows: list[dict[str, Any]] = [
+        _row("labels:pairs", len(ids)),
+        _row("labels:kappa", kappa),
+        _row("labels:kappa_same_scene_vs_rest", binary),
+        _row("labels:agreement", raw),
+        _row("labels:kappa:first_pair", low),
+        _row("labels:kappa:last_pair", high),
+        _row("labels:kappa:pairs", len(blind)),
+        _row("labels:third_member", 0),
+        _row("labels:positives_both_same_scene", int(both.sum())),
+        _row("labels:either_same_scene", int(either_truth.sum())),
+        _row("labels:positives", int(both.sum())),
+        _row("labels:positives_unsure_as_same_scene", int(unsure_truth.sum())),
+    ]
+    for name in ("first", "topup"):
+        rows.append(_row(f"labels:pairs:{name}", len(rounds.get(name, ()))))
+    if rounds.get("topup"):  # a top-up round's agreement, on all its pairs (reported only)
+        rows.append(_row("labels:kappa:topup", agreement([p.pair_id for p in rounds["topup"]])[0]))
+    for rater, labels in (("rater_1", first), ("rater_2", second)):
+        for label in LABELS:
+            rows.append(_row(f"labels:{rater}:{label}",
+                             sum(1 for i in ids if labels[i] == label)))  # fmt: skip
+    say(f"{len(ids)} pairs, two raters, no third member (D02 amendment 4); Cohen's kappa on "
+        f"pairs {low}-{high} ({len(blind)} pairs) {kappa:.3f} (same scene vs the rest "
+        f"{binary:.3f}), raw agreement {raw:.3f}; reported only")  # fmt: skip
+    say(f"positives (both same_scene) {int(both.sum())}; either rater same_scene "
+        f"{int(either_truth.sum())}; both same_scene or unsure "
+        f"{int(unsure_truth.sum())}")  # fmt: skip
+    return rows, both, unsure_truth, either_truth
+
+
+def score_labels_step(
+    embed_dir: Path,
+    label_files: Sequence[Path],
+    dataset_config: Mapping[str, Any],
+    *,
+    topup_dir: Path | None = None,
+    private_dir: Path | None = None,
+    commitments: Path | None = None,
+    third_member: bool = True,
+    kappa_pairs: tuple[int, int] | None = None,
+    log: Callable[[str], None] = print,
+) -> Scoring:
+    """RC-D1-label's scoring (module docstring). ``label_files``: the raters' files of every
+    round and the third member's files (column ``rater_3``); ``topup_dir``: the top-up's output
+    (its pairs are scored with the first round's, and the rule is chosen again on all labels);
+    ``private_dir``: where the list of pairs for the third member is written; ``commitments``:
+    the committed SHA-256 of each label file, checked first.
+
+    ``third_member=False`` (D02 amendment 4): no adjudication; the kappa on the pairs numbered
+    ``kappa_pairs``; positive = both raters ``same_scene``; the either-rater analysis is added
+    (reported only). The rule, the guard, the weights, the unsure analysis and the top-up are
+    as with a third member."""
+    embed_dir = Path(embed_dir)
+    lines: list[str] = []
+
+    def say(text: str) -> None:
+        lines.append(text)
+        log(text)
+
+    if commitments is not None:
+        for path, match in zip(label_files, check_commitments(label_files, commitments),
+                               strict=True):  # fmt: skip
+            say(f"{Path(path).name}: matches the commitment of {match['role']}, round "
+                f"{match['round']} (SHA-256 {match['sha256'][:12]}...)")  # fmt: skip
+    rounds = _round_pairs(embed_dir, topup_dir)
+    pairs = [p for round_pairs in rounds.values() for p in round_pairs]
+    ids = [p.pair_id for p in pairs]
+    first, second = read_labels(ids, *label_files)
+    third = read_third(*label_files)
+    either_truth: np.ndarray | None = None
+    if third_member:
+        head = _adjudicated_labels(first, second, third, rounds, private_dir, say)
+        if isinstance(head, Path):
+            return Scoring(StepResult(tuple(lines), (), {}), StepResult((), (), {}), None,
+                           adjudication=head)  # fmt: skip
+        rows, truth, unsure_truth = head
+    else:
+        if third:
+            raise LabelError(f"{len(third)} rater_3 labels given, but there is no third member "
+                             "(D02 amendment 4)")  # fmt: skip
+        if kappa_pairs is None:
+            raise LabelError("without a third member the kappa needs its pairs (--kappa-pairs; "
+                             "D02 amendment 4: 11-298)")  # fmt: skip
+        rows, truth, unsure_truth, either_truth = _two_rater_labels(
+            first, second, rounds, kappa_pairs, say
+        )
 
     scores = [score_rule(rule, pairs, truth) for rule in rule_family()]
     rule_rows: list[dict[str, Any]] = []
@@ -523,6 +622,22 @@ def score_labels_step(
     say(f"unsure analysis (sensitivity with unsure as same_scene): the chosen rule's sensitivity "
         f"{as_chosen.sensitivity[0]:.3f}; the rule it would choose: "
         f"{other.rule.label if other else 'none'}")  # fmt: skip
+    if either_truth is not None:  # D02 amendment 4: either rater same_scene, reported only
+        either = [score_rule(r, pairs, either_truth) for r in rule_family()]
+        either_chosen = next(s for s in either if s.rule == chosen.rule)
+        rows += _score_rows("labels:either_rater:chosen", either_chosen)
+        alt, _ = choose_rule(either, guard, min_precision=min_precision)
+        if alt is not None:
+            rows += [_row(f"labels:either_rater:rule:{k}", v) for k, v in alt.rule.code().items()]
+            rows += _score_rows("labels:either_rater:rule", alt)
+        same_either = alt is not None and alt.rule == chosen.rule
+        rows.append(_row("labels:either_rater:same_rule", int(same_either)))
+        say(f"either-rater analysis (same_scene for either rater): the chosen rule's sensitivity "
+            f"{either_chosen.sensitivity[0]:.3f}, precision {either_chosen.precision[0]:.3f}; "
+            f"the rule it would choose: {alt.rule.label if alt else 'none'}")  # fmt: skip
+        say(f"top-up: {'REQUIRED' if required else 'not needed'} ({in_band} labelled pairs "
+            f"within +-{top['band']:.2f} of {chosen.rule.threshold:.2f}, {chosen.rule.view} "
+            f"view; the minimum is {top['min_in_band']})")  # fmt: skip
     if required:
         say(f"TOP-UP REQUIRED: {in_band} labelled pairs within +-{top['band']:.2f} of "
             f"{chosen.rule.threshold:.2f} ({chosen.rule.view} view), fewer than "
