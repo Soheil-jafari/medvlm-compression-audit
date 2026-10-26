@@ -365,7 +365,9 @@ Recorded later, from the runs: the kappa, the chosen rule and its sensitivity an
 - run 3 reproduced: `split_sha256` 4a595fdf...;
 - model `facebook/dinov2-small` at revision `ed25f3a31f01632728cabb09d1542f84ab7b0056`,
   licence `apache-2.0` (the hub record);
-- 6,449 images, two views, embedded in 143 s on the GPU;
+- 6,449 images, two views, embedded in 143 s on the GPU as reported; the counts file
+  committed later (`results/data/near_duplicate_embed.csv`, commit 69799ff) says 156 s
+  (`embed:seconds` 156.28), and its other counts agree with the report;
 - 366,028 candidate pairs; 298 pairs to label;
 - self-check (cosine to the original):
   - synthetic copies: 0.937-0.995 (full view), 0.988-0.999 (centre view);
@@ -435,6 +437,71 @@ Applied in `configs/data/kvasir_vqa_x1.yaml` (`embedding`, `labelling.topup`),
 `utils/bundles.py`, `scripts/prepare_data.py` (`topup-labels`, `commit-labels`,
 `score-labels --topup-dir --private-dir --commitments`), `cards.py`, `scripts/run_card.py`,
 and the run cards RC-D1-embed (report) and RC-D1-label.
+
+## Amendment 4 (2026-10-22, Soheil): two raters, no third member
+
+Recorded before any label was compared with any cosine or rule, and before the scoring.
+
+**Facts:**
+- The commitments in `docs/runs/RC-D1-label_commitments.csv`, round `first`:
+  - `labels_rater_1.csv`, SHA-256
+    `02fc7492c1a9516f262344f4aa20fae4b772a7009207842c2f7e20527502156d`, 298 labels;
+  - `labels_rater_2.csv`, SHA-256
+    `ffb003276629eaa21335426d7cbf549dc8dbc64ffc9373565b388b6fc7ea08fb`, 298 labels.
+
+  Both rows reached `research-loop` in one commit (92b78e3, 2026-10-21 22:22 UTC), so the
+  history does not show an order between the two raters.
+- Rater 2 labelled pairs 11-298 blind, in letters. They were converted with the legend given
+  in writing before any comparison: T = `different`, F = `same_scene`, U = `unsure`.
+  - The legend was once stated the other way round. Raw agreement was then looked at under
+    both readings (0.17 and 0.78), and the team confirmed the first written legend.
+  - The scoring reports the raw agreement on pairs 11-298 under the confirmed legend
+    (`labels:agreement`).
+- Rater 2's labels for pairs 1-10 were given after rater 2 saw rater 1's labels for them;
+  rater 2 agreed with all 10.
+- Rater 1 labelled pairs 1-10 and 291-298 after the files were exchanged.
+- **The recorded decision for a second commitment:** the `rater_2` row replaced an earlier
+  `rater_2` row for the same round (288 labels, pairs 1-10 empty). `commit-labels` refuses a
+  second file for a role and round without a recorded decision; this is that decision. The
+  earlier row is not in the repository's history (it was never pushed).
+
+**Decision:**
+1. **Two raters, no third member:** the team has two members for this step. Amendment 3's
+   third-member steps are dropped:
+   - no adjudication of disagreements;
+   - no rule at kappa below 0.40.
+2. **Kappa** is computed on pairs **11-298 only** (both blind) and reported. No kappa
+   threshold triggers anything.
+3. **Primary truth:** a pair is a copy only if **both** raters call it `same_scene`;
+   `unsure` counts as not `same_scene`. The rule is chosen on this truth, over all 298 pairs,
+   with amendment 3's 450 rules, criterion, tie-breaks, Wilson intervals and weighting.
+4. **Reported, not used for the choice:**
+   - the truth "`same_scene` for **either** rater": the chosen rule's sensitivity and
+     precision under it, and the rule it would choose (`labels:either_rater:*`);
+   - the unsure analysis stays (`labels:unsure_analysis:*`). With two raters, its sensitivity
+     side counts a pair as positive when both raters say `same_scene` or `unsure`. This reads
+     each rater's `unsure` as `same_scene` (the agent's reading).
+5. **Top-up:** the rule of amendment 3 is unchanged. If it is needed, both raters label all
+   its pairs, and the third-member steps are skipped there too. A top-up round's kappa is
+   reported on all its pairs (`labels:kappa:topup`; reported only, the agent's choice).
+
+**Open question for the team:** rater 1 labelled pairs 291-298 after the files were exchanged,
+so these 8 pairs may not be blind for rater 1. The pairs both labelled before the exchange are
+11-290. Item 2 says 11-298. The card runs `--kappa-pairs 11-298` as decided; confirm, or
+change the range, before the scoring.
+
+Applied in `scripts/prepare_data.py` (`score-labels --no-third-member --kappa-pairs
+FIRST-LAST`) and `data/embed_step.py`. Without the flag, the scoring is amendment 3's.
+
+The rows written in addition (`results/data/near_duplicate_labels.csv`):
+- `labels:kappa:first_pair`, `labels:kappa:last_pair`, `labels:kappa:pairs`: the kappa's
+  pairs;
+- `labels:third_member` = 0;
+- `labels:either_rater:chosen:*`, `labels:either_rater:rule:*` and
+  `labels:either_rater:same_rule`.
+
+`labels:kappa`, `labels:kappa_same_scene_vs_rest` and `labels:agreement` are on the kappa's
+pairs only. Run card RC-D1-label has the Kaggle cell.
 
 ## Answer format for the inbox
 

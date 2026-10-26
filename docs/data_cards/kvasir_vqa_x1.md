@@ -59,13 +59,19 @@ The appendix item reports them next to the published adapter's test results.
      RC-D1-embed, 2026-10-19). Two views: the whole image and the central 60 % of width and
      height, 224 x 224. The features are L2-normalised and compared by cosine.
   2. 298 candidate pairs, stratified with the border zones oversampled, are labelled by two
-     raters, independently, as same scene, different or unsure, on sheets without scores. If
-     fewer than 30 labelled pairs lie within 0.03 of the chosen threshold, 100 more from that
-     band are labelled and the rule is chosen again once. Agreement before adjudication:
-     Cohen's kappa **[RC-D1-label]** `labels:kappa`. A third team member decides the
-     disagreements: **[RC-D1-label]** `labels:adjudicated` pairs. `unsure` counts as not the
-     same scene (a sensitivity analysis counts it the less favourable way:
-     `labels:unsure_analysis:*`).
+     raters as same scene, different or unsure, on sheets without scores. There is no third
+     member (D02 amendment 4).
+     - Blinding was not complete:
+       - rater 2 labelled pairs 1-10 after seeing rater 1's labels for them;
+       - rater 1 labelled pairs 1-10 and 291-298 after the two files were exchanged.
+     - Agreement: Cohen's kappa on pairs 11-298 **[RC-D1-label]** `labels:kappa`.
+     - A pair is a copy when both raters call it the same scene; `unsure` counts as not the
+       same scene.
+     - Two readings are reported but do not set the rule:
+       - the same scene for either rater (`labels:either_rater:*`);
+       - `unsure` counted the less favourable way (`labels:unsure_analysis:*`).
+     - If fewer than 30 labelled pairs lie within 0.03 of the chosen threshold, 100 more from
+       that band are labelled and the rule is chosen again once.
   3. The joining rule is chosen on these labels by a rule fixed in advance: the highest
      sensitivity with precision >= 0.5, with no group over 10 % of the images. The chosen
      rule: **[RC-D1-label]** `labels:chosen:*`.

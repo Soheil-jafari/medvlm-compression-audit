@@ -32,7 +32,9 @@ Commands:
            advance and the unsure analysis; aggregate numbers to
            <results_root>/data/near_duplicate_labels.csv and near_duplicate_rules.csv, which
            RC-D1 run 4 reads. If the third member has pairs to decide, their list goes to
-           --private-dir and it stops (exit code 4)
+           --private-dir and it stops (exit code 4). --no-third-member --kappa-pairs 11-298
+           (D02 amendment 4): two raters, no adjudication, the kappa on those pairs, positive
+           when both raters say same_scene, and the either-rater analysis (reported only)
   topup-labels  the top-up of D02 amendment 3: if fewer than 30 labelled pairs lie within
            +-0.03 of the chosen threshold, 100 more pairs from that band (seed 20261013), with
            sheets and a template in --out-dir (private); reuses RC-D1-embed's output (no new
@@ -295,12 +297,17 @@ def score_labels(args: argparse.Namespace, dataset: dict) -> int:
     from medcompress.data.labelling import LabelError
     from medcompress.utils.bundles import TOPUP_KIND, BundleError, verify_bundle
 
+    if args.no_third_member != (args.kappa_pairs is not None):
+        print("--no-third-member and --kappa-pairs go together (D02 amendment 4: "
+              "--no-third-member --kappa-pairs 11-298)", file=sys.stderr)  # fmt: skip
+        return INPUT_CHECK_FAILED
     try:
         embed_dir = _embed_output(args.embed_dir, dataset)
         topup = verify_bundle(args.topup_dir, kind=TOPUP_KIND).root if args.topup_dir else None
         scoring = score_labels_step(
             embed_dir, args.labels, dataset, topup_dir=topup, private_dir=args.private_dir,
-            commitments=args.commitments,
+            commitments=args.commitments, third_member=not args.no_third_member,
+            kappa_pairs=args.kappa_pairs,
         )  # fmt: skip
     except (BundleError, LabelError, ValueError) as exc:
         print(f"check failed: {exc}", file=sys.stderr)
@@ -362,6 +369,17 @@ def commit_labels(args: argparse.Namespace) -> int:
           f'"Commit the {row["role"]} labels of round {row["round"]}"; git push), then upload '
           "the label file to the private labels dataset")  # fmt: skip
     return 0
+
+
+def _pair_range(text: str) -> tuple[int, int]:
+    """``FIRST-LAST`` (both included), e.g. ``11-298``."""
+    try:
+        low, high = (int(part) for part in text.split("-"))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"{text!r}: give FIRST-LAST, e.g. 11-298") from exc
+    if not 1 <= low <= high:
+        raise argparse.ArgumentTypeError(f"{text!r}: need 1 <= FIRST <= LAST")
+    return low, high
 
 
 def _attached(path: Path | None, dataset: dict) -> Path | None:
@@ -539,6 +557,11 @@ def main(argv: list[str] | None = None) -> int:
                      help="where the third member's list goes (private)")  # fmt: skip
     lab.add_argument("--commitments", type=Path, default=None,
                      help="check every label file against these committed SHA-256")  # fmt: skip
+    lab.add_argument("--no-third-member", action="store_true",
+                     help="D02 amendment 4: two raters, no adjudication, the either-rater "
+                          "analysis")  # fmt: skip
+    lab.add_argument("--kappa-pairs", type=_pair_range, default=None, metavar="FIRST-LAST",
+                     help="with --no-third-member: the kappa on these pairs only")  # fmt: skip
     lab.add_argument("--results-root", type=Path, default=Path("results"))
     top = sub.add_parser("topup-labels", help="the top-up pairs near the chosen threshold")
     top.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")

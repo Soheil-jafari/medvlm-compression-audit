@@ -646,6 +646,118 @@ def test_run_4_waits_for_the_labels_and_the_guard_stops_chaining(tmp_path: Path)
                 rule=cand.JoinRule("full", 0.6), embedder=TinyEmbedder())  # fmt: skip
 
 
+def _two_raters(embed_dir: Path, tmp_path: Path) -> tuple[list[int], list[str], list[str]]:
+    """Rater 1 labels every pair as the scenes are; rater 2 says unsure on pairs 1-3 (outside
+    the kappa pairs) and same_scene on one different pair."""
+    pairs = lab.read_pairs(embed_dir / "label_pairs.csv")
+    ids, first = [p.pair_id for p in pairs], [_same(p) for p in pairs]
+    second = ["unsure"] * 3 + first[3:]
+    k = next(j for j in range(3, len(ids)) if first[j] == "different")
+    second[k] = "same_scene"
+    _labels(tmp_path / "labels_rater_1.csv", ids, first, [""] * len(ids))
+    _labels(tmp_path / "labels_rater_2.csv", ids, [""] * len(ids), second)
+    return ids, first, second
+
+
+def test_two_raters_without_a_third_member(tmp_path: Path) -> None:
+    from medcompress.data.embed_step import embed_step, score_labels_step
+
+    def quiet(_: str) -> None:
+        return None
+
+    data = _dataset(tmp_path, overlay=False, lookalike=True)
+    out = tmp_path / "embed"
+    embed_step(data, CONFIG, out, TinyEmbedder(), split_seed=3, close_bits=4, mask_threshold=4,
+               log=quiet)  # fmt: skip
+    ids, first, second = _two_raters(out, tmp_path)
+    assert ids == list(range(1, len(ids) + 1))
+    files = [tmp_path / "labels_rater_1.csv", tmp_path / "labels_rater_2.csv"]
+    lines: list[str] = []
+    scoring = score_labels_step(out, files, CONFIG, third_member=False,
+                                kappa_pairs=(4, len(ids)), log=lines.append)  # fmt: skip
+    assert scoring.adjudication is None and scoring.chosen is not None  # nobody adjudicates
+    values = {r["metric"]: r["value"] for r in scoring.labels.rows}
+    blind = lab.cohen_kappa(first[3:], second[3:], lab.LABELS)
+    assert values["labels:kappa"] == pytest.approx(blind)  # on pairs 4-n only
+    assert blind != pytest.approx(lab.cohen_kappa(first, second, lab.LABELS))
+    assert (values["labels:kappa:first_pair"], values["labels:kappa:last_pair"],
+            values["labels:kappa:pairs"]) == (4, len(ids), len(ids) - 3)  # fmt: skip
+    assert values["labels:agreement"] == pytest.approx(
+        sum(x == y for x, y in zip(first[3:], second[3:], strict=True)) / (len(ids) - 3)
+    )
+    assert values["labels:third_member"] == 0 and "labels:adjudicated" not in values
+    both = np.array([x == y == "same_scene" for x, y in zip(first, second, strict=True)])
+    either = np.array(["same_scene" in (x, y) for x, y in zip(first, second, strict=True)])
+    assert values["labels:positives"] == both.sum() == values["labels:positives_both_same_scene"]
+    assert values["labels:either_same_scene"] == either.sum() > both.sum()
+    pairs = lab.read_pairs(out / "label_pairs.csv")
+    primary = lab.score_rule(scoring.chosen, pairs, both)
+    assert values["labels:chosen:sensitivity"] == primary.sensitivity[0]
+    assert values["labels:chosen:precision"] == primary.precision[0]
+    by_either = lab.score_rule(scoring.chosen, pairs, either)  # reported, not used
+    assert values["labels:either_rater:chosen:sensitivity"] == pytest.approx(
+        by_either.sensitivity[0]
+    )
+    assert values["labels:either_rater:chosen:precision"] == pytest.approx(by_either.precision[0])
+    assert "labels:either_rater:same_rule" in values
+    assert "labels:unsure_analysis:chosen:sensitivity" in values  # the unsure analysis stays
+    assert values["labels:topup_required"] == int(scoring.topup_required)
+    assert any("no third member" in line for line in lines)
+    assert any(line.startswith("top-up: ") for line in lines)
+    with pytest.raises(lab.LabelError, match="--kappa-pairs"):
+        score_labels_step(out, files, CONFIG, third_member=False, log=quiet)
+    with pytest.raises(lab.LabelError, match="numbered 400 to 500"):
+        score_labels_step(out, files, CONFIG, third_member=False, kappa_pairs=(400, 500),
+                          log=quiet)  # fmt: skip
+    three = _third(tmp_path / "labels_rater_3.csv", {1: "same_scene"})
+    with pytest.raises(lab.LabelError, match="no third member"):
+        score_labels_step(out, [*files, three], CONFIG, third_member=False, kappa_pairs=(4, 9),
+                          log=quiet)  # fmt: skip
+    with pytest.raises(lab.LabelError, match="--private-dir"):  # without the flag: amendment 3
+        score_labels_step(out, files, CONFIG, log=quiet)
+
+
+def test_score_labels_without_a_third_member_on_the_command_line(tmp_path: Path) -> None:
+    data = _dataset(tmp_path, overlay=False, lookalike=True)
+    results, out = tmp_path / "results", tmp_path / "embed"
+    done = _run("embed", "--data-root", str(data), "--out-dir", str(out), "--results-root",
+                str(results), "--split-seed", "3", "--close-bits", "4", "--mask-threshold", "4",
+                "--embedding-model", "tiny")  # fmt: skip
+    assert done.returncode == 0, done.stdout + done.stderr
+    _pin(out)
+    ids, _, _ = _two_raters(out, tmp_path)
+    one, two = tmp_path / "labels_rater_1.csv", tmp_path / "labels_rater_2.csv"
+    commitments = tmp_path / "commitments.csv"
+    for path, role in ((one, "rater_1"), (two, "rater_2")):
+        made = _run("commit-labels", "--labels", str(path), "--role", role, "--round", "first",
+                    "--commitments", str(commitments))  # fmt: skip
+        assert made.returncode == 0, made.stderr
+    base = ("score-labels", "--embed-dir", str(out), "--results-root", str(results),
+            "--commitments", str(commitments), "--labels", str(one), str(two))  # fmt: skip
+    for half in (("--no-third-member",), ("--kappa-pairs", "4-9")):
+        alone = _run(*base, *half)
+        assert alone.returncode == 5 and "go together" in alone.stderr
+    assert _run(*base, "--no-third-member", "--kappa-pairs", "nine").returncode == 2
+    scored = _run(*base, "--no-third-member", "--kappa-pairs", f"4-{len(ids)}")
+    assert scored.returncode == 0, scored.stdout + scored.stderr
+    assert "matches the commitment of rater_2" in scored.stdout
+    assert "no third member" in scored.stdout and "chosen rule" in scored.stdout
+    assert "either-rater analysis" in scored.stdout  # every candidate is labelled here:
+    assert "top-up: not possible, no candidate pair is left in the band" in scored.stdout
+    assert "ADJUDICATION" not in scored.stdout
+    from medcompress.data.prepare import labels_values
+
+    values = labels_values(results)
+    assert values["labels:kappa:first_pair"] == 4 and values["labels:third_member"] == 0
+    assert "labels:either_rater:chosen:sensitivity" in values
+    assert "labels:chosen:view_code" in values and values["labels:topup_required"] == 0
+    assert (results / "data" / "near_duplicate_rules.csv").is_file()
+    one.write_text(one.read_text().replace("different", "unsure", 1))  # changed after its commit
+    refused = _run(*base, "--no-third-member", "--kappa-pairs", f"4-{len(ids)}")
+    assert refused.returncode == 5 and "labels_rater_1.csv" in refused.stderr
+    assert "is not in" in refused.stderr
+
+
 def test_the_strict_subset_restricts_the_comparisons() -> None:
     from medcompress.evaluation.compare_stage import Arm, ArmOutcomes, ProbeTable, restrict
 

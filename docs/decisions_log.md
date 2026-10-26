@@ -245,7 +245,8 @@ must be logged here.
   the pre-registration draft, the schedule and STATUS.
 - **2026-10-19 (Soheil, from RC-D1-embed), D02 amendment 3 additions,** before any label.
   - RC-D1-embed ran on a Kaggle T4 (commit cb5de07). Run 3 reproduced (`split_sha256`
-    4a595fdf...). 6,449 images, two views, in 143 s on the GPU. 366,028 candidate pairs; 298
+    4a595fdf...). 6,449 images, two views, in 143 s on the GPU as reported (the committed
+    counts file says 156 s, `embed:seconds`). 366,028 candidate pairs; 298
     pairs to label.
   - Self-check cosines: copies 0.937-0.995 (full) and 0.988-0.999 (centre); different images
     0.843-0.937 (full) and 0.879-0.942 (centre). The cosines are compressed into the high
@@ -269,15 +270,42 @@ must be logged here.
 
   Recorded in D02, the dataset config, RC-D1-embed (report), RC-D1-label and the
   pre-registration draft.
+- **2026-10-22 (Soheil), D02 amendment 4: two raters, no third member,** before any label was
+  compared with any cosine or rule, and before the scoring.
+  - Facts:
+    - both label files are committed by SHA-256 (298 labels each), in one commit (92b78e3);
+    - rater 2 labelled pairs 11-298 blind, in letters, converted with the written legend
+      T = different, F = same_scene, U = unsure. The legend was once stated the other way
+      round; raw agreement was looked at under both readings (0.17 and 0.78), and the team
+      confirmed the first written legend;
+    - rater 2's labels for pairs 1-10 came after seeing rater 1's (all 10 agree);
+    - rater 1 labelled pairs 1-10 and 291-298 after the files were exchanged;
+    - the `rater_2` row replaced an earlier one (288 labels, pairs 1-10 empty). This is the
+      decision `commit-labels` asks for.
+  - Decision:
+    - no third member, so no adjudication and no kappa rule;
+    - kappa on pairs 11-298 only, reported;
+    - primary truth: both raters `same_scene`, `unsure` not; the rule is chosen as in
+      amendment 3;
+    - reported only: the either-rater truth (the chosen rule's sensitivity and precision, and
+      the rule it would choose) and the unsure analysis;
+    - top-up unchanged, with both raters and no third member.
+  - Code: `score-labels --no-third-member --kappa-pairs 11-298`. Without the flag the
+    scoring is amendment 3's.
+  - Also recorded: `results/data/near_duplicate_embed.csv` was committed (69799ff). Its
+    `embed:seconds` is 156.28, not the 143 s reported from the printout; its other counts
+    agree with the report.
+
+  Recorded in D02, the pre-registration draft, the data card, RC-D1-embed (report) and
+  RC-D1-label.
 
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
 | Kaggle session time limit | the session time limit, and whether a stopped version keeps its output (unknown here); the T4 x2 quota rule is settled (counts once, 2026-10-19). RC-TT1 needs about 14.7 h (estimate) | team (check on Kaggle) | before RC-TT1 |
-| RC-D1-embed counts file | `results/data/near_duplicate_embed.csv` (aggregate counts of RC-D1-embed) was not on `research-loop` when the additions of 2026-10-19 were recorded; commit it from the run's output | Soheil | before RC-D1-label |
-| The two raters and the third member (RC-D1-label) | who labels the 298 pairs, each on their own (proposal: Soheil and one of Amir or Farzan), and who is the third team member deciding the disagreements (the one who is not a rater) | team | before RC-D1-label |
-| Kappa below 0.40: what the third member decides | the agent read "if kappa < 0.40" as: the third member then decides every pair of that round, the agreed pairs too. The other reading (only the disagreements) differs only when kappa < 0.40; confirm before the labels are scored | Soheil | before RC-D1-label's scoring |
+| The two raters' names (RC-D1-label) | who rater 1 and rater 2 are, for the run report (D02 amendment 4: two raters, no third member) | team | at RC-D1-label's scoring |
+| Kappa pairs 291-298 (D02 amendment 4) | rater 1 labelled pairs 291-298 after the files were exchanged, so these 8 pairs may not be blind for rater 1; the pairs both labelled before the exchange are 11-290. The decision says the kappa is on 11-298 (both blind) and the card runs `--kappa-pairs 11-298`; confirm, or change the range, before the scoring | Soheil | before RC-D1-label's scoring |
 | Published target modules | which modules the published `adapter_config.json` names (RC-TT0's printout is not committed; RC-TT1 prints it). If a name is outside the language model, RC-TT1 stops and the team decides | Soheil | at RC-TT1's start |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
 | Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |
