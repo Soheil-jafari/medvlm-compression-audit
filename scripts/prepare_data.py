@@ -42,6 +42,12 @@ Commands:
   commit-labels  check one rater's label file and add its SHA-256 to
            docs/runs/RC-D1-label_commitments.csv (blinding: commit that file before the labels
            are discussed)
+  rule-sweep  D02 amendment 5: the rules full:T OR crop >= 0.80 for the given T, highest
+           first, each split exactly as prepare builds it: the largest group, the joined pairs,
+           the val/test confirmed duplicates and one three-band cross-split contact sheet per
+           rule within the chaining guard (PNGs in --out-dir, private); counts to
+           <results_root>/data/near_duplicate_sweep.csv. prepare and counts then take
+           --rule <one of them> (run 4b); a rule not in that file is refused
 
 Exit codes: 4 a setting is open (the joining rule before the labels are scored, no rule
 qualifies, the third member has pairs to decide, or a top-up is required), 5 an input check
@@ -171,6 +177,9 @@ def counts(args: argparse.Namespace, dataset: dict) -> int:
     from medcompress.data.prepare import prepare
     from medcompress.utils.bundles import BundleError, attach_data
 
+    rule, code = _swept(args)
+    if code:
+        return code
     try:
         shared = attach_data({}, args.data_root)
     except BundleError as exc:
@@ -183,9 +192,11 @@ def counts(args: argparse.Namespace, dataset: dict) -> int:
         close_bits=args.close_bits,
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
+        rule=rule,  # type: ignore[arg-type]
         results_root=args.results_root,
         embed_dir=_attached(args.embed_dir, dataset),
     )
+    prepared = _from_sweep(prepared, rule)
     if prepared.split_sha256 != shared.meta.get("split_sha256"):
         print(
             f"check failed: these settings give split_sha256 {prepared.split_sha256}, the shared "
@@ -371,6 +382,104 @@ def commit_labels(args: argparse.Namespace) -> int:
     return 0
 
 
+def rule_sweep_command(args: argparse.Namespace, dataset: dict) -> int:
+    """D02 amendment 5: the rule sweep (counts, and one private sheet per rule in the guard)."""
+    from medcompress.config import repo_root
+    from medcompress.data.prepare import near_duplicate_settings
+    from medcompress.data.rule_sweep import (
+        SWEEP_FILE,
+        SweepError,
+        either_rater_rule,
+        rule_sweep,
+        sweep_rows,
+        sweep_rules,
+    )
+    from medcompress.utils.bundles import BundleError
+
+    out = args.out_dir.resolve()
+    if out.is_relative_to(repo_root().resolve()):
+        print(f"--out-dir must be outside the repository: {out}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    try:
+        embed_dir = _embed_output(args.embed_dir, dataset)
+        data_root = _data_folder(args.data_root)
+        rules = sweep_rules(args.thresholds, args.crop)
+        label_rule = either_rater_rule(args.results_root)
+        if label_rule != rules[0]:
+            raise SweepError(
+                f"the sweep starts from the rule chosen on the either-rater truth, "
+                f"{label_rule.label} (labels:either_rater:rule:*), but its first rule is "
+                f"{rules[0].label} (D02 amendment 5)"
+            )
+    except (BundleError, SweepError) as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    print(f"rule chosen on the either-rater truth (from the committed labels file): "
+          f"{label_rule.label}")  # fmt: skip
+    print("sweep: " + ", ".join(r.label for r in rules))
+    results = rule_sweep(
+        data_root, dataset, embed_dir, rules, split_seed=args.split_seed,
+        close_bits=args.close_bits, mask_threshold=args.mask_threshold,
+    )  # fmt: skip
+    guard = near_duplicate_settings(dataset, close_bits=args.close_bits, confirm_threshold=1.0)
+    for r in results:
+        head = (f"{r.rule.label}: joined pairs {r.joined_pairs}; largest group "
+                f"{r.largest_group} ({r.largest_fraction:.1%})")  # fmt: skip
+        if r.prepared is None:
+            print(f"{head}; OVER THE GUARD ({guard.max_group_fraction:.0%}): no split, no sheet")
+            continue
+        values = {row["metric"]: row["value"] for row in r.prepared.rows}
+        sheet = _final_sheet(r.prepared, out, data_root,
+                             name=f"rc_d1_sweep_{r.rule.label.replace(':', '_')}.png")  # fmt: skip
+        print(f"{head}; within the guard; val/test confirmed duplicates of train "
+              f"{values['val_test_confirmed_duplicates_of_train']:.0f}; images train / val / "
+              f"test {values['images:train']:.0f} / {values['images:val']:.0f} / "
+              f"{values['images:test']:.0f}; split_sha256 {r.prepared.split_sha256}; "
+              f"sheet (private, never commit it): {sheet}")  # fmt: skip
+    rows = sweep_rows(
+        results, label_rule=label_rule, split_seed=args.split_seed, close_bits=args.close_bits,
+        mask_threshold=args.mask_threshold, max_group_fraction=guard.max_group_fraction,
+    )  # fmt: skip
+    target = args.results_root / SWEEP_FILE
+    target.unlink(missing_ok=True)
+    append_results(rows, target)
+    print(f"wrote {len(rows)} aggregate rows to {target}")
+    print("the team now judges every sheet: per rule and band, how many pairs show the same "
+          "scene; the rule is the highest T within the guard with none "
+          "(D02 amendment 5)")  # fmt: skip
+    return 0
+
+
+def _swept(args: argparse.Namespace) -> tuple[object | None, int]:
+    """The rule of ``--rule`` if the committed sweep allows it: (rule or None, exit code)."""
+    if args.rule is None:
+        return None, 0
+    from medcompress.data.rule_sweep import SweepError, swept_rule
+
+    if args.confirm_threshold is not None:
+        print("--rule and --confirm-threshold exclude each other", file=sys.stderr)
+        return None, INPUT_CHECK_FAILED
+    try:
+        rule = swept_rule(args.results_root, args.rule)
+    except SweepError as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return None, INPUT_CHECK_FAILED
+    print(f"joining rule: {rule.label} (from the sweep, D02 amendment 5)")
+    return rule, 0
+
+
+def _from_sweep(prepared, rule):  # type: ignore[no-untyped-def]
+    """Record in the rows that the rule came from the sweep
+    (``near_duplicates:rule_from_sweep`` = 1)."""
+    from dataclasses import replace
+
+    from medcompress.data.prepare import _row
+
+    if rule is None:
+        return prepared
+    return replace(prepared, rows=(*prepared.rows, _row("near_duplicates:rule_from_sweep", 1)))
+
+
 def _pair_range(text: str) -> tuple[int, int]:
     """``FIRST-LAST`` (both included), e.g. ``11-298``."""
     try:
@@ -401,7 +510,7 @@ def _embed_output(path: Path, dataset: dict) -> Path:
     return root
 
 
-def _final_sheet(prepared, sheet_dir: Path, data_root: Path) -> Path:  # type: ignore[no-untyped-def]
+def _final_sheet(prepared, sheet_dir: Path, data_root: Path, name: str = FINAL_SHEET) -> Path:  # type: ignore[no-untyped-def]
     """Three bands, all pairs across splits. Under the cosine rule of amendment 3: the most
     similar by the cosine, by the crop, and the closest by the dHash. Under the crop rule:
     the most similar by the crop, the closest by the dHash, and the closest pairs within
@@ -430,7 +539,7 @@ def _final_sheet(prepared, sheet_dir: Path, data_root: Path) -> Path:  # type: i
              " dHash: all should be different scenes", cells(prepared.closest_dhash_cross_split)),
         )  # fmt: skip
         crop = float(prepared.near_duplicates.get("crop_fraction", 0.60))
-        return render_pairs(cosine, sheet_dir / FINAL_SHEET, crop_fraction=crop, columns=3)
+        return render_pairs(cosine, sheet_dir / name, crop_fraction=crop, columns=3)
     bands = (
         (f"1. The {len(prepared.top_cross_split)} most similar pairs across splits by the crop "
          "correlation: all should be different scenes", cells(prepared.top_cross_split)),
@@ -441,7 +550,7 @@ def _final_sheet(prepared, sheet_dir: Path, data_root: Path) -> Path:  # type: i
          cells(prepared.close_not_joined)),
     )  # fmt: skip
     crop = float(prepared.near_duplicates.get("crop_fraction", 0.60))
-    return render_pairs(bands, sheet_dir / FINAL_SHEET, crop_fraction=crop, columns=3)
+    return render_pairs(bands, sheet_dir / name, crop_fraction=crop, columns=3)
 
 
 def verify(args: argparse.Namespace) -> int:
@@ -515,6 +624,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     prep.add_argument("--embed-dir", type=Path, default=None, help="RC-D1-embed's output")
     prep.add_argument("--embedding-model", default=None, help="tests only (tiny)")
+    prep.add_argument(
+        "--rule", default=None,
+        help="run 4b (D02 amendment 5): a rule of the committed sweep, e.g. full:0.88:or_crop:0.80",
+    )  # fmt: skip
     bund = sub.add_parser("bundle", help="manifest of the shared-data folder (data/ + private/)")
     bund.add_argument("--bundle-dir", type=Path, required=True, help="outside the repository")
     ver = sub.add_parser("verify", help="check an attached shared-data dataset")
@@ -528,6 +641,7 @@ def main(argv: list[str] | None = None) -> int:
     cnt.add_argument("--mask-threshold", type=int, required=True, help="as in the first pass")
     cnt.add_argument("--confirm-threshold", type=float, default=None, help="as in the first pass")
     cnt.add_argument("--embed-dir", type=Path, default=None, help="RC-D1-embed's output")
+    cnt.add_argument("--rule", default=None, help="as in the first pass (run 4b: the swept rule)")
     cal = sub.add_parser("calibrate", help="choose the crop threshold (before prepare)")
     cal.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")
     cal.add_argument("--results-root", type=Path, default=Path("results"))
@@ -568,6 +682,18 @@ def main(argv: list[str] | None = None) -> int:
     top.add_argument("--embed-dir", type=Path, required=True, help="RC-D1-embed's output")
     top.add_argument("--out-dir", type=Path, required=True, help="private, outside the repo")
     top.add_argument("--results-root", type=Path, default=Path("results"))
+    swp = sub.add_parser("rule-sweep", help="D02 amendment 5: full:T OR crop rules, one sheet each")
+    swp.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")
+    swp.add_argument("--embed-dir", type=Path, required=True, help="RC-D1-embed's output")
+    swp.add_argument("--out-dir", type=Path, required=True, help="the sheets: outside the repo")
+    swp.add_argument("--results-root", type=Path, default=Path("results"))
+    swp.add_argument("--thresholds", type=float, nargs="+", required=True,
+                     help="the full-view cosine levels T (D02 amendment 5: 0.92 0.90 0.88 0.86 "
+                          "0.84)")  # fmt: skip
+    swp.add_argument("--crop", type=float, required=True, help="the crop level (0.80)")
+    swp.add_argument("--split-seed", type=int, default=20261012, help="as prepare (20261012)")
+    swp.add_argument("--close-bits", type=int, default=4, help="as prepare (4)")
+    swp.add_argument("--mask-threshold", type=int, default=4, help="as prepare (4)")
     com = sub.add_parser("commit-labels", help="add a label file's SHA-256 to the commitments")
     com.add_argument("--labels", type=Path, required=True, help="your own filled file")
     com.add_argument("--role", required=True, choices=("rater_1", "rater_2", "rater_3"))
@@ -608,6 +734,8 @@ def main(argv: list[str] | None = None) -> int:
             return score_labels(args, dataset)
         if args.command == "topup-labels":
             return topup_labels(args, dataset)
+        if args.command == "rule-sweep":
+            return rule_sweep_command(args, dataset)
         if args.command == "calibrate":
             return calibrate(args, dataset)
         if args.command == "counts":
@@ -629,6 +757,9 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
     from medcompress.data.embeddings import make_embedder
     from medcompress.data.prepare import prepare, write_private_outputs
 
+    rule, code = _swept(args)
+    if code:
+        return code
     prepared = prepare(
         args.data_root,
         dataset,
@@ -636,10 +767,12 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
         close_bits=args.close_bits,
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
+        rule=rule,  # type: ignore[arg-type]
         results_root=args.results_root,
         embed_dir=_attached(args.embed_dir, dataset),
         embedder=make_embedder(args.embedding_model) if args.embedding_model else None,
     )
+    prepared = _from_sweep(prepared, rule)
     hashes = write_private_outputs(prepared, args.private_dir, args.data_root)
     summary = args.results_root / "data" / "summary.csv"
     if summary.exists():

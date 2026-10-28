@@ -46,7 +46,13 @@ import numpy as np
 
 from medcompress.config import ConfigError
 from medcompress.data.base import VQASample
-from medcompress.data.candidates import JoinRule, component_groups, crop_pass, joined_pairs_all
+from medcompress.data.candidates import (
+    CropPairs,
+    JoinRule,
+    component_groups,
+    crop_pass,
+    joined_pairs_all,
+)
 from medcompress.data.dedup import (
     ChainingError,
     CropSettings,
@@ -554,6 +560,7 @@ def prepare(
     results_root: Path | None = None,
     features: tuple[Any, Any, Any, Any] | None = None,
     embed_dir: Path | None = None,
+    crop_pairs: CropPairs | None = None,
 ) -> PreparedData:
     """Run steps 1-6 and return the decisions plus the aggregate result rows.
 
@@ -565,7 +572,9 @@ def prepare(
     sorted image paths) are used if given, else computed with ``embedder`` or the configured
     model, or read from RC-D1-embed's output ``embed_dir`` (checked against the images, the
     settings and the pinned revision). ``features`` (samples, images, fingerprints,
-    signatures) skips reading the images.
+    signatures) skips reading the images. ``crop_pairs``: every pair at or above a crop level
+    no higher than the rule's, from ``crop_pass`` over the same signatures in the same image
+    order; it skips that pass (the rule sweep of D02 amendment 5 makes it once).
 
     Raises :class:`ConfigError` while a setting is open, and
     :class:`~medcompress.data.dedup.ChainingError` when the chaining guard stops the run.
@@ -612,9 +621,13 @@ def prepare(
         emb = embeddings or _embed(data_root, images, dataset_config, embedder)
         crop_above = None
         if rule.crop_threshold is not None:
-            _, _, crop_above = crop_pass(
-                [signatures[p] for p in images], settings.crop, k=0, floor=rule.crop_threshold
-            )
+            if crop_pairs is not None and crop_pairs.floor <= rule.crop_threshold:
+                crop_above = crop_pairs
+            else:
+                _, _, crop_above = crop_pass(
+                    [signatures[p] for p in images], settings.crop, k=0,
+                    floor=rule.crop_threshold,
+                )  # fmt: skip
         ja, jb = joined_pairs_all(rule, emb, crop_above)
         image_group = component_groups(images, ja, jb)
         check_chaining(image_group, settings.max_group_fraction)

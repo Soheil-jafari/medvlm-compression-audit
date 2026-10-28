@@ -758,6 +758,118 @@ def test_score_labels_without_a_third_member_on_the_command_line(tmp_path: Path)
     assert "is not in" in refused.stderr
 
 
+def test_a_rule_reads_back_from_its_label() -> None:
+    for rule in (cand.JoinRule("full", 0.88, 0.80), cand.JoinRule("centre", 0.9)):
+        assert cand.JoinRule.from_label(rule.label) == rule
+    for bad in ("full:0.9", "crop:0.65", "full:0.88:crop:0.80", "full", "full:x"):
+        with pytest.raises(ValueError):
+            cand.JoinRule.from_label(bad)
+
+
+def test_the_rule_sweep_is_reproducible_and_marks_the_guard(tmp_path: Path) -> None:
+    from medcompress.data.embed_step import embed_step
+    from medcompress.data.prepare import prepare
+    from medcompress.data.rule_sweep import rule_sweep, sweep_rows, sweep_rules
+
+    def quiet(_: str) -> None:
+        return None
+
+    data = _dataset(tmp_path, overlay=False, lookalike=True)
+    out = tmp_path / "embed"
+    embed_step(data, CONFIG, out, TinyEmbedder(), split_seed=3, close_bits=4, mask_threshold=4,
+               log=quiet)  # fmt: skip
+    rules = sweep_rules([0.60, 0.95, 0.55, 0.70], 0.80)
+    assert [r.label for r in rules] == [
+        f"full:{t}:or_crop:0.80" for t in ("0.95", "0.70", "0.60", "0.55")
+    ]
+    common = {"split_seed": 3, "close_bits": 4, "mask_threshold": 4}
+    first = rule_sweep(data, CONFIG, out, rules, log=quiet, **common)
+    again = rule_sweep(data, CONFIG, out, rules, log=quiet, **common)
+    guard = CONFIG["near_duplicates"]["max_group_fraction"]  # 0.5 of the 16 images
+    rows = sweep_rows(first, label_rule=rules[0], max_group_fraction=guard, **common)
+    assert rows == sweep_rows(again, label_rule=rules[0], max_group_fraction=guard, **common)
+    assert [r.within_guard for r in first] == [True, True, True, False]
+    assert [r.largest_group for r in first] == [2, 2, 5, 9]
+    assert first[3].prepared is None and first[3].largest_fraction == 9 / 16
+    assert [r.joined_pairs for r in first] == sorted(r.joined_pairs for r in first)
+    for r in first[:3]:  # each split is the one prepare builds alone (run 4b)
+        alone = prepare(data, CONFIG, rule=r.rule, embed_dir=out, **common)
+        assert r.prepared is not None and alone.split_sha256 == r.prepared.split_sha256
+        assert alone.rows == r.prepared.rows
+    values = {row["metric"]: row["value"] for row in rows}
+    assert values["sweep:full:0.55:or_crop:0.80:within_guard"] == 0
+    assert "sweep:full:0.55:or_crop:0.80:val_test_confirmed_duplicates_of_train" not in values
+    for label in ("full:0.95:or_crop:0.80", "full:0.70:or_crop:0.80", "full:0.60:or_crop:0.80"):
+        assert values[f"sweep:{label}:within_guard"] == 1
+        assert values[f"sweep:{label}:val_test_confirmed_duplicates_of_train"] == 0
+        assert values[f"sweep:{label}:sheet_band_pairs:cosine"] > 0
+    assert values["sweep:label_rule:threshold"] == 0.95 and values["sweep:rules"] == 4
+
+
+def test_the_rule_sweep_and_run_4b_on_the_command_line(tmp_path: Path) -> None:
+    from medcompress.data.prepare import _row, labels_values
+    from medcompress.utils.io import append_results
+
+    data = _dataset(tmp_path, overlay=False, lookalike=True)
+    results, out = tmp_path / "results", tmp_path / "embed"
+    done = _run("embed", "--data-root", str(data), "--out-dir", str(out), "--results-root",
+                str(results), "--split-seed", "3", "--close-bits", "4", "--mask-threshold", "4",
+                "--embedding-model", "tiny")  # fmt: skip
+    assert done.returncode == 0, done.stdout + done.stderr
+    _pin(out)
+    either = cand.JoinRule("full", 0.95, 0.80)  # as RC-D1-label's scoring writes it
+    append_results([_row(f"labels:either_rater:rule:{k}", v) for k, v in either.code().items()],
+                   results / "data" / "near_duplicate_labels.csv")  # fmt: skip
+    sheets = tmp_path / "sweep_sheets"
+    base = ("rule-sweep", "--data-root", str(data), "--embed-dir", str(out), "--results-root",
+            str(results), "--crop", "0.80", "--split-seed", "3")  # fmt: skip
+    wrong = _run(*base, "--out-dir", str(sheets), "--thresholds", "0.90", "0.70")
+    assert wrong.returncode == 5 and "either-rater truth" in wrong.stderr  # must start at 0.95
+    inside = _run(*base, "--out-dir", str(REPO / "tmp_sweep"), "--thresholds", "0.95")
+    assert inside.returncode == 5 and "outside the repository" in inside.stderr
+    swept = _run(*base, "--out-dir", str(sheets), "--thresholds", "0.60", "0.95", "0.70")
+    assert swept.returncode == 0, swept.stdout + swept.stderr
+    assert "from the committed labels file): full:0.95:or_crop:0.80" in swept.stdout
+    assert "full:0.60:or_crop:0.80: joined pairs" in swept.stdout
+    assert "OVER THE GUARD" in swept.stdout
+    assert sorted(p.name for p in sheets.glob("*.png")) == [
+        "rc_d1_sweep_full_0.70_or_crop_0.80.png",
+        "rc_d1_sweep_full_0.95_or_crop_0.80.png",
+    ]
+    target = results / "data" / "near_duplicate_sweep.csv"
+    counts = target.read_text()
+    assert ".jpg" not in counts and "sweep:full:0.60:or_crop:0.80:within_guard" in counts
+    again = _run(*base, "--out-dir", str(tmp_path / "sheets2"), "--thresholds", "0.95", "0.70",
+                 "0.60")  # fmt: skip
+    assert again.returncode == 0 and target.read_text() == counts  # the same counts again
+    from medcompress.evaluation.aggregate import validate_results_tree
+
+    assert validate_results_tree(results) == []
+    hashes = {}  # rule label -> the split_sha256 the sweep printed
+    for line in swept.stdout.splitlines():
+        if "split_sha256" in line:
+            label = line.split(": joined", 1)[0]
+            hashes[label] = line.split("split_sha256 ", 1)[1].split(";")[0]
+    prep = ("prepare", "--data-root", str(data), "--private-dir", str(tmp_path / "private"),
+            "--results-root", str(results), "--split-seed", "3", "--close-bits", "4",
+            "--mask-threshold", "4", "--embed-dir", str(out))  # fmt: skip
+    for rule, why in (("full:0.88:or_crop:0.80", "not in the sweep"),
+                      ("full:0.60:or_crop:0.80", "over the chaining guard"),
+                      ("full:0.7:or_crop:0.80", "write the rule as")):  # fmt: skip
+        refused = _run(*prep, "--rule", rule)
+        assert refused.returncode == 5 and why in refused.stderr, refused.stderr
+    both = _run(*prep, "--rule", "full:0.70:or_crop:0.80", "--confirm-threshold", "0.65")
+    assert both.returncode == 5 and "exclude each other" in both.stderr
+    run_4b = _run(*prep, "--rule", "full:0.70:or_crop:0.80", "--sheet-dir",
+                  str(tmp_path / "sheets_4b"))  # fmt: skip
+    assert run_4b.returncode == 0, run_4b.stdout + run_4b.stderr
+    assert "joining rule: full:0.70:or_crop:0.80 (from the sweep" in run_4b.stdout
+    assert hashes["full:0.70:or_crop:0.80"] in run_4b.stdout  # the swept split, unchanged
+    summary = (results / "data" / "summary.csv").read_text()
+    assert "near_duplicates:rule_from_sweep,1" in summary.replace(",1.0", ",1")
+    assert labels_values(results)["labels:either_rater:rule:threshold"] == 0.95
+
+
 def test_the_strict_subset_restricts_the_comparisons() -> None:
     from medcompress.evaluation.compare_stage import Arm, ArmOutcomes, ProbeTable, restrict
 

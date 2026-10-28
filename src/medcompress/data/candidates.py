@@ -261,6 +261,29 @@ class JoinRule:
         crop = None if crop_threshold < 0 else round(float(crop_threshold), 4)
         return cls(view, round(float(threshold), 4), crop)
 
+    @classmethod
+    def from_label(cls, text: str) -> JoinRule:
+        """The inverse of :attr:`label` for a cosine rule: ``full:0.88`` or
+        ``full:0.88:or_crop:0.80``. Raises ``ValueError`` on anything else."""
+        parts = text.strip().split(":")
+        try:
+            if parts[0] not in RULE_VIEWS or len(parts) not in (2, 4):
+                raise ValueError
+            crop = None
+            if len(parts) == 4:
+                if parts[2] != "or_crop":
+                    raise ValueError
+                crop = round(float(parts[3]), 4)
+            rule = cls(parts[0], round(float(parts[1]), 4), crop)
+        except ValueError:
+            raise ValueError(
+                f"{text!r} is not a rule: write it as view:threshold or "
+                "view:threshold:or_crop:level, e.g. full:0.88:or_crop:0.80"
+            ) from None
+        if rule.label != text.strip():
+            raise ValueError(f"{text!r}: write the rule as {rule.label}")
+        return rule
+
 
 RULE_VIEWS: tuple[str, ...] = ("full", "centre", "max")
 RULE_THRESHOLDS: tuple[float, ...] = tuple(round(0.50 + 0.01 * k, 2) for k in range(50))
