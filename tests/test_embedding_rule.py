@@ -870,6 +870,160 @@ def test_the_rule_sweep_and_run_4b_on_the_command_line(tmp_path: Path) -> None:
     assert labels_values(results)["labels:either_rater:rule:threshold"] == 0.95
 
 
+def test_the_heldout_filter_keeps_train_and_moves_no_image(tmp_path: Path) -> None:
+    from medcompress.data.dedup import cross_similarity_matrix, hamming_distance
+    from medcompress.data.embed_step import embed_step
+    from medcompress.data.embeddings import load_embeddings
+    from medcompress.data.prepare import (
+        HELDOUT_FILE,
+        _features,
+        crop_settings,
+        prepare,
+        write_private_outputs,
+    )
+    from medcompress.data.rule_sweep import filter_sweep, filter_sweep_rows, heldout_filters
+
+    def quiet(_: str) -> None:
+        return None
+
+    data = _dataset(tmp_path, overlay=False, lookalike=True)
+    out = tmp_path / "embed"
+    embed_step(data, CONFIG, out, TinyEmbedder(), split_seed=3, close_bits=4, mask_threshold=4,
+               log=quiet)  # fmt: skip
+    rule = cand.JoinRule("full", 0.95, 0.80)
+    filters = heldout_filters([0.40, 0.99, 0.62], crop=0.70, bits=4, bits_crop=0.50)
+    assert [f.label for f in filters] == ["0.99", "0.62", "0.40"]  # the fewest removed first
+    common = {"split_seed": 3, "close_bits": 4, "mask_threshold": 4}
+    base, results = filter_sweep(data, CONFIG, out, rule, filters, log=quiet, **common)
+    base2, results2 = filter_sweep(data, CONFIG, out, rule, filters, log=quiet, **common)
+    rows = filter_sweep_rows(base, results, rule=rule, **common)
+    assert rows == filter_sweep_rows(base2, results2, rule=rule, **common)  # reproducible
+
+    def images(prepared):  # type: ignore[no-untyped-def]
+        return {n: {s.image_path for s in m} for n, m in prepared.splits.items()}
+
+    before = images(base)
+    _, paths, fingerprints, signatures = _features(data, CONFIG, crop_settings(CONFIG))
+    emb, _ = load_embeddings(out / "embeddings.npz", paths, SETTINGS)
+    index = {p: i for i, p in enumerate(paths)}
+    train = sorted(before["train"])
+    for r in results:
+        after = images(r.prepared)
+        assert [s.sample_id for s in r.prepared.splits["train"]] == [
+            s.sample_id for s in base.splits["train"]]  # train untouched  # fmt: skip
+        for name in ("val", "test"):
+            assert after[name] <= before[name]  # nothing added, nothing moved in
+            gone = before[name] - after[name]
+            assert {Path(p).stem for p in gone} == set(r.prepared.heldout_removed[name])
+            for path in sorted(before[name]):  # removed exactly when a condition holds
+                cos = max(float(emb["full"][index[path]] @ emb["full"][index[t]]) for t in train)
+                crop = cross_similarity_matrix([signatures[path]],
+                                               [signatures[t] for t in train],
+                                               crop_settings(CONFIG))[0]  # fmt: skip
+                close = [c for t, c in zip(train, crop, strict=True)
+                         if hamming_distance(fingerprints[path], fingerprints[t]) <= 4]  # fmt: skip
+                expected = (np.float32(cos) >= np.float32(r.heldout.threshold)
+                            or crop.max() >= np.float32(0.70)
+                            or any(c >= np.float32(0.50) for c in close))  # fmt: skip
+                assert (path in gone) == bool(expected), (r.heldout.label, path)
+        for name, members in after.items():  # no image changes split
+            assert members <= before[name]
+    values = {r.heldout.label: r.values for r in results}
+    assert results[0].prepared.split_sha256 == base.split_sha256  # 0.99 removes nothing
+    assert values["0.62"]["heldout_filter:removed:test"] == 1
+    assert values["0.62"]["heldout_filter:kept_fraction:images:test"] == pytest.approx(2 / 3)
+    assert values["0.62"]["heldout_filter:test_floor_met"] == 1 and results[1].floor_met
+    assert values["0.40"]["heldout_filter:kept_fraction:images:test"] == 0.0
+    assert values["0.40"]["heldout_filter:test_floor_met"] == 0 and not results[2].floor_met
+    assert values["0.62"]["heldout_filter:unfiltered:images:test"] == len(before["test"])
+    assert values["0.62"]["val_test_confirmed_duplicates_of_train"] == 0
+    for r in results:  # each filtered split is the one prepare builds alone (run 4b)
+        alone = prepare(data, CONFIG, rule=rule, embed_dir=out, heldout_filter=r.heldout,
+                        **common)  # fmt: skip
+        assert alone.split_sha256 == r.prepared.split_sha256 and alone.rows == r.prepared.rows
+        for t in alone.top_cosine_cross_split:  # no val/test pair on the sheet
+            assert "train" in (t.first_split, t.second_split)
+    write_private_outputs(results[1].prepared, tmp_path / "private", data)
+    removed = json.loads((tmp_path / "private" / HELDOUT_FILE).read_text())
+    assert removed["removed"]["test"] == list(results[1].prepared.heldout_removed["test"])
+    assert removed["filter"]["threshold"] == 0.62
+    sweep_values = {row["metric"]: row["value"] for row in rows}
+    assert sweep_values["filter_sweep:0.40:test_floor_met"] == 0
+    assert sweep_values["filter_sweep:unfiltered:images:test"] == len(before["test"])
+    assert sweep_values["filter_sweep:rule:threshold"] == 0.95
+
+
+def test_the_filter_sweep_and_run_4b_with_the_filter_on_the_command_line(tmp_path: Path) -> None:
+    from medcompress.data.prepare import _row
+    from medcompress.utils.io import append_results
+
+    data = _dataset(tmp_path, overlay=False, lookalike=True)
+    results, out = tmp_path / "results", tmp_path / "embed"
+    done = _run("embed", "--data-root", str(data), "--out-dir", str(out), "--results-root",
+                str(results), "--split-seed", "3", "--close-bits", "4", "--mask-threshold", "4",
+                "--embedding-model", "tiny")  # fmt: skip
+    assert done.returncode == 0, done.stdout + done.stderr
+    _pin(out)
+    sweep = results / "data" / "near_duplicate_sweep.csv"  # as rule-sweep writes it
+    append_results([_row("sweep:full:0.95:or_crop:0.80:within_guard", 1),
+                    _row("sweep:full:0.60:or_crop:0.80:within_guard", 0)], sweep)  # fmt: skip
+    sheets = tmp_path / "filter_sheets"
+    base = ("filter-sweep", "--data-root", str(data), "--embed-dir", str(out), "--results-root",
+            str(results), "--split-seed", "3", "--thresholds", "0.40", "0.99", "0.62")  # fmt: skip
+    for rule, why in (("full:0.60:or_crop:0.80", "over the chaining guard"),
+                      ("full:0.90:or_crop:0.80", "not in the sweep")):  # fmt: skip
+        refused = _run(*base, "--rule", rule, "--out-dir", str(sheets))
+        assert refused.returncode == 5 and why in refused.stderr, refused.stderr
+    inside = _run(*base, "--rule", "full:0.95:or_crop:0.80", "--out-dir", str(REPO / "tmp_f"))
+    assert inside.returncode == 5 and "outside the repository" in inside.stderr
+    swept = _run(*base, "--rule", "full:0.95:or_crop:0.80", "--out-dir", str(sheets))
+    assert swept.returncode == 0, swept.stdout + swept.stderr
+    assert "held-out filter F 0.40:" in swept.stdout
+    assert "is BELOW the 50% floor" in swept.stdout and "meets the 50% floor" in swept.stdout
+    assert "held-out filter F 0.62: val keeps" in swept.stdout
+    assert sorted(p.name for p in sheets.glob("*.png")) == [
+        "rc_d1_filter_0.40.png",
+        "rc_d1_filter_0.62.png",
+        "rc_d1_filter_0.99.png",
+    ]
+    target = results / "data" / "near_duplicate_filter_sweep.csv"
+    counts = target.read_text()
+    assert ".jpg" not in counts and "filter_sweep:0.62:kept_fraction:images:test" in counts
+    again = _run(*base, "--rule", "full:0.95:or_crop:0.80", "--out-dir", str(tmp_path / "f2"))
+    assert again.returncode == 0 and target.read_text() == counts  # the same counts again
+    from medcompress.evaluation.aggregate import validate_results_tree
+
+    assert validate_results_tree(results) == []
+    hashes = {}  # F -> the split_sha256 the filter sweep printed
+    for line in swept.stdout.splitlines():
+        if line.startswith("held-out filter F "):
+            hashes[line.split()[3].rstrip(":")] = line.split("split_sha256 ", 1)[1].split(";")[0]
+    prep = ("prepare", "--data-root", str(data), "--private-dir", str(tmp_path / "private"),
+            "--results-root", str(results), "--split-seed", "3", "--close-bits", "4",
+            "--mask-threshold", "4", "--embed-dir", str(out))  # fmt: skip
+    rule = ("--rule", "full:0.95:or_crop:0.80")
+    for extra, why in ((("--heldout-filter", "0.85", *rule), "not in the filter sweep"),
+                       (("--heldout-filter", "0.40", *rule), "keeps less than 50%"),
+                       (("--heldout-filter", "0.625", *rule), "two decimals"),
+                       (("--heldout-filter", "0.62"), "needs --rule")):  # fmt: skip
+        refused = _run(*prep, *extra)
+        assert refused.returncode == 5 and why in refused.stderr, (extra, refused.stderr)
+    run_4b = _run(*prep, *rule, "--heldout-filter", "0.62", "--sheet-dir", str(tmp_path / "s4b"))
+    assert run_4b.returncode == 0, run_4b.stdout + run_4b.stderr
+    assert "held-out filter: F 0.62, crop 0.70, crop 0.50 within 4 bits" in run_4b.stdout
+    assert "held-out filter F 0.62: val keeps" in run_4b.stdout
+    assert hashes["0.62"] in run_4b.stdout  # the filtered split the sweep showed
+    summary = (results / "data" / "summary.csv").read_text()
+    assert "heldout_filter:threshold,0.62" in summary
+    assert "near_duplicates:rule_from_sweep" in summary
+    removed = json.loads((tmp_path / "private" / "heldout_filter_removed.json").read_text())
+    assert removed["removed"]["test"] and removed["filter"]["threshold"] == 0.62
+    assert validate_results_tree(results) == []  # summary.csv with the filter rows too
+    append_results([_row("sweep:full:0.70:or_crop:0.80:within_guard", 1)], sweep)
+    other = _run(*prep, "--rule", "full:0.70:or_crop:0.80", "--heldout-filter", "0.62")
+    assert other.returncode == 5 and "used the rule full:0.95:or_crop:0.80" in other.stderr
+
+
 def test_the_strict_subset_restricts_the_comparisons() -> None:
     from medcompress.evaluation.compare_stage import Arm, ArmOutcomes, ProbeTable, restrict
 

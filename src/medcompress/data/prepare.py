@@ -77,6 +77,16 @@ from medcompress.data.embeddings import (
     make_embedder,
     pair_cosines,
 )
+from medcompress.data.heldout_filter import (
+    HELDOUT_SPLITS,
+    MIN_TEST_KEPT,
+    REASONS,
+    HeldoutFilter,
+    HeldoutNeighbours,
+    count_matching_pairs,
+    heldout_neighbours,
+    kept_fraction,
+)
 from medcompress.data.kvasir import (
     KvasirVQAx1,
     link_masks,
@@ -108,6 +118,10 @@ class PreparedData:
     strict_test_images: tuple[str, ...] = ()
     """img_ids of the test images whose most similar training image stays below the rule's
     threshold minus the strict margin (D02 amendment 3; empty under the crop rule)."""
+    heldout_filter: Mapping[str, float] = field(default_factory=dict)
+    """The held-out filter's settings (D02 amendment 6; empty without a filter)."""
+    heldout_removed: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """img_ids removed from validation and test by the held-out filter, per split."""
 
 
 @dataclass(frozen=True)
@@ -230,6 +244,7 @@ def near_duplicate_settings(
 LABELS_FILE = Path("data") / "near_duplicate_labels.csv"
 """The committed scores of the labelled pairs; ``labels:chosen:*`` hold the chosen rule."""
 STRICT_FILE = "strict_test.json"
+HELDOUT_FILE = "heldout_filter_removed.json"
 DEFAULT_STRICT_MARGIN = 0.05
 
 
@@ -452,6 +467,8 @@ def _cross_split(
     emb: Mapping[str, np.ndarray] | None = None,
     index: Mapping[str, int] | None = None,
     margin: float = DEFAULT_STRICT_MARGIN,
+    *,
+    train_pairs_only: bool = False,
 ) -> _Cross:
     """Similarities across splits, after the split.
 
@@ -462,6 +479,8 @@ def _cross_split(
     training image *beyond* the candidate distance reaches the threshold. Under a cosine rule:
     the strict test subset, the test images whose most similar training image stays below the
     rule's threshold minus ``margin`` (and below its crop level minus ``margin``).
+    ``train_pairs_only`` (the held-out filter of D02 amendment 6): leave out the pairs between
+    validation and test, which the filter does not touch.
     """
     rows: list[dict[str, Any]] = []
     by_score: list[CrossPair] = []
@@ -471,6 +490,8 @@ def _cross_split(
     names = list(split_images)
     for i, first in enumerate(names):
         for second in names[i + 1 :]:
+            if train_pairs_only and "train" not in (first, second):
+                continue
             a, b = list(split_images[first]), list(split_images[second])
             if not a or not b:
                 continue
@@ -546,6 +567,54 @@ def _cross_split(
     return _Cross(rows, top, closest, top_cos, tuple(sorted(strict)))
 
 
+def _positive_images(members: Sequence[VQASample], finding: str) -> int:
+    return len({s.image_path for s in members if s.findings.get(finding)})
+
+
+def _filter_rows(
+    heldout: HeldoutFilter,
+    neighbours: HeldoutNeighbours,
+    removed: Mapping[str, Sequence[str]],
+    before: Mapping[str, Sequence[VQASample]],
+    after: Mapping[str, Sequence[VQASample]],
+    masked: set[str],
+) -> list[dict[str, Any]]:
+    """``heldout_filter:*``: the settings, what was removed and why, and how much of each
+    held-out split is kept (images, QA rows, masked images, positives per finding)."""
+    rows = [_row(f"heldout_filter:{k}", v) for k, v in heldout.code().items()]
+    for name in HELDOUT_SPLITS:
+        old, new = list(before.get(name, ())), list(after.get(name, ()))
+        old_images, new_images = {s.image_path for s in old}, {s.image_path for s in new}
+        counts = {
+            "images": (len(old_images), len(new_images)),
+            "qa_rows": (len(old), len(new)),
+            "masked_images": (len(old_images & masked), len(new_images & masked)),
+        }
+        for finding in sorted({f for s in old for f, on in s.findings.items() if on}):
+            counts[f"positives:{finding}"] = (
+                _positive_images(old, finding),
+                _positive_images(new, finding),
+            )
+        for key, (total, kept) in counts.items():
+            rows.append(_row(f"heldout_filter:unfiltered:{key}:{name}", total))
+            if total:  # a fraction of nothing is not written
+                rows.append(
+                    _row(f"heldout_filter:kept_fraction:{key}:{name}", kept_fraction(kept, total))
+                )
+        rows.append(_row(f"heldout_filter:removed:{name}", len(removed.get(name, ()))))
+        for reason in REASONS:
+            hits = sum(1 for p in removed.get(name, ()) if heldout.reasons(neighbours, p)[reason])
+            rows.append(_row(f"heldout_filter:removed_by:{reason}:{name}", hits))
+    test_total = len({s.image_path for s in before.get("test", ())})
+    test_kept = len({s.image_path for s in after.get("test", ())})
+    rows += [
+        _row("heldout_filter:min_test_kept", MIN_TEST_KEPT),
+        _row("heldout_filter:test_floor_met",
+             int(kept_fraction(test_kept, test_total) >= MIN_TEST_KEPT)),
+    ]  # fmt: skip
+    return rows
+
+
 def prepare(
     data_root: Path,
     dataset_config: Mapping[str, Any],
@@ -561,6 +630,8 @@ def prepare(
     features: tuple[Any, Any, Any, Any] | None = None,
     embed_dir: Path | None = None,
     crop_pairs: CropPairs | None = None,
+    heldout_filter: HeldoutFilter | None = None,
+    neighbours: HeldoutNeighbours | None = None,
 ) -> PreparedData:
     """Run steps 1-6 and return the decisions plus the aggregate result rows.
 
@@ -575,6 +646,13 @@ def prepare(
     signatures) skips reading the images. ``crop_pairs``: every pair at or above a crop level
     no higher than the rule's, from ``crop_pass`` over the same signatures in the same image
     order; it skips that pass (the rule sweep of D02 amendment 5 makes it once).
+
+    ``heldout_filter`` (D02 amendment 6, a cosine rule only): after the split, remove from
+    validation and test every image too similar to a training image
+    (``data/heldout_filter.py``). It never moves an image between splits and never touches
+    train; the rows, the strict subset, the contact-sheet bands (then train/val and train/test
+    pairs only) and ``split_sha256`` are of the filtered splits. ``neighbours``: the held-out
+    similarities of the same split, computed once by the filter sweep.
 
     Raises :class:`ConfigError` while a setting is open, and
     :class:`~medcompress.data.dedup.ChainingError` when the chaining guard stops the run.
@@ -682,6 +760,35 @@ def prepare(
     split_images = {
         name: sorted({s.image_path for s in members}) for name, members in splits.items()
     }
+    filter_rows: list[dict[str, Any]] = []
+    removed: dict[str, tuple[str, ...]] = {}
+    if heldout_filter is not None:
+        if emb is None:
+            raise ConfigError("the held-out filter (D02 amendment 6) needs a cosine rule")
+        if neighbours is None or not neighbours.fits(split_images, heldout_filter.bits):
+            neighbours = heldout_neighbours(
+                split_images, fingerprints, signatures, settings.crop, emb, images,
+                bits=heldout_filter.bits,
+            )  # fmt: skip
+        removed = heldout_filter.removed(neighbours)
+        gone = {p for paths in removed.values() for p in paths}
+        kept = {
+            name: [s for s in members if s.image_path not in gone]
+            for name, members in splits.items()
+        }
+        filter_rows = _filter_rows(
+            heldout_filter, neighbours, removed, splits, kept, set(links.links)
+        )
+        splits = kept  # train is untouched: none of its images is in ``gone``
+        split_images = {
+            name: sorted({s.image_path for s in members}) for name, members in splits.items()
+        }
+        filter_rows.append(
+            _row("heldout_filter:val_test_pairs_matching", count_matching_pairs(
+                split_images.get("val", []), split_images.get("test", []), heldout_filter,
+                fingerprints, signatures, settings.crop, emb, images,
+            ))
+        )  # fmt: skip
     split_of = {p: name for name, paths in split_images.items() for p in paths}
     train_fp = {p: fingerprints[p] for p in split_images["train"]}
     closest = {
@@ -692,14 +799,14 @@ def prepare(
     close_count = sum(1 for d in closest.values() for v in d.values() if v <= close_bits)
     crossing: dict[str, set[str]] = {name: set() for name in closest}
     for a, b in joined_list:
-        if split_of[a] != split_of[b]:
+        if a in split_of and b in split_of and split_of[a] != split_of[b]:
             for path, other in ((a, b), (b, a)):
                 if split_of[path] != "train" and split_of[other] == "train":
                     crossing[split_of[path]].add(path)
-    close_apart = [  # within close_bits, not joined, in different splits
+    close_apart = [  # within close_bits, not joined, in different splits (filter: still in one)
         CrossPair(a, split_of[a], b, split_of[b], score, d)
         for a, b, d, keep, score in close
-        if not keep and split_of[a] != split_of[b]
+        if not keep and a in split_of and b in split_of and split_of[a] != split_of[b]
     ]
     confirmed_leaks = sum(len(v) for v in crossing.values())
     if confirmed_leaks:  # impossible by construction: joined pairs share a group
@@ -724,6 +831,7 @@ def prepare(
     rows: list[dict[str, Any]] = [_row("images:all", len(images))]
     rows += group_size_rows(group_sizes, len(images))
     rows += rule_rows
+    rows += filter_rows
     close_joined = sum(1 for *_, keep, _ in close if keep)
     rows += [
         _row("near_duplicates:close_pairs", len(close)),
@@ -758,7 +866,8 @@ def prepare(
         for key, count in hist.items():
             rows.append(_row(f"min_distance_to_train:{name}:{key}", count))
     margin = strict_margin(dataset_config)
-    cross = _cross_split(split_images, fingerprints, signatures, settings, rule, emb, index, margin)
+    cross = _cross_split(split_images, fingerprints, signatures, settings, rule, emb, index, margin,
+                         train_pairs_only=heldout_filter is not None)  # fmt: skip
     rows += cross.rows
     strict_ids: tuple[str, ...] = ()
     if rule.view != "crop":
@@ -807,6 +916,10 @@ def prepare(
         close_not_joined=tuple(close_apart[:CLOSE_NOT_JOINED_SHOWN]),
         top_cosine_cross_split=cross.top_cosine,
         strict_test_images=strict_ids,
+        heldout_filter=heldout_filter.code() if heldout_filter is not None else {},
+        heldout_removed={
+            name: tuple(sorted(str(Path(p).stem) for p in paths)) for name, paths in removed.items()
+        },
     )  # fmt: skip
 
 
@@ -1089,6 +1202,12 @@ def write_private_outputs(prepared: PreparedData, out_dir: Path, data_root: Path
         )
     if prepared.strict_test_images:  # D02 amendment 3: the strict test subset (img_ids)
         (out_dir / STRICT_FILE).write_text(json.dumps(list(prepared.strict_test_images), indent=0))
+    if prepared.heldout_filter:  # D02 amendment 6: the img_ids the held-out filter removed
+        removed = {
+            "filter": dict(prepared.heldout_filter),
+            "removed": {k: list(v) for k, v in prepared.heldout_removed.items()},
+        }
+        (out_dir / HELDOUT_FILE).write_text(json.dumps(removed, sort_keys=True, indent=1))
     hashes = {"split_sha256": prepared.split_sha256}
     for name in ("kvasir_vqa_x1", "kvasir_seg"):
         root = Path(data_root) / name

@@ -48,6 +48,12 @@ Commands:
            rule within the chaining guard (PNGs in --out-dir, private); counts to
            <results_root>/data/near_duplicate_sweep.csv. prepare and counts then take
            --rule <one of them> (run 4b); a rule not in that file is refused
+  filter-sweep  D02 amendment 6: with the swept rule's groups and split, the held-out filter
+           at each F (remove a val/test image whose training neighbour has a full-view cosine
+           >= F, a crop >= 0.70, or a crop >= 0.50 within 4 dHash bits): what each F keeps and
+           one private sheet of the closest remaining train/val and train/test pairs (PNGs in
+           --out-dir); counts to <results_root>/data/near_duplicate_filter_sweep.csv. prepare and
+           counts then take --heldout-filter <one F of it> with --rule
 
 Exit codes: 4 a setting is open (the joining rule before the labels are scored, no rule
 qualifies, the third member has pairs to decide, or a top-up is required), 5 an input check
@@ -177,7 +183,7 @@ def counts(args: argparse.Namespace, dataset: dict) -> int:
     from medcompress.data.prepare import prepare
     from medcompress.utils.bundles import BundleError, attach_data
 
-    rule, code = _swept(args)
+    rule, heldout, code = _swept(args)
     if code:
         return code
     try:
@@ -193,6 +199,7 @@ def counts(args: argparse.Namespace, dataset: dict) -> int:
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
         rule=rule,  # type: ignore[arg-type]
+        heldout_filter=heldout,  # type: ignore[arg-type]
         results_root=args.results_root,
         embed_dir=_attached(args.embed_dir, dataset),
     )
@@ -450,22 +457,110 @@ def rule_sweep_command(args: argparse.Namespace, dataset: dict) -> int:
     return 0
 
 
-def _swept(args: argparse.Namespace) -> tuple[object | None, int]:
-    """The rule of ``--rule`` if the committed sweep allows it: (rule or None, exit code)."""
+def _filter_line(values: dict) -> str:
+    """One line on what the held-out filter removed and kept."""
+    parts = []
+    for name in ("val", "test"):
+        total = values[f"heldout_filter:unfiltered:images:{name}"]
+        share = values.get(f"heldout_filter:kept_fraction:images:{name}")
+        parts.append(
+            f"{name} keeps {values[f'images:{name}']:.0f} of {total:.0f} images "
+            f"({'n/a' if share is None else f'{share:.1%}'}), "
+            f"{values[f'qa_rows:{name}']:.0f} of "
+            f"{values[f'heldout_filter:unfiltered:qa_rows:{name}']:.0f} QA rows"
+        )
+    floor = "meets" if values["heldout_filter:test_floor_met"] else "is BELOW"
+    masked_kept = values.get("heldout_filter:kept_fraction:masked_images:test")
+    masked = "n/a" if masked_kept is None else f"{masked_kept:.1%}"
+    pairs = values["heldout_filter:val_test_pairs_matching"]
+    return (f"held-out filter F {values['heldout_filter:threshold']:.2f}: " + "; ".join(parts)
+            + f"; masked test images kept {masked}; the test {floor} the "
+            f"{values['heldout_filter:min_test_kept']:.0%} floor; val/test pairs meeting the "
+            f"filter (not filtered) {pairs:.0f}")  # fmt: skip
+
+
+def filter_sweep_command(args: argparse.Namespace, dataset: dict) -> int:
+    """D02 amendment 6: the held-out filter sweep (counts, one private sheet per F)."""
+    from medcompress.config import repo_root
+    from medcompress.data.rule_sweep import (
+        FILTER_SWEEP_FILE,
+        SweepError,
+        filter_sweep,
+        filter_sweep_rows,
+        heldout_filters,
+        swept_rule,
+    )
+    from medcompress.utils.bundles import BundleError
+
+    out = args.out_dir.resolve()
+    if out.is_relative_to(repo_root().resolve()):
+        print(f"--out-dir must be outside the repository: {out}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    try:
+        embed_dir = _embed_output(args.embed_dir, dataset)
+        data_root = _data_folder(args.data_root)
+        rule = swept_rule(args.results_root, args.rule)
+        filters = heldout_filters(args.thresholds, crop=args.crop, bits=args.bits,
+                                  bits_crop=args.bits_crop)  # fmt: skip
+    except (BundleError, SweepError) as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    print(f"joining rule: {rule.label} (from the sweep, D02 amendment 5); filters: F "
+          + ", ".join(f.label for f in filters)
+          + f"; crop {args.crop:.2f}; crop {args.bits_crop:.2f} within {args.bits} "
+          "bits")  # fmt: skip
+    base, results = filter_sweep(
+        data_root, dataset, embed_dir, rule, filters, split_seed=args.split_seed,
+        close_bits=args.close_bits, mask_threshold=args.mask_threshold,
+    )  # fmt: skip
+    unfiltered = {row["metric"]: row["value"] for row in base.rows}
+    print(f"unfiltered: images train / val / test {unfiltered['images:train']:.0f} / "
+          f"{unfiltered['images:val']:.0f} / {unfiltered['images:test']:.0f}; split_sha256 "
+          f"{base.split_sha256}")  # fmt: skip
+    for r in results:
+        sheet = _final_sheet(r.prepared, out, data_root, name=f"rc_d1_filter_{r.heldout.label}.png")
+        print(f"{_filter_line(r.values)}; split_sha256 {r.prepared.split_sha256}; sheet "
+              f"(private, never commit it): {sheet}")  # fmt: skip
+    rows = filter_sweep_rows(
+        base, results, rule=rule, split_seed=args.split_seed, close_bits=args.close_bits,
+        mask_threshold=args.mask_threshold,
+    )  # fmt: skip
+    target = args.results_root / FILTER_SWEEP_FILE
+    target.unlink(missing_ok=True)
+    append_results(rows, target)
+    print(f"wrote {len(rows)} aggregate rows to {target}")
+    print("the team now judges every sheet: per F and band, how many pairs show the same scene; "
+          "F is the highest with none whose test keeps at least half of its images "
+          "(D02 amendment 6)")  # fmt: skip
+    return 0
+
+
+def _swept(args: argparse.Namespace) -> tuple[object | None, object | None, int]:
+    """The rule of ``--rule`` and the filter of ``--heldout-filter`` if the committed sweeps
+    allow them: (rule or None, filter or None, exit code)."""
+    heldout = getattr(args, "heldout_filter", None)
     if args.rule is None:
-        return None, 0
-    from medcompress.data.rule_sweep import SweepError, swept_rule
+        if heldout is not None:
+            print("--heldout-filter needs --rule (D02 amendment 6)", file=sys.stderr)
+            return None, None, INPUT_CHECK_FAILED
+        return None, None, 0
+    from medcompress.data.rule_sweep import SweepError, swept_filter, swept_rule
 
     if args.confirm_threshold is not None:
         print("--rule and --confirm-threshold exclude each other", file=sys.stderr)
-        return None, INPUT_CHECK_FAILED
+        return None, None, INPUT_CHECK_FAILED
     try:
         rule = swept_rule(args.results_root, args.rule)
+        found = swept_filter(args.results_root, heldout, rule) if heldout is not None else None
     except SweepError as exc:
         print(f"check failed: {exc}", file=sys.stderr)
-        return None, INPUT_CHECK_FAILED
+        return None, None, INPUT_CHECK_FAILED
     print(f"joining rule: {rule.label} (from the sweep, D02 amendment 5)")
-    return rule, 0
+    if found is not None:
+        print(f"held-out filter: F {found.threshold:.2f}, crop {found.crop:.2f}, crop "
+              f"{found.bits_crop:.2f} within {found.bits} bits (from the filter sweep, D02 "
+              "amendment 6)")  # fmt: skip
+    return rule, found, 0
 
 
 def _from_sweep(prepared, rule):  # type: ignore[no-untyped-def]
@@ -529,13 +624,17 @@ def _final_sheet(prepared, sheet_dir: Path, data_root: Path, name: str = FINAL_S
     apart = int(metrics.get("near_duplicates:close_pairs_not_joined", 0))
     across = int(metrics.get("near_duplicates:close_pairs_not_joined:cross_split", 0))
     if prepared.top_cosine_cross_split:
+        where = "across splits"
+        if prepared.heldout_filter:  # D02 amendment 6: train/val and train/test pairs only
+            where = (f"train/val and train/test left after the held-out filter (F "
+                     f"{prepared.heldout_filter['threshold']:.2f})")  # fmt: skip
         cosine = (
-            (f"1. The {len(prepared.top_cosine_cross_split)} most similar pairs across splits "
+            (f"1. The {len(prepared.top_cosine_cross_split)} most similar pairs {where} "
              "by the cosine of the joining rule (caption: crop r, dHash bits, splits): all should "
              "be different scenes", cells(prepared.top_cosine_cross_split)),
-            (f"2. The {len(prepared.top_cross_split)} most similar pairs across splits by the "
+            (f"2. The {len(prepared.top_cross_split)} most similar pairs {where} by the "
              "crop correlation: all should be different scenes", cells(prepared.top_cross_split)),
-            (f"3. The {len(prepared.closest_dhash_cross_split)} closest pairs across splits by the"
+            (f"3. The {len(prepared.closest_dhash_cross_split)} closest pairs {where} by the"
              " dHash: all should be different scenes", cells(prepared.closest_dhash_cross_split)),
         )  # fmt: skip
         crop = float(prepared.near_duplicates.get("crop_fraction", 0.60))
@@ -628,6 +727,10 @@ def main(argv: list[str] | None = None) -> int:
         "--rule", default=None,
         help="run 4b (D02 amendment 5): a rule of the committed sweep, e.g. full:0.88:or_crop:0.80",
     )  # fmt: skip
+    prep.add_argument(
+        "--heldout-filter", type=float, default=None, metavar="F",
+        help="run 4b (D02 amendment 6): an F of the committed filter sweep, with --rule",
+    )  # fmt: skip
     bund = sub.add_parser("bundle", help="manifest of the shared-data folder (data/ + private/)")
     bund.add_argument("--bundle-dir", type=Path, required=True, help="outside the repository")
     ver = sub.add_parser("verify", help="check an attached shared-data dataset")
@@ -642,6 +745,8 @@ def main(argv: list[str] | None = None) -> int:
     cnt.add_argument("--confirm-threshold", type=float, default=None, help="as in the first pass")
     cnt.add_argument("--embed-dir", type=Path, default=None, help="RC-D1-embed's output")
     cnt.add_argument("--rule", default=None, help="as in the first pass (run 4b: the swept rule)")
+    cnt.add_argument("--heldout-filter", type=float, default=None, metavar="F",
+                     help="as in the first pass (run 4b: the swept F)")  # fmt: skip
     cal = sub.add_parser("calibrate", help="choose the crop threshold (before prepare)")
     cal.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")
     cal.add_argument("--results-root", type=Path, default=Path("results"))
@@ -694,6 +799,21 @@ def main(argv: list[str] | None = None) -> int:
     swp.add_argument("--split-seed", type=int, default=20261012, help="as prepare (20261012)")
     swp.add_argument("--close-bits", type=int, default=4, help="as prepare (4)")
     swp.add_argument("--mask-threshold", type=int, default=4, help="as prepare (4)")
+    fsw = sub.add_parser("filter-sweep", help="D02 amendment 6: the held-out filter at each F")
+    fsw.add_argument("--data-root", type=Path, required=True, help="data folder or shared data")
+    fsw.add_argument("--embed-dir", type=Path, required=True, help="RC-D1-embed's output")
+    fsw.add_argument("--rule", required=True, help="the swept rule (full:0.92:or_crop:0.80)")
+    fsw.add_argument("--out-dir", type=Path, required=True, help="the sheets: outside the repo")
+    fsw.add_argument("--results-root", type=Path, default=Path("results"))
+    fsw.add_argument("--thresholds", type=float, nargs="+", required=True,
+                     help="the full-view cosine levels F (D02 amendment 6: 0.90 0.88 0.86 0.84 "
+                          "0.82 0.80)")  # fmt: skip
+    fsw.add_argument("--crop", type=float, default=0.70, help="crop level (0.70)")
+    fsw.add_argument("--bits", type=int, default=4, help="dHash bits of the third condition (4)")
+    fsw.add_argument("--bits-crop", type=float, default=0.50, help="crop within those bits (0.50)")
+    fsw.add_argument("--split-seed", type=int, default=20261012, help="as prepare (20261012)")
+    fsw.add_argument("--close-bits", type=int, default=4, help="as prepare (4)")
+    fsw.add_argument("--mask-threshold", type=int, default=4, help="as prepare (4)")
     com = sub.add_parser("commit-labels", help="add a label file's SHA-256 to the commitments")
     com.add_argument("--labels", type=Path, required=True, help="your own filled file")
     com.add_argument("--role", required=True, choices=("rater_1", "rater_2", "rater_3"))
@@ -736,6 +856,8 @@ def main(argv: list[str] | None = None) -> int:
             return topup_labels(args, dataset)
         if args.command == "rule-sweep":
             return rule_sweep_command(args, dataset)
+        if args.command == "filter-sweep":
+            return filter_sweep_command(args, dataset)
         if args.command == "calibrate":
             return calibrate(args, dataset)
         if args.command == "counts":
@@ -757,7 +879,7 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
     from medcompress.data.embeddings import make_embedder
     from medcompress.data.prepare import prepare, write_private_outputs
 
-    rule, code = _swept(args)
+    rule, heldout, code = _swept(args)
     if code:
         return code
     prepared = prepare(
@@ -768,6 +890,7 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
         mask_threshold=args.mask_threshold,
         confirm_threshold=args.confirm_threshold,
         rule=rule,  # type: ignore[arg-type]
+        heldout_filter=heldout,  # type: ignore[arg-type]
         results_root=args.results_root,
         embed_dir=_attached(args.embed_dir, dataset),
         embedder=make_embedder(args.embedding_model) if args.embedding_model else None,
@@ -793,6 +916,8 @@ def prepare_command(args: argparse.Namespace, dataset: dict) -> int:
               f"({metrics['strict_test:image_fraction_of_test']:.1%} of the test images), "
               f"{metrics['strict_test:qa_rows']:.0f} QA rows; margin "
               f"{metrics['strict_test:margin']:.2f}")  # fmt: skip
+    if prepared.heldout_filter:
+        print(_filter_line(metrics))
     if args.sheet_dir is not None:
         sheet = _final_sheet(prepared, args.sheet_dir, args.data_root)
         print(f"final contact sheet (private, never commit it; attach it to the report): {sheet}")
