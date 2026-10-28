@@ -20,9 +20,12 @@
   - write **one shared-data folder** (the images, the rows, Kvasir-SEG and the private RC-D1
     files, with a SHA-256 manifest) that every later card attaches as a private Kaggle dataset.
 - Who: **Soheil** (decision of 2026-10-17).
-- Status: `blocked` for **run 4** (section 3b) until RC-D1-embed has run, the two raters have
-  labelled the pairs, and RC-D1-label's scoring has committed the chosen rule. Runs 1, 2 and 3
-  are recorded in section 5; nothing from them is used (run 3 was not accepted).
+- Status: `blocked` for the runner (its RC-D1 plan has no `--rule` and would repeat run 4's
+  rule). **Run 4 is not accepted** (D02 amendment 5, 2026-10-28; section 5). Next, by hand:
+  - the rule sweep (section 3c);
+  - then run 4b with the rule the team selects on the sweep's sheets (section 3d).
+
+  Runs 1, 2, 3 and 4 are recorded in section 5; nothing from them is used.
 
 ## 2. Requirements
 
@@ -158,7 +161,10 @@ into validation or test (expensive); a wrong join only puts two images in the sa
 (cheap, as long as no giant group forms). So the threshold sits in the valley of the bimodal
 5-8 bit distribution, not at the provisional proposal 0.80, which missed a same-scene pair.
 
-### 3b. Run 4 (after RC-D1-label)
+### 3b. Run 4 (after RC-D1-label): done 2026-10-28, NOT accepted (section 5)
+
+Kept as the record of run 4, and for the bands of the final contact sheet and the rows of
+`results/data/summary.csv`, which run 4b shares. Do not run it again: use sections 3c and 3d.
 
 Before it: the chosen rule is committed (`results/data/near_duplicate_labels.csv`), and the
 agent has pinned the embedding revision RC-D1-embed printed.
@@ -261,6 +267,139 @@ python scripts/run_card.py --card RC-D1-counts --data-root /kaggle/input/<shared
 # by hand: python scripts/prepare_data.py counts --data-root /kaggle/input/<shared-data> \
 #     --split-seed 20261012 --close-bits 4 --mask-threshold 4 --embed-dir /kaggle/input/rc-d1-embed
 ```
+
+### 3c. The rule sweep (D02 amendment 5; CPU, Save & Run All)
+
+Run 4 is not accepted (section 5). This one CPU run tries the rules fixed by amendment 5:
+- `full:T` OR crop >= 0.80, for T = 0.92, 0.90, 0.88, 0.86 and 0.84, highest first;
+- each split is built exactly as `prepare` builds it (seed 20261012, close bits 4, mask
+  threshold 4, the attached embeddings);
+- for each rule it prints the largest group, the joined pairs and the val/test confirmed
+  duplicates, and draws one three-band cross-split sheet (bands as in section 3b);
+- a rule over the 10 % guard is marked `OVER THE GUARD` and gets no sheet.
+
+The sweep reads the rule chosen on the either-rater truth from the committed labels file
+(`labels:either_rater:rule:*`) and stops (exit code 5) unless it is the sweep's first rule,
+`full:0.92:or_crop:0.80`.
+
+**Before you run:**
+- Notebook: **CPU**, Internet **on** (the clone, pip and the export).
+- Attach (Add Input), private datasets only:
+  - `kvasir-seg`;
+  - `rc-d1-embed`;
+  - `rc-d1-sheets` and `c-d1-sheet-001`.
+
+  The cell rebuilds RC-D1-embed's folder with its 30 labelling sheets: it collects every
+  `pairs_*.png` under `/kaggle/input`, as the run 4 cell did. Then the folder's manifest
+  check passes; the slugs of the sheet datasets do not matter.
+- Run time: not measured. The export took about 9 minutes in run 1. The one crop pass took
+  199 s on 6,449 synthetic signatures here (4 CPU cores). Each rule within the guard then runs
+  one `prepare`, whose time on Kaggle is not recorded.
+
+**The cell** (Save Version -> Save & Run All; nothing to edit):
+
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+grep "labels:either_rater:rule" results/data/near_duplicate_labels.csv
+pip install -q -r requirements/base.txt && pip install -q -e . --no-deps && pip install -q datasets
+
+# RC-D1-embed's output, with its 30 labelling sheets put back (they were uploaded apart)
+EMBED_SRC=$(dirname "$(find /kaggle/input -name embeddings.npz | head -n 1)")
+echo "RC-D1-embed at: $EMBED_SRC"
+EMBED=/kaggle/working/rc_d1_embed
+rm -rf $EMBED && mkdir -p $EMBED/label_sheets && cp -r "$EMBED_SRC"/. $EMBED/
+find /kaggle/input -name 'pairs_*.png' -exec cp -n {} $EMBED/label_sheets/ \;
+echo "labelling sheets: $(ls $EMBED/label_sheets | wc -l) (must be 30)"
+
+# the data: the export and Kvasir-SEG, as in section 3b
+export SHARED=/kaggle/working/medcompress_data
+python scripts/prepare_data.py export --data-root $SHARED/data
+SEG=$(dirname "$(find /kaggle/input -type d -name masks -path '*Kvasir-SEG*' | head -n 1)")
+echo "Kvasir-SEG at: $SEG"; ls "$SEG/images" | wc -l; ls "$SEG/masks" | wc -l   # 1000 and 1000
+python -c "import sys; sys.path.insert(0, 'src'); from pathlib import Path; \
+from medcompress.utils.kaggle import copy_kvasir_seg; \
+copy_kvasir_seg(Path('$SEG'), Path('$SHARED/data'))"
+
+# the sweep: counts to stdout and results/data/near_duplicate_sweep.csv, sheets to rc_d1_sweep/
+python scripts/prepare_data.py rule-sweep --data-root $SHARED/data --embed-dir $EMBED \
+    --out-dir /kaggle/working/rc_d1_sweep --thresholds 0.92 0.90 0.88 0.86 0.84 --crop 0.80 \
+    2>&1 | tee /kaggle/working/rc_d1_sweep.txt
+mkdir -p /kaggle/working/results_to_commit/results/data
+cp results/data/near_duplicate_sweep.csv /kaggle/working/results_to_commit/results/data/
+ls -l /kaggle/working/rc_d1_sweep
+rm -rf $SHARED   # the images are not needed in the version's output
+```
+
+**Paste back and commit:**
+- Paste back the whole printout (`rc_d1_sweep.txt`): the either-rater rule line and one line
+  per rule (joined pairs, largest group, within or over the guard, the val/test confirmed
+  duplicates, the images per split, `split_sha256`).
+- Commit `results/data/near_duplicate_sweep.csv` (aggregate counts only).
+- The sheets `rc_d1_sweep/rc_d1_sweep_full_<T>_or_crop_0.80.png` stay private: **never commit
+  them**. The team looks at every sheet and writes, per rule and band, how many pairs show the
+  same scene (section 5, the sweep's report).
+- **The selection, fixed in advance:** the highest T within the guard whose three bands show no
+  same-scene pair. If none is clean, stop and report: nothing lower is tried without a new
+  recorded decision.
+
+### 3d. Run 4b (D02 amendment 5; CPU)
+
+Only after the sweep's counts are committed and the team has selected the rule. `prepare`
+accepts `--rule` only for a rule the committed `results/data/near_duplicate_sweep.csv` lists
+within the guard; anything else stops with exit code 5. `results/data/summary.csv` then records
+the rule (`near_duplicates:rule:*`) and `near_duplicates:rule_from_sweep` = 1.
+
+Attach the same datasets as for the sweep. Do not use `CARD = "RC-D1"` in
+`notebooks/run_card.ipynb`: its plan has no `--rule` and would repeat run 4's rule.
+
+**The cell** (set `RULE` first, to the rule the team selected, written as the sweep prints it):
+
+```bash
+%%bash
+set -euo pipefail
+RULE=CHOOSE        # e.g. full:0.88:or_crop:0.80: the rule the team selected on the sweep's sheets
+if [ "$RULE" = CHOOSE ]; then echo "set RULE to the selected rule first"; exit 1; fi
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+grep "sweep:$RULE:within_guard" results/data/near_duplicate_sweep.csv   # must say 1.0
+pip install -q -r requirements/base.txt && pip install -q -e . --no-deps && pip install -q datasets
+
+EMBED_SRC=$(dirname "$(find /kaggle/input -name embeddings.npz | head -n 1)")
+EMBED=/kaggle/working/rc_d1_embed
+rm -rf $EMBED && mkdir -p $EMBED/label_sheets && cp -r "$EMBED_SRC"/. $EMBED/
+find /kaggle/input -name 'pairs_*.png' -exec cp -n {} $EMBED/label_sheets/ \;
+echo "labelling sheets: $(ls $EMBED/label_sheets | wc -l) (must be 30)"
+
+export SHARED=/kaggle/working/medcompress_data
+python scripts/prepare_data.py export --data-root $SHARED/data
+SEG=$(dirname "$(find /kaggle/input -type d -name masks -path '*Kvasir-SEG*' | head -n 1)")
+echo "Kvasir-SEG at: $SEG"; ls "$SEG/images" | wc -l; ls "$SEG/masks" | wc -l   # 1000 and 1000
+python -c "import sys; sys.path.insert(0, 'src'); from pathlib import Path; \
+from medcompress.utils.kaggle import copy_kvasir_seg; \
+copy_kvasir_seg(Path('$SEG'), Path('$SHARED/data'))"
+
+python scripts/prepare_data.py prepare --data-root $SHARED/data --private-dir $SHARED/private \
+    --split-seed 20261012 --close-bits 4 --mask-threshold 4 --embed-dir $EMBED --rule "$RULE" \
+    --sheet-dir /kaggle/working/rc_d1_sheets 2>&1 | tee /kaggle/working/rc_d1_run4b.txt
+python scripts/prepare_data.py bundle --bundle-dir $SHARED    # SHA-256 manifest of every file
+python scripts/prepare_data.py verify --data-root $SHARED     # must print OK
+python -m pytest -q tests/test_results.py                     # must pass before you commit
+mkdir -p /kaggle/working/results_to_commit/results/data
+cp results/data/summary.csv /kaggle/working/results_to_commit/results/data/
+```
+
+**Paste back** what section 3b asks for. Check that:
+- the `split_sha256` is the one the sweep printed for this rule (the same split);
+- the final contact sheet `/kaggle/working/rc_d1_sheets/rc_d1_final_cross_split_pairs.png`
+  is checked the same way (per band: how many pairs show the same scene).
+
+Then make the shared data a private dataset (section 4), under a new name (for example
+`medcompress-data-run4b`). Commit `results/data/summary.csv` (it replaces run 4's).
 
 ## 4. Make the shared data a private Kaggle dataset, and what to commit back
 
@@ -415,17 +554,68 @@ them.
 - Conclusion: both measures miss true duplicates; the split is not clean. Hence D02 amendment
   3 (embeddings, a rule chosen on human labels).
 
-### Run 4
+### Run 4 (reported 2026-10-28, Soheil, Kaggle, commit 5e08c51): rule full:0.93; NOT accepted
+
+- Run by / date: reported 2026-10-28 by Soheil (`results/data/summary.csv` committed in
+  629cb6d)
+- Commit actually used: 5e08c51 (it holds the chosen rule in
+  `results/data/near_duplicate_labels.csv`)
+- The rule: `full:0.93`, chosen on amendment 4's both-raters truth
+  (`near_duplicates:rule:*`: view 1, threshold 0.93, no crop part)
+- RC-D1-embed's dataset attached: `rc-d1-embed`, with its 30 labelling sheets rebuilt from the
+  `pairs_*.png` files under `/kaggle/input`
+- Hardware / library versions, wall time: not reported here
+- The automatic checks, all passed (from the committed `summary.csv`):
+  - groups 4,443, the largest 370 (5.7 %);
+  - held-out images with a confirmed duplicate in train: 0;
+  - pairs within 4 bits not joined: 1,038 (365 across splits);
+  - joined pairs 26,273;
+  - strict test subset 706 images (74.9 % of the test images), 19,723 QA rows, margin 0.05.
+- `split_sha256`: `4bc426fea4965a4a8408c6dffa7c9ad60be7b0f974d7eb624385db5e089de8d3`
+- **The deciding check failed.** On `rc_d1_final_cross_split_pairs.png`, many cross-split
+  pairs are the same scene (consecutive frames of one video). The reviewer counted, from a
+  screenshot:
+  - band 1 (the highest cosines): about 17 of 24;
+  - band 2 (the highest crop correlations): about 4 of 24;
+  - band 3 (the closest by the dHash): about 13 of 24.
+- Likely cause (recorded as such): the primary truth required both raters to say
+  `same_scene`. Rater 2's first written legend called the code "identical", a narrower notion
+  than `same_scene`, so near-identical frames counted as negatives and pushed the threshold up.
+- Verdict: **not accepted** (D02 amendment 5). Its split is not used. Its `summary.csv` stays
+  committed until run 4b replaces it.
+- Name of the private shared-data dataset: not reported here; do not attach it to any later
+  card.
+
+### The rule sweep (section 3c)
 
 - Run by / date:
-- Commit actually used (it must hold the chosen rule in `results/data/near_duplicate_labels.csv`
-  and the pinned embedding revision):
-- RC-D1-embed's dataset attached (name):
-- Hardware / library versions (`pip freeze | grep -E "datasets|pillow|numpy"`):
+- Commit actually used:
+- The either-rater rule line:
+- One line per rule (joined pairs, largest group and fraction, within or over the guard, the
+  val/test confirmed duplicates, `split_sha256`):
+- Wall time:
+- The team's count of same-scene pairs, per rule and band (who judged, and when):
+
+  | Rule | Band 1 (cosine) | Band 2 (crop) | Band 3 (dHash) |
+  |---|---|---|---|
+  | full:0.92:or_crop:0.80 | | | |
+  | full:0.90:or_crop:0.80 | | | |
+  | full:0.88:or_crop:0.80 | | | |
+  | full:0.86:or_crop:0.80 | | | |
+  | full:0.84:or_crop:0.80 | | | |
+
+- The selected rule (the highest T within the guard with no same-scene pair), or "none clean:
+  stopped":
+
+### Run 4b (section 3d)
+
+- Run by / date:
+- Commit actually used:
+- The rule (`--rule`):
 - Wall time:
 - The `groups ...` line and the `strict test subset ...` line:
-- Hashes printed at the end (`split_sha256`, manifest hashes, the bundle's file count):
-- The final contact sheet: attached (yes / no); same-scene pairs seen in band 1, band 2,
-  band 3 (number, or none):
+- Hashes printed at the end (`split_sha256`, the same as the sweep's for this rule; manifest
+  hashes, the bundle's file count):
+- The final contact sheet: same-scene pairs seen in band 1, band 2, band 3 (number, or none):
 - Name of the private shared-data dataset, and who it is shared with:
 - Anything unusual (errors, retries, changed settings):

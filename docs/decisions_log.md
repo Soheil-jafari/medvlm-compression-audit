@@ -298,6 +298,34 @@ must be logged here.
 
   Recorded in D02, the pre-registration draft, the data card, RC-D1-embed (report) and
   RC-D1-label.
+- **2026-10-28 (Soheil), D02 amendment 5: RC-D1 run 4 not accepted; a rule sweep,** decided
+  after the deciding check and recorded as post hoc.
+  - Run 4 (commit 5e08c51, rule `full:0.93` from the both-raters truth) passed every automatic
+    check: val/test confirmed duplicates 0; largest group 370 (5.7 %); `split_sha256`
+    4bc426fe....
+  - Its deciding check failed: many cross-split pairs on the final contact sheet are the same
+    scene (consecutive frames of one video). The reviewer counted, from a screenshot: band 1
+    about 17 of 24, band 2 about 4 of 24, band 3 about 13 of 24. **Run 4 is not accepted.**
+  - Likely cause (recorded as such): the primary truth needed both raters to say
+    `same_scene`; rater 2's first written legend called the code "identical", narrower than
+    `same_scene`, so near-identical frames counted as negatives and pushed the threshold up.
+  - Decision:
+    - truth = `same_scene` for either rater; its rule by amendment 3's criterion, read from
+      the committed labels file: `full:0.92` OR crop >= 0.80;
+    - sweep of `full:T` OR crop >= 0.80, T in {0.92, 0.90, 0.88, 0.86, 0.84}, each split as
+      `prepare` builds it, one private three-band sheet per rule within the 10 % guard;
+    - selection: the highest T within the guard whose three bands show no same-scene pair,
+      judged by the team, with the counts per band per T recorded. If none is clean, stop;
+    - then run 4b with `prepare --rule`, its sheet checked again;
+    - the paper reports the label-chosen rule, its failure, the sweep and the selected rule;
+      the strict test subset stays a sensitivity analysis.
+  - Code: `prepare_data.py rule-sweep`, `prepare --rule` and `counts --rule` (only a rule of
+    the committed sweep within the guard).
+  - Also recorded: the committed labels file has the kappa on pairs 11-290, which settles
+    amendment 4's open question.
+
+  Recorded in D02, the pre-registration draft, the data card, the paper's data TODO and the
+  RC-D1 card.
 
 ## Open decisions
 
@@ -305,7 +333,8 @@ must be logged here.
 |---|---|---|---|
 | Kaggle session time limit | the session time limit, and whether a stopped version keeps its output (unknown here); the T4 x2 quota rule is settled (counts once, 2026-10-19). RC-TT1 needs about 14.7 h (estimate) | team (check on Kaggle) | before RC-TT1 |
 | The two raters' names (RC-D1-label) | who rater 1 and rater 2 are, for the run report (D02 amendment 4: two raters, no third member) | team | at RC-D1-label's scoring |
-| Kappa pairs 291-298 (D02 amendment 4) | rater 1 labelled pairs 291-298 after the files were exchanged, so these 8 pairs may not be blind for rater 1; the pairs both labelled before the exchange are 11-290. The decision says the kappa is on 11-298 (both blind) and the card runs `--kappa-pairs 11-298`; confirm, or change the range, before the scoring | Soheil | before RC-D1-label's scoring |
+| The sweep's sheets (D02 amendment 5) | per rule and band, how many pairs show the same scene, judged by the team on the private sheets; then the rule (the highest T within the guard with none) or, if none is clean, a stop and a new recorded decision | team | after the sweep |
+| `results/data/summary.csv` | holds run 4 (not accepted) until run 4b replaces it; the paper's generated data table shows it until then | Soheil | at run 4b |
 | Published target modules | which modules the published `adapter_config.json` names (RC-TT0's printout is not committed; RC-TT1 prints it). If a name is outside the language model, RC-TT1 stops and the team decides | Soheil | at RC-TT1's start |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
 | Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |

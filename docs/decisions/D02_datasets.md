@@ -490,6 +490,9 @@ so these 8 pairs may not be blind for rater 1. The pairs both labelled before th
 11-290. Item 2 says 11-298. The card runs `--kappa-pairs 11-298` as decided; confirm, or
 change the range, before the scoring.
 
+(Settled by the scoring itself: the committed labels file has the kappa on pairs 11-290; see
+amendment 5.)
+
 Applied in `scripts/prepare_data.py` (`score-labels --no-third-member --kappa-pairs
 FIRST-LAST`) and `data/embed_step.py`. Without the flag, the scoring is amendment 3's.
 
@@ -502,6 +505,75 @@ The rows written in addition (`results/data/near_duplicate_labels.csv`):
 
 `labels:kappa`, `labels:kappa_same_scene_vs_rest` and `labels:agreement` are on the kappa's
 pairs only. Run card RC-D1-label has the Kaggle cell.
+
+## Amendment 5 (2026-10-28, Soheil): RC-D1 run 4 not accepted; a rule sweep (post hoc)
+
+**Run 4 is not accepted.** Run 4 was run from commit 5e08c51 with the rule `full:0.93`, chosen
+on amendment 4's both-raters truth. It passed every automatic check:
+- `val_test_confirmed_duplicates_of_train` 0;
+- largest group 370 images (5.7 %);
+- `split_sha256` `4bc426fea4965a4a8408c6dffa7c9ad60be7b0f974d7eb624385db5e089de8d3`.
+
+The deciding check failed. On `rc_d1_final_cross_split_pairs.png`, many cross-split pairs are
+the same scene: consecutive frames of one video. The reviewer counted, from a screenshot:
+
+| Band of the final contact sheet | Same scene |
+|---|---|
+| 1. the 24 highest cosines (full view) | about 17 of 24 |
+| 2. the 24 highest crop correlations | about 4 of 24 |
+| 3. the 24 closest by the dHash | about 13 of 24 |
+
+Nothing of run 4's split is used. Its `results/data/summary.csv` stays in the repository
+until run 4b replaces it, as the record of the run.
+
+The labels the rule was chosen on (`results/data/near_duplicate_labels.csv`, committed in
+5e08c51) were scored on pairs 11-290 for the kappa (`labels:kappa:first_pair` 11,
+`labels:kappa:last_pair` 290). This settles amendment 4's open question in favour of 11-290.
+
+**Likely cause (recorded as such, not tested):**
+- the primary truth required both raters to say `same_scene`;
+- rater 2's first written legend called the code "identical", a narrower notion than
+  `same_scene`;
+- so near-identical frames counted as negatives, which pushed the threshold up.
+
+**Decision (made after the deciding check; post hoc, and reported as such):**
+1. **Truth = `same_scene` for either rater** (amendment 4's secondary reading). The rule chosen
+   on it by amendment 3's criterion is the one RC-D1-label's scoring wrote to the committed
+   labels file (`labels:either_rater:rule:*`): `full:0.92` OR crop >= 0.80. The sweep reads it
+   from that file, prints it, and refuses to run if its first rule is not this one.
+2. **Rule sweep, fixed before any new sheet is seen:**
+   - the candidate rules are `full:T` OR crop >= 0.80, T in {0.92, 0.90, 0.88, 0.86, 0.84};
+   - for each, the split is built exactly as `prepare` builds it (`prepare` itself runs for
+     each rule): seed 20261012, close bits 4, mask threshold 4, the attached RC-D1-embed
+     embeddings;
+   - recorded per rule: the largest group and its fraction, the joined pairs, the val/test
+     confirmed duplicates (must be 0), and the three-band cross-split contact sheet. The bands
+     are as now, 24 pairs each; there is one PNG per T, written privately outside the
+     repository;
+   - a rule over the 10 % guard is marked and gets no sheet.
+3. **Selection, fixed now:**
+   - the highest T (the least joining) within the guard whose three bands show no same-scene
+     pair, judged by the team on the sheets;
+   - the count of same-scene pairs per band per T is recorded;
+   - if none is clean, stop and report. Nothing lower is tried without a new recorded
+     decision.
+4. **Run 4b** = `prepare` with the selected rule (`--rule`), then `bundle` and `verify`. Its
+   final contact sheet is checked again the same way.
+5. **In the paper:** the label-chosen rule, its failure on the deciding check, the sweep and
+   the selected rule. The strict test subset stays as a sensitivity analysis.
+
+Applied in:
+- `data/rule_sweep.py` and `scripts/prepare_data.py rule-sweep --data-root ... --embed-dir ...
+  --out-dir ... --thresholds 0.92 0.90 0.88 0.86 0.84 --crop 0.80`. It is one CPU run. The
+  counts per T go to stdout and to `results/data/near_duplicate_sweep.csv` (aggregate only:
+  `sweep:<rule>:*`); the PNGs go to `--out-dir`, outside the repository;
+- `prepare --rule full:T:or_crop:0.80` (and `counts --rule`, the same rule in pass 2). Only a
+  rule listed in the committed sweep file within the guard is accepted; anything else stops
+  with exit code 5. `results/data/summary.csv` then records the rule
+  (`near_duplicates:rule:*`) and `near_duplicates:rule_from_sweep` = 1;
+- `data/prepare.py` (`prepare` can take the sweep's one crop pass) and `data/candidates.py`
+  (`JoinRule.from_label`);
+- the RC-D1 card: section 3c (the sweep) and section 3d (run 4b), with their Kaggle cells.
 
 ## Answer format for the inbox
 

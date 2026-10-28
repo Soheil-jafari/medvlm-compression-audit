@@ -41,9 +41,13 @@
    2026-10-22 (iteration 56): both label files committed by SHA-256; D02 amendment 4 (two
    raters, no third member; kappa on pairs 11-298; primary truth both `same_scene`;
    either-rater and unsure readings reported only); `score-labels --no-third-member`; the
-   counts file is now committed (69799ff; 156 s of embedding, not 143 s). Open: whether pairs
-   291-298 belong in the kappa. Next: RC-D1-label's scoring (the card's Kaggle cell); then
-   run 4 (final sheet, label values,
+   counts file is now committed (69799ff; 156 s of embedding, not 143 s).
+   2026-10-28 (iteration 57): RC-D1-label scored (kappa on pairs 11-290); run 4 (full:0.93)
+   passed the automatic checks but failed the deciding check (same-scene pairs across splits:
+   about 17, 4, 13 of 24 per band), so it is not accepted. D02 amendment 5 (post hoc):
+   either-rater truth, a sweep of full:T OR crop >= 0.80 (T 0.92 to 0.84), `rule-sweep` and
+   `prepare --rule`. Next: the sweep on Kaggle (RC-D1 section 3c), the team's counts on its
+   sheets, run 4b (section 3d); then pass 2 (label values,
    finding list, `max_new_tokens`); then RC-TT1's target printout and progress. RC-L1 needs code
    first (run identities, parent from config, cache extension, comparison rows); the A1/A2 reuse
    of E7's effects waits on the team (freeze list item 15).
