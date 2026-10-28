@@ -7,9 +7,17 @@
 \todo{models}
 
 \subsection{Data}
-% TODO: Kvasir-VQA-x1 (main QA; validation and test = halves of its official test
-% split by image), Kvasir-SEG masks matched by fingerprint, EndoBench external test
-% (deduplicated), finding list and prevalence groups (D02).
+% TODO: Kvasir-VQA-x1 (main QA), re-split by image 70/15/15 (seed 20261012) after joining
+% near-duplicate images (D02 amendments of 2026-10-18 to 2026-10-28). Report (D02 amendment 5):
+% the rule chosen on the labelled pairs (full:0.93, both-raters truth) and its failure on the
+% deciding check (RC-D1 run 4: same-scene pairs across splits on the final contact sheet); the
+% post hoc sweep of full:T OR crop >= 0.80, which stopped (only full:0.92 OR crop >= 0.80 within
+% the guard, not clean; D02 amendment 6); the post hoc held-out filter on val and test (cosine
+% >= F, crop >= 0.70, or crop >= 0.50 within 4 dHash bits; F from its sweep) and the selected
+% F (run 4b). Primary test = the filtered test; the unfiltered test and the strict subset as
+% sensitivity analyses. Kvasir-SEG masks matched by fingerprint, EndoBench external test
+% (deduplicated), finding list and prevalence groups (D02). The data table below is generated
+% from results/data/summary.csv, which holds run 4 (not accepted) until run 4b replaces it.
 \todo{data}
 
 \begin{table}[t]
