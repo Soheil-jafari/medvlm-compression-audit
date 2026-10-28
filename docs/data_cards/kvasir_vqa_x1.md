@@ -94,14 +94,40 @@ The appendix item reports them next to the published adapter's test results.
        - the rule used is the highest T within the guard whose contact sheet shows no
          same-scene pair: **[RC-D1 sweep]** `results/data/near_duplicate_sweep.csv` and the
          team's counts per band. If none is clean, the preparation stops.
-  4. The rule (run 4b's) is applied to all pairs of images; the joined pairs form groups.
+     - **The sweep stopped** (D02 amendment 6, 2026-10-28):
+       - only `full:0.92` OR crop >= 0.80 stayed within the guard (largest group 447 images,
+         6.9 %);
+       - its sheet still showed same-scene pairs across splits: about 12, 3 and 1 of 24 per
+         band.
+     - **Post hoc** (amendment 6): the groups of that rule are kept, and a held-out filter is
+       applied after the split (step 5b).
+  4. The rule (`full:0.92` OR crop >= 0.80) is applied to all pairs of images; the joined
+     pairs form groups.
   5. Whole groups are assigned to train / validation / test = 70 / 15 / 15 % of the images,
      seed 20261012, stratified by the answer values of the finding question and by the
      Kvasir-SEG mask (`data/splits.py: assign_groups_stratified`).
+  5b. **Held-out filter** (D02 amendment 6). After the split, a validation or test image is
+     removed if:
+     - its nearest training image has a full-view cosine of at least F;
+     - or a crop correlation of at least 0.70;
+     - or a training image lies within 4 dHash bits with a crop correlation of at least 0.50.
+
+     The filter never moves images between splits and never touches train. Validation/test
+     pairs are counted, not filtered (`heldout_filter:val_test_pairs_matching`).
+     - F is the highest of 0.90 to 0.80 (by 0.02) whose sheet of the closest remaining
+       train/val and train/test pairs shows no same-scene pair, if the filtered test keeps at
+       least half of the test images: **[RC-D1 filter sweep]**
+       `results/data/near_duplicate_filter_sweep.csv` and the team's counts.
+     - What it removes and keeps: **[RC-D1]** `heldout_filter:removed:<split>`,
+       `heldout_filter:kept_fraction:<images, qa_rows, masked_images>:<split>`.
+     - **The primary test is the filtered test.** The unfiltered test and the strict subset
+       are sensitivity analyses.
   6. A contact sheet of the closest cross-split pairs (by cosine, crop correlation and dHash)
-     is checked by eye (kept private).
+     is checked by eye (kept private). After the filter it shows train/val and train/test
+     pairs only.
 - **Strict test subset** (a pre-registered sensitivity analysis): the test images whose most
-  similar training image is below the threshold of the rule used (run 4b) minus 0.05: **[RC-D1]**
+  similar training image is below the threshold of the rule used (run 4b) minus 0.05, within
+  the filtered test: **[RC-D1]**
   `strict_test:images`, `strict_test:qa_rows`. The main comparisons are reported on it too.
 - **Images and QA rows per split:** **[RC-D1]** `images:<split>`, `qa_rows:<split>`,
   `image_fraction:<split>`.
