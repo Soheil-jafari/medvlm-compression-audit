@@ -327,7 +327,6 @@ def filter_sweep(
         split_images, fingerprints, signatures, settings.crop, embeddings, images,
         bits=filters[0].bits,
     )  # fmt: skip
-    log(f"unfiltered split: split_sha256 {base.split_sha256}")
     results = [
         FilterResult(f, prepare(data_root, dataset_config, heldout_filter=f,
                                 neighbours=neighbours, **common))
