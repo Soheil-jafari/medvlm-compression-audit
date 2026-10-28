@@ -35,13 +35,16 @@ from those cards' wall times when it sets this card to `ready`.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher adapter; E1 seed0 adapter; E1 seed<k> adapter; E1 seed2 adapter; E2 seed0 adapter; E2 seed<k> adapter; E2 seed2 adapter.
 - **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
 - **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-R1"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-R1 --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off> ...`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
-  - test evaluation E0 seed0
-  - test evaluation E1 seed0
-  - test evaluation E1 seed<k>
-  - test evaluation E1 seed2
-  - test evaluation E2 seed0
-  - test evaluation E2 seed<k>
-  - test evaluation E2 seed2
+  - test evaluation E0 seed0, then unfiltered test evaluation E0 seed0
+  - test evaluation E1 seed0, then unfiltered test evaluation E1 seed0
+  - test evaluation E1 seed<k>, then unfiltered test evaluation E1 seed<k>
+  - test evaluation E1 seed2, then unfiltered test evaluation E1 seed2
+  - test evaluation E2 seed0, then unfiltered test evaluation E2 seed0
+  - test evaluation E2 seed<k>, then unfiltered test evaluation E2 seed<k>
+  - test evaluation E2 seed2, then unfiltered test evaluation E2 seed2
+
+  (The unfiltered test is the filtered test with the removed test images added back: the
+  sensitivity analysis of D02 amendment 6. Its rows go to `metrics_test_unfiltered.csv`.)
 - **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E2_test_outcomes`.
 - **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
 - **Session limits:** a T4 x2 session counts **once** against the weekly quota (measured 2026-10-19: a 17-minute T4 x2 session used 16 minutes). The session time limit is unknown here (TODO: the team checks on Kaggle). This card uses T4 x2. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
@@ -59,10 +62,12 @@ export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # copy E1/ and E
 export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
 export MEDCOMPRESS_RESULTS_ROOT=$PWD/results
 
-python scripts/06_evaluate.py --exp E0 --seed 0 -o evaluation.split=test   # 2 x T4 session
-for SEED in 0 1 2; do                                                      # one T4 is enough
-  python scripts/06_evaluate.py --exp E1 --seed $SEED -o evaluation.split=test
-  python scripts/06_evaluate.py --exp E2 --seed $SEED -o evaluation.split=test
+for SPLIT in test test_unfiltered; do        # the primary test, then the unfiltered test
+  python scripts/06_evaluate.py --exp E0 --seed 0 -o evaluation.split=$SPLIT   # 2 x T4 session
+  for SEED in 0 1 2; do                                                      # one T4 is enough
+    python scripts/06_evaluate.py --exp E1 --seed $SEED -o evaluation.split=$SPLIT
+    python scripts/06_evaluate.py --exp E2 --seed $SEED -o evaluation.split=$SPLIT
+  done
 done
 python -m pytest -q tests/test_results.py                  # must pass before you commit
 ```

@@ -23,7 +23,7 @@
 - Status: `blocked` for the runner (its RC-D1 plan has no `--rule` and no `--heldout-filter`,
   and would repeat run 4's rule). **Run 4 is not accepted** (D02 amendment 5), and **the rule
   sweep stopped** (D02 amendment 6, 2026-10-28; section 5). Next, by hand:
-  - commit the rule sweep's counts (`results/data/near_duplicate_sweep.csv`);
+  - the rule sweep's counts are committed (`results/data/near_duplicate_sweep.csv`, 9d5e2e3);
   - the held-out filter sweep (section 3d);
   - then run 4b with `full:0.92:or_crop:0.80` and the F the team selects (section 3e).
 
@@ -452,7 +452,10 @@ What it writes:
 - `results/data/summary.csv` records the rule, `near_duplicates:rule_from_sweep` = 1 and the
   filter (`heldout_filter:*`);
 - `split_sha256` covers the filtered splits;
-- the removed img_ids go to the private `heldout_filter_removed.json`, next to `splits.json`.
+- the removed img_ids go to the private `heldout_filter_removed.json`, next to `splits.json`;
+- the second test file, `test_unfiltered.json` (private, next to `splits.json`): the filtered
+  test with the removed test images added back. Every later card scores each model on it too
+  (`test_unfiltered`). Its hash `test_unfiltered_sha256` is printed with the others.
 
 Attach the same datasets as for the sweep. Do not use `CARD = "RC-D1"` in
 `notebooks/run_card.ipynb`: its plan has neither flag and would repeat run 4's rule.
@@ -708,7 +711,8 @@ them.
   `becacdaebcdee6424318785ed7e32ffc783ee6ce99817e5c7a2fe916d59fc245`; val/test confirmed
   duplicates 0; images train / val / test 4,513 / 968 / 968.
 - Joined pairs, wall time, the either-rater rule line: not reported here.
-- `results/data/near_duplicate_sweep.csv`: not on `research-loop` yet (to commit).
+- `results/data/near_duplicate_sweep.csv`: committed on 2026-10-28 (9d5e2e3); its counts agree
+  with the lines above.
 - The team's count of same-scene pairs (from the sheet):
 
   | Rule | Band 1 (cosine) | Band 2 (crop) | Band 3 (dHash) |
@@ -750,7 +754,7 @@ them.
 - The `groups ...` line and the `strict test subset ...` line:
 - The `held-out filter F ...` line:
 - Hashes printed at the end (`split_sha256`, the same as the filter sweep's for this F;
-  manifest hashes, the bundle's file count):
+  `test_unfiltered_sha256`; manifest hashes, the bundle's file count):
 - The final contact sheet: same-scene pairs seen in band 1, band 2, band 3 (number, or none):
 - Name of the private shared-data dataset, and who it is shared with:
 - Anything unusual (errors, retries, changed settings):

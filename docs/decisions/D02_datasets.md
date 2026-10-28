@@ -602,7 +602,8 @@ So, per amendment 5, **the sweep stops**: no rule of it is used as it stands.
 
 The sweep's counts file (`results/data/near_duplicate_sweep.csv`) was not on `research-loop`
 when this was recorded. `prepare --rule` and the filter sweep read it, so it is committed
-first.
+first. (Committed later on 2026-10-28, commit 9d5e2e3; its counts agree with the values
+above.)
 
 **Decision (recorded as post hoc; fixed before any new sheet is seen):**
 1. **Groups:** `full:0.92:or_crop:0.80`, the swept rule within the guard, with its split
@@ -612,7 +613,8 @@ first.
    - its nearest training image has a full-view cosine of at least **F**;
    - or its nearest training image has a crop correlation of at least **0.70**;
    - or a training image lies within **4** dHash bits with a crop correlation of at least
-     **0.50**. The agent reads this condition as one training image meeting both.
+     **0.50**. One training image must meet both (the agent's reading, confirmed by Soheil
+     on 2026-10-28).
 
    The filter:
    - never moves an image between splits and never touches train;
@@ -634,13 +636,32 @@ first.
 5. **The test set:**
    - **primary:** the filtered test;
    - **sensitivity analyses:** the unfiltered test, and the strict subset (taken within the
-     filtered test, the test split as written; the agent's reading).
+     filtered test, the test split as written; the agent's reading, confirmed by Soheil on
+     2026-10-28).
 
    The filter is applied once, here; no model result is seen before it is fixed.
 
-Not built yet (open item): the unfiltered-test sensitivity analysis needs the removed test
-images evaluated too. Their img_ids are in the private `heldout_filter_removed.json`; the
-evaluation reads only the split files, so this step is still to be added.
+**The unfiltered test** (built 2026-10-28, at Soheil's request). The sensitivity analysis needs
+the removed test images scored too, so:
+- with the filter, `prepare` writes a second private test file, `test_unfiltered.json`. It
+  holds the sample ids of the filtered test with the removed test images added back (the test
+  split before the filter). Its hash `test_unfiltered_sha256` is printed with the run card's
+  hashes; `split_sha256` stays that of the filtered splits;
+- `load_prepared(..., unfiltered_test=True)` returns it as the split `test_unfiltered`;
+  without the flag nothing changes;
+- `06_evaluate.py -o evaluation.split=test_unfiltered` scores it under the same lock as the
+  test split. Its rows and outcomes go to their own files (`metrics_test_unfiltered.csv`,
+  `outcomes_test_unfiltered.npz`), labelled `test_unfiltered` in the aggregation;
+- every test evaluation of the run cards now scores both tests, so each model is scored on
+  both;
+- `09_compare_arms.py --unfiltered` repeats the paired comparisons on it
+  (`results/comparisons_unfiltered/`). The comparison card runs it and `--strict` after the
+  main comparisons;
+- the paper keeps the sensitivity analyses (strict subset, unfiltered test) out of the
+  primary tables, figures and verdicts. Their numbers reach `numbers.tex` under macro names
+  that start with the split (`\resTestUnfiltered...`, `\resStrictTest...`). Before this, a
+  metric on two splits would have given two macros of the same name and stopped the paper
+  build.
 
 Applied in:
 - `data/heldout_filter.py`;

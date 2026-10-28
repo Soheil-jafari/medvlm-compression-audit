@@ -51,9 +51,13 @@
    447 images or 6.9 %; its sheet about 12, 3, 1 of 24 same-scene pairs). D02 amendment 6
    (post hoc): keep its groups and split, then a held-out filter on val and test (cosine >= F,
    crop >= 0.70, or crop >= 0.50 within 4 bits), F swept from 0.90 to 0.80;
-   `filter-sweep` and `prepare --heldout-filter`. Next: commit the sweep's counts file, the
-   filter sweep (RC-D1 section 3d), the team's counts on its sheets, run 4b (section 3e);
-   then pass 2 (label values,
+   `filter-sweep` and `prepare --heldout-filter`.
+   2026-10-28 (iteration 59): both readings confirmed; the unfiltered test built (a second
+   private test file, `evaluation.split=test_unfiltered`, scored by every test evaluation,
+   `09_compare_arms.py --unfiltered`); the paper keeps the sensitivity analyses out of the
+   primary tables, with their own macro names. The sweep's counts file is committed. Next: the
+   filter sweep (RC-D1 section 3d), the team's counts on its sheets, run 4b (section 3e); then
+   pass 2 (label values,
    finding list, `max_new_tokens`); then RC-TT1's target printout and progress. RC-L1 needs code
    first (run identities, parent from config, cache extension, comparison rows); the A1/A2 reuse
    of E7's effects waits on the team (freeze list item 15).

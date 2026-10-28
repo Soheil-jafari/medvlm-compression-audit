@@ -355,6 +355,25 @@ must be logged here.
     - the strict subset is taken within the filtered test.
 
   Recorded in D02, the pre-registration draft, the data card and the RC-D1 card.
+- **2026-10-28 (Soheil): the two readings of amendment 6 confirmed; the unfiltered test
+  built.**
+  - Confirmed:
+    - the dHash condition means one training image meeting both (<= 4 bits and crop >= 0.50);
+    - the strict subset is taken within the filtered test.
+  - Built (the open item):
+    - `prepare` with the filter writes a second private test file, `test_unfiltered.json`:
+      the filtered test with the removed test images added back;
+    - the evaluation scores it as `test_unfiltered` when asked
+      (`-o evaluation.split=test_unfiltered`), under the same lock, into its own files;
+    - every test evaluation of the run cards scores both tests;
+    - `09_compare_arms.py --unfiltered` repeats the comparisons on it;
+    - the paper keeps both sensitivity analyses out of the primary tables, with their own
+      macro names. This also fixes a macro-name collision that a metric on two splits would
+      have caused.
+  - The rule sweep's counts file is committed (9d5e2e3); its counts agree with the values
+    reported for amendment 6.
+
+  Recorded in D02, the pre-registration draft, the data card and the RC-D1 card.
 
 ## Open decisions
 
@@ -362,9 +381,7 @@ must be logged here.
 |---|---|---|---|
 | Kaggle session time limit | the session time limit, and whether a stopped version keeps its output (unknown here); the T4 x2 quota rule is settled (counts once, 2026-10-19). RC-TT1 needs about 14.7 h (estimate) | team (check on Kaggle) | before RC-TT1 |
 | The two raters' names (RC-D1-label) | who rater 1 and rater 2 are, for the run report (D02 amendment 4: two raters, no third member) | team | at RC-D1-label's scoring |
-| The sweep's counts file (D02 amendment 5) | `results/data/near_duplicate_sweep.csv` (aggregate counts of the rule sweep) is not on `research-loop`; `prepare --rule` and `filter-sweep` read it, so commit it from the sweep's `results_to_commit/` first | Soheil | before the filter sweep |
 | The filter sweep's sheets (D02 amendment 6) | per F and band, how many pairs show the same scene, judged by the team on the private sheets; then F (the highest with none whose test keeps >= 50 %) or, if none qualifies, a stop | team | after the filter sweep |
-| The unfiltered-test sensitivity analysis (D02 amendment 6) | the removed test images (img_ids in the private `heldout_filter_removed.json`) must also be evaluated; the evaluation reads only the split files, so this step is not built yet | agent proposes, team confirms | before the test split is unlocked |
 | `results/data/summary.csv` | holds run 4 (not accepted) until run 4b replaces it; the paper's generated data table shows it until then | Soheil | at run 4b |
 | Published target modules | which modules the published `adapter_config.json` names (RC-TT0's printout is not committed; RC-TT1 prints it). If a name is outside the language model, RC-TT1 stops and the team decides | Soheil | at RC-TT1's start |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |

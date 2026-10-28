@@ -12,6 +12,16 @@ A card runs unattended with `notebooks/run_card.ipynb` (Save & Run All), which c
 `scripts/run_card.py`. Section 2b of each card says what to attach and what it hands off. How to
 set up an account: `docs/team_setup.md`. Who runs what, week by week: `docs/schedule.md`.
 
+Since 2026-10-28 (D02 amendment 6) every model is scored on two tests:
+- the test split, which is the filtered test and the primary one;
+- the unfiltered test, the filtered test with the removed test images added back (a
+  sensitivity analysis).
+
+In the runner, each step `test evaluation <run>` is followed by `unfiltered test evaluation
+<run>`. Section 2b of a card may still list only the first. By hand, run each
+`06_evaluate.py ... -o evaluation.split=test` again with `-o evaluation.split=test_unfiltered`.
+Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unfiltered.npz`.
+
 ## Queue
 
 | Card | Stage | What | Who | Status |

@@ -121,7 +121,9 @@ The appendix item reports them next to the published adapter's test results.
      - What it removes and keeps: **[RC-D1]** `heldout_filter:removed:<split>`,
        `heldout_filter:kept_fraction:<images, qa_rows, masked_images>:<split>`.
      - **The primary test is the filtered test.** The unfiltered test and the strict subset
-       are sensitivity analyses.
+       are sensitivity analyses. The unfiltered test (the filtered test with the removed
+       images added back) is a second private test file; every model is scored on it too
+       (`test_unfiltered`).
   6. A contact sheet of the closest cross-split pairs (by cosine, crop correlation and dHash)
      is checked by eye (kept private). After the filter it shows train/val and train/test
      pairs only.
