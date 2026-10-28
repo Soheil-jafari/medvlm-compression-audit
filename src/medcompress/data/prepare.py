@@ -95,7 +95,8 @@ from medcompress.data.kvasir import (
 )
 from medcompress.data.manifests import build_manifest, write_manifest
 from medcompress.data.masks import lesion_area_fraction, load_mask, size_strata_thresholds
-from medcompress.data.splits import make_image_disjoint_splits, split_fingerprint
+from medcompress.data.prepared import UNFILTERED_TEST, UNFILTERED_TEST_FILE
+from medcompress.data.splits import ids_fingerprint, make_image_disjoint_splits, split_fingerprint
 
 DATA_EXPERIMENT = "DATA"
 
@@ -122,6 +123,9 @@ class PreparedData:
     """The held-out filter's settings (D02 amendment 6; empty without a filter)."""
     heldout_removed: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     """img_ids removed from validation and test by the held-out filter, per split."""
+    test_unfiltered: tuple[str, ...] = ()
+    """The sample ids of the test split before the held-out filter (the filtered test with the
+    removed test images added back): the unfiltered-test sensitivity analysis."""
 
 
 @dataclass(frozen=True)
@@ -762,6 +766,7 @@ def prepare(
     }
     filter_rows: list[dict[str, Any]] = []
     removed: dict[str, tuple[str, ...]] = {}
+    unfiltered_test: tuple[str, ...] = ()
     if heldout_filter is not None:
         if emb is None:
             raise ConfigError("the held-out filter (D02 amendment 6) needs a cosine rule")
@@ -771,6 +776,7 @@ def prepare(
                 bits=heldout_filter.bits,
             )  # fmt: skip
         removed = heldout_filter.removed(neighbours)
+        unfiltered_test = tuple(sorted(s.sample_id for s in splits.get("test", ())))
         gone = {p for paths in removed.values() for p in paths}
         kept = {
             name: [s for s in members if s.image_path not in gone]
@@ -920,6 +926,7 @@ def prepare(
         heldout_removed={
             name: tuple(sorted(str(Path(p).stem) for p in paths)) for name, paths in removed.items()
         },
+        test_unfiltered=unfiltered_test,
     )  # fmt: skip
 
 
@@ -1208,7 +1215,14 @@ def write_private_outputs(prepared: PreparedData, out_dir: Path, data_root: Path
             "removed": {k: list(v) for k, v in prepared.heldout_removed.items()},
         }
         (out_dir / HELDOUT_FILE).write_text(json.dumps(removed, sort_keys=True, indent=1))
+        # the second test file: the filtered test with the removed test images added back
+        unfiltered = list(prepared.test_unfiltered)
+        (out_dir / UNFILTERED_TEST_FILE).write_text(json.dumps(unfiltered, indent=0))
     hashes = {"split_sha256": prepared.split_sha256}
+    if prepared.heldout_filter:
+        hashes["test_unfiltered_sha256"] = ids_fingerprint(
+            {UNFILTERED_TEST: list(prepared.test_unfiltered)}
+        )
     for name in ("kvasir_vqa_x1", "kvasir_seg"):
         root = Path(data_root) / name
         if root.is_dir():

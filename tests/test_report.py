@@ -146,3 +146,45 @@ def test_aggregate_results_end_to_end(tmp_path: Path) -> None:
     ]
     assert (tmp_path / "figures" / "budget_curves.pdf").read_bytes().startswith(b"%PDF")
     assert "## H3: pending" in (tmp_path / "VERDICTS.md").read_text()
+
+
+def test_the_sensitivity_analyses_get_their_own_macros_and_stay_out_of_the_tables(
+    tmp_path: Path,
+) -> None:
+    from medcompress.evaluation.aggregate import classify_path
+
+    root = tmp_path / "results"
+    _tree(root)
+    _test_split_copy(root)
+    for seed in range(3):  # the unfiltered test (D02 amendment 6): its own run file
+        append_results(
+            [{"experiment": "E7", "budget": "B2", "seed": seed,
+              "metric": "small_finding_recall", "value": 0.555}],
+            root / "E7" / "B2" / f"seed{seed}" / "metrics_test_unfiltered.csv",
+        )  # fmt: skip
+    for folder, value in (("comparisons_unfiltered", 0.333), ("comparisons_strict", 0.444)):
+        append_results(
+            [{"experiment": "E7_vs_best", "budget": "B2", "seed": 0,
+              "metric": "diff:small_finding_recall", "value": value}],
+            root / folder / "E7_vs_best" / "B2" / "comparison.csv",
+        )  # fmt: skip
+    found = classify_path(root / "E7" / "B2" / "seed0" / "metrics_test_unfiltered.csv", root)
+    assert found is not None and found.split == "test_unfiltered" and found.seed == 0
+    found = classify_path(root / "comparisons_unfiltered" / "E7_vs_best" / "B2" / "comparison.csv",
+                          root)  # fmt: skip
+    assert found is not None and found.kind == "comparison" and found.split == "test_unfiltered"
+    aggregate_results(
+        root, tmp_path / "summary", tables_dir=tmp_path / "tables",
+        figures_dir=tmp_path / "figures", verdicts_path=tmp_path / "VERDICTS.md",
+    )  # fmt: skip
+    numbers = (tmp_path / "tables" / "numbers.tex").read_text()
+    assert "\\newcommand{\\resESevenBTwoSmallFindingRecall}{0.720}" in numbers  # primary
+    assert "\\newcommand{\\resTestUnfilteredESevenBTwoSmallFindingRecall}{0.555}" in numbers
+    assert (
+        "\\newcommand{\\resTestUnfilteredESevenVsBestBTwoDiffSmallFindingRecall}{0.333}" in numbers
+    )
+    assert "\\newcommand{\\resStrictTestESevenVsBestBTwoDiffSmallFindingRecall}{0.444}" in numbers
+    for table in ("main.tex", "primary.tex"):  # the primary tables read the primary rows only
+        text = (tmp_path / "tables" / table).read_text()
+        assert "0.555" not in text and "0.333" not in text and "0.444" not in text
+    assert "0.050" in (tmp_path / "tables" / "primary.tex").read_text()

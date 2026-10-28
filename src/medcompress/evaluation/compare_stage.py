@@ -52,6 +52,9 @@ from medcompress.registry import BUDGET_IDS, PRIMARY_BUDGET, REGISTRY
 STRICT_FILE = "strict_test.json"
 """RC-D1 run 4's strict test subset (D02 amendment 3): img_ids, in the private folder."""
 STRICT_DIR = "comparisons_strict"
+UNFILTERED_DIR = "comparisons_unfiltered"
+UNFILTERED_OUTCOMES_FILE = "outcomes_test_unfiltered.npz"
+"""The unfiltered test (D02 amendment 6): the same comparisons on its outcomes."""
 
 OUTCOMES_FILE = "outcomes_test.npz"
 CHOICES_FILE = "choices.json"
@@ -520,7 +523,10 @@ def _seeds(experiment_id: str) -> tuple[int, ...]:
 
 
 def load_arms(
-    output_root: Path, arms: Sequence[Arm], seeds_of: Mapping[str, Sequence[int]]
+    output_root: Path,
+    arms: Sequence[Arm],
+    seeds_of: Mapping[str, Sequence[int]],
+    outcomes_file: str = OUTCOMES_FILE,
 ) -> tuple[dict[Arm, list[dict[str, np.ndarray]]], list[str]]:
     """Per-seed arrays of every arm with all its seeds; the others are listed as incomplete.
 
@@ -530,7 +536,7 @@ def load_arms(
     incomplete = []
     for arm in arms:
         seeds = seeds_of[arm.label.partition(":")[0]]
-        paths = [run.run_dir(output_root) / OUTCOMES_FILE for run in arm.runs(seeds)]
+        paths = [run.run_dir(output_root) / outcomes_file for run in arm.runs(seeds)]
         missing = [p for p in paths if not p.is_file()]
         if missing:
             incomplete.append(f"{arm.name}: {len(missing)} of {len(paths)} seeds missing")
@@ -565,11 +571,15 @@ def run_comparisons(
     output_root: Path | None = None,
     n_resamples: int | None = None,
     strict: bool = False,
+    unfiltered: bool = False,
 ) -> list[Path]:
     """Stage entry point for ``scripts/09_compare_arms.py`` (see the module docstring).
 
     ``strict``: the same comparisons on the strict test subset only (D02 amendment 3, the
     pre-registered sensitivity analysis), written to ``comparisons_strict/``.
+    ``unfiltered``: the same comparisons on the unfiltered test (D02 amendment 6, a
+    sensitivity analysis), from ``outcomes_test_unfiltered.npz``, written to
+    ``comparisons_unfiltered/``.
 
     Needs the frozen pre-registration (the test split), the evaluation settings and the
     committed results (validation rows for the comparator, efficiency and budget rows for H2).
@@ -579,6 +589,9 @@ def run_comparisons(
     from medcompress.evaluation.aggregate import load_results
     from medcompress.utils.io import write_json
 
+    if strict and unfiltered:
+        raise ConfigError("the strict subset is taken within the filtered test: use one of "
+                          "--strict and --unfiltered")  # fmt: skip
     settings = _settings(config)
     headline = headline_metric(config)
     results_root = Path(results_root or config["paths"]["results_root"])
@@ -587,9 +600,11 @@ def run_comparisons(
     alpha = settings.alpha
     seeds_of = {e: _seeds(e) for e in (REFERENCE, *COMPRESSED)}
     wanted = [Arm(REFERENCE)] + [arm for e in COMPRESSED for arm in arms_of(e)]
-    found, incomplete = load_arms(output_root, wanted, seeds_of)
+    outcomes_file = UNFILTERED_OUTCOMES_FILE if unfiltered else OUTCOMES_FILE
+    found, incomplete = load_arms(output_root, wanted, seeds_of, outcomes_file)
     if Arm(REFERENCE) not in found:
-        raise ConfigError(f"the outcomes of {REFERENCE} (all seeds) are needed under {output_root}")
+        raise ConfigError(f"the outcomes of {REFERENCE} (all seeds, {outcomes_file}) are needed "
+                          f"under {output_root}")  # fmt: skip
     groups = dict(settings.groups or {})
     table = build_table(
         found[Arm(REFERENCE)][0],
@@ -600,7 +615,7 @@ def run_comparisons(
     )
     arms = list(found)
     outcomes = [arm_outcomes(a, seeds_of[a.label.partition(":")[0]], found[a], table) for a in arms]
-    folder = "comparisons"
+    folder = UNFILTERED_DIR if unfiltered else "comparisons"
     if strict:
         keep = strict_images(Path(config["paths"]["private_root"]))
         table, outcomes = restrict(table, outcomes, keep)
@@ -621,7 +636,13 @@ def run_comparisons(
         "n_rare_positives": int(table.rare.sum()),
         "arms": [a.name for a in arms],
         "incomplete": incomplete,
-        "subset": "strict test (D02 amendment 3)" if strict else "test",
+        "subset": (
+            "strict test (D02 amendment 3)"
+            if strict
+            else "unfiltered test (D02 amendment 6)"
+            if unfiltered
+            else "test"
+        ),
     }
 
     # H1: every compressed arm against E2

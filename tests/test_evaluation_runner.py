@@ -356,6 +356,40 @@ def test_validation_and_test_scores_go_to_separate_files(
     assert validate_results_tree(root / "results") == []
 
 
+def test_the_unfiltered_test_is_locked_and_scored_into_its_own_files(
+    dataset: tuple[Path, list[VQASample]],
+) -> None:
+    from medcompress.evaluation.aggregate import load_results
+    from medcompress.evaluation.runner import RUN_FILES_BY_SPLIT
+
+    root, samples = dataset
+    run = RunContext("E2", seed=0)
+    unfiltered = eval_config(root, suites=["clinical"], split="test_unfiltered")
+    with pytest.raises(ConfigError, match="test_unfiltered split is locked"):
+        resolve_settings(unfiltered)
+    test_config = eval_config(root, suites=["clinical"], split="test")
+    (root / "weights.yaml").write_text(  # eval_config re-locks the split; freeze it here
+        yaml.safe_dump({"preregistration": {"frozen_on": "2026-11-01"}})
+    )
+    assert resolve_settings(unfiltered).split == "test_unfiltered"
+    run_evaluation(test_config, run, model=Detector(min_pixels=20), samples=samples)
+    run_evaluation(unfiltered, run, model=Detector(min_pixels=1), samples=samples)
+    folder = root / "results" / "E2" / "nobudget" / "seed0"
+    test = pd.read_csv(folder / "metrics_test.csv").set_index("metric")["value"]
+    other = pd.read_csv(folder / "metrics_test_unfiltered.csv").set_index("metric")["value"]
+    assert test["sensitivity:polyp"] == pytest.approx(5 / 6)  # not overwritten
+    assert other["sensitivity:polyp"] == 1.0
+    outputs = root / "outputs" / "E2" / "nobudget" / "seed0"
+    assert (outputs / "outcomes_test.npz").is_file()
+    assert (outputs / "outcomes_test_unfiltered.npz").is_file()
+    assert RUN_FILES_BY_SPLIT["test_unfiltered"][1] == "outcomes_test_unfiltered.npz"
+    assert validate_results_tree(root / "results") == []
+    splits = set(load_results(root / "results")["split"])
+    assert {"test", "test_unfiltered"} <= splits
+    with pytest.raises(ConfigError, match="must be one of"):
+        resolve_settings(eval_config(root, split="test_all"))
+
+
 def test_rerunning_replaces_rows_and_a_better_reader_scores_higher(
     dataset: tuple[Path, list[VQASample]],
 ) -> None:

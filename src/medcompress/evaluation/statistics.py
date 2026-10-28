@@ -308,6 +308,7 @@ def aggregate_results(
     from medcompress.evaluation.aggregate import (
         load_results,
         paper_rows,
+        primary_rows,
         summarise_over_seeds,
         write_summary,
     )
@@ -331,10 +332,11 @@ def aggregate_results(
     tables = Path(tables_dir or root / "paper" / "tables")
     figures = Path(figures_dir or root / "paper" / "figures")
     written += write_tables(rows, summary, tables)
-    written += write_figures(summary, figures, headline=headline)
+    primary = primary_rows(summary)  # without the sensitivity analyses (strict, unfiltered)
+    written += write_figures(primary, figures, headline=headline)
     # compute used and the student checks are bookkeeping of every run, tied to no split
-    written += write_appendix(everything, summary, tables, figures)
+    written += write_appendix(everything, primary, tables, figures)
     written.append(
-        write_verdicts(summary, Path(verdicts_path or root / "docs" / "results" / "VERDICTS.md"))
+        write_verdicts(primary, Path(verdicts_path or root / "docs" / "results" / "VERDICTS.md"))
     )
     return written

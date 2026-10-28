@@ -245,8 +245,19 @@ def test_a_grid_run_made_by_rc_g2_is_skipped_when_its_model_is_attached(tmp_path
         session, config, {}, repo=tmp_path, data_root=None, handoffs=[],
         runner=lambda c, e, log: calls.append(c[1]) or 0,
     )  # fmt: skip
-    assert [s.status for s in session.steps] == ["skipped", "ok"]
-    assert calls == ["scripts/06_evaluate.py"]  # only its test evaluation runs
+    assert [s.status for s in session.steps] == ["skipped", "ok", "ok"]
+    assert calls == ["scripts/06_evaluate.py"] * 2  # only its two test evaluations run
+
+
+def test_every_test_evaluation_also_scores_the_unfiltered_test() -> None:
+    for card, seed in (("RC-E3", 0), ("RC-E4", 0), ("RC-E8", 0), ("RC-R1", None), ("RC-E7", 0)):
+        plan = build_plan(card, seed)
+        splits = [a.split("=", 1)[1] for s in plan.steps for a in s.argv
+                  if a.startswith("evaluation.split=")]  # fmt: skip
+        assert splits and splits.count("test") == splits.count("test_unfiltered"), card
+    steps = {s.label: s.argv for s in build_plan("RC-C1").steps}
+    assert "--unfiltered" in steps["comparisons, unfiltered test"]
+    assert "--strict" in steps["comparisons, strict subset"]
 
 
 def test_the_environment_check_knows_the_kaggle_pitfalls() -> None:
