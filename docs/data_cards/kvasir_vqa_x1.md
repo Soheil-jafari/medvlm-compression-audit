@@ -118,12 +118,32 @@ The appendix item reports them next to the published adapter's test results.
        train/val and train/test pairs shows no same-scene pair, if the filtered test keeps at
        least half of the test images: **[RC-D1 filter sweep]**
        `results/data/near_duplicate_filter_sweep.csv` and the team's counts.
+     - **No F was clean** (D02 amendment 7, 2026-10-28). Same-scene pairs per band (cosine /
+       crop / dHash, of 24 each):
+       - F 0.90: about 3 / 0 / 0;
+       - F 0.88: about 5-7 / 0 / 0;
+       - F 0.86: about 4-6 / 0 / 0;
+       - 0.84 to 0.80 keep less than half of the test images.
+
+       The remaining pairs are frames of the same examination with the camera moved, not
+       copies. **F = 0.86** was chosen (post hoc), the lowest F that keeps half of the test:
+       - the test keeps 512 of 968 images (52.9 %) and 12,067 of 21,728 QA rows;
+       - validation keeps 390 of 968 images (40.3 %);
+       - masked test images: 86 of 147.
      - What it removes and keeps: **[RC-D1]** `heldout_filter:removed:<split>`,
        `heldout_filter:kept_fraction:<images, qa_rows, masked_images>:<split>`.
-     - **The primary test is the filtered test.** The unfiltered test and the strict subset
-       are sensitivity analyses. The unfiltered test (the filtered test with the removed
-       images added back) is a second private test file; every model is scored on it too
-       (`test_unfiltered`).
+     - **The internal test is a "reduced-leakage" test**, reported with those residual counts.
+       It is one of two co-primary tests; the other is an external test from another centre
+       (PolypGen and/or GastroVision, D02 amendment 7; not part of this card).
+     - Every model is scored on four tests:
+       - the filtered test;
+       - the unfiltered test (the filtered test with the removed images added back, a second
+         private test file, `test_unfiltered`);
+       - the strict subset;
+       - the external test.
+
+       The conclusions are reported for each. At F = 0.86 the strict subset is the whole
+       filtered test (512 of 512 images).
   6. A contact sheet of the closest cross-split pairs (by cosine, crop correlation and dHash)
      is checked by eye (kept private). After the filter it shows train/val and train/test
      pairs only.
@@ -149,6 +169,10 @@ The appendix item reports them next to the published adapter's test results.
   test are therefore image-disjoint and near-duplicate-disjoint, **not patient-disjoint**, and
   results on them may be optimistic by an unknown amount. The near-duplicate rule itself misses
   some copies: its sensitivity on the labelled pairs is reported above, with its interval.
+  After the held-out filter, same-examination pairs (the camera moved) remain across splits:
+  about 4-6 of the 24 most similar train/val and train/test pairs by cosine at F = 0.86. No
+  image-level method can remove them without patient or video ids. Hence the test is called
+  reduced-leakage, and an external test from another centre is co-primary (D02 amendment 7).
 - **Kvasir-SEG masks per split:** **[RC-D1]** `masked_images:<split>`; links
   `masks:linked/ambiguous/unmatched`.
 - **Split hash:** **[RC-D1]** `split_sha256` (printed by `prepare_data.py bundle`).

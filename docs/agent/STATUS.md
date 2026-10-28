@@ -55,9 +55,15 @@
    2026-10-28 (iteration 59): both readings confirmed; the unfiltered test built (a second
    private test file, `evaluation.split=test_unfiltered`, scored by every test evaluation,
    `09_compare_arms.py --unfiltered`); the paper keeps the sensitivity analyses out of the
-   primary tables, with their own macro names. The sweep's counts file is committed. Next: the
-   filter sweep (RC-D1 section 3d), the team's counts on its sheets, run 4b (section 3e); then
-   pass 2 (label values,
+   primary tables, with their own macro names. The sweep's counts file is committed.
+   2026-10-28 (iteration 60): D02 amendment 7 (post hoc). No F of the filter sweep was clean
+   (about 3, 5-7, 4-6 same-examination pairs in band 1 at 0.90 / 0.88 / 0.86); F = 0.86, the
+   lowest that keeps half of the test (512 of 968 images). The internal test is a
+   "reduced-leakage" test; an external test from another centre (PolypGen and/or GastroVision)
+   is co-primary; every model on four tests. At F = 0.86 the strict subset is the whole
+   filtered test. RC-X2 planned (nothing downloaded). Next: run 4b with F 0.86 (RC-D1 section
+   3e); RC-X2 part A (terms, centres, masks); the team's choices on the co-primary
+   combination and the strict subset; then pass 2 (label values,
    finding list, `max_new_tokens`); then RC-TT1's target printout and progress. RC-L1 needs code
    first (run identities, parent from config, cache extension, comparison rows); the A1/A2 reuse
    of E7's effects waits on the team (freeze list item 15).

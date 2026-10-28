@@ -12,13 +12,15 @@ A card runs unattended with `notebooks/run_card.ipynb` (Save & Run All), which c
 `scripts/run_card.py`. Section 2b of each card says what to attach and what it hands off. How to
 set up an account: `docs/team_setup.md`. Who runs what, week by week: `docs/schedule.md`.
 
-Since 2026-10-28 (D02 amendment 6) every model is scored on two tests:
-- the test split, which is the filtered test and the primary one;
-- the unfiltered test, the filtered test with the removed test images added back (a
-  sensitivity analysis).
+Since 2026-10-28 (D02 amendments 6 and 7) every model is scored on four tests:
+- the test split: the filtered test, a "reduced-leakage" test (F = 0.86), co-primary;
+- the unfiltered test: the filtered test with the removed test images added back;
+- the strict subset, which at F = 0.86 is the whole filtered test;
+- the external test from another centre, co-primary (RC-X2; not built yet).
 
-In the runner, each step `test evaluation <run>` is followed by `unfiltered test evaluation
-<run>`. Section 2b of a card may still list only the first. By hand, run each
+Today the first two are scored as separate splits; the strict subset is a restriction of the
+first (`09_compare_arms.py --strict`). In the runner, each step `test evaluation <run>` is
+followed by `unfiltered test evaluation <run>`. Section 2b of a card may still list only the first. By hand, run each
 `06_evaluate.py ... -o evaluation.split=test` again with `-o evaluation.split=test_unfiltered`.
 Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unfiltered.npz`.
 
@@ -60,7 +62,8 @@ Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unf
 | [RC-A6](RC-A6_unit_granularity.md) | S10 | A6: layers only / heads and channel groups, B2 x 3 seeds | Amir (card); seeds 0 Soheil, 1 Farzan, 2 Amir (proposal) | blocked (as RC-A1) |
 | [RC-R1](RC-R1_reference_arms_test_split.md) | S11 | E0, E1, E2 on the test split (after the freeze) | Soheil | blocked (freeze, RC-TT1, RC-E0b, RC-E1, RC-E2) |
 | [RC-C1](RC-C1_paired_comparisons.md) | S11 | Paired comparisons (H1-H4), tables, figures, verdicts; CPU only | Soheil | blocked (every test-split evaluation) |
-| [RC-X1](RC-X1_external_test_endobench.md) | S11 | EndoBench part A: terms, format, overlap with our images (no GPU); part B written after it | Farzan | blocked (RC-D1) |
+| [RC-X1](RC-X1_external_test_endobench.md) | S11 | EndoBench part A: terms, format, overlap with our images (no GPU); part B written after it | Farzan | set aside (D02 amendment 7) |
+| [RC-X2](RC-X2_external_test_other_centre.md) | S11 | External test from another centre, co-primary (PolypGen and/or GastroVision), part A: terms, centres, annotations (masks), overlap (no GPU); part B written after it | [team] (proposal: Farzan) | blocked (terms; RC-D1 run 4b) |
 | [RC-T1](RC-T1_final_timing.md) | S11 | Final timing of every arm on the rented GPU (T5) | Amir | blocked (GPU and precision chosen, every arm done) |
 
 Statuses: `not written yet` -> `ready` -> `running` -> `done` (or `failed`, with the

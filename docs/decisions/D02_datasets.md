@@ -678,6 +678,84 @@ Applied in:
   floor, with two decimals. Anything else stops with exit code 5;
 - the RC-D1 card: the sweep's report, and sections 3d (the filter sweep) and 3e (run 4b).
 
+## Amendment 7 (2026-10-28, Soheil): F = 0.86, a reduced-leakage internal test, an external test as co-primary (post hoc)
+
+Recorded post hoc, after the filter sweep's sheets were judged and before any model result.
+
+**The filter sweep** (`results/data/near_duplicate_filter_sweep.csv`, committed in 7222174).
+The test images kept are from that file; the same-scene pairs per band are the team's counts
+from the sheets (24 pairs per band):
+
+| F | Test images kept | 50 % floor | Band 1 (cosine) | Band 2 (crop) | Band 3 (dHash) |
+|---|---|---|---|---|---|
+| 0.90 | 857 of 968 (88.5 %) | met | about 3 | 0 | 0 |
+| 0.88 | 693 (71.6 %) | met | about 5-7 | 0 | 0 |
+| 0.86 | 512 (52.9 %) | met | about 4-6 | 0 | 0 |
+| 0.84 | 336 (34.7 %) | below | not judged | | |
+| 0.82 | 201 (20.8 %) | below | not judged | | |
+| 0.80 | 113 (11.7 %) | below | not judged | | |
+
+None is clean, so amendment 6's selection would stop. The team's reading of the remaining
+pairs: frames of the same examination with the camera moved, not copies.
+
+**Decision:**
+1. **F = 0.86**, the lowest F that meets the floor. Run 4b uses
+   `--rule full:0.92:or_crop:0.80 --heldout-filter 0.86`. At F = 0.86, from the committed
+   counts:
+   - test: 512 of 968 images (52.9 %), 12,067 of 21,728 QA rows (55.5 %), masked images 86 of
+     147 (58.5 %); 456 images removed;
+   - validation: 390 of 968 images (40.3 %), 11,598 of 30,852 QA rows (37.6 %); 578 images
+     removed;
+   - 39 validation/test pairs meet a condition (not filtered); val/test confirmed duplicates
+     of train 0.
+2. **The internal test is reported as a "reduced-leakage" test**, with the residual counts
+   above: at F = 0.86, about 4-6 same-examination pairs among the 24 most similar train/val
+   and train/test pairs by cosine, and none in the crop and dHash bands.
+
+   **Limitation:** no image-level method can remove same-examination pairs without patient or
+   video ids, and Kvasir-VQA-x1 has none.
+3. **Co-primary: an external test set from another centre**: PolypGen and/or GastroVision. The
+   licences are still to be checked. Run card RC-X2 is planned; nothing is downloaded.
+4. **Every model is scored on four tests:**
+   - the filtered (reduced-leakage) test;
+   - the unfiltered test;
+   - the strict subset;
+   - the external test.
+
+   The conclusions (H1-H4) are reported for each.
+
+**The agent's notes** (facts from the committed counts, and what this leaves open):
+- **The strict subset equals the filtered test at F = 0.86.**
+  `filter_sweep:0.86:strict_test:image_fraction_of_test` is 1.0 (512 of 512). It follows from
+  the definitions:
+  - the strict subset keeps a test image whose most similar training image is below
+    0.92 - 0.05 = 0.87 (cosine) and 0.80 - 0.05 = 0.75 (crop);
+  - F = 0.86 already removes every test image at a cosine >= 0.86 or a crop >= 0.70.
+
+  So the strict-subset conclusions will repeat the filtered-test ones, and the four tests are
+  three distinct sets. Open: keep it and report it as identical, or redefine the strict subset.
+- **Validation shrinks too:** 390 images, 11,598 QA rows. Gate 2, the choice of the best of
+  E5/E6 and the student checks read it.
+- **A co-primary test needs lesion masks.** Both primary endpoints need masks of the mask
+  findings: the small-finding recall (it needs the lesion-area strata) and the lesion-mask
+  effect. An external set without masks can carry the secondary endpoints only. RC-X2 checks
+  this for each dataset.
+- **"Another centre" must be checked.** RC-X2 records the hospital(s) of each candidate and of
+  the Kvasir sources. The agent's recollection, not verified from here: HyperKvasir and
+  GastroVision both come at least partly from Bærum Hospital (Vestre Viken Health Trust,
+  Norway). If so, GastroVision is not wholly another centre.
+- **How the two co-primary tests combine is open.** Today the two primary endpoints are
+  Holm-corrected together on one test. Still to fix before the freeze: whether a hypothesis
+  needs support on both tests, and whether the correction also spans the two tests.
+- **EndoBench** (RC-X1, the external test of the D02 decision of 2026-10-12) is not among the
+  four tests. The agent reads it as set aside; RC-X2 reuses RC-X1's overlap step.
+- **Still to build (code):**
+  - the external test's loader and probes (images, finding labels, masks), and the split
+    `external_test` in the evaluation (`data/base.py` already names it);
+  - the comparisons on the external test;
+  - the verdicts for each of the four tests: today `evaluation/verdicts.py` reads the primary
+    rows only.
+
 ## Answer format for the inbox
 
 `- YYYY-MM-DD (name): D02 decided: Q1 <A|B>, Q2 <match|probes>, Q3 <EndoBench|ColonEval|none>, Q4 <x1 only|add ColonVQA>, Q5 <later|drop>.`

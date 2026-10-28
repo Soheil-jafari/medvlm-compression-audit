@@ -9,7 +9,9 @@
   that we may use it, record what its files look like, and count how many of its images are
   near-copies of Kvasir images we train or test on (EndoBench draws on public endoscopy sets,
   so overlap is likely).
-- Status: `blocked` (see section 2)
+- Status: `blocked`: **set aside by D02 amendment 7** (2026-10-28). The external test now comes
+  from another centre, PolypGen and/or GastroVision (card RC-X2), which reuses this card's
+  overlap step. Reopen only if the team brings EndoBench back.
 - Part B (the evaluation of E0, E2, E3, E5, E6 and E7 at B2) is written by the agent from what
   this part reports; it is not written yet.
 
