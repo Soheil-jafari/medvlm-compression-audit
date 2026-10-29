@@ -407,6 +407,29 @@ must be logged here.
   Recorded in D02, the pre-registration draft, the data card, the RC-D1 card, RC-X2 (new),
   RC-X1 and the run-card README.
 
+- **2026-10-29 (Soheil): RC-D1 run 4b done; the strict subset dropped; RC-TT1 ready.**
+  - Run 4b (saved version `notebookd7588ea09b`): rule `full:0.92:or_crop:0.80`, F 0.86.
+    - groups 4,122, the largest 447 (6.9 %); 0 val/test confirmed duplicates;
+    - val 390 images (11,598 QA rows), test 512 (12,067), masked test kept 58.5 %;
+    - `split_sha256` 54dfa70a..., `test_unfiltered_sha256` adf50c68...;
+    - bundle 8,511 files, verify OK.
+
+    Shared data: private Kaggle dataset `medcompress-data`, shared with Amir and Farzan. The
+    committed `summary.csv` (38a20dc) agrees with the report. RC-D1 is done.
+  - The strict subset is 100 % of the filtered test at F = 0.86, so it is no longer a separate
+    analysis. Three tests remain: filtered, unfiltered and external.
+  - The split hash is pinned (`configs/data/kvasir_vqa_x1.yaml`) and checked whenever shared
+    data are attached.
+  - RC-TT1 is made ready on `medcompress-data`:
+    - it verifies the shared data and checks the pinned split before training;
+    - it prints the published target modules before the model loads;
+    - it saves its state every 81 updates (about 30 minutes, an estimate) to the version's
+      output;
+    - `--stop-after-hours` ends a session cleanly on a saved step, for the one resume.
+
+  Recorded in D02, the pre-registration draft, the data card, STATUS and the RC-D1, RC-C1 and
+  RC-TT1 cards.
+
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
@@ -414,10 +437,8 @@ must be logged here.
 | Kaggle session time limit | the session time limit, and whether a stopped version keeps its output (unknown here); the T4 x2 quota rule is settled (counts once, 2026-10-19). RC-TT1 needs about 14.7 h (estimate) | team (check on Kaggle) | before RC-TT1 |
 | The two raters' names (RC-D1-label) | who rater 1 and rater 2 are, for the run report (D02 amendment 4: two raters, no third member) | team | at RC-D1-label's scoring |
 | Co-primary tests: how they combine (D02 amendment 7) | whether a hypothesis needs support on both co-primary tests (the reduced-leakage internal test and the external test), and whether the Holm correction of the two primary endpoints also spans the two tests | team | before the freeze |
-| The strict subset at F = 0.86 (D02 amendment 7) | it is the whole filtered test (512 of 512 images), so its conclusions repeat the filtered test's; keep it and say so, or redefine it (for example a margin below F) | team | before the freeze |
 | The external test (D02 amendment 7) | PolypGen and/or GastroVision: licences, the hospitals (another centre than Kvasir; the agent recalls, unverified, that GastroVision is partly from Bærum Hospital, like HyperKvasir), lesion masks (needed for the primary endpoints), format, overlap with our images (RC-X2 part A) | Farzan proposed (as for EndoBench); team confirms | before RC-X2 part B |
-| Code for amendment 7 | the external test's loader and probes and the split `external_test` in the evaluation; the comparisons on it; the verdicts for each of the four tests (today they read the primary rows only) | agent | after RC-X2 part A |
-| `results/data/summary.csv` | holds run 4 (not accepted) until run 4b replaces it; the paper's generated data table shows it until then | Soheil | at run 4b |
+| Code for amendment 7 | the external test's loader and probes and the split `external_test` in the evaluation; the comparisons on it; the verdicts for each of the three tests (today they read the primary rows only) | agent | after RC-X2 part A |
 | Published target modules | which modules the published `adapter_config.json` names (RC-TT0's printout is not committed; RC-TT1 prints it). If a name is outside the language model, RC-TT1 stops and the team decides | Soheil | at RC-TT1's start |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
 | Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |

@@ -63,7 +63,14 @@
    is co-primary; every model on four tests. At F = 0.86 the strict subset is the whole
    filtered test. RC-X2 planned (nothing downloaded). Next: run 4b with F 0.86 (RC-D1 section
    3e); RC-X2 part A (terms, centres, masks); the team's choices on the co-primary
-   combination and the strict subset; then pass 2 (label values,
+   combination and the strict subset.
+   2026-10-29 (iteration 61): RC-D1 run 4b done and accepted (`medcompress-data`,
+   split_sha256 54dfa70a..., pinned and checked on every attach); RC-D1 done. The strict subset
+   is dropped (100 % of the filtered test): three tests remain. RC-TT1 ready: verify and the
+   pinned split first, the published targets before the model loads, saves every 81 updates
+   to the version's output, `--stop-after-hours 11` for one clean resume (about 15 GPU hours
+   in all, an estimate). Next: RC-TT1 (two sessions); RC-X2 part A; the co-primary
+   combination; then pass 2 (label values,
    finding list, `max_new_tokens`); then RC-TT1's target printout and progress. RC-L1 needs code
    first (run identities, parent from config, cache extension, comparison rows); the A1/A2 reuse
    of E7's effects waits on the team (freeze list item 15).

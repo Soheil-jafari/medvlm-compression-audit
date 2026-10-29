@@ -135,21 +135,24 @@ The appendix item reports them next to the published adapter's test results.
      - **The internal test is a "reduced-leakage" test**, reported with those residual counts.
        It is one of two co-primary tests; the other is an external test from another centre
        (PolypGen and/or GastroVision, D02 amendment 7; not part of this card).
-     - Every model is scored on four tests:
+     - Every model is scored on three tests:
        - the filtered test;
        - the unfiltered test (the filtered test with the removed images added back, a second
          private test file, `test_unfiltered`);
-       - the strict subset;
        - the external test.
 
-       The conclusions are reported for each. At F = 0.86 the strict subset is the whole
-       filtered test (512 of 512 images).
+       The conclusions are reported for each. The strict subset is no longer a separate
+       analysis (2026-10-29): at F = 0.86 it is the whole filtered test (512 of 512 images).
+     - RC-D1 run 4b (2026-10-29) applied it: `split_sha256`
+       `54dfa70a9aa99ea86262447acfd16fe4d4e871272781a31f39c9f330f4f7d090`, pinned in the
+       dataset config.
   6. A contact sheet of the closest cross-split pairs (by cosine, crop correlation and dHash)
      is checked by eye (kept private). After the filter it shows train/val and train/test
      pairs only.
-- **Strict test subset** (a pre-registered sensitivity analysis): the test images whose most
-  similar training image is below the threshold of the rule used (run 4b) minus 0.05, within
-  the filtered test: **[RC-D1]**
+- **Strict test subset** (pre-registered as a sensitivity analysis; **dropped** on 2026-10-29,
+  because at F = 0.86 it is the whole filtered test): the test images whose most similar
+  training image is below the threshold of the rule used (run 4b) minus 0.05, within the
+  filtered test: **[RC-D1]**
   `strict_test:images`, `strict_test:qa_rows`. The main comparisons are reported on it too.
 - **Images and QA rows per split:** **[RC-D1]** `images:<split>`, `qa_rows:<split>`,
   `image_fraction:<split>`.

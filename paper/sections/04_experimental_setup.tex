@@ -14,10 +14,13 @@
 % post hoc sweep of full:T OR crop >= 0.80, which stopped (only full:0.92 OR crop >= 0.80 within
 % the guard, not clean; D02 amendment 6); the post hoc held-out filter on val and test (cosine
 % >= F, crop >= 0.70, or crop >= 0.50 within 4 dHash bits; F from its sweep) and the selected
-% F (run 4b). Primary test = the filtered test; the unfiltered test and the strict subset as
-% sensitivity analyses. Kvasir-SEG masks matched by fingerprint, EndoBench external test
-% (deduplicated), finding list and prevalence groups (D02). The data table below is generated
-% from results/data/summary.csv, which holds run 4 (not accepted) until run 4b replaces it.
+% F = 0.86 (run 4b; no F was clean). Two co-primary tests (D02 amendment 7): the internal test
+% after the filter, reported as "reduced-leakage" with its residual same-examination pairs, and
+% an external test from another centre (PolypGen and/or GastroVision, RC-X2); the unfiltered
+% test as a sensitivity analysis (the strict subset dropped: at F = 0.86 it is the whole
+% filtered test). Limitation: no patient or video ids. Kvasir-SEG masks matched by fingerprint,
+% finding list and prevalence groups (D02). The data table below is generated from
+% results/data/summary.csv: RC-D1 run 4b (split_sha256 54dfa70a..., 2026-10-29).
 \todo{data}
 
 \begin{table}[t]
