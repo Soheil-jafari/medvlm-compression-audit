@@ -322,6 +322,7 @@ def train_lora(
     seed: int,
     attach_adapter: bool = True,
     resume_dir: Path | None = None,
+    stop_after_seconds: float | None = None,
 ) -> TrainResult:
     """Attach LoRA to the student (if not attached) and train it for ``cfg.steps`` optimizer steps.
 
@@ -337,6 +338,11 @@ def train_lora(
     (``cfg.extra``; default ``resume.DEFAULT_CHECKPOINT_EVERY``) and after the last step, and a
     run started again with the same settings and examples continues from the last saved step
     (``resume.py``). The caller removes the folder once the final output is saved.
+
+    ``stop_after_seconds`` (needs ``resume_dir``): once that much wall time has passed in this
+    call, the state is saved after the current step and the run returns early (fewer than
+    ``cfg.steps`` steps), so a session can end cleanly before its time limit and the next one
+    resumes. It is not part of the run's fingerprint.
     """
     import peft
     import torch
@@ -352,6 +358,8 @@ def train_lora(
 
     if not examples:
         raise ValueError("no training examples")
+    if stop_after_seconds is not None and resume_dir is None:
+        raise ValueError("stop_after_seconds needs resume_dir: the state must be saved")
     torch.manual_seed(seed)
     if attach_adapter and not isinstance(student.module, peft.PeftModel):
         attach_lora(student, cfg.lora)
@@ -441,9 +449,16 @@ def train_lora(
         progress.kd_losses.append(totals[2])
         progress.step = step + 1
         progress.examples_seen += per_step
-        if store is not None and store.due(progress.step, cfg.steps):
+        saved = store is not None and store.due(progress.step, cfg.steps)
+        if saved and store is not None:
             done = progress.seconds + time.perf_counter() - start
             store.save(Progress(**{**progress.__dict__, "seconds": done}), save_state)
+        if (stop_after_seconds is not None and progress.step < cfg.steps
+                and time.perf_counter() - start >= stop_after_seconds):  # fmt: skip
+            if not saved and store is not None:  # end the session on a saved step
+                done = progress.seconds + time.perf_counter() - start
+                store.save(Progress(**{**progress.__dict__, "seconds": done}), save_state)
+            break
     result = TrainResult(
         steps=progress.step,
         examples_seen=progress.examples_seen,

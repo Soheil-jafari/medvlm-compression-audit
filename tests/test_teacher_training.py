@@ -249,7 +249,9 @@ def test_the_feasibility_script_records_failures_and_applies_rule_3(tmp_path: Pa
     assert "N = 27000" in shown.stdout  # the rule again, with a T4 x2 hour counted once
 
 
-def test_the_training_dry_run_reads_the_plan_and_the_shared_data(tmp_path: Path) -> None:
+def test_the_training_dry_run_reads_the_plan_and_the_shared_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from test_bundles import _shared_data
 
     shared = tmp_path / "working" / "medcompress_data"
@@ -261,12 +263,21 @@ def test_the_training_dry_run_reads_the_plan_and_the_shared_data(tmp_path: Path)
     )  # fmt: skip
     assert made.returncode == 0, made.stderr
     plan = _feasibility_csv(tmp_path / "rc_tt0.csv", _full_values())
+    refused = subprocess.run(  # the config pins RC-D1 run 4b's split, not this fixture's
+        [sys.executable, str(REPO / "scripts" / "train_teacher.py"), "--data-root", str(shared),
+         "--feasibility", str(plan), "--out", str(tmp_path / "out"), "--dry-run"],
+        capture_output=True, text=True, cwd=REPO, check=False, timeout=300,
+    )  # fmt: skip
+    assert refused.returncode == 5 and "the config pins" in refused.stderr
+    held = json.loads((shared / "bundle_manifest.json").read_text())["split_sha256"]
+    monkeypatch.setenv("MEDCOMPRESS_SPLIT_SHA256", held)  # the fixture's own split (tests only)
     run = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "train_teacher.py"), "--data-root", str(shared),
          "--feasibility", str(plan), "--out", str(tmp_path / "out"), "--dry-run"],
         capture_output=True, text=True, cwd=REPO, check=False, timeout=300,
     )  # fmt: skip
     assert run.returncode == 0, run.stdout + run.stderr
+    assert f"split: split_sha256 {held} (pinned, checked)" in run.stdout
     assert "setup fp16_2gpu" in run.stdout and "N = " in run.stdout and "estimate" in run.stdout
     assert "counted once" in run.stdout  # the config, measured 2026-10-19
     assert "read from the hub when the run starts" in run.stdout

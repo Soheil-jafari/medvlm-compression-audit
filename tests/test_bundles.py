@@ -159,6 +159,41 @@ def test_rc_d1_writes_one_shared_data_folder_that_later_runs_verify(tmp_path: Pa
     assert "Traceback" not in stage.stderr
 
 
+def test_the_shared_data_must_hold_the_pinned_split(tmp_path: Path) -> None:
+    from medcompress.data.prepared import pinned_split_sha256
+
+    shared = tmp_path / "medcompress_data"
+    _shared_data(shared)
+    made = _run("prepare_data.py", "bundle", "--bundle-dir", str(shared))
+    assert made.returncode == 0, made.stderr
+    held = json.loads((shared / bundles.MANIFEST_NAME).read_text())["split_sha256"]
+
+    def pinning(value: str) -> dict:
+        path = tmp_path / f"dataset_{value[:4]}.yaml"
+        path.write_text(f'dataset:\n  split_sha256: "{value}"\n')
+        return {"components": {"datasets": {"train_qa": str(path)}}}
+
+    bundles.attach_data(pinning(held), shared)  # the pinned split: attached
+    with pytest.raises(bundles.BundleError, match="the config pins ffff"):
+        bundles.attach_data(pinning("f" * 64), shared)
+    bundles.attach_data(pinning("TODO"), shared)  # an open pin checks nothing
+    bundles.attach_data({}, shared)  # RC-D1's own steps name no dataset config
+    real = load_config("experiments/E0.yaml")  # the real config pins RC-D1 run 4b's split
+    with pytest.raises(bundles.BundleError, match="54dfa70a9aa99ea8"):
+        bundles.attach_data(real, shared)
+    dataset = load_config("data/kvasir_vqa_x1.yaml")["dataset"]
+    assert pinned_split_sha256(dataset) == (
+        "54dfa70a9aa99ea86262447acfd16fe4d4e871272781a31f39c9f330f4f7d090")  # fmt: skip
+    assert pinned_split_sha256({"split_sha256": "TODO"}) is None
+    from medcompress.config import ConfigError
+
+    for bad in (0, "54dfa70a", "G" * 64):  # unquoted digits read as a number, short, not hex
+        with pytest.raises(ConfigError, match="64 hex digits"):
+            pinned_split_sha256({"split_sha256": bad})
+    teacher = _run("train_teacher.py", "--data-root", str(shared), "--dry-run")
+    assert teacher.returncode == 5 and "the config pins" in teacher.stderr  # before any model
+
+
 def _split_hash(shared: Path, seed: int) -> str:
     from medcompress.config import config_root
     from medcompress.data.prepare import prepare

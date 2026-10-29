@@ -20,6 +20,10 @@ dataset:
     train: 70 % of all 6,449 images of both official splits, by near-duplicate group
     val: 15 % of the images
     test: 15 % of the images
+  split_sha256: "54dfa70a9aa99ea86262447acfd16fe4d4e871272781a31f39c9f330f4f7d090"  # RC-D1 run 4b
+                                          # (D02 amendments 5-7: full:0.92:or_crop:0.80, held-out
+                                          # filter F 0.86); every card's shared data must match
+  test_unfiltered_sha256: "adf50c68ee84f727329860ddbd17a6747d3b2e0e37e9e33dd4dcd6b36dc036cb"  # 4b
   split_ratios: {train: 0.70, val: 0.15, test: 0.15}   # fractions of images; groups of near-
                                           # duplicates (near_duplicates below, transitive) go
                                           # whole, stratified by finding answer and by

@@ -16,9 +16,15 @@ previous notebook version's output attached as input (searched under /kaggle/inp
 and runs the validation evaluation and Gate 1, which wait cleanly while the finding list is
 still open (RC-E0a and RC-E0b then run them).
 
+The shared data must hold the split the dataset config pins (``split_sha256``, RC-D1 run 4b):
+the manifest is checked when the data are attached, and the training split is rebuilt and
+hashed again. With ``--stop-after-hours H`` the training stops on a saved step once H hours
+have passed since the script started, and the script exits with code 3: the notebook version
+then ends normally, its output keeps the saved state, and the next session resumes from it.
+
 Examples (Kaggle, from the repository root):
     python scripts/train_teacher.py --data-root /kaggle/input/<shared-data> --dry-run
-    python scripts/train_teacher.py --data-root /kaggle/input/<shared-data>
+    python scripts/train_teacher.py --data-root /kaggle/input/<shared-data> --stop-after-hours 11
     python scripts/train_teacher.py --data-root ... --extend --from /kaggle/input/<teacher-adapter>
 """
 
@@ -32,6 +38,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -56,6 +63,8 @@ from medcompress.models.teacher_training import (  # noqa: E402
     training_size,
 )
 
+RESUME_NEEDED = 3
+"""The training stopped on a saved step for ``--stop-after-hours``: run it again to resume."""
 CONFIG_INCOMPLETE = 4
 INPUT_CHECK_FAILED = 5
 
@@ -81,6 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--extend", action="store_true",
         help="the one extension of the quality rule: +50 %% of N, on the next examples",
+    )  # fmt: skip
+    parser.add_argument(
+        "--stop-after-hours", type=float, default=None, metavar="H",
+        help="stop on a saved step once H hours have passed since the start, and exit with "
+             "code 3 so the session ends cleanly (set it below the session time limit)",
     )  # fmt: skip
     parser.add_argument("--skip-eval", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="print the plan; load no model")
@@ -135,7 +149,11 @@ def _evaluate(script: str, data_root: Path, *extra: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear procedure
+    started = time.monotonic()
     args = build_parser().parse_args(argv)
+    if args.stop_after_hours is not None and args.stop_after_hours <= 0:
+        print("--stop-after-hours must be above 0", file=sys.stderr)
+        return INPUT_CHECK_FAILED
     from medcompress.config import load_config
 
     settings = load_config("teacher_training.yaml")["teacher_training"]
@@ -189,10 +207,20 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
 
     from medcompress.compression.distillation.offline_kd import TrainConfig, data_seed
     from medcompress.compression.lora import LoRAConfig
-    from medcompress.data.prepared import load_prepared
+    from medcompress.data.prepared import load_prepared, pinned_split_sha256
 
     dataset = load_config(config["components"]["datasets"]["train_qa"])["dataset"]
-    train = load_prepared(Path(paths["data_root"]), dataset, Path(paths["private_root"]))["train"]
+    pinned = pinned_split_sha256(dataset)
+    try:  # the split rebuilt here must hash to the pinned one (RC-D1 run 4b)
+        train = load_prepared(
+            Path(paths["data_root"]), dataset, Path(paths["private_root"]),
+            expected_split_sha256=pinned,
+        )["train"]  # fmt: skip
+    except ValueError as exc:
+        print(f"[inputs] check failed: {exc}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
+    print(f"split: {'split_sha256 ' + pinned + ' (pinned, checked)' if pinned else 'not pinned'}"
+          f"; {len(train)} training rows")  # fmt: skip
     order = teacher_order(train, data_seed(config))
     n = training_size(plan, len(train))
     if args.extend:
@@ -277,7 +305,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
             model.module, str(adapter_dir), is_trainable=True
         )
     examples = examples_from_samples(pool, Path(paths["data_root"]))
-    result = train_lora(model, examples, cfg, seed=0, resume_dir=resume)
+    budget = None
+    if args.stop_after_hours is not None:  # what is left of H after the model was loaded
+        budget = max(0.0, args.stop_after_hours * 3600 - (time.monotonic() - started))
+    result = train_lora(model, examples, cfg, seed=0, resume_dir=resume, stop_after_seconds=budget)
+    if result.steps < cfg.steps:
+        print(f"STOPPED for a resume after {args.stop_after_hours} h: step {result.steps} of "
+              f"{cfg.steps} is saved in {resume} (this version's output). Start the resume "
+              "session: attach this version's output and run the same command (RC-TT1, "
+              "section 3)")  # fmt: skip
+        return RESUME_NEEDED
 
     target = checkpoint_root / ADAPTER_DIR
     if target.is_symlink():  # an attached adapter (the extension): write a new folder

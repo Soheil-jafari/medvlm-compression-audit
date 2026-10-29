@@ -368,15 +368,36 @@ def check_data_layout(root: Path) -> list[str]:
 
 
 def attach_data(config: dict[str, Any], data_root: Path) -> Bundle:
-    """Verify the shared data; point ``paths.data_root`` and ``private_root`` at it."""
+    """Verify the shared data; point ``paths.data_root`` and ``private_root`` at it.
+
+    If ``config`` names the main dataset's config (``components.datasets.train_qa``) and that
+    pins a ``split_sha256`` (RC-D1 run 4b), the shared data must hold that split."""
     bundle = verify_bundle(data_root, kind=DATA_KIND)
     lacking = check_data_layout(bundle.root)
     if lacking:
         raise BundleError(f"the shared data at {bundle.root} lack: {', '.join(lacking)}")
+    pinned = _pinned_split(config)
+    if pinned is not None and bundle.meta.get("split_sha256") != pinned:
+        raise BundleError(
+            f"the shared data at {bundle.root} hold split_sha256 "
+            f"{bundle.meta.get('split_sha256')}, the config pins {pinned} (RC-D1 run 4b, D02 "
+            "amendments 5-7): attach run 4b's shared data"
+        )
     paths = config.setdefault("paths", {})
     paths["data_root"] = str(bundle.root / "data")
     paths["private_root"] = str(bundle.root / "private")
     return bundle
+
+
+def _pinned_split(config: Mapping[str, Any]) -> str | None:
+    """The split hash the main dataset's config pins, if ``config`` names that config."""
+    name = ((config.get("components") or {}).get("datasets") or {}).get("train_qa")
+    if not name:
+        return None
+    from medcompress.config import load_config
+    from medcompress.data.prepared import pinned_split_sha256
+
+    return pinned_split_sha256(load_config(name).get("dataset") or {})
 
 
 # ------------------------------------------------------------------ hand-offs
