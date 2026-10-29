@@ -156,11 +156,17 @@ def _experiment(run: Run) -> Step:
     return Step(f"run {run.label}", _script("run_experiment.py", *run.args()))
 
 
-def _test_eval(run: Run) -> Step:
+def _test_eval(run: Run, split: str = "test") -> Step:
+    name = "test evaluation" if split == "test" else "unfiltered test evaluation"
     return Step(
-        f"test evaluation {run.label}",
-        _script("06_evaluate.py", *run.args(), "-o", "evaluation.split=test"),
+        f"{name} {run.label}",
+        _script("06_evaluate.py", *run.args(), "-o", f"evaluation.split={split}"),
     )
+
+
+def _test_evals(run: Run) -> tuple[Step, Step]:
+    """The test split and the unfiltered test (D02 amendment 6): each model is scored on both."""
+    return _test_eval(run), _test_eval(run, "test_unfiltered")
 
 
 def _training(run: Run) -> list[Step]:
@@ -185,7 +191,7 @@ def _pruning(runs: Sequence[Run]) -> list[Step]:
     for run in runs:
         experiment = _experiment(run)
         steps.append(Step(experiment.label, experiment.argv, skip_if_pruned=run))
-        steps.append(_test_eval(run))
+        steps += _test_evals(run)
     return steps
 
 
@@ -410,7 +416,7 @@ def build_plan(
     if card == "RC-E3":
         s = _seed(card, seed, SEEDS)
         runs = [Run("E3", s, variant=v) for v in _pick(E3_VARIANTS, variants)]
-        steps = [step for run in runs for step in (_experiment(run), _test_eval(run))]
+        steps = [step for run in runs for step in (_experiment(run), *_test_evals(run))]
         return CardPlan(
             card, f"E3 post-training quantization, seed {s}", 1, tuple(steps),
             handoffs=(Handoff("quantized", tuple(runs), f"E3_seed{s}_quantized"),
@@ -421,7 +427,7 @@ def build_plan(
         run = Run("E4", _seed(card, seed, SEEDS))
         return CardPlan(
             card, f"E4 quantization-aware distillation, seed {run.seed}", 1,
-            (_experiment(run), _test_eval(run)),
+            (_experiment(run), *_test_evals(run)),
             handoffs=(Handoff("quantized", (run,), f"E4_seed{run.seed}_quantized"),
                       Handoff("outcomes", (run,), f"E4_seed{run.seed}_outcomes")),
             needs=(Need("teacher_cache"),), seed=run.seed, quantization=True, internet=True,
@@ -430,7 +436,7 @@ def build_plan(
         _no_seed(card, seed)
         run = Run("E9")
         return CardPlan(
-            card, "E9 the teacher at 4 bit", 2, (_experiment(run), _test_eval(run)),
+            card, "E9 the teacher at 4 bit", 2, (_experiment(run), *_test_evals(run)),
             handoffs=(Handoff("quantized", (run,), "E9_seed0_quantized"),),
             needs=(Need("teacher_adapter"),), quantization=True, internet=True,
         )  # fmt: skip
@@ -462,7 +468,7 @@ def build_plan(
     if card == "RC-E8":
         s = _seed(card, seed, SEEDS)
         runs = [Run("E8", s, b) for b in picked_budgets]
-        steps = [step for run in runs for step in (_experiment(run), _test_eval(run))]
+        steps = [step for run in runs for step in (_experiment(run), *_test_evals(run))]
         b2 = tuple(r for r in runs if r.budget == "B2")  # RC-T1 times B2
         return CardPlan(
             card, f"E8 clinical pruning + 4-bit, seed {s}", 1, tuple(steps),
@@ -489,7 +495,8 @@ def build_plan(
         runs = [Run("E0")] + [Run(e, s) for e in ("E1", "E2") for s in SEEDS]
         e2 = tuple(r for r in runs if r.exp == "E2")  # RC-C1 compares E2 with every arm
         return CardPlan(
-            card, "E0, E1, E2 on the test split", 2, tuple(_test_eval(r) for r in runs),
+            card, "E0, E1, E2 on the test split", 2,
+            tuple(step for r in runs for step in _test_evals(r)),
             handoffs=(Handoff("outcomes", e2, "E2_test_outcomes"),),
             needs=(Need("teacher_adapter"),)
             + tuple(Need("adapter", Run(e, s)) for e in ("E1", "E2") for s in SEEDS),
@@ -500,6 +507,8 @@ def build_plan(
         return CardPlan(
             card, "Paired comparisons (CPU)", 0,
             (Step("comparisons", _script("09_compare_arms.py")),
+             Step("comparisons, strict subset", _script("09_compare_arms.py", "--strict")),
+             Step("comparisons, unfiltered test", _script("09_compare_arms.py", "--unfiltered")),
              Step("tables and figures", _script("08_aggregate_results.py"), inputs=False)),
             needs=(Need("outcomes", text="outcomes of E2 (RC-R1) and of every E3-E8 session"),),
         )  # fmt: skip

@@ -1024,6 +1024,50 @@ def test_the_filter_sweep_and_run_4b_with_the_filter_on_the_command_line(tmp_pat
     assert other.returncode == 5 and "used the rule full:0.95:or_crop:0.80" in other.stderr
 
 
+def test_the_unfiltered_test_file_adds_the_removed_test_images_back(tmp_path: Path) -> None:
+    from medcompress.config import ConfigError
+    from medcompress.data.embed_step import embed_step
+    from medcompress.data.heldout_filter import HeldoutFilter
+    from medcompress.data.prepare import prepare, write_private_outputs
+    from medcompress.data.prepared import UNFILTERED_TEST_FILE, load_prepared
+    from medcompress.data.splits import ids_fingerprint, split_fingerprint
+
+    def quiet(_: str) -> None:
+        return None
+
+    data = _dataset(tmp_path, overlay=False, lookalike=True)
+    out = tmp_path / "embed"
+    embed_step(data, CONFIG, out, TinyEmbedder(), split_seed=3, close_bits=4, mask_threshold=4,
+               log=quiet)  # fmt: skip
+    common = {"split_seed": 3, "close_bits": 4, "mask_threshold": 4, "embed_dir": out,
+              "rule": cand.JoinRule("full", 0.95, 0.80)}  # fmt: skip
+    base = prepare(data, CONFIG, **common)
+    filtered = prepare(data, CONFIG, heldout_filter=HeldoutFilter(0.62), **common)
+    assert filtered.heldout_removed["test"]  # s00_shift is removed (see the filter test)
+    private = tmp_path / "private"
+    hashes = write_private_outputs(filtered, private, data)
+    ids = json.loads((private / UNFILTERED_TEST_FILE).read_text())
+    unfiltered = sorted(s.sample_id for s in base.splits["test"])
+    assert ids == unfiltered  # the filtered test with the removed test images added back
+    assert {s.sample_id for s in filtered.splits["test"]} < set(ids)
+    assert hashes["test_unfiltered_sha256"] == ids_fingerprint({"test_unfiltered": ids})
+    # the split hash is of the filtered splits; the unfiltered test is added when asked
+    loaded = load_prepared(data, CONFIG, private, expected_split_sha256=filtered.split_sha256,
+                           unfiltered_test=True)  # fmt: skip
+    assert sorted(s.sample_id for s in loaded["test_unfiltered"]) == unfiltered
+    assert all(s.split == "test_unfiltered" for s in loaded["test_unfiltered"])
+    assert [s.sample_id for s in loaded["test"]] == [s.sample_id for s in filtered.splits["test"]]
+    stems = {Path(s.image_path).stem for s in loaded["test_unfiltered"]}
+    assert set(filtered.heldout_removed["test"]) <= stems
+    assert split_fingerprint({k: v for k, v in loaded.items() if k != "test_unfiltered"}) == (
+        filtered.split_sha256)  # fmt: skip
+    assert "test_unfiltered" not in load_prepared(data, CONFIG, private)  # only when asked
+    write_private_outputs(base, tmp_path / "private_unfiltered", data)  # no filter: no file
+    assert not (tmp_path / "private_unfiltered" / UNFILTERED_TEST_FILE).exists()
+    with pytest.raises(ConfigError, match="held-out filter"):
+        load_prepared(data, CONFIG, tmp_path / "private_unfiltered", unfiltered_test=True)
+
+
 def test_the_strict_subset_restricts_the_comparisons() -> None:
     from medcompress.evaluation.compare_stage import Arm, ArmOutcomes, ProbeTable, restrict
 

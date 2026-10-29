@@ -355,6 +355,57 @@ must be logged here.
     - the strict subset is taken within the filtered test.
 
   Recorded in D02, the pre-registration draft, the data card and the RC-D1 card.
+- **2026-10-28 (Soheil): the two readings of amendment 6 confirmed; the unfiltered test
+  built.**
+  - Confirmed:
+    - the dHash condition means one training image meeting both (<= 4 bits and crop >= 0.50);
+    - the strict subset is taken within the filtered test.
+  - Built (the open item):
+    - `prepare` with the filter writes a second private test file, `test_unfiltered.json`:
+      the filtered test with the removed test images added back;
+    - the evaluation scores it as `test_unfiltered` when asked
+      (`-o evaluation.split=test_unfiltered`), under the same lock, into its own files;
+    - every test evaluation of the run cards scores both tests;
+    - `09_compare_arms.py --unfiltered` repeats the comparisons on it;
+    - the paper keeps both sensitivity analyses out of the primary tables, with their own
+      macro names. This also fixes a macro-name collision that a metric on two splits would
+      have caused.
+  - The rule sweep's counts file is committed (9d5e2e3); its counts agree with the values
+    reported for amendment 6.
+
+  Recorded in D02, the pre-registration draft, the data card and the RC-D1 card.
+
+- **2026-10-28 (Soheil), D02 amendment 7: F = 0.86, a reduced-leakage internal test, an
+  external test as co-primary,** recorded post hoc, before any model result.
+  - The filter sweep's sheets (team's counts, band 1 / 2 / 3):
+    - F 0.90 about 3 / 0 / 0;
+    - F 0.88 about 5-7 / 0 / 0;
+    - F 0.86 about 4-6 / 0 / 0;
+    - 0.84, 0.82 and 0.80 are below the 50 % floor and not judged.
+
+    None is clean. The remaining pairs are frames of the same examination with the camera
+    moved, not copies.
+  - Decision:
+    - F = 0.86, the lowest F that meets the floor. The test keeps 512 of 968 images and
+      12,067 of 21,728 QA rows; validation keeps 390 of 968 images;
+    - the internal test is reported as a "reduced-leakage" test, with these residual counts;
+    - limitation: no image-level method removes same-examination pairs without patient or
+      video ids;
+    - co-primary: an external test set from another centre, PolypGen and/or GastroVision
+      (licences to check). Run card RC-X2 is planned; nothing is downloaded;
+    - every model is scored on four tests (filtered, unfiltered, strict subset, external), and
+      the conclusions are reported for each.
+  - Agent's notes:
+    - at F = 0.86 the strict subset is the whole filtered test (512 of 512), so it repeats the
+      filtered-test results;
+    - a co-primary test needs lesion masks for the two primary endpoints;
+    - GastroVision may share a hospital with HyperKvasir (the agent's recollection,
+      unverified);
+    - EndoBench is set aside;
+    - code still to build: the external test, and the verdicts per test.
+
+  Recorded in D02, the pre-registration draft, the data card, the RC-D1 card, RC-X2 (new),
+  RC-X1 and the run-card README.
 
 ## Open decisions
 
@@ -362,9 +413,10 @@ must be logged here.
 |---|---|---|---|
 | Kaggle session time limit | the session time limit, and whether a stopped version keeps its output (unknown here); the T4 x2 quota rule is settled (counts once, 2026-10-19). RC-TT1 needs about 14.7 h (estimate) | team (check on Kaggle) | before RC-TT1 |
 | The two raters' names (RC-D1-label) | who rater 1 and rater 2 are, for the run report (D02 amendment 4: two raters, no third member) | team | at RC-D1-label's scoring |
-| The sweep's counts file (D02 amendment 5) | `results/data/near_duplicate_sweep.csv` (aggregate counts of the rule sweep) is not on `research-loop`; `prepare --rule` and `filter-sweep` read it, so commit it from the sweep's `results_to_commit/` first | Soheil | before the filter sweep |
-| The filter sweep's sheets (D02 amendment 6) | per F and band, how many pairs show the same scene, judged by the team on the private sheets; then F (the highest with none whose test keeps >= 50 %) or, if none qualifies, a stop | team | after the filter sweep |
-| The unfiltered-test sensitivity analysis (D02 amendment 6) | the removed test images (img_ids in the private `heldout_filter_removed.json`) must also be evaluated; the evaluation reads only the split files, so this step is not built yet | agent proposes, team confirms | before the test split is unlocked |
+| Co-primary tests: how they combine (D02 amendment 7) | whether a hypothesis needs support on both co-primary tests (the reduced-leakage internal test and the external test), and whether the Holm correction of the two primary endpoints also spans the two tests | team | before the freeze |
+| The strict subset at F = 0.86 (D02 amendment 7) | it is the whole filtered test (512 of 512 images), so its conclusions repeat the filtered test's; keep it and say so, or redefine it (for example a margin below F) | team | before the freeze |
+| The external test (D02 amendment 7) | PolypGen and/or GastroVision: licences, the hospitals (another centre than Kvasir; the agent recalls, unverified, that GastroVision is partly from Bærum Hospital, like HyperKvasir), lesion masks (needed for the primary endpoints), format, overlap with our images (RC-X2 part A) | Farzan proposed (as for EndoBench); team confirms | before RC-X2 part B |
+| Code for amendment 7 | the external test's loader and probes and the split `external_test` in the evaluation; the comparisons on it; the verdicts for each of the four tests (today they read the primary rows only) | agent | after RC-X2 part A |
 | `results/data/summary.csv` | holds run 4 (not accepted) until run 4b replaces it; the paper's generated data table shows it until then | Soheil | at run 4b |
 | Published target modules | which modules the published `adapter_config.json` names (RC-TT0's printout is not committed; RC-TT1 prints it). If a name is outside the language model, RC-TT1 stops and the team decides | Soheil | at RC-TT1's start |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
@@ -374,7 +426,7 @@ must be logged here.
 | Budget hardware for stage 07 | `budgets.measurement.hardware` is open, so the benchmark step of RC-E1 and RC-E2 waits (the runner skips it and goes on) | Amir | before RC-B0 |
 | Student amendment | tell Amir and Farzan that one student is used (D05 amendment) | Soheil | before RC-E1 |
 | Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
-| EndoBench terms | Confirm licence and download before it is used as the external test | Farzan | before S11 |
+| EndoBench terms | set aside by D02 amendment 7 (the external test is from another centre: PolypGen and/or GastroVision); reopen only if the team brings EndoBench back | Farzan | — |
 | Finding list and weights | Pre-registered table, frozen before E7. Draft rules (iteration 40): a finding enters C with at least 20 positive training images and 10 in each of validation and test; groups common >= 10 %, rare < 2 %; cap 20; three tiers with multipliers 2.0 / 1.5 / 1.0 assigned from the finding names | team | after RC-D1 |
 | Comparator "best of E5/E6" (draft proposal) | the generic arm with the highest validation small-finding recall at B2 (mean of 3 seeds), the same for both primary endpoints | team | before the freeze |
 | Headline accuracy for H1 and H4 (draft proposal) | macro balanced accuracy instead of the overall probe accuracy, which mostly measures specificity; overall accuracy still reported | team | before the freeze |

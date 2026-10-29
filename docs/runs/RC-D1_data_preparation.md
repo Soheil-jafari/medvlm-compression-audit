@@ -22,13 +22,12 @@
 - Who: **Soheil** (decision of 2026-10-17).
 - Status: `blocked` for the runner (its RC-D1 plan has no `--rule` and no `--heldout-filter`,
   and would repeat run 4's rule). **Run 4 is not accepted** (D02 amendment 5), and **the rule
-  sweep stopped** (D02 amendment 6, 2026-10-28; section 5). Next, by hand:
-  - commit the rule sweep's counts (`results/data/near_duplicate_sweep.csv`);
-  - the held-out filter sweep (section 3d);
-  - then run 4b with `full:0.92:or_crop:0.80` and the F the team selects (section 3e).
+  sweep stopped** (D02 amendment 6, 2026-10-28; section 5). The held-out filter sweep is done
+  and judged; none of its F was clean, and D02 amendment 7 sets **F = 0.86** (section 5). Next,
+  by hand: run 4b with `full:0.92:or_crop:0.80` and F = 0.86 (section 3e).
 
-  Runs 1, 2, 3 and 4 and the rule sweep are recorded in section 5; nothing from them is used
-  but the swept rule's groups.
+  Runs 1, 2, 3 and 4 and both sweeps are recorded in section 5. Nothing from them is used but
+  the swept rule's groups and the filter at F = 0.86.
 
 ## 2. Requirements
 
@@ -349,7 +348,7 @@ rm -rf $SHARED   # the images are not needed in the version's output
   same-scene pair. If none is clean, stop and report: nothing lower is tried without a new
   recorded decision.
 
-### 3d. The held-out filter sweep (D02 amendment 6; CPU, Save & Run All)
+### 3d. The held-out filter sweep (D02 amendment 6; CPU, Save & Run All): done 2026-10-28; F = 0.86 (D02 amendment 7, section 5)
 
 The rule sweep stopped (section 5): its only rule within the guard,
 `full:0.92:or_crop:0.80`, was not clean. Amendment 6 keeps that rule's groups and split. After
@@ -438,10 +437,11 @@ rm -rf $SHARED   # the images are not needed in the version's output
 
   If none qualifies, stop and report.
 
-### 3e. Run 4b (D02 amendments 5 and 6; CPU)
+### 3e. Run 4b (D02 amendments 5, 6 and 7; CPU)
 
-Only after the filter sweep's counts are committed and the team has selected F. It runs
-`prepare --rule full:0.92:or_crop:0.80 --heldout-filter F`. The command accepts:
+The filter sweep's counts are committed (7222174), and D02 amendment 7 sets F = 0.86: the
+lowest F that keeps half of the test images, since none was clean. It runs
+`prepare --rule full:0.92:or_crop:0.80 --heldout-filter 0.86`. The command accepts:
 - `--rule` only for a rule the committed rule sweep lists within the guard;
 - `--heldout-filter` only for an F that the committed filter sweep lists, with that rule, at or
   above the 50 % floor, written with two decimals.
@@ -452,19 +452,21 @@ What it writes:
 - `results/data/summary.csv` records the rule, `near_duplicates:rule_from_sweep` = 1 and the
   filter (`heldout_filter:*`);
 - `split_sha256` covers the filtered splits;
-- the removed img_ids go to the private `heldout_filter_removed.json`, next to `splits.json`.
+- the removed img_ids go to the private `heldout_filter_removed.json`, next to `splits.json`;
+- the second test file, `test_unfiltered.json` (private, next to `splits.json`): the filtered
+  test with the removed test images added back. Every later card scores each model on it too
+  (`test_unfiltered`). Its hash `test_unfiltered_sha256` is printed with the others.
 
 Attach the same datasets as for the sweep. Do not use `CARD = "RC-D1"` in
 `notebooks/run_card.ipynb`: its plan has neither flag and would repeat run 4's rule.
 
-**The cell** (set `F` first, to the value the team selected, e.g. `0.86`):
+**The cell** (nothing to edit: `F` is set to 0.86, as D02 amendment 7 decided):
 
 ```bash
 %%bash
 set -euo pipefail
 RULE=full:0.92:or_crop:0.80   # the groups of D02 amendment 6
-F=CHOOSE                      # e.g. 0.86: the F the team selected on the filter sweep's sheets
-if [ "$F" = CHOOSE ]; then echo "set F to the selected value first"; exit 1; fi
+F=0.86                        # D02 amendment 7: the lowest F that meets the 50 % floor
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
@@ -708,7 +710,8 @@ them.
   `becacdaebcdee6424318785ed7e32ffc783ee6ce99817e5c7a2fe916d59fc245`; val/test confirmed
   duplicates 0; images train / val / test 4,513 / 968 / 968.
 - Joined pairs, wall time, the either-rater rule line: not reported here.
-- `results/data/near_duplicate_sweep.csv`: not on `research-loop` yet (to commit).
+- `results/data/near_duplicate_sweep.csv`: committed on 2026-10-28 (9d5e2e3); its counts agree
+  with the lines above.
 - The team's count of same-scene pairs (from the sheet):
 
   | Rule | Band 1 (cosine) | Band 2 (crop) | Band 3 (dHash) |
@@ -719,27 +722,32 @@ them.
 - The selected rule: **none clean: stopped** (D02 amendment 5). D02 amendment 6 keeps the
   groups of `full:0.92:or_crop:0.80` and adds the held-out filter (section 3d).
 
-### The held-out filter sweep (section 3d)
+### The held-out filter sweep (section 3d; reported 2026-10-28, Soheil): none clean; F = 0.86 (D02 amendment 7)
 
-- Run by / date:
-- Commit actually used:
-- The unfiltered line (images per split, `split_sha256`):
-- One `held-out filter F ...` line per F (images and QA rows kept, masked test images kept,
-  the 50 % floor, the val/test pairs, `split_sha256`):
-- Wall time:
-- The team's count of same-scene pairs, per F and band (who judged, and when):
+- Run by / date: reported 2026-10-28 by Soheil
+- Commit actually used, wall time, the printed lines: not reported here
+- `results/data/near_duplicate_filter_sweep.csv`: committed on 2026-10-28 (7222174). The
+  unfiltered split there is 968 / 968 validation / test images (30,852 / 21,728 QA rows).
+- The team's count of same-scene pairs (from the sheets) and the test kept (from the file):
 
   | F | Band 1 (cosine) | Band 2 (crop) | Band 3 (dHash) | Test kept (floor 50 %) |
   |---|---|---|---|---|
-  | 0.90 | | | | |
-  | 0.88 | | | | |
-  | 0.86 | | | | |
-  | 0.84 | | | | |
-  | 0.82 | | | | |
-  | 0.80 | | | | |
+  | 0.90 | about 3 of 24 | 0 | 0 | 857 of 968 (88.5 %), met |
+  | 0.88 | about 5-7 of 24 | 0 | 0 | 693 (71.6 %), met |
+  | 0.86 | about 4-6 of 24 | 0 | 0 | 512 (52.9 %), met |
+  | 0.84 | not judged | | | 336 (34.7 %), below |
+  | 0.82 | not judged | | | 201 (20.8 %), below |
+  | 0.80 | not judged | | | 113 (11.7 %), below |
 
-- The selected F (the highest with no same-scene pair whose test keeps >= 50 %), or "none
-  qualifies: stopped":
+- The remaining pairs are frames of the same examination with the camera moved, not copies
+  (the team's reading).
+- The selected F: **none qualifies** under amendment 6. **D02 amendment 7** (post hoc, before
+  any model result) sets F = 0.86, the lowest F that meets the floor. At F = 0.86:
+  - the test keeps 512 images and 12,067 QA rows, and 86 of its 147 masked images;
+  - validation keeps 390 images and 11,598 QA rows;
+  - 39 validation/test pairs meet a condition (not filtered).
+
+  The internal test is reported as a "reduced-leakage" test with these residual counts.
 
 ### Run 4b (section 3e)
 
@@ -750,7 +758,7 @@ them.
 - The `groups ...` line and the `strict test subset ...` line:
 - The `held-out filter F ...` line:
 - Hashes printed at the end (`split_sha256`, the same as the filter sweep's for this F;
-  manifest hashes, the bundle's file count):
+  `test_unfiltered_sha256`; manifest hashes, the bundle's file count):
 - The final contact sheet: same-scene pairs seen in band 1, band 2, band 3 (number, or none):
 - Name of the private shared-data dataset, and who it is shared with:
 - Anything unusual (errors, retries, changed settings):

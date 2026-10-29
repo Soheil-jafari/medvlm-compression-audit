@@ -35,19 +35,30 @@ from medcompress.utils.io import RESULTS_COLUMNS
 RUN_FILES: tuple[str, ...] = (
     "metrics.csv",
     "metrics_test.csv",
+    "metrics_test_unfiltered.csv",
     "efficiency.csv",
     "efficiency_final.csv",
 )
 SPLIT_OF_RUN_FILE: dict[str, str] = {
     "metrics.csv": "val",
     "metrics_test.csv": "test",
+    "metrics_test_unfiltered.csv": "test_unfiltered",  # D02 amendment 6, sensitivity analysis
     "efficiency.csv": "",
     "efficiency_final.csv": "",  # the final timing (RC-T1), metric names prefixed "final:"
 }
 """Split of the rows in each run file; ``""`` = not tied to a split (footprints, training)."""
+COMPARISON_DIRS: dict[str, str] = {
+    "comparisons": "",
+    "comparisons_strict": "strict_test",  # D02 amendment 3
+    "comparisons_unfiltered": "test_unfiltered",  # D02 amendment 6
+}
+"""The comparison folders and the split their rows belong to (``""``: the primary test)."""
+SENSITIVITY_SPLITS: frozenset[str] = frozenset({"strict_test", "test_unfiltered"})
+"""Rows of the sensitivity analyses: in the summary and ``numbers.tex`` (their macro names say
+so), never in the primary tables, figures or verdicts."""
 SUMMARY_KEYS: tuple[str, ...] = ("experiment", "budget", "split", "metric")
 SPECIAL_DIRS: tuple[str, ...] = (
-    "comparisons", "comparisons_strict", "selection", "data", "smoke", "summary",
+    *COMPARISON_DIRS, "selection", "data", "smoke", "summary",
 )  # fmt: skip
 SELECTION_ROUNDS: tuple[str, ...] = ("R0", "R1", "R2", "R3")
 _SEED_DIR = re.compile(r"^seed(\d+)$")
@@ -79,14 +90,14 @@ def classify_path(path: Path, root: Path) -> ResultFile | None:
     parts = rel.parts
     if not parts or parts[0] == "summary" or path.suffix != ".csv":
         return None
-    if parts[0] in ("comparisons", "comparisons_strict"):  # strict: D02 amendment 3
+    if parts[0] in COMPARISON_DIRS:  # strict: D02 amendment 3; unfiltered: amendment 6
         budget = parts[2] if len(parts) == 4 else None
         return ResultFile(
             path,
             kind="comparison",
             relative=rel.as_posix(),
             budget=None if budget == "nobudget" else budget,
-            split="strict_test" if parts[0] == "comparisons_strict" else "",
+            split=COMPARISON_DIRS[parts[0]],
         )
     if parts[0] == "selection":
         return ResultFile(path, relative=rel.as_posix(), kind="selection", split="val")
@@ -255,6 +266,14 @@ def paper_rows(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty or "split" not in frame:
         return frame
     return frame[frame["split"].fillna("") != "val"]
+
+
+def primary_rows(frame: pd.DataFrame) -> pd.DataFrame:
+    """Rows (or summary rows) without those of the sensitivity analyses
+    (:data:`SENSITIVITY_SPLITS`): what the primary tables, figures and verdicts read."""
+    if frame.empty or "split" not in frame:
+        return frame
+    return frame[~frame["split"].fillna("").isin(SENSITIVITY_SPLITS)]
 
 
 def metric_names(rows: pd.DataFrame) -> list[str]:

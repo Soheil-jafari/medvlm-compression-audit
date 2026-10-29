@@ -223,7 +223,12 @@ def make_calibration_subset(
 
 def split_fingerprint(splits: Mapping[str, Sequence[VQASample]]) -> str:
     """Return a SHA-256 over sorted (split, sample_id) pairs, recorded in the preregistration."""
-    lines = sorted(
-        f"{name}\t{sample.sample_id}" for name, members in splits.items() for sample in members
+    return ids_fingerprint(
+        {name: [s.sample_id for s in members] for name, members in splits.items()}
     )
+
+
+def ids_fingerprint(splits: Mapping[str, Sequence[str]]) -> str:
+    """:func:`split_fingerprint` from the sample ids of each split."""
+    lines = sorted(f"{name}\t{sample_id}" for name, ids in splits.items() for sample_id in ids)
     return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()

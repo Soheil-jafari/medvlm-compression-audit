@@ -3,8 +3,10 @@
 
 Reads the per-probe outcomes (outcomes_test.npz) of every run under paths.output_root,
 averages them over seeds and writes results/comparisons/. Needs the frozen pre-registration.
-With --strict, the same comparisons on the strict test subset of RC-D1 run 4 (D02 amendment 3,
-the pre-registered sensitivity analysis), to results/comparisons_strict/.
+With --strict, the same comparisons on the strict test subset (D02 amendment 3, the
+pre-registered sensitivity analysis), to results/comparisons_strict/. With --unfiltered, the same
+comparisons on the unfiltered test (outcomes_test_unfiltered.npz; D02 amendment 6, a sensitivity
+analysis), to results/comparisons_unfiltered/.
 
 Example (from the repository root):
     python scripts/09_compare_arms.py -o paths.output_root=/kaggle/working/outputs
@@ -27,11 +29,12 @@ def main(argv: list[str] | None = None) -> int:
         "--resamples", type=int, default=None, help="Defaults to evaluation.bootstrap_resamples."
     )
     parser.add_argument("--strict", action="store_true", help="the strict test subset only")
+    parser.add_argument("--unfiltered", action="store_true", help="the unfiltered test")
     args = parser.parse_args(argv)
     config = resolve_config(args)
     return run_stage(
         "09_compare_arms", run_comparisons, config=config, n_resamples=args.resamples,
-        strict=args.strict,
+        strict=args.strict, unfiltered=args.unfiltered,
     )  # fmt: skip
 
 

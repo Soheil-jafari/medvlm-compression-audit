@@ -2,7 +2,10 @@
 
 Probe suites (one forward pass per question, no free generation) and free-text suites
 (greedy generation) are scored on one split of the prepared data: the validation split
-during development, the test split only after the pre-registration is frozen. Per-probe
+during development, the test split only after the pre-registration is frozen. The test split
+is the filtered test of D02 amendment 6; ``test_unfiltered`` (the same test with the removed
+images added back) is scored when asked, for the sensitivity analysis, under the same lock.
+Per-probe
 outcomes are saved under ``paths.output_root`` (never committed) because paired
 comparisons between arms need them; the summary rows go to ``metrics.csv``.
 """
@@ -52,14 +55,18 @@ PROBE_SUITES = frozenset(
     }
 )
 FREE_TEXT_SUITES = frozenset({"hallucination", "language"})
-SPLITS = ("val", "test")
+SPLITS = ("val", "test", "test_unfiltered")
+TEST_SPLITS = frozenset({"test", "test_unfiltered"})
+"""Locked until the pre-registration is frozen."""
 RUN_FILES_BY_SPLIT: Mapping[str, tuple[str, str]] = {
     "val": ("metrics.csv", "outcomes.npz"),
     "test": ("metrics_test.csv", "outcomes_test.npz"),
+    "test_unfiltered": ("metrics_test_unfiltered.csv", "outcomes_test_unfiltered.npz"),
 }
 """(results file, per-probe outcomes file) of each split. The test split has its own files, so
 scoring it never overwrites the validation rows that Gate 2 and "best of E5/E6" are read from,
-and the aggregation can keep the two splits apart (the metric names are the same)."""
+and the aggregation can keep the splits apart (the metric names are the same). The unfiltered
+test (D02 amendment 6) has its own files too, so each model is scored on both tests."""
 PROBE_SAMPLE_SEED = 0
 """Fixed seed for capping probes per finding, so every arm and seed scores the same probes."""
 _CHUNK = 32
@@ -111,11 +118,11 @@ def resolve_settings(config: Mapping[str, Any]) -> EvalSettings:
     split = str(evaluation.get("split", "val"))
     if split not in SPLITS:
         raise ConfigError(f"evaluation.split must be one of {SPLITS}, got {split!r}")
-    if split == "test":
+    if split in TEST_SPLITS:
         table = load_config(config["components"]["finding_weights"])
         if _is_open(table.get("preregistration", {}).get("frozen_on")):
             raise ConfigError(
-                "the test split is locked until the pre-registration is frozen "
+                f"the {split} split is locked until the pre-registration is frozen "
                 "(preregistration.frozen_on is still open)"
             )
     domain = load_config(config["components"]["domain"])["domain"]
@@ -508,10 +515,11 @@ def run_evaluation(
 
     Loads the model for ``run``, scores the enabled suites on ``evaluation.split`` of
     the prepared data and upserts the rows into ``<results_root>/<run dir>/metrics.csv``
-    (validation) or ``metrics_test.csv`` (test; :data:`RUN_FILES_BY_SPLIT`). The per-probe
-    outcomes (needed for paired comparisons) are written to ``<output_root>/<run dir>/``
-    ``outcomes.npz`` or ``outcomes_test.npz``. The external test set (EndoBench) is added in
-    the final-evaluation stage.
+    (validation), ``metrics_test.csv`` (test) or ``metrics_test_unfiltered.csv`` (the
+    unfiltered test; :data:`RUN_FILES_BY_SPLIT`). The per-probe outcomes (needed for paired
+    comparisons) are written to ``<output_root>/<run dir>/`` ``outcomes.npz``,
+    ``outcomes_test.npz`` or ``outcomes_test_unfiltered.npz``. The external test set
+    (EndoBench) is added in the final-evaluation stage.
 
     Used by: all experiments (E0-E9, A1-A6).
     """
@@ -530,7 +538,10 @@ def run_evaluation(
         from medcompress.data.prepared import load_prepared
 
         dataset = load_config(config["components"]["datasets"]["train_qa"])["dataset"]
-        samples = load_prepared(data_root, dataset, Path(paths["private_root"]))[settings.split]
+        samples = load_prepared(
+            data_root, dataset, Path(paths["private_root"]),
+            unfiltered_test=settings.split == "test_unfiltered",
+        )[settings.split]  # fmt: skip
     if model is None:
         model = load_run_model(config, run, int(side))
     seed = run.seed
