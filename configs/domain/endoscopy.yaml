@@ -10,16 +10,26 @@ domain:
     - data/endobench.yaml
 
   # Finding list C used by probes, per-finding metrics and the clinical criterion.
+  # Frozen 2026-10-31 (pre-registration amendment, before any model result), from the committed
+  # results/data/summary.csv (RC-D1 run 4b): images whose abnormality answer holds the value,
+  # train / validation / test: polyp 810 / 105 / 106, ulcerative colitis 691 / 85 / 98,
+  # oesophagitis 546 / 37 / 25. Excluded (too few to test; a limitation): barretts 14 / 2 / 0,
+  # short-segment barretts 8 / 0 / 1, hemorrhoids 1 / 0 / 0. An image whose only abnormality
+  # value is excluded is a negative for the three findings.
   findings:
-    - TODO
+    - polyp
+    - ulcerative_colitis
+    - oesophagitis
 
-  # Prevalence groups are fixed in advance from training-split prevalence.
+  # Prevalence groups, fixed in advance from training prevalence (images with the value /
+  # training images, 4,513): polyp 17.9 %, ulcerative colitis 15.3 %, oesophagitis 12.1 %. All
+  # three are common; no medium or rare group exists in this dataset, so no cut points are set
+  # and the rare-group analysis is dropped from the internal data (a limitation; the
+  # per-finding results stay). Amendment of 2026-10-31.
   prevalence_groups:
-    method: TODO
-    thresholds:
-      common_min: TODO
-      rare_max: TODO
-    common: []
+    method: "all findings common: no rare group exists (pre-registration amendment 2026-10-31)"
+    thresholds: null                      # none: no cut point is needed to separate groups
+    common: [polyp, ulcerative_colitis, oesophagitis]
     medium: []
     rare: []
 
@@ -28,10 +38,16 @@ domain:
     answers:
       positive: "yes"
       negative: "no"
-    display_names: {}                     # TODO: finding ID -> wording used in the probe
+    display_names:                        # finding id -> the dataset's own wording (the
+      polyp: polyp                        # source answer value, lower case), frozen 2026-10-31
+      ulcerative_colitis: ulcerative colitis
+      oesophagitis: oesophagitis
 
   small_findings:
     area_source: lesion_masks
     n_strata: 4                           # quartiles
     small_stratum: 0                      # smallest quartile = "small"
-    thresholds: TODO                      # frozen in the preregistration
+    thresholds:                           # frozen 2026-10-31: quartiles of the polyp mask area of
+      - 0.056763729641891                 # the training images with a linked Kvasir-SEG mask
+      - 0.11336397748286361               # (summary.csv lesion_area_threshold:q1..q3, RC-D1
+      - 0.19931969465606578               # run 4b); small = below q1. Also used for PolypGen.

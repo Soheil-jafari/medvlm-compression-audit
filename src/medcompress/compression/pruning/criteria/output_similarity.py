@@ -10,6 +10,7 @@ from medcompress.compression.pruning import scoring
 from medcompress.compression.pruning.criteria.base import PruningCriterion, register_criterion
 from medcompress.compression.pruning.units import UnitType
 from medcompress.config import ConfigError, find_todos
+from medcompress.data.summary import resolve_max_new_tokens
 
 if TYPE_CHECKING:
     import numpy as np
@@ -89,7 +90,9 @@ class OutputSimilarityCriterion(PruningCriterion):
                 f"pruning.output_similarity.embedder.{k}": embedder.get(k)
                 for k in ("source", "revision")
             },
-            "evaluation.max_new_tokens": (config.get("evaluation") or {}).get("max_new_tokens"),
+            "evaluation.max_new_tokens": resolve_max_new_tokens(
+                (config.get("evaluation") or {}).get("max_new_tokens")
+            ),
         }
         open_keys = [k for k, v in wanted.items() if v is None or find_todos({"v": v})]
         if open_keys:
@@ -115,7 +118,8 @@ class OutputSimilarityCriterion(PruningCriterion):
             raise ValueError("output similarity scores whole decoder layers only")
         if not calibration:
             raise ValueError("the output-similarity criterion needs calibration samples")
-        max_new = (self.config.get("evaluation") or {}).get("max_new_tokens")
+        evaluation = self.config.get("evaluation") or {}
+        max_new = resolve_max_new_tokens(evaluation.get("max_new_tokens"))
         if max_new is None or find_todos({"v": max_new}):
             raise ConfigError("settings still open: evaluation.max_new_tokens")
         embed = self._embed()

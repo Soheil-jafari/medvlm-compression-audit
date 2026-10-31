@@ -430,25 +430,55 @@ must be logged here.
   Recorded in D02, the pre-registration draft, the data card, STATUS and the RC-D1, RC-C1 and
   RC-TT1 cards.
 
+- **2026-10-31 (Soheil): RC-TT1 done; the evaluation settings frozen (pre-registration
+  amendment, before any model result); PolypGen first; a flip analysis after Hooker et al.**
+  - RC-TT1 (T4 x2, two sessions): session 1 stopped on a saved step at 1,698 of 2,375 after
+    11.0 h; session 2 resumed from 1,698 and finished. 38,000 examples, final loss 0.457, 15.17
+    h of training in all (`teacher_train_seconds`). Adapter: 4 files in
+    `handoff/E0_teacher_adapter`, the private Kaggle dataset `e0-teacher-adapter`, shared with
+    Amir and Farzan. Validation and Gate 1 waited on the open settings. RC-TT1 is done.
+  - Frozen (from the committed `summary.csv`; `docs/preregistration.md` section 11):
+    - findings `polyp`, `ulcerative_colitis`, `oesophagitis` (train / test 810 / 106,
+      691 / 98, 546 / 25); barretts, short-segment barretts and hemorrhoids excluded (test 0,
+      1, 0; a limitation); display names from the dataset's wording;
+    - all three common (17.9 %, 15.3 %, 12.1 %): no rare group, the rare-finding analysis
+      dropped from the internal data (a limitation), per-finding results kept; no cut point
+      set;
+    - small-finding thresholds: the training quartiles of the polyp mask area (0.05676,
+      0.11336, 0.19932); about 21 of the 86 masked test images are small (an estimate); the
+      count and the interval are reported;
+    - `max_new_tokens` by the D04 rule, computed in code from the summary (46), for the
+      evaluation, E0's cache and the budget protocol;
+    - mask findings `[polyp]`.
+  - External test: PolypGen first (masks, many polyps); RC-X2 plans its licence check, probes,
+    strata with our quartiles and the overlap check. Nothing downloaded.
+  - Secondary analysis (Hooker, Courville, Clark, Dauphin, Frome, arXiv:1911.05248): per
+    method and budget, the test probes whose answer flips between E0 and the compressed model,
+    over findings and size strata, with image-bootstrap intervals; from the saved outcomes.
+  - RC-E0a and RC-E0b are ready.
+
+  Recorded in the pre-registration, D02, D04, the data card, STATUS, the configs, the
+  related-work section and the RC-TT1, RC-X2, RC-E0a, RC-E0b, RC-R1 and RC-C1 cards.
+
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
 |---|---|---|---|
-| Kaggle session time limit | the session time limit, and whether a stopped version keeps its output (unknown here); the T4 x2 quota rule is settled (counts once, 2026-10-19). RC-TT1 needs about 14.7 h (estimate) | team (check on Kaggle) | before RC-TT1 |
+| Kaggle session time limit | still not verified here; RC-TT1's 11.0 h session ran and its saved state carried into session 2 (2026-10-31), so the 11-h stop works in practice | team (check on Kaggle) | before the next long run |
 | The two raters' names (RC-D1-label) | who rater 1 and rater 2 are, for the run report (D02 amendment 4: two raters, no third member) | team | at RC-D1-label's scoring |
 | Co-primary tests: how they combine (D02 amendment 7) | whether a hypothesis needs support on both co-primary tests (the reduced-leakage internal test and the external test), and whether the Holm correction of the two primary endpoints also spans the two tests | team | before the freeze |
-| The external test (D02 amendment 7) | PolypGen and/or GastroVision: licences, the hospitals (another centre than Kvasir; the agent recalls, unverified, that GastroVision is partly from Bærum Hospital, like HyperKvasir), lesion masks (needed for the primary endpoints), format, overlap with our images (RC-X2 part A) | Farzan proposed (as for EndoBench); team confirms | before RC-X2 part B |
+| The external test (D02 amendment 7) | **PolypGen first** (2026-10-31: masks and many polyps). RC-X2 part A: the exact licence (or stop), the centres, its masks, the overlap with our images. GastroVision later, if at all (the agent recalls, unverified, that it is partly from Bærum Hospital, like HyperKvasir) | Farzan proposed (as for EndoBench); team confirms | before RC-X2 part B |
 | Code for amendment 7 | the external test's loader and probes and the split `external_test` in the evaluation; the comparisons on it; the verdicts for each of the three tests (today they read the primary rows only) | agent | after RC-X2 part A |
-| Published target modules | which modules the published `adapter_config.json` names (RC-TT0's printout is not committed; RC-TT1 prints it). If a name is outside the language model, RC-TT1 stops and the team decides | Soheil | at RC-TT1's start |
+| Published target modules | settled by RC-TT1 (2026-10-31): `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`, 28 decoder layers each (196); the printed line itself was not pasted | — | — |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
-| Label values (RC-D1 pass 2) | the answer values of the abnormality question that become finding ids (`configs/data/kvasir_vqa_x1.yaml`), from the first pass's `answer_count:*`; then the counts pass | agent proposes, team confirms | after RC-D1 pass 1 |
+| Label values (RC-D1 pass 2) | frozen 2026-10-31 (polyp, ulcerative colitis, oesophagitis). No counts pass is needed: the findings are read from the source answers when the data load. Open: only images with an abnormality value are probed (no "none" answer exists), so a finding's negatives are other abnormalities; the team reads E0's validation probe count | team | at RC-E0b |
 | Recovery steps | 25 % of 625 = 156.25; proposal 157 = `ceil(2,500 / 16)` (D06 memo) | team | before RC-E5 |
 | A1 and A2 reuse of E7's effects | D07 says they reuse E7's per-probe effects; the code scores them again (about 7.9 h per run at 672, an estimate). Either the agent adds the reuse (the per-probe effects must then be kept) or the schedule keeps the cost | team | before the freeze |
 | Budget hardware for stage 07 | `budgets.measurement.hardware` is open, so the benchmark step of RC-E1 and RC-E2 waits (the runner skips it and goes on) | Amir | before RC-B0 |
 | Student amendment | tell Amir and Farzan that one student is used (D05 amendment) | Soheil | before RC-E1 |
 | Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
 | EndoBench terms | set aside by D02 amendment 7 (the external test is from another centre: PolypGen and/or GastroVision); reopen only if the team brings EndoBench back | Farzan | — |
-| Finding list and weights | Pre-registered table, frozen before E7. Draft rules (iteration 40): a finding enters C with at least 20 positive training images and 10 in each of validation and test; groups common >= 10 %, rare < 2 %; cap 20; three tiers with multipliers 2.0 / 1.5 / 1.0 assigned from the finding names | team | after RC-D1 |
+| Finding weights | the finding list and groups are frozen (2026-10-31); still open: cap (proposal 20) and the three tiers with multipliers 2.0 / 1.5 / 1.0, assigned from the finding names; the prevalences are 17.9 %, 15.3 %, 12.1 % | team | before E7 |
 | Comparator "best of E5/E6" (draft proposal) | the generic arm with the highest validation small-finding recall at B2 (mean of 3 seeds), the same for both primary endpoints | team | before the freeze |
 | Headline accuracy for H1 and H4 (draft proposal) | macro balanced accuracy instead of the overall probe accuracy, which mostly measures specificity; overall accuracy still reported | team | before the freeze |
 | A3 ranking (agent proposal, iteration 42) | A3 orders its random scores without dividing by the unit size (`score_normalisation: none`). Divided by size, a random score sends whole layers first (estimate: about 98 % of the removed parameters at a 30 % cut), so A3 would test random layer removal, not random choice of units. D07's per-parameter rule stays for every other arm | team | before the freeze |

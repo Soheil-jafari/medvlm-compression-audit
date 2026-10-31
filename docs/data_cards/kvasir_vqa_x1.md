@@ -12,7 +12,7 @@
 | Reference | arXiv 2506.09958 (to add to `paper/references.bib`) |
 | Licence and terms | CC BY-NC 4.0 (Kvasir-VQA and Kvasir-VQA-x1); Kvasir-SEG: research and educational use only. Our shared copy is a private Kaggle dataset, shared within the team only |
 | Domain and modality | GI endoscopy, RGB images with questions and answers |
-| Role in this project | main QA (training, validation, test), rare findings |
+| Role in this project | main QA (training, validation, test); per-finding probes of three common findings (no rare group, 2026-10-31) |
 | Config | `configs/data/kvasir_vqa_x1.yaml` |
 
 ## The official split overlaps by image
@@ -179,3 +179,28 @@ The appendix item reports them next to the published adapter's test results.
 - **Kvasir-SEG masks per split:** **[RC-D1]** `masked_images:<split>`; links
   `masks:linked/ambiguous/unmatched`.
 - **Split hash:** **[RC-D1]** `split_sha256` (printed by `prepare_data.py bundle`).
+
+## Findings (frozen 2026-10-31, pre-registration amendment)
+
+From the source answers to "are there any abnormalities in the image" (label rule
+`abnormalities`), counted as images with the value in `results/data/summary.csv` (RC-D1 run 4b):
+
+| Value (finding id) | Train | Validation | Test | Training prevalence | In the finding list |
+|---|---|---|---|---|---|
+| polyp (`polyp`) | 810 | 105 | 106 | 17.9 % | yes |
+| ulcerative colitis (`ulcerative_colitis`) | 691 | 85 | 98 | 15.3 % | yes |
+| oesophagitis (`oesophagitis`) | 546 | 37 | 25 | 12.1 % | yes |
+| barretts | 14 | 2 | 0 | 0.3 % | no: too few to test |
+| short-segment barretts | 8 | 0 | 1 | 0.2 % | no: too few to test |
+| hemorrhoids | 1 | 0 | 0 | 0.0 % | no: too few to test |
+
+Prevalence = images with the value / 4,513 training images. All three findings are common, so
+there is no rare group (a limitation). Lesion-size strata: quartiles of the polyp mask area of
+the 710 training images with a Kvasir-SEG mask (q1 0.05676, q2 0.11336, q3 0.19932); the
+filtered test holds 86 masked images.
+
+The source answers hold no "none" value for this question (there is no
+`answer_count:abnormalities:none` row), so only images with at least one abnormality value
+are labelled and probed. A finding's negatives are then the images with another abnormality,
+not normal mucosa. The first validation run counts the probes (`n_probes_scored`).
+

@@ -11,7 +11,7 @@ budgets:
       Parameter counts are reported but never used to match budgets.
     hardware: TODO                        # same GPU for every arm
     batch_size: 1                         # D07: one image, the deployment case
-    max_new_tokens: TODO
+    max_new_tokens: d04_rule              # = evaluation.max_new_tokens (pre-registration section 4)
     warmup_runs: 3                        # D07
     repeats: 5                            # D07: timed passes
     samples: 32                           # D07: validation images drawn with a fixed seed, the same for every arm

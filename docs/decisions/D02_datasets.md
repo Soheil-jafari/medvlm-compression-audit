@@ -788,6 +788,25 @@ crop level, 0.75, is above the filter's 0.70). So it is dropped from the list of
 Every model is scored on these three, and the conclusions are reported for each. The code
 keeps `09_compare_arms.py --strict`, but no card runs it any more.
 
+### Finding list frozen (2026-10-31, Soheil), before any model result
+
+Recorded as a pre-registration amendment (`docs/preregistration.md`, section 11), from the
+committed `results/data/summary.csv`:
+- label values -> findings: `polyp`, `ulcerative colitis` -> `ulcerative_colitis`,
+  `oesophagitis`. Images with the value, train / validation / test: 810 / 105 / 106,
+  691 / 85 / 98, 546 / 37 / 25. Display names are the dataset's wording;
+- excluded, too few to test (a limitation): barretts (test 0), short-segment barretts (test 1),
+  hemorrhoids (test 0);
+- all three findings are common (training prevalence 17.9 %, 15.3 %, 12.1 %): no rare group, so
+  the rare-finding analysis is dropped from the internal data (a limitation);
+- lesion-size strata: the committed training quartiles of the polyp mask area (q1 0.05676,
+  q2 0.11336, q3 0.19932); mask findings `[polyp]`;
+- the external test: **PolypGen first** (masks and many polyps), with our quartiles (RC-X2).
+
+The label mapping changes no split: the re-split was stratified by the answer values
+themselves, and `split_sha256` hashes sample ids only. The findings are read from the source
+answers when the shared data are loaded, so no new RC-D1 pass is needed.
+
 ## Answer format for the inbox
 
 `- YYYY-MM-DD (name): D02 decided: Q1 <A|B>, Q2 <match|probes>, Q3 <EndoBench|ColonEval|none>, Q4 <x1 only|add ColonVQA>, Q5 <later|drop>.`

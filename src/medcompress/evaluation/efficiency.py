@@ -113,6 +113,12 @@ class EfficiencyProtocol:
     @classmethod
     def from_config(cls, measurement: Mapping[str, Any]) -> EfficiencyProtocol:
         """Read the ``measurement`` block; every value that is still ``TODO`` is listed."""
+        from medcompress.data.summary import resolve_max_new_tokens
+
+        measurement = {
+            **measurement,
+            "max_new_tokens": resolve_max_new_tokens(measurement.get("max_new_tokens")),
+        }
         keys = ("hardware", "batch_size", "max_new_tokens", "warmup_runs", "repeats", "samples")
         open_keys = [
             f"budgets.measurement.{k}"

@@ -28,8 +28,9 @@
   7. Runs the teacher's validation evaluation and Gate 1. Both wait cleanly while the finding
      list is still open; RC-E0a and RC-E0b then run them.
 - Who: **Soheil**.
-- Status: `ready` (2026-10-29): RC-D1 run 4b's shared data are the private dataset
-  `medcompress-data`; RC-TT0's result file is committed. Run it with the cells of section 3.
+- Status: `done` (2026-10-31): two sessions on T4 x2; the adapter is the private dataset
+  `e0-teacher-adapter`. The validation and Gate 1 waited on the open settings; RC-E0a and
+  RC-E0b run them (section 6).
 
 ## 2. Requirements
 
@@ -237,14 +238,46 @@ python scripts/train_teacher.py --data-root /kaggle/input/medcompress-data --ext
 
 ## 6. Run report (filled by the person who ran it)
 
-- Run by / date:
-- Commit actually used:
-- Hardware and library versions:
-- Sessions used (one line each: the notebook version, start step, end step, wall time, the exit
-  code):
-- N, steps, final loss, peak memory:
-- The printed `published target_modules (as written)` line and `adapted linear layers per
-  target` line:
-- Name of the private teacher-adapter dataset:
-- Validation and Gate 1 (ran, or waited on the finding list):
-- Anything unusual:
+Reported by Soheil on 2026-10-31. The `teacher_*` rows are committed in
+`results/E0/nobudget/seed0/metrics.csv` (moved there from `results/E0/metrics.csv`, where they
+were first uploaded, so that the aggregation and RC-E0a/RC-E0b find them; the rows are
+unchanged).
+
+- Run by / date: Soheil; finished by 2026-10-31.
+- Commit actually used: not reported.
+- Hardware and library versions: Kaggle T4 x2 (`teacher_setup_fp16_2gpu` 1,
+  `teacher_t4x2_counts_once` 1); library versions not reported.
+- Sessions used:
+  - session 1: start step 0, stopped on a saved step at **1,698 of 2,375** after **11.0 h**
+    (`--stop-after-hours 11`), exit code 3 (`STOPPED for a resume`);
+  - session 2: resumed from step 1,698 and finished at 2,375.
+  - The training time of both sessions together (`teacher_train_seconds`, the training loop
+    only, summed over the sessions by the saved state) is 54,603 s = **15.17 h**. So session 2
+    trained about 4.2 h (15.17 - 11.0, derived, not measured on its own). Model loading,
+    saves and the hand-off are not in this number.
+  - Against the plan (RC-TT0: 1.3928 s per example, 14.7 h): 1.437 s per example, 23.0 s per
+    update, about 3 % slower than planned (derived from the rows).
+- N, steps, final loss, peak memory: `teacher_n_examples` 38,000, `teacher_train_steps`
+  2,375, `teacher_train_examples_seen` 38,000, `teacher_extension_examples` 0;
+  `teacher_train_loss_final` 0.457; `teacher_train_peak_gpu_bytes` 23,504,323,584 (21.9 GiB,
+  summed over the two T4s; peak of session 2 only, because the counter is reset when a session
+  starts training); `teacher_gradient_checkpointing` 0.
+- Published targets and adapted layers: LoRA rank 16, alpha 64, dropout 0.05; 196 adapted
+  linear layers, 28 per target for `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`,
+  `up_proj`, `down_proj` (one per decoder layer). The printed lines were not pasted; the counts
+  above are the same rows.
+- Name of the private teacher-adapter dataset: **`e0-teacher-adapter`** (the 4 files of
+  `/kaggle/working/handoff/E0_teacher_adapter`), shared with Amir and Farzan.
+- Validation and Gate 1: **waited on the open settings** (the finding list), as planned. They
+  run in RC-E0a and RC-E0b after the freeze of 2026-10-31.
+- Anything unusual: none reported.
+
+Pass criteria (section 5):
+
+| Check | Result |
+|---|---|
+| The pinned split | not pasted; the script checks the pin before the model loads and stops otherwise (exit code 5), and it trained, so it passed that check |
+| Plan followed | pass: 2,375 steps and 38,000 examples |
+| Published targets used | pass: all 7 targets adapt 28 layers each (196) |
+| Training sane | pass: final loss 0.457, finite |
+| Hand-off intact | not reported; RC-E0a and RC-E0b compare every file with the manifest when they attach `e0-teacher-adapter`, and stop before the model loads if one differs |

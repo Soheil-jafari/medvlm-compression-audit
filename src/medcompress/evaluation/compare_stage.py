@@ -38,6 +38,7 @@ import numpy as np
 import pandas as pd
 
 from medcompress.config import ConfigError, RunContext
+from medcompress.evaluation import flips as flips_mod
 from medcompress.evaluation.comparisons import add_holm_rows, compare_arms, pick_best_arm
 from medcompress.evaluation.statistics import (
     bootstrap_p_value,
@@ -439,6 +440,39 @@ def tau_rows(observed: np.ndarray, draws: np.ndarray, arms: Sequence[int], alpha
     return rows
 
 
+def flip_comparison(
+    output_root: Path,
+    outcomes_file: str,
+    table: ProbeTable,
+    outcomes: Sequence[ArmOutcomes],
+    settings: Any,
+    *,
+    n_resamples: int,
+    alpha: float,
+) -> tuple[list[dict[str, Any]], str]:
+    """The flip rows of every arm against E0 (``evaluation/flips.py``), or why there are none."""
+    run = RunContext(flips_mod.REFERENCE, seed=0)
+    path = run.run_dir(output_root) / outcomes_file
+    if not path.is_file():
+        return [], f"the outcomes of {flips_mod.REFERENCE} seed 0 ({path.name}) are not there"
+    reference = read_outcomes(path)
+    order = _order(_keys(reference["probe_sample_ids"], reference["probe_findings"]),
+                   table.keys, f"{flips_mod.REFERENCE} seed 0")  # fmt: skip
+    if not np.array_equal(reference["probe_truth"].astype(bool)[order], table.truth):
+        raise ValueError(
+            f"{flips_mod.REFERENCE} seed 0: probe labels differ from the reference run"
+        )
+    items = flips_mod.flip_items(
+        reference, order, table.findings, settings.thresholds, settings.mask_findings
+    )
+    labels = [(o.arm.label, o.arm.budget) for o in outcomes]
+    answers = np.array([flips_mod.majority_yes(o.majority, table.truth) for o in outcomes])
+    flipped = answers != items.reference_yes[None, :]
+    rows = flips_mod.flip_rows(labels, flipped, items, n_resamples=n_resamples, alpha=alpha,
+                               seed=BOOTSTRAP_SEED)  # fmt: skip
+    return rows, ""
+
+
 # ------------------------------------------------------------------- choices
 
 
@@ -713,6 +747,26 @@ def run_comparisons(
     ranked = [index[a] for a in arms if a.label != REFERENCE]
     if len(ranked) >= 2:
         rows += tau_rows(observed, draws, ranked, alpha)
+
+    # secondary (pre-registered 2026-10-31): the items whose answer flips against E0
+    if strict:
+        choices["flips"] = {"skipped": "not computed on the strict subset"}
+    else:
+        flips, why = flip_comparison(output_root, outcomes_file, table, outcomes, settings,
+                                     n_resamples=resamples, alpha=alpha)  # fmt: skip
+        rows += flips
+        choices["flips"] = (
+            {"reference": flips_mod.REFERENCE, "skipped": why}
+            if why
+            else {
+                "reference": flips_mod.REFERENCE,
+                "arms": sorted({r["experiment"] for r in flips}),
+            }
+        )
+    choices["rare_group"] = (
+        "none: the domain has no rare prevalence group, so no rare-group rows"
+        if not table.rare.any() else "pooled positives of the rare group"
+    )  # fmt: skip
 
     written = write_comparisons(rows, results_root, folder)
     choices_path = results_root / folder / CHOICES_FILE

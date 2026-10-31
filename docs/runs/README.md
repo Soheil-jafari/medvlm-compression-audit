@@ -35,9 +35,9 @@ Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unf
 | [RC-D1-label](RC-D1-label_rater_instructions.md) | S03 | Two raters label the pairs; kappa, every rule's sensitivity and precision, the joining rule chosen by the rule fixed in advance (CPU) | two raters; scoring Soheil | ready after RC-D1-embed |
 | [RC-M1](RC-M1_model_smoke_test.md) | S04 | GPU smoke test: load pair, score probes, remove one layer | Soheil | done 2026-10-15 |
 | [RC-TT0](RC-TT0_teacher_feasibility.md) | S05 | Our teacher: feasibility of one LoRA step of the 7B (fp16 on 2 x T4, QLoRA on 1 x T4), then rule 3 (setup and N) | Soheil | done 2026-10-19 (result file committed) |
-| [RC-TT1](RC-TT1_teacher_training.md) | S05 | Our teacher: LoRA training on our training split (resumable), hand-off, validation | Soheil | ready (2026-10-29: on `medcompress-data`; N = 38,000, published LoRA targets; about 14.7 h on T4 x2, one resume) |
-| [RC-E0a](RC-E0a_gate1_teacher_image_reliance.md) | S05 | Gate 1: teacher image-reliance checks (validation), with our teacher adapter | Soheil | blocked (RC-TT1, RC-D1 both passes, finding list; image side and RC-M1 met) |
-| [RC-E0b](RC-E0b_teacher_cache_and_E0_evaluation.md) | S05 | Teacher cache (train; its first 100 answers are timed) and E0 validation metrics, with our teacher adapter | Soheil | blocked (RC-TT1, Gate 1 verdict, RC-D1, open settings; image side met) |
+| [RC-TT1](RC-TT1_teacher_training.md) | S05 | Our teacher: LoRA training on our training split (resumable), hand-off, validation | Soheil | done (2026-10-31: two sessions, 15.17 h of training; adapter `e0-teacher-adapter`) |
+| [RC-E0a](RC-E0a_gate1_teacher_image_reliance.md) | S05 | Gate 1 (teacher image-reliance checks) and the E0 validation, with our teacher adapter | Soheil | ready (2026-10-31; about 2 h on T4 x2 plus setup, an estimate) |
+| [RC-E0b](RC-E0b_teacher_cache_and_E0_evaluation.md) | S05 | Teacher cache of the training pool (its first 100 answers are timed; stops and resumes between shards) | Soheil | ready after RC-E0a's `gate1_pass` = 1 is committed (the cache checks it); C unknown, about 12.5 h one answer at a time (an estimate), so two sessions |
 | [RC-S0](RC-S0_student_feasibility.md) | S05b | Student checks: feasibility of Qwen2.5-VL-3B and the fallback Qwen3-VL-2B on one T4 | Soheil | done 2026-10-16 (both pass G1) |
 | [RC-S0b](RC-S0b_image_size_measurement.md) | S05b | Image side: student and teacher at 448 / 560 / 672 on synthetic images, one process per step, LoRA step at micro-batch 1 / 2 / 4 with and without gradient checkpointing, stated adapter and processor settings | Soheil | done 2026-10-16 (run 2); side 672 decided 2026-10-17 |
 | [RC-S1](RC-S1_round1_screen.md) | S05b | Round 1 screen, 10 candidates | all three | not used (D05 amendment) |
@@ -65,7 +65,7 @@ Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unf
 | [RC-R1](RC-R1_reference_arms_test_split.md) | S11 | E0, E1, E2 on the test split (after the freeze) | Soheil | blocked (freeze, RC-TT1, RC-E0b, RC-E1, RC-E2) |
 | [RC-C1](RC-C1_paired_comparisons.md) | S11 | Paired comparisons (H1-H4), tables, figures, verdicts; CPU only | Soheil | blocked (every test-split evaluation) |
 | [RC-X1](RC-X1_external_test_endobench.md) | S11 | EndoBench part A: terms, format, overlap with our images (no GPU); part B written after it | Farzan | set aside (D02 amendment 7) |
-| [RC-X2](RC-X2_external_test_other_centre.md) | S11 | External test from another centre, co-primary (PolypGen and/or GastroVision), part A: terms, centres, annotations (masks), overlap (no GPU); part B written after it | [team] (proposal: Farzan) | blocked (terms; RC-D1 run 4b) |
+| [RC-X2](RC-X2_external_test_other_centre.md) | S11 | External test from another centre, co-primary: **PolypGen first** (2026-10-31), part A: the exact licence (or stop), centres, polyp masks and negatives, overlap (no GPU); part B (probes, strata with our quartiles, the held-out filter's check) planned in section 7 | [team] (proposal: Farzan) | blocked (licence) |
 | [RC-T1](RC-T1_final_timing.md) | S11 | Final timing of every arm on the rented GPU (T5) | Amir | blocked (GPU and precision chosen, every arm done) |
 
 Statuses: `not written yet` -> `ready` -> `running` -> `done` (or `failed`, with the

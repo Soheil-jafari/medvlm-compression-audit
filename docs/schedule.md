@@ -38,7 +38,7 @@ from it (`docs/team_setup.md`).
 | E9 (the 7B at 4 bit) | **1 to 2 h** (card estimate) | |
 | RC-L1: E2@30k / E7@30k recovery / E7@30k scoring | **7.1 / 1.8 / 7.9 h** | the cache for 20,000 more answers: 2 C |
 | Teacher cache, 10,000 answers (RC-E0b) | | **C**: unknown until RC-E0b times its first 100 answers (they are written to `results/E0/nobudget/seed0/metrics.csv` at once) |
-| Gate 1 (RC-E0a) | | **G**: teacher probes x 0.584 s x conditions, counts from RC-D1 |
+| Gate 1 and E0 validation (RC-E0a) | Gate 1: at most about 2,240 scored probes x 0.584 s = **0.36 h**; the validation: the same probes (0.36 h) plus 1,000 free-text answers, **about 1.3 h** one at a time (about 12 tokens per answer, an assumption; batched, not measured); about **2 h** in all plus setup (2026-10-31, from the frozen counts) | the setup; the batched generation speed |
 | One evaluation pass of the student, validation or test | | **V**, **T**: probe rows x conditions x 0.414 s, plus 1,000 free-text answers. One answer at a time runs at about 5 tokens per second; the speed of the batched answers of stage 06 is not measured. RC-E1's first validation step gives the first real V |
 | One budget search (each pruned run) | | **S**: several footprint measurements, not measured |
 
@@ -56,7 +56,7 @@ RC-D1 pass 1 (shared data) ──> label values (agent, team) ──> RC-D1 pass
    │        └──> RC-E1 validation (needs the finding list) <──────────┤
    │                                                                 └──> RC-E0a Gate 1
    └──> RC-X1 part A (CPU)                                                   │
-                                                                     RC-E0b teacher cache + E0 val
+                                                                     RC-E0b teacher cache (E0 val in RC-E0a)
                                                                              │ (hand-off: teacher cache)
                           RC-E2 seed 0 ─ RC-E2 seed 1 ─ RC-E2 seed 2 <───────┤
                                │ (hand-off: E2 seed k adapter)               └──> RC-E4 (cache only)
@@ -87,7 +87,7 @@ are given against the 30 h each person has. The unknown parts are named next to 
 | Week | Soheil | Farzan | Amir | Known GPU h (S / F / A) |
 |---|---|---|---|---|
 | 1 | RC-D1-embed done (2026-10-19, T4, about 2.5 minutes of embedding); labelling 298 pairs by two raters (done 2026-10-22; no third member, D02 amendment 4), no top-up was needed; RC-D1-label's scoring (done); RC-D1 run 4 (done, not accepted, D02 amendment 5); the rule sweep (done, stopped, D02 amendment 6), the held-out filter sweep, then run 4b = pass 1 (CPU, D02 amendments 5 and 6); share the dataset; RC-D1 pass 2 (CPU) once the label values are confirmed. RC-TT0 is done | account setup; RC-X1 part A (CPU) once the shared data is shared | account setup; attach and verify the shared data | 0 / 0 / 0 |
-| 2 | RC-TT1, our teacher's training (14.7 h on T4 x2, counted once; two sessions with one clean resume, about 15 GPU hours in all, an estimate; ready 2026-10-29 on `medcompress-data`); then RC-E0a Gate 1 and RC-E0b cache with our adapter (T4 x2); RC-E1 seed 0 | RC-E1 seed 1 | RC-E1 seed 2 | 14.7 + 2.4 + G + C + 2 V / 2.4 + V / 2.4 + V |
+| 2 | RC-TT1, our teacher's training: **done 2026-10-31** (two sessions, 15.17 h of training measured); then RC-E0a (Gate 1 and the E0 validation, about 2 h plus setup, an estimate) and RC-E0b (the cache, C unknown; `--stop-after-hours 9` this week, the rest next) with our adapter (T4 x2); RC-E1 seed 0 | RC-E1 seed 1 | RC-E1 seed 2 | 14.7 + 2.4 + G + C + 2 V / 2.4 + V / 2.4 + V |
 | 3 | RC-E2 seed 0 | RC-E2 seed 1 | RC-E2 seed 2; RC-B0 (minutes, E2 seed 0 hand-off). Then B1-B3 and the **freeze** | 2.4 + V / 2.4 + V / 2.4 + V |
 | 4 | RC-E3 seed 0; RC-E4 seed 0; RC-R1 | RC-E9 (T4 x2) | RC-G2 (5 runs) | 5.5-9.1 + 4 V + 11 T / 1-2 + V + T (teacher) / 10.9 + 5 V + 5 S |
 | 5 | RC-E3 seeds 1, 2; RC-E4 seeds 1, 2 | RC-E5, E6, E7 seed 1 (15 runs) | RC-E5, E6, E7 seed 0 (10 runs; G2's 5 reused) | 11.1-18.2 + 8 V + 8 T / 16.8 + 15 V + 15 T + 15 S / 5.9 + 10 V + 15 T + 10 S |
@@ -115,7 +115,7 @@ after it moves with it.
 
 RC-D1-embed -> the pair labels (two raters) -> RC-D1-label -> RC-D1 pass 1 (run 4) -> label values ->
 RC-D1 pass 2 -> finding list ->
-RC-E0a (Gate 1) -> RC-E0b (the teacher cache, **C unknown**) -> RC-E2 seed 0 -> RC-B0 -> B1-B3
+RC-E0a (Gate 1, E0 validation) -> RC-E0b (the teacher cache, **C unknown**) -> RC-E2 seed 0 -> RC-B0 -> B1-B3
 and the freeze -> RC-G2 -> the E7 grid of each seed -> RC-E8 -> RC-C1. The ablations and RC-L1 are needed for the paper but
 not for the comparisons (H1-H4).
 

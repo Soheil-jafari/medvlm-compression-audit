@@ -40,12 +40,12 @@ How to read this draft:
 
 | Item | Rule | Value |
 |---|---|---|
-| Finding list C | every answer value of the source question "are there any abnormalities in the image" (label rule `abnormalities`, `configs/data/kvasir_vqa_x1.yaml`) with at least **20** positive training images and at least **10** positive images in each of validation and test. **[team]** confirm the two numbers. Instruments and landmarks are control questions, not findings (D02) | **[RC-D1]** from `answer_count:*` and `positives:<f>:<split>` |
-| Display names | the answer value as written in the source answers, lower case | **[RC-D1]** |
-| Prevalence | positive training images / training images (`prevalence:<f>`) | **[RC-D1]** |
-| Prevalence groups | common: prevalence >= 10 %; rare: < 2 %; medium: in between. **[team]** confirm the cut points (the alternative is tertiles of the prevalences of C) | **[RC-D1]** |
-| Mask findings | the findings Kvasir-SEG delineates: `polyp` (`image_reliance_check.mask_findings`) | D02 |
-| Lesion-size strata | quartiles of the lesion area of training images with a linked mask (`lesion_area_threshold:q1..q3`); "small" = below q1 | **[RC-D1]** |
+| Finding list C | every answer value of the source question "are there any abnormalities in the image" (label rule `abnormalities`, `configs/data/kvasir_vqa_x1.yaml`) with at least **20** positive training images and at least **10** positive images in each of validation and test. Instruments and landmarks are control questions, not findings (D02) | **Frozen 2026-10-31** (amendment, section 11): `polyp`, `ulcerative_colitis`, `oesophagitis`, images with the value train / validation / test 810 / 105 / 106, 691 / 85 / 98, 546 / 37 / 25 (`answer_count:abnormalities:<value>:<split>`, RC-D1 run 4b). Excluded, too few to test (a limitation): barretts 14 / 2 / 0, short-segment barretts 8 / 0 / 1, hemorrhoids 1 / 0 / 0 |
+| Display names | the answer value as written in the source answers, lower case | **Frozen 2026-10-31:** "polyp", "ulcerative colitis", "oesophagitis" |
+| Prevalence | images with the value / training images (4,513) | **2026-10-31:** 17.9 %, 15.3 %, 12.1 % (computed from the committed counts, `data/summary.py`) |
+| Prevalence groups | the draft cut points were common >= 10 %, rare < 2 % | **Frozen 2026-10-31:** all three findings are common; **no rare or medium group exists** in this dataset, so no cut point is set (`thresholds: null`). The rare-group analysis is dropped from the internal data (a limitation); the per-finding results stay. (The draft cut points would give the same groups.) |
+| Mask findings | the findings Kvasir-SEG delineates (`image_reliance_check.mask_findings`) | **Frozen 2026-10-31:** `[polyp]` |
+| Lesion-size strata | quartiles of the polyp mask area of training images with a linked mask (`lesion_area_threshold:q1..q3`); "small" = below q1 | **Frozen 2026-10-31:** q1 0.05676, q2 0.11336, q3 0.19932 (the committed values, full precision in `configs/domain/endoscopy.yaml`); the same cut points for the external test |
 | Probe | "Is there a {finding} in this image? Answer yes or no.", one forward pass, log P(yes) against log P(no) | D02, S04 |
 
 ## 3. Finding weights (clinical criterion E7, E8, A2, A4-A6)
@@ -70,7 +70,7 @@ incomplete or unfrozen table for a final run.
 |---|---|---|
 | Metric | peak GPU memory during inference (weights, activations, KV cache) | D07 |
 | Tolerance | 3 % of the target, either side | D07 |
-| Protocol | batch 1, free generation with `evaluation.max_new_tokens`, 3 warm-up and 5 timed passes, 32 validation images drawn with seed 0, the same for every arm | D07 |
+| Protocol | batch 1, free generation with `evaluation.max_new_tokens` (46 by the D04 rule, section 11), 3 warm-up and 5 timed passes, 32 validation images drawn with seed 0, the same for every arm | D07 |
 | Reference | E2 seed 0, measured twice in fresh processes (RC-B0) | D07, RC-B0 |
 | B1 / B2 / B3 | remove about 15 / 30 / 45 % of the decoder's bytes, written as fractions of E2's measured peak: **[RC-B0]** | D07 section 4 |
 | Timing hardware **[team]** | the rented GPU type (final numbers); development numbers on the Kaggle T4 are labelled as such | D07 |
@@ -97,11 +97,11 @@ accuracy while losing recall, which would make H1 easy to support. Proposal: H1 
 findings; `macro_balanced_accuracy`); the overall accuracy is still reported.
 
 **Secondary:** per-finding sensitivity and specificity, macro-F1, overall accuracy,
-rare-finding recall by prevalence group (positives pooled within a group), blank-image accuracy
-drop and other-image tests, ECE (15 equal-width bins), Brier score, AURC, hallucination /
+blank-image accuracy drop and other-image tests, ECE (15 equal-width bins), Brier score, AURC, hallucination /
 omission / negation rates on 1,000 free-text answers, exact match and token F1, efficiency
 (parameters, file size, peak memory, cold and warm latency, throughput, energy where measurable,
-kernel check).
+kernel check). The rare-finding recall by prevalence group is dropped (2026-10-31): the dataset
+has no rare group (section 2). The flip analysis of section 11 is a secondary analysis too.
 
 ## 6. Analysis plan
 
@@ -127,13 +127,14 @@ kernel check).
   sequence of image-level resamples (seed 0) is shared by every arm and every comparison. An
   arm with a missing seed is left out and listed, never compared on fewer seeds.
   - H1 for every arm of E3-E8 (each variant and budget): the relative drop against E2 of the
-    small-finding recall minus that of the headline accuracy; the same with the rare-group
-    recall is reported next to it.
+    small-finding recall minus that of the headline accuracy. (The same with the rare-group
+    recall is not computed: no rare group, 2026-10-31.)
   - H2 **[team]** proposal: E3 `w8` is compared at the budget whose target is nearest to its
     measured peak memory, against the generic pruning arm (E5 criteria, E6) with the highest
     validation small-finding recall at that budget (mean of 3 seeds).
   - H4: the compressed students E3-E8 at every budget, ranked by the headline accuracy and by
-    small-finding recall, rare-group recall and ECE (negated, so higher is better in both).
+    small-finding recall and ECE (negated, so higher is better in both); the rare-group ranking
+    is dropped with the rare group (2026-10-31).
   - McNemar per finding **[team]** proposal: on each probe's majority answer over the 3 seeds
     (right in at least 2), for E7 against the comparator and for H2.
 - **Answer parsing:** probes are scored, never parsed, so they cannot be unparseable. Free-text
@@ -212,3 +213,79 @@ kernel check).
 ## 10. Deviations after the freeze
 
 List any deviation from this document after the freeze, with date and reason.
+
+## 11. Amendments before the freeze
+
+### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result
+
+Recorded before any model result: RC-TT1 trained the teacher, and its validation and Gate 1
+waited on these settings, so no model has been scored. Every count comes from the committed
+`results/data/summary.csv` (RC-D1 run 4b, `split_sha256` `54dfa70a...`).
+
+1. **Finding list** (`domain.findings`, label rule values): `polyp`, `ulcerative_colitis`,
+   `oesophagitis`. Images with the abnormality answer value, train / test: 810 / 106,
+   691 / 98, 546 / 25 (validation 105, 85, 37). They meet the draft rule of section 2 (at
+   least 20 training and 10 validation and test images). Probe display names are the
+   dataset's own wording: "polyp", "ulcerative colitis", "oesophagitis".
+   - Excluded: barretts, short-segment barretts and hemorrhoids (test images 0, 1, 0): too few
+     to test. Stated as a limitation. An image whose only abnormality value is excluded is a
+     negative for the three findings.
+   - Negatives: the source answers hold no "none" value for this question (no
+     `answer_count:abnormalities:none` row), so only images with at least one abnormality
+     value are labelled; a finding's negatives are the images with another abnormality. The
+     first validation run (E0) counts the probes; the team reads that count before the freeze.
+2. **Prevalence groups:** all three findings are common (training prevalence 17.9 %, 15.3 %,
+   12.1 % of the 4,513 training images). No rare group exists in this dataset.
+   - The rare-finding analysis is dropped from the internal data (a limitation). The
+     per-finding results stay (sensitivity, specificity and McNemar per finding).
+   - The groups are set so the code reflects this: `common` holds the three findings,
+     `medium` and `rare` are empty, `thresholds: null`. No cut point is invented. The
+     evaluation no longer runs the rare-finding suite. The comparison step writes no
+     `diff:drop_gap_rare` and no `tau:rare_recall` row when the rare group is empty, and says
+     so in `choices.json` (`rare_group`).
+3. **Small findings** (`small_findings.thresholds`): the committed training quartiles of the
+   polyp mask area, q1 0.05676, q2 0.11336, q3 0.19932 (`lesion_area_threshold:q1..q3`);
+   small = below q1.
+   - The filtered test holds 86 masked images. If their areas follow the training quartiles,
+     about 21 are small (86 / 4, an estimate). The real count is written by every test
+     evaluation (`n_stratum:0`, with `n_mask_positives`), and is reported next to the
+     small-finding recall and its image-bootstrap 95 % interval.
+   - With about 21 small polyps that interval is wide: about +-0.17 at a recall of 0.8 (normal
+     approximation, an estimate). The paired differences between arms are expected to be
+     narrower, by an amount not known before the runs.
+4. **Generation limit** (`evaluation.max_new_tokens`, E0's `teacher_cache.max_new_tokens`, and
+   `budgets.measurement.max_new_tokens`): the D04 rule, `ceil(1.5 x p99 answer words) + 8`.
+   The configs hold the rule's name (`d04_rule`); the code computes the number from the
+   committed summary each time a run reads it (`data/summary.py`). With p99 = 25 words it is
+   ceil(37.5) + 8 = **46**. No number is typed by hand.
+5. **Mask findings** (`image_reliance_check.mask_findings`): `[polyp]`.
+6. **External test** (D02 amendment 7, co-primary): **PolypGen first**, because it has masks
+   and many polyps, so the small-polyp stratum also has enough cases there. Its card (RC-X2)
+   checks the licence first (the exact licence, or stop), and plans:
+   - image-level probes for polyp present / absent with the same probe template;
+   - lesion-size strata from its masks, with **our** training quartiles above;
+   - the same near-duplicate overlap check against our training images.
+
+   Nothing is downloaded yet.
+7. **Secondary analysis: what compression forgets** (after Hooker, Courville, Clark, Dauphin
+   and Frome, arXiv:1911.05248). For each method and budget, the test items (probes) whose
+   answer flips between E0 and the compressed model:
+   - an item flips when the arm's majority answer over its 3 seeds differs from E0's answer;
+   - reported: the number and rate of flips, and how they are distributed over the findings
+     and over the lesion-size strata of the positive polyps (rate, share and the ratio of each
+     group's flip rate to the overall one), and the flip rate of small polyps minus that of
+     larger ones;
+   - question: are small polyps over-represented among the flips (the interval of
+     `flip_ratio:stratum0` above 1)?
+   - 95 % image-level percentile bootstrap, the comparison step's resamples (seed 0);
+   - descriptive: not part of H1-H4, no verdict, no multiplicity correction;
+   - E3-E8 start from E2, which is distilled from E0, so their flips against E0 include those
+     of the distillation. E2's own row (`E2_vs_E0`) is reported next to them;
+   - no extra GPU: it reads the per-probe answers stage 06 already saves
+     (`evaluation/flips.py`, run by the comparison step; RC-R1 also hands off E0's test
+     outcomes).
+
+Still open before `preregistration.frozen_on` is set: how the two co-primary tests combine in a
+verdict, the finding weights (cap, tiers), the budgets and the other **[team]** items above.
+The test split stays locked until then.
+

@@ -18,9 +18,14 @@
 % after the filter, reported as "reduced-leakage" with its residual same-examination pairs, and
 % an external test from another centre (PolypGen and/or GastroVision, RC-X2); the unfiltered
 % test as a sensitivity analysis (the strict subset dropped: at F = 0.86 it is the whole
-% filtered test). Limitation: no patient or video ids. Kvasir-SEG masks matched by fingerprint,
-% finding list and prevalence groups (D02). The data table below is generated from
-% results/data/summary.csv: RC-D1 run 4b (split_sha256 54dfa70a..., 2026-10-29).
+% filtered test). Limitation: no patient or video ids. Kvasir-SEG masks matched by fingerprint.
+% Finding list (frozen 2026-10-31, pre-registration amendment): polyp, ulcerative colitis,
+% oesophagitis; Barrett's, short-segment Barrett's and haemorrhoids excluded (too few test
+% images; a limitation); all three common, so no rare group (a limitation; per-finding results
+% kept); only images with an abnormality answer are labelled, so negatives are other
+% abnormalities. External test: PolypGen first (RC-X2), strata from our training quartiles.
+% The data table below is generated from results/data/summary.csv: RC-D1 run 4b (split_sha256
+% 54dfa70a..., 2026-10-29).
 \todo{data}
 
 \begin{table}[t]
@@ -51,10 +56,12 @@
 \end{table}
 
 \subsection{Metrics}
-% TODO: clinical, small findings (lesion-area quartiles), rare findings (prevalence
-% groups), image reliance (blank, lesion vs random mask, other patient),
-% calibration (ECE, Brier, risk-coverage), hallucination/omission/negation,
-% efficiency.
+% TODO: clinical, small findings (lesion-area quartiles of the training polyp masks; report
+% the number of small polyps next to the recall and its CI), image reliance (blank, lesion vs
+% random mask, other patient), calibration (ECE, Brier, risk-coverage),
+% hallucination/omission/negation (generation limit by the D04 rule), efficiency. No rare-group
+% recall: the dataset has no rare finding. Secondary: the flip analysis after Hooker et al.
+% (items whose answer flips between E0 and each compressed arm, by finding and size stratum).
 \todo{metrics}
 
 \subsection{Statistics}

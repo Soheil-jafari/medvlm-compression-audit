@@ -42,5 +42,6 @@ teacher_cache:
   pool_size: 10000                        # = training.data_subset (2026-10-16): cache exactly the training
                                           # pool E2, E4 and the recoveries use, not all 143k rows
   top_k: 20                               # D04 decided 2026-10-12
-  max_new_tokens: TODO                    # D04 rule: ceil(1.5 x p99 answer words) + 8, from the RC-D1 counts
+  max_new_tokens: d04_rule                # D04 rule: ceil(1.5 x p99 answer words) + 8, computed from the
+                                          # committed results/data/summary.csv (46 from p99 = 25)
   shard_size: 1000

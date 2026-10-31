@@ -128,7 +128,14 @@ def test_seg_records_and_mask_linking(tmp_path: Path) -> None:
 def test_repository_config_has_label_rules_section() -> None:
     dataset = load_config(config_root() / "data" / "kvasir_vqa_x1.yaml")["dataset"]
     rules = parse_label_rules(dataset["label_mapping"])
-    assert rules and rules[0].values == {}  # values come from RC-D1, then pre-registration
+    # frozen 2026-10-31 from the RC-D1 run 4b answer counts (pre-registration amendment)
+    assert rules and rules[0].values == {
+        "polyp": "polyp",
+        "ulcerative colitis": "ulcerative_colitis",
+        "oesophagitis": "oesophagitis",
+    }
+    domain = load_config(config_root() / "domain" / "endoscopy.yaml")["domain"]
+    assert sorted(rules[0].values.values()) == sorted(domain["findings"])
 
 
 def test_prepare_end_to_end(tmp_path: Path) -> None:
