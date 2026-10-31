@@ -456,6 +456,34 @@ GATE1_KEYS = (
 )
 
 
+def require_gate1_pass(config: Mapping[str, Any]) -> None:
+    """Refuse to go on unless E0's results hold ``gate1_pass`` = 1 (RC-E0a, run first).
+
+    The teacher cache (RC-E0b) is built only for a teacher that passed Gate 1: if it failed,
+    rule 3's one extension of the teacher training comes first (pre-registration section 6).
+
+    Raises:
+        ConfigError: no ``gate1_pass`` row, or it is not 1.
+    """
+    import csv
+
+    from medcompress.config import ConfigError, RunContext
+
+    path = RunContext("E0", seed=0).run_dir(Path(config["paths"]["results_root"])) / "metrics.csv"
+    values = []
+    if path.is_file():
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            values = [float(r["value"]) for r in csv.DictReader(handle)
+                      if r.get("metric") == "gate1_pass"]  # fmt: skip
+    if not values:
+        raise ConfigError(f"Gate 1 has not run: {path} has no gate1_pass row (run RC-E0a first)")
+    if values[-1] != 1.0:
+        raise ConfigError(
+            f"Gate 1 did not pass (gate1_pass = {values[-1]:g} in {path}): no teacher cache; "
+            "rule 3's extension of the teacher training comes first"
+        )
+
+
 def gate1_verdict(metrics: Mapping[str, float], thresholds: Mapping[str, Any]) -> dict[str, float]:
     """Apply the approved Gate 1 thresholds to the measured metrics.
 

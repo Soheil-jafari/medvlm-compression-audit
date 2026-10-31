@@ -162,7 +162,11 @@ def resolve_settings(config: Mapping[str, Any]) -> EvalSettings:
     if wanted & {"image_reliance", "blank_image", "mask_audit"}:
         fill = need("image_reliance_check.fill", check.get("fill"))
     if wanted & FREE_TEXT_SUITES:
-        max_new = need("evaluation.max_new_tokens", evaluation.get("max_new_tokens"))
+        from medcompress.data.summary import resolve_max_new_tokens
+
+        max_new = need(
+            "evaluation.max_new_tokens", resolve_max_new_tokens(evaluation.get("max_new_tokens"))
+        )
         if "generation_samples" not in evaluation:
             open_keys.add("evaluation.generation_samples")
         elif evaluation["generation_samples"] is not None:  # null means every row

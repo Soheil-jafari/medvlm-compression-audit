@@ -74,11 +74,14 @@ dataset:
                                           # crop level minus 0.05 if the rule has one)
   official_split_note: "by question, not by image: 3,821 of the 4,058 official test images are training images (RC-D1 run 1); used only for the data card and the appendix item"
   label_mapping:                          # per-image finding labels from the source Kvasir-VQA questions
-    status: TODO                          # values filled from the RC-D1 answer counts, then pre-registered
+    status: "FROZEN 2026-10-31"           # from the RC-D1 run 4b answer counts (pre-registration amendment)
     rules:
       - name: abnormalities
         question_contains: "are there any abnormalities in the image"
         mode: multi_label
-        values: {}                        # answer value -> finding id, e.g. "polyp": polyp
+        values:                           # answer value -> finding id; excluded values
+          polyp: polyp                    # (barretts, short-segment barretts, hemorrhoids:
+          ulcerative colitis: ulcerative_colitis   # too few test images) mark no finding
+          oesophagitis: oesophagitis
         none_values: ["none", "no"]
   notes: "D02 amendments of 2026-10-18/19: the official split is by question, so all images are re-split by image (splits_used); near-duplicate groups by the embedding rule chosen on human labels (near_duplicates, amendment 3)."

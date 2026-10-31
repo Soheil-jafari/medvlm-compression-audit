@@ -239,6 +239,14 @@ def _get(config: Mapping[str, Any], dotted: str) -> Any:
     return node
 
 
+def _value(config: Mapping[str, Any], dotted: str) -> Any:
+    """The setting as a run reads it: a generation limit given by the D04 rule is computed."""
+    from medcompress.data.summary import resolve_max_new_tokens
+
+    value = _get(config, dotted)
+    return resolve_max_new_tokens(value) if dotted.endswith("max_new_tokens") else value
+
+
 def _show(value: Any) -> str:
     from medcompress.config import find_todos
 
@@ -264,7 +272,7 @@ def hyperparameter_table() -> str:
     for group, setting, experiment, spec in HYPERPARAMETERS:
         if experiment not in configs:
             configs[experiment] = load_experiment(experiment)[0]
-        values = [_show(_get(configs[experiment], key)) for key in _expand(spec)]
+        values = [_show(_value(configs[experiment], key)) for key in _expand(spec)]
         rows.append([latex_escape(group), latex_escape(setting), latex_escape(" / ".join(values))])
     return tabular(["Block", "Setting", "Value"], rows)
 

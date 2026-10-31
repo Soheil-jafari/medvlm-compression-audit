@@ -127,6 +127,14 @@ def _shard_matches(path: Path, expected_ids: Sequence[str]) -> bool:
         return False
 
 
+class CacheStopped(RuntimeError):
+    """The cache stopped between two shards for a time budget; run it again to resume."""
+
+    def __init__(self, out_dir: Path, done: int, total: int) -> None:
+        super().__init__(f"{done} of {total} shards saved in {out_dir}")
+        self.out_dir, self.done, self.total = Path(out_dir), done, total
+
+
 def cache_teacher_outputs(
     teacher: VLMWrapper,
     samples: Sequence[VQASample],
@@ -138,6 +146,7 @@ def cache_teacher_outputs(
     data_root: Path | None = None,
     time_first: int = 0,
     on_timed: Callable[[int, float], None] | None = None,
+    stop_after_seconds: float | None = None,
 ) -> Path:
     """Generate teacher answers once and write them to sharded files with a manifest.
 
@@ -149,6 +158,11 @@ def cache_teacher_outputs(
     (rounded up to whole batches of the teacher, so no batch changes) are generated and timed
     on their own, and ``on_timed(answers, seconds)`` is called at once: the cost of the cache is
     known long before it is finished.
+
+    With ``stop_after_seconds``, a shard is started only if this call's time so far plus the
+    longest shard it has generated still fits; otherwise :class:`CacheStopped` is raised
+    between two shards (every finished shard is on disk), so a session ends cleanly before its
+    time limit and the next one resumes.
 
     Used by: E0 (producer); E2, E4, E5-E7, A1-A6 (consumers).
     """
@@ -182,11 +196,17 @@ def cache_teacher_outputs(
 
     root = Path(data_root) if data_root is not None else None
     shards = []
-    for index, start in enumerate(range(0, len(samples), shard_size)):
+    begun, longest = time.perf_counter(), 0.0
+    starts = range(0, len(samples), shard_size)
+    for index, start in enumerate(starts):
         chunk = samples[start : start + shard_size]
         chunk_ids = [s.sample_id for s in chunk]
         path = out / shard_name(index)
         if not (path.exists() and _shard_matches(path, chunk_ids)):
+            elapsed = time.perf_counter() - begun
+            if stop_after_seconds is not None and elapsed + longest > stop_after_seconds:
+                raise CacheStopped(out, index, len(starts))
+            shard_started = time.perf_counter()
             images = [(root / s.image_path) if root is not None else s.image_path for s in chunk]
             questions = [s.question for s in chunk]
             first = 0
@@ -213,6 +233,7 @@ def cache_teacher_outputs(
             with tmp.open("wb") as handle:
                 np.savez_compressed(handle, **_pack_shard(chunk_ids, outputs, top_k))
             os.replace(tmp, path)
+            longest = max(longest, time.perf_counter() - shard_started)
         shards.append({"file": path.name, "num_samples": len(chunk), "sha256": _sha256_file(path)})
     manifest = {
         "format_version": CACHE_FORMAT_VERSION,
@@ -273,12 +294,47 @@ def cache_metadata(cache_dir: Path) -> Mapping[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def seed_from_previous(previous: Path, out_dir: Path) -> int:
+    """Copy the shards a stopped session saved into ``out_dir``; return how many were copied.
+
+    ``previous`` is that session's output attached as input (or its cache folder itself); the
+    teacher cache inside it is the folder whose ``metadata.json`` is a cache's and that holds
+    the most shards. Files already in ``out_dir`` are kept. The cache then checks the settings
+    and skips the shards.
+    """
+    import shutil
+
+    def is_cache(folder: Path) -> bool:
+        try:
+            meta = json.loads((folder / METADATA_NAME).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        return isinstance(meta, dict) and "teacher_config_sha256" in meta
+
+    previous = Path(previous)
+    candidates = [previous, *sorted(m.parent for m in previous.glob(f"**/{METADATA_NAME}"))]
+    found = [d for d in candidates if is_cache(d)]
+    if not found:
+        raise FileNotFoundError(f"no teacher cache (with {METADATA_NAME}) under {previous}")
+    source = max(found, key=lambda d: len(list(d.glob("shard_*.npz"))))
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for item in [source / METADATA_NAME, *sorted(source.glob("shard_*.npz"))]:
+        if not (out / item.name).exists():
+            shutil.copy2(item, out / item.name)
+            copied += item.name != METADATA_NAME
+    return copied
+
+
 def run_teacher_caching(
     config: Mapping[str, Any],
     run: RunContext | None,
     *,
     teacher: VLMWrapper | None = None,
     samples: Sequence[VQASample] | None = None,
+    stop_after_hours: float | None = None,
+    resume_from: Path | None = None,
 ) -> None:
     """Stage entry point for ``scripts/01_cache_teacher_outputs.py``.
 
@@ -290,12 +346,19 @@ def run_teacher_caching(
     whole split. ``teacher`` and ``samples`` can be passed in (tests do); otherwise they are
     built from the config, and ``pool_size`` is applied to them either way.
 
+    ``resume_from``: a stopped session's output; its shards are copied in first
+    (:func:`seed_from_previous`). ``stop_after_hours``: stop cleanly between two shards
+    (:class:`CacheStopped`) when the next shard would not fit, as RC-TT1's training does.
+
     Used by: E0.
     """
     from medcompress.config import ConfigError, find_todos
 
     section = config.get("teacher_cache", {})
+    from medcompress.data.summary import resolve_max_new_tokens
+
     needed = {k: section.get(k) for k in ("splits", "top_k", "max_new_tokens", "shard_size")}
+    needed["max_new_tokens"] = resolve_max_new_tokens(needed["max_new_tokens"])  # D04 rule
     open_keys = sorted(k for k, v in needed.items() if v is None or find_todos({k: v}))
     if open_keys:
         raise ConfigError(f"teacher_cache settings still open: {', '.join(open_keys)}")
@@ -346,22 +409,30 @@ def run_teacher_caching(
             ]  # fmt: skip
             upsert_results(rows, run.run_dir(Path(paths["results_root"])) / "metrics.csv")
 
+    cache_dir = Path(paths["cache_root"]) / "teacher"
+    if resume_from is not None:
+        copied = seed_from_previous(Path(resume_from), cache_dir)
+        print(f"teacher cache: continuing with {copied} shard(s) saved in {resume_from}")
     started = time.perf_counter()
-    out = cache_teacher_outputs(
-        teacher,
-        samples,
-        Path(paths["cache_root"]) / "teacher",
-        top_k=int(needed["top_k"]),
-        max_new_tokens=int(needed["max_new_tokens"]),
-        shard_size=int(needed["shard_size"]),
-        data_root=Path(paths["data_root"]),
-        time_first=TIME_FIRST_ANSWERS,
-        on_timed=timed,
-    )
-    if run is not None:
-        add_session_seconds(
-            run, Path(paths["results_root"]), "teacher_cache_seconds", time.perf_counter() - started
+    try:
+        out = cache_teacher_outputs(
+            teacher,
+            samples,
+            cache_dir,
+            top_k=int(needed["top_k"]),
+            max_new_tokens=int(needed["max_new_tokens"]),
+            shard_size=int(needed["shard_size"]),
+            data_root=Path(paths["data_root"]),
+            time_first=TIME_FIRST_ANSWERS,
+            on_timed=timed,
+            stop_after_seconds=None if stop_after_hours is None else 3600 * stop_after_hours,
         )
+    finally:  # a stopped session's time counts too
+        if run is not None:
+            add_session_seconds(
+                run, Path(paths["results_root"]), "teacher_cache_seconds",
+                time.perf_counter() - started,
+            )  # fmt: skip
     print(f"teacher cache complete: {len(samples)} samples, manifest {cache_manifest_hash(out)}")
 
 

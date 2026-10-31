@@ -224,9 +224,20 @@ def _config(tmp_path: Path, **overrides: object) -> dict:
 
 
 def test_stage_is_blocked_while_the_finding_list_is_open(
-    dataset: tuple[Path, list[VQASample]],
+    dataset: tuple[Path, list[VQASample]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import medcompress.config as config_module
+
     root, samples = dataset
+    real_load = config_module.load_config
+
+    def open_list(path, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        loaded = real_load(path, *args, **kwargs)
+        if "domain" in loaded and "findings" in loaded["domain"]:
+            loaded["domain"]["findings"] = ["TODO"]  # the list frozen on 2026-10-31, reopened
+        return loaded
+
+    monkeypatch.setattr(config_module, "load_config", open_list)
     with pytest.raises(ConfigError, match="domain.findings"):
         check_teacher_image_reliance(_config(root), None, model=Reliant(), samples=samples)
     with pytest.raises(ConfigError, match="gate1.min_blank_accuracy_drop"):
@@ -262,3 +273,20 @@ def test_stage_writes_metrics_and_replaces_them_on_rerun(
     row = frame[frame["metric"] == "lesion_mask_effect"].iloc[0]
     assert row["ci_low"] <= row["value"] <= row["ci_high"]
     assert validate_results_tree(root / "results") == []
+
+
+def test_the_cache_waits_for_a_passed_gate1(tmp_path: Path) -> None:
+    from medcompress.evaluation.image_reliance import require_gate1_pass
+    from medcompress.utils.io import append_results
+
+    config = {"paths": {"results_root": str(tmp_path / "results")}}
+    with pytest.raises(ConfigError, match="has not run"):
+        require_gate1_pass(config)
+    target = tmp_path / "results" / "E0" / "nobudget" / "seed0" / "metrics.csv"
+    row = {"experiment": "E0", "budget": "", "seed": 0, "metric": "gate1_pass", "value": 0.0}
+    append_results([row], target)
+    with pytest.raises(ConfigError, match="did not pass"):
+        require_gate1_pass(config)
+    target.unlink()
+    append_results([{**row, "value": 1.0}], target)
+    require_gate1_pass(config)  # passes quietly

@@ -377,19 +377,17 @@ def build_plan(
         _no_seed(card, seed)
         run = Run("E0")
         return CardPlan(
-            "RC-E0a", "Gate 1", 2,
-            (Step("gate 1", _script("00_check_teacher_image_reliance.py", *run.args())),),
+            "RC-E0a", "Gate 1 and E0 validation", 2,
+            (Step("gate 1", _script("00_check_teacher_image_reliance.py", *run.args())),
+             Step("E0 validation", _script("06_evaluate.py", *run.args()))),
             needs=(Need("teacher_adapter"),), internet=True,
         )  # fmt: skip
     if card == "RC-E0B":
         _no_seed(card, seed)
         run = Run("E0")
         return CardPlan(
-            "RC-E0b", "Teacher cache and E0 validation", 2,
-            (
-                Step("teacher cache", _script("01_cache_teacher_outputs.py", *run.args())),
-                Step("E0 validation", _script("06_evaluate.py", *run.args())),
-            ),
+            "RC-E0b", "Teacher cache (after Gate 1)", 2,
+            (Step("teacher cache", _script("01_cache_teacher_outputs.py", *run.args())),),
             handoffs=(Handoff("teacher_cache", (run,), "E0_teacher_cache"),),
             needs=(Need("teacher_adapter"),), internet=True,
         )  # fmt: skip
@@ -501,7 +499,8 @@ def build_plan(
         return CardPlan(
             card, "E0, E1, E2 on the test split", 2,
             tuple(step for r in runs for step in _test_evals(r)),
-            handoffs=(Handoff("outcomes", e2, "E2_test_outcomes"),),
+            handoffs=(Handoff("outcomes", e2, "E2_test_outcomes"),
+                      Handoff("outcomes", (Run("E0"),), "E0_test_outcomes")),  # flips vs E0
             needs=(Need("teacher_adapter"),)
             + tuple(Need("adapter", Run(e, s)) for e in ("E1", "E2") for s in SEEDS),
             internet=True,
@@ -513,7 +512,8 @@ def build_plan(
             (Step("comparisons", _script("09_compare_arms.py")),
              Step("comparisons, unfiltered test", _script("09_compare_arms.py", "--unfiltered")),
              Step("tables and figures", _script("08_aggregate_results.py"), inputs=False)),
-            needs=(Need("outcomes", text="outcomes of E2 (RC-R1) and of every E3-E8 session"),),
+            needs=(Need("outcomes",
+                        text="outcomes of E0 and E2 (RC-R1) and of every E3-E8 session"),),
         )  # fmt: skip
     if card == "RC-X1":
         _no_seed(card, seed)

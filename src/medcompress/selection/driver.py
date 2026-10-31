@@ -88,8 +88,10 @@ def _failed_in_round(
     for gate, metric in ROUND_GATES[round_name]:
         values = [m[metric] for m in seeds.values() if metric in m]
         if not values:
-            if required:
-                raise ValueError(
+            if required:  # a missing step, not a crash: the stage stops cleanly (exit code 4)
+                from medcompress.config import ConfigError
+
+                raise ConfigError(
                     f"{candidate} has no {metric!r} row in results/selection/{round_name}/"
                     f"{candidate}/metrics.csv; run the round before ranking it"
                 )

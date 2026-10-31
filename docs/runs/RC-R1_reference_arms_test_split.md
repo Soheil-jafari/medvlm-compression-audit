@@ -45,7 +45,7 @@ from those cards' wall times when it sets this card to `ready`.
 
   (The unfiltered test is the filtered test with the removed test images added back: the
   sensitivity analysis of D02 amendment 6. Its rows go to `metrics_test_unfiltered.csv`.)
-- **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E2_test_outcomes`.
+- **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E2_test_outcomes`, `E0_test_outcomes`.
 - **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
 - **Session limits:** a T4 x2 session counts **once** against the weekly quota (measured 2026-10-19: a 17-minute T4 x2 session used 16 minutes). The session time limit is unknown here (TODO: the team checks on Kaggle). This card uses T4 x2. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
 

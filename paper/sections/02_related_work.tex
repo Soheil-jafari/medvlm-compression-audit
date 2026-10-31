@@ -15,6 +15,14 @@
 \subsection{What compression forgets}
 % TODO: pruning / quantization effects beyond average accuracy (long tail,
 % evidence, explanations); position our audit and criterion.
+% Hooker et al. (arXiv:1911.05248): the cost of compression falls on a small subset of
+% examples, which top-line accuracy hides. Our pre-registered secondary flip analysis
+% (2026-10-31) follows it: for each method and budget, the test probes whose answer flips
+% between E0 and the compressed model, by finding and by lesion-size stratum (are small
+% polyps over-represented among the flips?), with image-bootstrap intervals.
+Compression can keep the average accuracy of a model while its errors move to a small set of
+examples~\cite{hooker_compressed_forget}; we ask whether, in endoscopy, those examples are the
+small lesions (Section~\ref{sec:setup}).
 \todo{what compression forgets} \cite{holste_pruning_longtail,khalid_pruning_longtail,ghostq,kim_quantization_evidence}
 
 % Datasets are cited in Section~\ref{sec:setup} (e.g.\ \cite{colonx}).

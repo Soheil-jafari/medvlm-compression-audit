@@ -250,3 +250,61 @@ def test_the_first_answers_are_timed_on_whole_batches_and_recorded_at_once(
     metrics = (tmp_path / "results" / "E0" / "nobudget" / "seed0" / "metrics.csv").read_text()
     assert "teacher_cache_first_answers," in metrics
     assert "teacher_cache_first_answers_seconds" in metrics
+
+
+class _Clock:
+    """A fake clock: every reading moves 100 seconds on."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        self.now += 100.0
+        return self.now
+
+
+def test_a_time_budget_stops_between_shards_and_the_next_session_resumes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import medcompress.models.teacher_cache as tc
+
+    monkeypatch.setattr(tc.time, "perf_counter", _Clock())
+    first = FakeTeacher()
+    with pytest.raises(tc.CacheStopped) as stopped:
+        _cache(tmp_path / "s1", first, n=5, stop_after_seconds=250.0)
+    assert (stopped.value.done, stopped.value.total) == (1, 3)  # shard 0 saved, then stopped
+    saved = tmp_path / "s1" / "cache"
+    assert (saved / shard_name(0)).exists() and not (saved / "manifest.json").exists()
+    # the next session: the stopped session's output is attached, and the cache goes on
+    copied = tc.seed_from_previous(tmp_path / "s1", tmp_path / "s2" / "cache")
+    assert copied == 1
+    monkeypatch.undo()
+    second = FakeTeacher()
+    out = _cache(tmp_path / "s2", second, n=5)
+    assert [len(c) for c in second.calls] == [2, 1]  # shard 0 was not generated again
+    plain = _cache(tmp_path / "plain", FakeTeacher(), n=5)
+    assert cache_manifest_hash(out) == cache_manifest_hash(plain)
+
+
+def test_seed_from_previous_needs_a_cache(tmp_path: Path) -> None:
+    from medcompress.models.teacher_cache import seed_from_previous
+
+    with pytest.raises(FileNotFoundError, match="no teacher cache"):
+        seed_from_previous(tmp_path, tmp_path / "out")
+
+
+def test_a_stopped_stage_still_counts_its_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import medcompress.models.teacher_cache as tc
+    from medcompress.config import RunContext
+
+    config = _config(tmp_path)
+    config["paths"]["results_root"] = str(tmp_path / "results")
+    config["teacher_cache"]["shard_size"] = 1
+    monkeypatch.setattr(tc.time, "perf_counter", _Clock())
+    with pytest.raises(tc.CacheStopped):
+        run_teacher_caching(config, RunContext("E0", seed=0), teacher=FakeTeacher(),
+                            samples=_samples(3), stop_after_hours=0.1)  # fmt: skip
+    metrics = (tmp_path / "results" / "E0" / "nobudget" / "seed0" / "metrics.csv").read_text()
+    assert "teacher_cache_seconds" in metrics

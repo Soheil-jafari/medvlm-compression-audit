@@ -123,6 +123,16 @@ approved.
 - Gate 1 now has masked validation images. The image-disjoint split (D02 amendment) puts the
   Kvasir-SEG-linked images into validation in proportion; run 1's old split had none.
 
+## Applied (2026-10-31): `max_new_tokens` = 46, computed from the committed counts
+
+The rule is applied as decided, at the freeze of 2026-10-31 (pre-registration amendment,
+section 11). The configs hold the rule's name, `d04_rule`, for the teacher cache
+(`teacher_cache.max_new_tokens`), the evaluation (`evaluation.max_new_tokens`) and the budget
+protocol (`budgets.measurement.max_new_tokens`). `data/summary.py` computes the number from
+the committed `results/data/summary.csv` when a run reads it: p99 = 25 answer words, so
+ceil(1.5 x 25) + 8 = **46**. Gate 1's settings (`mask_findings: [polyp]`, the finding list)
+are frozen the same day, so RC-E0a is ready.
+
 ## Questions that were asked
 
 1. Approve the three Gate 1 thresholds (0.65 / 0.10 / CI above 0)?

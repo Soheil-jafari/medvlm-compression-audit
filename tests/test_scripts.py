@@ -48,17 +48,18 @@ def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixtur
 @pytest.mark.parametrize(
     ("script", "args", "open_setting"),
     [
-        ("01_cache_teacher_outputs.py", [], "max_new_tokens"),
-        ("00_check_teacher_image_reliance.py", [], "domain.findings"),
+        # the settings are frozen (2026-10-31): these stop at the missing shared data
+        ("01_cache_teacher_outputs.py", [], "gate1_pass"),  # the cache waits for Gate 1
+        ("00_check_teacher_image_reliance.py", [], "--data-root"),
         # the image side is set (2026-10-17): the stage stops at the missing shared data
         ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "--data-root"),
         (
             "06_evaluate.py",
             ["--exp", "A4", "--budget", "B2", "--variant", "n64"],
-            "domain.findings",
+            "--data-root",
         ),
         ("select_student.py", ["--round", "R1", "--candidate", "qwen3_vl_2b"], "compute_unit_b"),
-        ("select_student.py", ["--rank", "R1"], "domain.small_findings.thresholds"),
+        ("select_student.py", ["--rank", "R1"], "run the round before ranking it"),
         ("04_score_pruning_units.py", ["--exp", "E7"], "pruning.clinical.ablation_method"),
         ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "training.steps"),
         (
