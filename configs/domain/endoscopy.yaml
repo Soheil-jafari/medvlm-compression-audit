@@ -33,13 +33,24 @@ domain:
     medium: []
     rare: []
 
+  # The dataset's own wording of each finding (the source answer value, lower case), frozen
+  # 2026-10-31. Free-text answers are searched for these words (hallucination, omission and
+  # negation rates), so the article of a probe never decides whether a finding is mentioned.
+  finding_names:
+    polyp: polyp
+    ulcerative_colitis: ulcerative colitis
+    oesophagitis: oesophagitis
+
   probe:
-    template: "Is there a {finding} in this image? Answer yes or no."
+    # Wording fix of 2026-10-31, before any model result: the display name carries its own
+    # article, so every probe is grammatical ("Is there a polyp", "Is there ulcerative
+    # colitis", "Is there oesophagitis"). Pre-registration section 11.
+    template: "Is there {finding} in this image? Answer yes or no."
     answers:
       positive: "yes"
       negative: "no"
-    display_names:                        # finding id -> the dataset's own wording (the
-      polyp: polyp                        # source answer value, lower case), frozen 2026-10-31
+    display_names:                        # finding id -> the words put into the template
+      polyp: a polyp
       ulcerative_colitis: ulcerative colitis
       oesophagitis: oesophagitis
 

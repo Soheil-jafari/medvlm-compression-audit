@@ -794,7 +794,10 @@ Recorded as a pre-registration amendment (`docs/preregistration.md`, section 11)
 committed `results/data/summary.csv`:
 - label values -> findings: `polyp`, `ulcerative colitis` -> `ulcerative_colitis`,
   `oesophagitis`. Images with the value, train / validation / test: 810 / 105 / 106,
-  691 / 85 / 98, 546 / 37 / 25. Display names are the dataset's wording;
+  691 / 85 / 98, 546 / 37 / 25. Display names come from the dataset's wording, with their own
+  article (wording fix the same day, before any model result): the probe template is "Is
+  there {finding} in this image? Answer yes or no." with "a polyp", "ulcerative colitis",
+  "oesophagitis";
 - excluded, too few to test (a limitation): barretts (test 0), short-segment barretts (test 1),
   hemorrhoids (test 0);
 - all three findings are common (training prevalence 17.9 %, 15.3 %, 12.1 %): no rare group, so

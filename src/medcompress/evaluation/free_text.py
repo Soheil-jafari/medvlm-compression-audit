@@ -66,8 +66,9 @@ def hallucination_metrics(
 ) -> list[Metric]:
     """Rates of hallucinated, omitted and polarity-flipped findings over the answers.
 
-    The labels of a row are its per-finding labels, keyed by the finding's display
-    name (the wording that appears in answers).
+    The labels of a row are its per-finding labels, keyed by the finding's name as it appears
+    in answers (``display_names`` here is ``domain.finding_names``, the dataset's wording,
+    not the probe's wording with its article).
     """
     names = dict(display_names or {})
     errors = []

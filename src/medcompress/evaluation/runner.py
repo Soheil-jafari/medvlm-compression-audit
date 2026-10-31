@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -93,6 +93,10 @@ class EvalSettings:
     max_mask_probes: int | None
     max_new_tokens: int | None
     generation_samples: int | None
+    mention_names: Mapping[str, str] = field(default_factory=dict)
+    """Finding id -> the words searched for in free-text answers (``domain.finding_names``;
+    the probe's ``display_names`` without them). Kept apart from the probe wording, so a
+    display name with an article ("a polyp") does not hide "no polyps" in an answer."""
 
 
 def _is_open(value: Any) -> bool:
@@ -197,6 +201,9 @@ def resolve_settings(config: Mapping[str, Any]) -> EvalSettings:
         max_mask_probes=check.get("max_mask_probes"),
         max_new_tokens=int(max_new) if max_new is not None else None,
         generation_samples=int(limit) if limit is not None else None,
+        mention_names=dict(
+            domain.get("finding_names") or domain.get("probe", {}).get("display_names") or {}
+        ),
     )
 
 
@@ -475,7 +482,7 @@ def evaluate_model(
             metrics += free_text.language_metrics(answers, [r.answer for r in rows_qa])
         if "hallucination" in wanted:
             metrics += free_text.hallucination_metrics(
-                answers, rows_qa, settings.findings, settings.display_names
+                answers, rows_qa, settings.findings, settings.mention_names
             )
     return EvaluationResult(metrics, arrays, out, audit)
 

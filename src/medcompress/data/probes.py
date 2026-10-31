@@ -1,8 +1,9 @@
 """Fixed yes/no finding probes.
 
 For every calibration or test image x and every finding c in the domain list,
-one probe asks the domain template question (e.g. "Is there a polyp in this
-image? Answer yes or no.") and stores the correct answer from the labels. The
+one probe asks the domain template question (e.g. "Is there {finding} in this image?
+Answer yes or no." with the display name "a polyp") and stores the correct answer from the
+labels. The
 probes are scored by one forward pass (``VLMWrapper.score_yes_no``); there is no
 free generation. Used by the clinical criterion (E7, A1-A6), the lesion-mask
 audit and per-finding recall.
@@ -34,7 +35,7 @@ class FindingProbe:
 def format_probe_question(template: str, finding: str) -> str:
     """Fill the domain probe template with a finding name.
 
-    >>> format_probe_question("Is there a {finding} in this image? Answer yes or no.", "polyp")
+    >>> format_probe_question("Is there {finding} in this image? Answer yes or no.", "a polyp")
     'Is there a polyp in this image? Answer yes or no.'
 
     Raises ``ValueError`` if the template has no ``{finding}`` placeholder or the

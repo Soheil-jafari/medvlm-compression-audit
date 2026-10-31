@@ -460,6 +460,12 @@ must be logged here.
   Recorded in the pre-registration, D02, D04, the data card, STATUS, the configs, the
   related-work section and the RC-TT1, RC-X2, RC-E0a, RC-E0b, RC-R1 and RC-C1 cards.
 
+- **2026-10-31 (Soheil): probe wording fix, before any model result** (RC-E0a had not run).
+  Template "Is there {finding} in this image? Answer yes or no."; display names with their own
+  article: "a polyp", "ulcerative colitis", "oesophagitis". Free-text answers are still
+  searched for the dataset's wording (`domain.finding_names`). Recorded in the freeze
+  amendment (pre-registration section 11, item 8), D02, the paper's method section and RC-X2.
+
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
