@@ -29,6 +29,9 @@ ABLATION_VARIANTS: dict[str, tuple[str | None, ...]] = {
     "A5": ("kl",),  # logprob_drop is E7 itself
     "A6": ("layers_only", "heads_channels"),
 }
+RC_D1_RUN4B: tuple[str, ...] = ("--rule", "full:0.92:or_crop:0.80", "--heldout-filter", "0.86")
+"""The rule and the held-out filter of RC-D1 run 4b (D02 amendments 5-7): pass 2 must use them
+to rebuild the same split."""
 RC_D1_SETTINGS: tuple[str, ...] = (
     "--split-seed", "20261012", "--close-bits", "4", "--mask-threshold", "4",
 )  # fmt: skip
@@ -361,8 +364,9 @@ def build_plan(
         if data_root is None:
             raise CardError("the second RC-D1 pass needs --data-root (the shared data)")
         counts = _script(
-            "prepare_data.py", "counts", "--data-root", str(data_root), *RC_D1_SETTINGS
-        )
+            "prepare_data.py", "counts", "--data-root", str(data_root), *RC_D1_SETTINGS,
+            *RC_D1_RUN4B,
+        )  # fmt: skip
         if embed_dir is not None:  # run 4's groups need RC-D1-embed's embeddings
             counts = (*counts, "--embed-dir", str(embed_dir))
         return CardPlan(
@@ -507,7 +511,6 @@ def build_plan(
         return CardPlan(
             card, "Paired comparisons (CPU)", 0,
             (Step("comparisons", _script("09_compare_arms.py")),
-             Step("comparisons, strict subset", _script("09_compare_arms.py", "--strict")),
              Step("comparisons, unfiltered test", _script("09_compare_arms.py", "--unfiltered")),
              Step("tables and figures", _script("08_aggregate_results.py"), inputs=False)),
             needs=(Need("outcomes", text="outcomes of E2 (RC-R1) and of every E3-E8 session"),),

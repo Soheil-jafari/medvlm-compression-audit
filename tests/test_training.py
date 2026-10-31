@@ -527,6 +527,27 @@ def _adapter_weights(wrapper: HFVLMWrapper) -> dict[str, torch.Tensor]:
     return {n: p.detach().clone() for n, p in wrapper.module.named_parameters() if p.requires_grad}
 
 
+def test_a_time_budget_stops_on_a_saved_step_and_the_next_session_resumes(
+    tmp_path: Path,
+) -> None:
+    import json
+
+    cfg = _config(steps=6, extra={"checkpoint_every": 4})
+    reference = offline_kd.train_lora(_wrapper(), _examples(), cfg, seed=3)
+    folder = tmp_path / "resume"
+    stopped = offline_kd.train_lora(
+        _wrapper(), _examples(), cfg, seed=3, resume_dir=folder, stop_after_seconds=0.0
+    )
+    assert stopped.steps == 1  # the budget is spent after the first step
+    saved = json.loads((folder / "current" / "progress.json").read_text())
+    assert saved["step"] == 1  # saved there, although step 1 is no regular save point
+    resumed = offline_kd.train_lora(_wrapper(), _examples(), cfg, seed=3, resume_dir=folder)
+    assert resumed.steps == 6 and resumed.examples_seen == reference.examples_seen
+    assert resumed.losses == pytest.approx(reference.losses, rel=1e-4, abs=1e-6)
+    with pytest.raises(ValueError, match="needs resume_dir"):
+        offline_kd.train_lora(_wrapper(), _examples(), cfg, seed=3, stop_after_seconds=1.0)
+
+
 def test_a_stopped_training_resumes_from_its_last_saved_step(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

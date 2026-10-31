@@ -14,6 +14,7 @@ images added back). ``load_prepared(..., unfiltered_test=True)`` returns it as t
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -27,6 +28,29 @@ from medcompress.data.splits import split_fingerprint
 UNFILTERED_TEST = "test_unfiltered"
 UNFILTERED_TEST_FILE = "test_unfiltered.json"
 """The sample ids of the unfiltered test (D02 amendment 6), in the private folder."""
+
+
+SPLIT_PIN_ENV = "MEDCOMPRESS_SPLIT_SHA256"
+"""Tests only: replaces the pinned ``split_sha256`` (a fixture's shared data have their own)."""
+
+
+def pinned_split_sha256(dataset_config: Mapping[str, Any]) -> str | None:
+    """The ``split_sha256`` the dataset config pins (RC-D1 run 4b), or ``None`` if open.
+
+    It must be a quoted string of 64 hex digits: unquoted, YAML can read a hash made of digits
+    as a number. ``MEDCOMPRESS_SPLIT_SHA256`` replaces it (tests only)."""
+    import os
+
+    value = os.environ.get(SPLIT_PIN_ENV) or dataset_config.get("split_sha256")
+    if value is None or str(value).strip().upper().startswith("TODO"):
+        return None
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value.strip()):
+        from medcompress.config import ConfigError
+
+        raise ConfigError(
+            f"split_sha256 {value!r} is not a quoted string of 64 hex digits (the dataset config)"
+        )
+    return value.strip()
 
 
 def load_prepared(

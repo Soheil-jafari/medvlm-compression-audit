@@ -33,7 +33,6 @@ number depends on the size of the test split, so allow up to 30 minutes on a slo
 - **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
 - **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-C1"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-C1 --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
   - comparisons
-  - comparisons, strict subset
   - comparisons, unfiltered test
   - tables and figures
 - **Hand-offs it writes:** none (its results reach the others through git).
@@ -56,8 +55,8 @@ find $MEDCOMPRESS_OUTPUT_ROOT -name outcomes_test_unfiltered.npz | wc -l   # the
 
 python -m pytest -q tests/test_compare_stage.py
 python scripts/09_compare_arms.py
-python scripts/09_compare_arms.py --strict       # the strict subset (D02 amendment 3)
 python scripts/09_compare_arms.py --unfiltered   # the unfiltered test (D02 amendment 6)
+# no --strict: the strict subset is the whole filtered test at F = 0.86 (D02 amendment 7)
 python scripts/08_aggregate_results.py
 python -m pytest -q tests/test_results.py tests/test_paper.py   # must pass before you commit
 ```
@@ -69,8 +68,8 @@ with a missing seed is left out and listed under `incomplete` in
 
 ## 4. What to commit back
 
-- `results/comparisons/` (every `comparison.csv` and `choices.json`), and the same for the two
-  sensitivity analyses, `results/comparisons_strict/` and `results/comparisons_unfiltered/`
+- `results/comparisons/` (every `comparison.csv` and `choices.json`), and the same for the
+  unfiltered test, `results/comparisons_unfiltered/`
 - `results/summary/`, `paper/tables/`, `paper/figures/` and `docs/results/VERDICTS.md`
 - This card with section 6 filled.
 

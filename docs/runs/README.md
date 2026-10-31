@@ -12,15 +12,17 @@ A card runs unattended with `notebooks/run_card.ipynb` (Save & Run All), which c
 `scripts/run_card.py`. Section 2b of each card says what to attach and what it hands off. How to
 set up an account: `docs/team_setup.md`. Who runs what, week by week: `docs/schedule.md`.
 
-Since 2026-10-28 (D02 amendments 6 and 7) every model is scored on four tests:
+Since 2026-10-29 (D02 amendments 6 and 7) every model is scored on three tests:
 - the test split: the filtered test, a "reduced-leakage" test (F = 0.86), co-primary;
 - the unfiltered test: the filtered test with the removed test images added back;
-- the strict subset, which at F = 0.86 is the whole filtered test;
 - the external test from another centre, co-primary (RC-X2; not built yet).
 
-Today the first two are scored as separate splits; the strict subset is a restriction of the
-first (`09_compare_arms.py --strict`). In the runner, each step `test evaluation <run>` is
-followed by `unfiltered test evaluation <run>`. Section 2b of a card may still list only the first. By hand, run each
+The strict subset was dropped: at F = 0.86 it is the whole filtered test. The shared data of
+every card are RC-D1 run 4b's private dataset `medcompress-data`: its `split_sha256` is pinned
+in `configs/data/kvasir_vqa_x1.yaml` and checked when the data are attached.
+
+Today the first two are scored as separate splits. In the runner, each step `test evaluation
+<run>` is followed by `unfiltered test evaluation <run>`. Section 2b of a card may still list only the first. By hand, run each
 `06_evaluate.py ... -o evaluation.split=test` again with `-o evaluation.split=test_unfiltered`.
 Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unfiltered.npz`.
 
@@ -28,12 +30,12 @@ Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unf
 
 | Card | Stage | What | Who | Status |
 |---|---|---|---|---|
-| [RC-D1](RC-D1_data_preparation.md) | S03 | Data preparation: download, image-disjoint re-split of all images (70/15/15 by near-duplicate group), mask links, aggregate counts, the shared-data dataset; pass 2 recounts after the label values | Soheil | blocked: **run 4** waits for RC-D1-embed and RC-D1-label (D02 amendment 3); runs 1-3 not used (run 3 not accepted) |
+| [RC-D1](RC-D1_data_preparation.md) | S03 | Data preparation: download, image-disjoint re-split of all images (70/15/15 by near-duplicate group), mask links, aggregate counts, the shared-data dataset; pass 2 recounts after the label values | Soheil | **done** (run 4b, 2026-10-29: shared data `medcompress-data`, `split_sha256` 54dfa70a...); pass 2 recounts after the label values; runs 1-4 not used |
 | [RC-D1-embed](RC-D1-embed_embeddings_and_labelling_sheets.md) | S03 | Embeddings (proposal DINOv2-small, verified on the hub), candidate pairs, about 300 pairs to label on score-free sheets (CPU) | Soheil | **ready** |
 | [RC-D1-label](RC-D1-label_rater_instructions.md) | S03 | Two raters label the pairs; kappa, every rule's sensitivity and precision, the joining rule chosen by the rule fixed in advance (CPU) | two raters; scoring Soheil | ready after RC-D1-embed |
 | [RC-M1](RC-M1_model_smoke_test.md) | S04 | GPU smoke test: load pair, score probes, remove one layer | Soheil | done 2026-10-15 |
 | [RC-TT0](RC-TT0_teacher_feasibility.md) | S05 | Our teacher: feasibility of one LoRA step of the 7B (fp16 on 2 x T4, QLoRA on 1 x T4), then rule 3 (setup and N) | Soheil | done 2026-10-19 (result file committed) |
-| [RC-TT1](RC-TT1_teacher_training.md) | S05 | Our teacher: LoRA training on our training split (resumable), hand-off, validation | Soheil | blocked (needs RC-D1 run 4; N = 38,000, published LoRA targets) |
+| [RC-TT1](RC-TT1_teacher_training.md) | S05 | Our teacher: LoRA training on our training split (resumable), hand-off, validation | Soheil | ready (2026-10-29: on `medcompress-data`; N = 38,000, published LoRA targets; about 14.7 h on T4 x2, one resume) |
 | [RC-E0a](RC-E0a_gate1_teacher_image_reliance.md) | S05 | Gate 1: teacher image-reliance checks (validation), with our teacher adapter | Soheil | blocked (RC-TT1, RC-D1 both passes, finding list; image side and RC-M1 met) |
 | [RC-E0b](RC-E0b_teacher_cache_and_E0_evaluation.md) | S05 | Teacher cache (train; its first 100 answers are timed) and E0 validation metrics, with our teacher adapter | Soheil | blocked (RC-TT1, Gate 1 verdict, RC-D1, open settings; image side met) |
 | [RC-S0](RC-S0_student_feasibility.md) | S05b | Student checks: feasibility of Qwen2.5-VL-3B and the fallback Qwen3-VL-2B on one T4 | Soheil | done 2026-10-16 (both pass G1) |

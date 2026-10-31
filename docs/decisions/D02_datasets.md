@@ -722,7 +722,8 @@ pairs: frames of the same examination with the camera moved, not copies.
    - the strict subset;
    - the external test.
 
-   The conclusions (H1-H4) are reported for each.
+   The conclusions (H1-H4) are reported for each. (Changed on 2026-10-29: the strict subset is
+   dropped, and three tests remain; see the additions below.)
 
 **The agent's notes** (facts from the committed counts, and what this leaves open):
 - **The strict subset equals the filtered test at F = 0.86.**
@@ -755,6 +756,37 @@ pairs: frames of the same examination with the camera moved, not copies.
   - the comparisons on the external test;
   - the verdicts for each of the four tests: today `evaluation/verdicts.py` reads the primary
     rows only.
+
+### Amendment 7, additions (2026-10-29, Soheil): RC-D1 run 4b done; the strict subset dropped
+
+**RC-D1 run 4b is done.** Saved notebook version `notebookd7588ea09b`; rule
+`full:0.92:or_crop:0.80`, held-out filter F 0.86. As reported, and as in the committed
+`results/data/summary.csv` (38a20dc):
+- groups 4,122, the largest 447 (6.9 %); val/test confirmed duplicates of train 0;
+- pairs within 4 bits not joined: 743 (111 across splits);
+- validation keeps 390 of 968 images (11,598 QA rows); test keeps 512 of 968 images (12,067 QA
+  rows); masked test images kept 58.5 %; train 106,627 QA rows;
+- `split_sha256` `54dfa70a9aa99ea86262447acfd16fe4d4e871272781a31f39c9f330f4f7d090`;
+  `test_unfiltered_sha256` `adf50c68ee84f727329860ddbd17a6747d3b2e0e37e9e33dd4dcd6b36dc036cb`;
+- bundle 8,511 files, verify OK, `tests/test_results.py` passed;
+- its final sheet is the F 0.86 sheet of the filter sweep (the same split hash), judged under
+  amendment 7.
+
+The shared data are the private Kaggle dataset `medcompress-data`, shared with Amir and Farzan.
+The split hash is pinned in `configs/data/kvasir_vqa_x1.yaml` (`split_sha256`). Every card's
+shared data are checked against it when attached, and RC-TT1 also rebuilds and hashes its
+training split.
+
+**The strict subset is no longer a separate analysis.** At F = 0.86 it is 100 % of the
+filtered test: its margin, 0.05 below the rule's 0.92, gives 0.87, which is above F (and its
+crop level, 0.75, is above the filter's 0.70). So it is dropped from the list of tests, and
+**three tests remain**:
+- the filtered test (reduced-leakage, co-primary);
+- the unfiltered test;
+- the external test from another centre (co-primary).
+
+Every model is scored on these three, and the conclusions are reported for each. The code
+keeps `09_compare_arms.py --strict`, but no card runs it any more.
 
 ## Answer format for the inbox
 

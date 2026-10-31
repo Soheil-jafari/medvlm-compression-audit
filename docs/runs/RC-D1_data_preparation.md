@@ -20,14 +20,12 @@
   - write **one shared-data folder** (the images, the rows, Kvasir-SEG and the private RC-D1
     files, with a SHA-256 manifest) that every later card attaches as a private Kaggle dataset.
 - Who: **Soheil** (decision of 2026-10-17).
-- Status: `blocked` for the runner (its RC-D1 plan has no `--rule` and no `--heldout-filter`,
-  and would repeat run 4's rule). **Run 4 is not accepted** (D02 amendment 5), and **the rule
-  sweep stopped** (D02 amendment 6, 2026-10-28; section 5). The held-out filter sweep is done
-  and judged; none of its F was clean, and D02 amendment 7 sets **F = 0.86** (section 5). Next,
-  by hand: run 4b with `full:0.92:or_crop:0.80` and F = 0.86 (section 3e).
-
-  Runs 1, 2, 3 and 4 and both sweeps are recorded in section 5. Nothing from them is used but
-  the swept rule's groups and the filter at F = 0.86.
+- Status: `done` (2026-10-29): **run 4b** is the accepted first pass (section 5): rule
+  `full:0.92:or_crop:0.80`, held-out filter F 0.86, `split_sha256` 54dfa70a.... The shared data
+  are the private Kaggle dataset `medcompress-data`; every later card attaches it.
+  - Pass 2 (the counts with the label values) follows once the label values are confirmed.
+  - Runs 1, 2, 3 and 4 and both sweeps are recorded in section 5. Nothing from them is used but
+    the swept rule's groups and the filter at F = 0.86.
 
 ## 2. Requirements
 
@@ -261,13 +259,18 @@ What `results/data/summary.csv` holds after run 4 (aggregate counts only; experi
 | `official:images:*`, `official:test_rows:*`, `official:test_only_min_distance_to_train:*` | the official split's overlap (data card, appendix item) |
 
 **Pass 2** (after the agent has committed the label values and the team has confirmed them), a
-new CPU notebook with run 4's shared data and RC-D1-embed's dataset attached:
+new CPU notebook:
+- attach run 4b's shared data (`medcompress-data`) and the datasets of section 3c, from which
+  the embeddings folder is rebuilt as there;
+- pass 2 uses run 4b's rule and filter, so that it rebuilds the same split. The runner's plan
+  adds them itself.
 
 ```bash
-python scripts/run_card.py --card RC-D1-counts --data-root /kaggle/input/<shared-data> \
-    --embed-dir /kaggle/input/rc-d1-embed
-# by hand: python scripts/prepare_data.py counts --data-root /kaggle/input/<shared-data> \
-#     --split-seed 20261012 --close-bits 4 --mask-threshold 4 --embed-dir /kaggle/input/rc-d1-embed
+python scripts/run_card.py --card RC-D1-counts --data-root /kaggle/input/medcompress-data \
+    --embed-dir /kaggle/working/rc_d1_embed
+# by hand: python scripts/prepare_data.py counts --data-root /kaggle/input/medcompress-data \
+#     --split-seed 20261012 --close-bits 4 --mask-threshold 4 --embed-dir /kaggle/working/rc_d1_embed \
+#     --rule full:0.92:or_crop:0.80 --heldout-filter 0.86
 ```
 
 ### 3c. The rule sweep (D02 amendment 5; CPU, Save & Run All): done 2026-10-28, stopped (section 5)
@@ -749,16 +752,34 @@ them.
 
   The internal test is reported as a "reduced-leakage" test with these residual counts.
 
-### Run 4b (section 3e)
+### Run 4b (section 3e; reported 2026-10-29, Soheil): rule full:0.92:or_crop:0.80, F 0.86; ACCEPTED
 
-- Run by / date:
-- Commit actually used:
-- The rule (`--rule`) and the filter (`--heldout-filter`):
-- Wall time:
-- The `groups ...` line and the `strict test subset ...` line:
-- The `held-out filter F ...` line:
-- Hashes printed at the end (`split_sha256`, the same as the filter sweep's for this F;
-  `test_unfiltered_sha256`; manifest hashes, the bundle's file count):
-- The final contact sheet: same-scene pairs seen in band 1, band 2, band 3 (number, or none):
-- Name of the private shared-data dataset, and who it is shared with:
-- Anything unusual (errors, retries, changed settings):
+- Run by / date: Soheil, reported 2026-10-29 (saved notebook version `notebookd7588ea09b`)
+- Commit actually used, wall time: not reported here
+- The rule and the filter: `--rule full:0.92:or_crop:0.80 --heldout-filter 0.86`
+- The groups: 4,122 groups, the largest 447 (6.9 %). Held-out images with a confirmed
+  duplicate in train: 0. Pairs within 4 bits not joined: 743 (111 across splits).
+- The held-out filter at F 0.86:
+  - validation keeps 390 of 968 images (11,598 QA rows);
+  - test keeps 512 of 968 images (12,067 QA rows);
+  - masked test images kept 58.5 %.
+- Samples per split: train 106,627 / val 11,598 / test 12,067.
+- The strict test subset: 512 images, the whole filtered test, so it is no longer a separate
+  analysis (D02 amendment 7, additions of 2026-10-29).
+- Hashes:
+  - `split_sha256` `54dfa70a9aa99ea86262447acfd16fe4d4e871272781a31f39c9f330f4f7d090`, the same
+    as the filter sweep's at F 0.86. It is pinned in `configs/data/kvasir_vqa_x1.yaml`;
+  - `test_unfiltered_sha256`
+    `adf50c68ee84f727329860ddbd17a6747d3b2e0e37e9e33dd4dcd6b36dc036cb`;
+  - manifests: `kvasir_vqa_x1`
+    `972ebfeb0176a05be4c6c8457a055b916b8eddceaf23c514fcd685ec1bcbacc5`, `kvasir_seg`
+    `718bd4f5644714a771c04a130829b65553a483c34c3b810991225d275c2e32b3`;
+  - the bundle: 8,511 files, `verify` OK, `tests/test_results.py` passed.
+- The final contact sheet: it is the F 0.86 sheet of the filter sweep (the same split hash),
+  judged under D02 amendment 7: about 4-6 same-examination pairs of 24 in band 1, none in
+  bands 2 and 3.
+- The private shared-data dataset: `medcompress-data` (made from that version's
+  `medcompress_data` folder), shared with Amir and Farzan.
+- `results/data/summary.csv`: committed by Soheil (38a20dc); its counts agree with the lines
+  above.
+- Anything unusual: none reported.
