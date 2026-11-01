@@ -16,7 +16,8 @@ C       Finding list from ``configs/domain/<domain>.yaml`` (domain undecided).
 X_cal   Calibration images drawn from the training split
         (``data/splits.make_calibration_subset``); size N (A4: 32/64/128/256).
 q_c     Fixed probe question for finding c, from the domain probe template, e.g.
-        "Is there a <finding> in this image? Answer yes or no."
+        "Is there <finding> in this image? Answer yes or no." (the finding's display name
+        carries its article: "a polyp", "ulcerative colitis").
 y(c,x)  Correct answer ("yes"/"no") for finding c on image x, from labels.
 theta   Parameters of the E2 student (the starting point of every pruning arm).
 theta\\j Same model with unit j ablated (zeroed / bypassed for scoring only;

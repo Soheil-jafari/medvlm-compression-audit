@@ -98,7 +98,9 @@ visual features (where the architecture has them) are protected.
 \subsection{Clinically weighted pruning criterion}
 Let $C$ be the pre-registered finding list and $X_{\mathrm{cal}}$ a calibration set
 of training images. For every finding $c$ and image $x$ we ask a fixed probe
-$q_c$ = ``Is there a $\langle c \rangle$ in this image? Answer yes or no.'' and read
+$q_c$ = ``Is there $\langle c \rangle$ in this image? Answer yes or no.'', where
+$\langle c \rangle$ is the finding's name with its article (``a polyp'', ``ulcerative
+colitis''), and read
 the log-probabilities of the two answers from a single forward pass (no
 generation). For each candidate unit $j$,
 \begin{equation}

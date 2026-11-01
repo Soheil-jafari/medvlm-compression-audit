@@ -19,7 +19,7 @@
 | 10 | Chen et al., *GRACE* (full title TODO) | ICML 2026 | 2601.22709 | Template for our quantization-aware distillation arm (E4). | TODO |
 | 11 | MedTokenBudget, authors and title TODO | preprint | 2609.30613 | TODO: summarise after reading. | TODO |
 | 12 | Colon-X (ColonVQA, ColonPert), authors and title TODO | preprint | 2512.03667 | Source of candidate rare-finding / stress-test datasets. | TODO |
-| 13 | Hooker, Courville, Clark, Dauphin, Frome, *What Do Compressed Deep Neural Networks Forget?* | preprint (2019) | 1911.05248 | The cost of compression falls on a small subset of examples, hidden by top-line accuracy. Basis of our pre-registered secondary flip analysis (2026-10-31): the test probes whose answer flips between E0 and each compressed arm, by finding and lesion-size stratum. | TODO |
+| 13 | Sara Hooker, Aaron Courville, Gregory Clark, Yann Dauphin, Andrea Frome, *What Do Compressed Deep Neural Networks Forget?* | arXiv preprint (2019) | 1911.05248 | The cost of compression falls on a small subset of examples, hidden by top-line accuracy. Basis of our pre-registered secondary flip analysis (2026-10-31): the test probes whose answer flips between E0 and each compressed arm, by finding and lesion-size stratum. | TODO |
 
 ## Paper structure for related work
 

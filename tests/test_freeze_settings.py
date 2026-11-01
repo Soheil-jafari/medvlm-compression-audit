@@ -88,9 +88,40 @@ def test_finding_list_follows_the_preregistered_rule() -> None:
     assert counts == [(810, 106), (691, 98), (546, 25)]
 
 
-def test_display_names_are_the_dataset_wording() -> None:
-    names = _domain()["probe"]["display_names"]
-    assert names == {finding: value for value, finding in FROZEN.items()}
+def test_probes_read_as_frozen_after_the_wording_fix() -> None:
+    from medcompress.data.probes import format_probe_question
+
+    probe = _domain()["probe"]
+    assert probe["template"] == "Is there {finding} in this image? Answer yes or no."
+    questions = [
+        format_probe_question(probe["template"], probe["display_names"][f]) for f in FROZEN.values()
+    ]
+    assert questions == [
+        "Is there a polyp in this image? Answer yes or no.",
+        "Is there ulcerative colitis in this image? Answer yes or no.",
+        "Is there oesophagitis in this image? Answer yes or no.",
+    ]
+
+
+def test_free_text_is_searched_for_the_dataset_wording() -> None:
+    from medcompress.evaluation import free_text
+    from medcompress.evaluation.runner import resolve_settings
+
+    assert _domain()["finding_names"] == {finding: value for value, finding in FROZEN.items()}
+    config, _ = load_experiment("E0")
+    settings = resolve_settings(config)
+    assert settings.mention_names["polyp"] == "polyp"  # not the probe's "a polyp"
+    assert settings.display_names["polyp"] == "a polyp"
+    from medcompress.data.base import VQASample
+
+    row = VQASample("s", "d", "i.jpg", "q", "There are no polyps.", findings={"polyp": False})
+    rates = {
+        m.name: m.value
+        for m in free_text.hallucination_metrics(
+            ["There are two polyps."], [row], ["polyp"], settings.mention_names
+        )
+    }
+    assert rates["hallucination_rate"] == 1.0  # found by the dataset wording
 
 
 def test_all_findings_are_common_and_no_rare_group_exists() -> None:

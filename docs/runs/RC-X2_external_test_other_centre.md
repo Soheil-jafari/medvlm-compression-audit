@@ -127,7 +127,8 @@ Written so that the external test asks the same questions as the internal one:
 
 - **Probes:** one image-level probe per PolypGen image, polyp present or absent, with the same
   template and display name: "Is there a polyp in this image? Answer yes or no."
-  (`domain.probe.template`, display name "polyp"). Present = a mask with at least one polyp
+  (`domain.probe.template` "Is there {finding} in this image? Answer yes or no.", display name
+  "a polyp"; wording fix of 2026-10-31). Present = a mask with at least one polyp
   pixel; absent = an empty mask or a frame released without a polyp. One forward pass, log
   P(yes) against log P(no), as for the internal test.
 - **Size strata from its masks, with OUR training quartiles:** the lesion area is the mask's

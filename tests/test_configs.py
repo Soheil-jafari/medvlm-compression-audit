@@ -137,8 +137,10 @@ def test_domain_configs(name: str) -> None:
     for key in ("findings", "prevalence_groups", "probe", "small_findings"):
         assert key in domain
     assert set(domain["prevalence_groups"]) >= {"common", "medium", "rare"}
-    question = format_probe_question(domain["probe"]["template"], "lesion")
-    assert question.startswith("Is there a lesion in this image?")
+    template = domain["probe"]["template"]
+    # endoscopy's display names carry their own article (wording fix of 2026-10-31)
+    lesion = "lesion" if "a {finding}" in template else "a lesion"
+    assert format_probe_question(template, lesion).startswith("Is there a lesion in this image?")
 
 
 def test_budgets_config() -> None:

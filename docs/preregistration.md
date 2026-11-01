@@ -41,12 +41,12 @@ How to read this draft:
 | Item | Rule | Value |
 |---|---|---|
 | Finding list C | every answer value of the source question "are there any abnormalities in the image" (label rule `abnormalities`, `configs/data/kvasir_vqa_x1.yaml`) with at least **20** positive training images and at least **10** positive images in each of validation and test. Instruments and landmarks are control questions, not findings (D02) | **Frozen 2026-10-31** (amendment, section 11): `polyp`, `ulcerative_colitis`, `oesophagitis`, images with the value train / validation / test 810 / 105 / 106, 691 / 85 / 98, 546 / 37 / 25 (`answer_count:abnormalities:<value>:<split>`, RC-D1 run 4b). Excluded, too few to test (a limitation): barretts 14 / 2 / 0, short-segment barretts 8 / 0 / 1, hemorrhoids 1 / 0 / 0 |
-| Display names | the answer value as written in the source answers, lower case | **Frozen 2026-10-31:** "polyp", "ulcerative colitis", "oesophagitis" |
+| Display names | the words put into the probe template; the finding's name in the source answers, lower case, with its own article where English needs one | **Frozen 2026-10-31** (wording fix the same day, section 11): "a polyp", "ulcerative colitis", "oesophagitis". Free-text answers are searched for the dataset's wording without the article (`domain.finding_names`: "polyp", "ulcerative colitis", "oesophagitis") |
 | Prevalence | images with the value / training images (4,513) | **2026-10-31:** 17.9 %, 15.3 %, 12.1 % (computed from the committed counts, `data/summary.py`) |
 | Prevalence groups | the draft cut points were common >= 10 %, rare < 2 % | **Frozen 2026-10-31:** all three findings are common; **no rare or medium group exists** in this dataset, so no cut point is set (`thresholds: null`). The rare-group analysis is dropped from the internal data (a limitation); the per-finding results stay. (The draft cut points would give the same groups.) |
 | Mask findings | the findings Kvasir-SEG delineates (`image_reliance_check.mask_findings`) | **Frozen 2026-10-31:** `[polyp]` |
 | Lesion-size strata | quartiles of the polyp mask area of training images with a linked mask (`lesion_area_threshold:q1..q3`); "small" = below q1 | **Frozen 2026-10-31:** q1 0.05676, q2 0.11336, q3 0.19932 (the committed values, full precision in `configs/domain/endoscopy.yaml`); the same cut points for the external test |
-| Probe | "Is there a {finding} in this image? Answer yes or no.", one forward pass, log P(yes) against log P(no) | D02, S04 |
+| Probe | "Is there {finding} in this image? Answer yes or no." (wording fix of 2026-10-31, before any model result; it was "Is there a {finding} ..."), one forward pass, log P(yes) against log P(no) | D02, S04, section 11 |
 
 ## 3. Finding weights (clinical criterion E7, E8, A2, A4-A6)
 
@@ -225,8 +225,8 @@ waited on these settings, so no model has been scored. Every count comes from th
 1. **Finding list** (`domain.findings`, label rule values): `polyp`, `ulcerative_colitis`,
    `oesophagitis`. Images with the abnormality answer value, train / test: 810 / 106,
    691 / 98, 546 / 25 (validation 105, 85, 37). They meet the draft rule of section 2 (at
-   least 20 training and 10 validation and test images). Probe display names are the
-   dataset's own wording: "polyp", "ulcerative colitis", "oesophagitis".
+   least 20 training and 10 validation and test images). Probe display names come from the
+   dataset's own wording (see the wording fix, item 8).
    - Excluded: barretts, short-segment barretts and hemorrhoids (test images 0, 1, 0): too few
      to test. Stated as a limitation. An image whose only abnormality value is excluded is a
      negative for the three findings.
@@ -284,6 +284,18 @@ waited on these settings, so no model has been scored. Every count comes from th
    - no extra GPU: it reads the per-probe answers stage 06 already saves
      (`evaluation/flips.py`, run by the comparison step; RC-R1 also hands off E0's test
      outcomes).
+
+8. **Probe wording fix** (Soheil, 2026-10-31, the same day, after the items above and
+   **before any model result**: RC-E0a had not run, so no model had answered a probe). The
+   template "Is there a {finding} in this image? Answer yes or no." made two of the three
+   probes ungrammatical ("Is there a ulcerative colitis", "Is there a oesophagitis").
+   - Template: **"Is there {finding} in this image? Answer yes or no."**
+   - Display names carry their own article: `polyp` -> "a polyp", `ulcerative_colitis` ->
+     "ulcerative colitis", `oesophagitis` -> "oesophagitis". The polyp probe reads as before.
+   - Free-text answers are still searched for the dataset's wording without an article
+     (`domain.finding_names`), so the hallucination, omission and negation rates do not change
+     with the probe wording ("no polyps" is still found).
+   - The external test (PolypGen) uses the same template and the display name "a polyp".
 
 Still open before `preregistration.frozen_on` is set: how the two co-primary tests combine in a
 verdict, the finding weights (cap, tiers), the budgets and the other **[team]** items above.
