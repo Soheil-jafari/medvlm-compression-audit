@@ -477,6 +477,12 @@ must be logged here.
     `e0-teacher-cache` shared with Amir and Farzan. The hash is pinned in
     `configs/training.yaml` and `configs/recovery.yaml`; every reader refuses another cache.
   - Rule 3's quality part is read when E1 seed 0 is committed; E2's training checks it.
+- **2026-11-02 (Soheil): per-finding AUROC and "yes" rate, a pre-registered secondary metric
+  for every model** (before any student or compressed result; pre-registration section 11
+  item 9). The AUROC of the probe scores with an image-bootstrap interval, the "yes" rate and
+  the class counts per finding, next to sensitivity and specificity, so a method that only
+  shifts the yes/no bias can be told from one that loses discrimination. E0's from its saved
+  validation outcomes on CPU (`scripts/rescore_probes.py`, RC-E0a section 3b).
 - **2026-11-02 (Soheil): inputs found by their manifests.** No cell uses a fixed
   `/kaggle/input` path any more: the shared data are the folder of a `bundle_manifest.json` with
   `private/` next to it, a hand-off the folder of a `bundle_manifest.json` whose path contains

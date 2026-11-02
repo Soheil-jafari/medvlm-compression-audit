@@ -86,7 +86,7 @@ python scripts/handoff.py export --kind adapter --exp E2 --seed $SEED \
 python -m pytest -q tests/test_results.py                       # must pass before you commit
 mkdir -p /kaggle/working/results_to_commit/results
 cp -r results/E2 /kaggle/working/results_to_commit/results/
-grep -E "train_|n_probes_scored|macro_balanced_accuracy|small_finding_recall|lesion_mask_effect|evaluation_seconds" \
+grep -E "train_|n_probes_scored|macro_balanced_accuracy|sensitivity|specificity|auroc|yes_rate|small_finding_recall|lesion_mask_effect|evaluation_seconds" \
     results/E2/nobudget/seed${SEED}/metrics.csv
 ```
 

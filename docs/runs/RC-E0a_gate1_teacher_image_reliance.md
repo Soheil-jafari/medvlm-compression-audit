@@ -108,6 +108,36 @@ What it prints:
 If a script stops with "configuration incomplete", a setting is open: do not fill it in
 yourself, tell the agent through the inbox.
 
+### 3b. The per-finding AUROC and "yes" rate for E0 (CPU, no GPU; added 2026-11-02)
+
+Pre-registration section 11 item 9. The validation pass above saved every probe's score in
+`outputs/E0/nobudget/seed0/outcomes.npz` (in that notebook version's output), so the new rows
+are recomputed from it without a GPU. Kaggle settings: **Accelerator None**, Internet on.
+Add Input: the **output of the RC-E0a notebook version** (Your Work -> the notebook -> that
+version -> Output). One cell; nothing to edit:
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
+OUT=$(find /kaggle/input -path '*outputs/E0/nobudget/seed0/outcomes.npz' | head -n 1)
+[ -n "$OUT" ] || { echo "STOP: no E0 outcomes.npz attached: add the output of the RC-E0a version"; exit 1; }
+echo "outcomes: $OUT"
+python scripts/rescore_probes.py --exp E0 --seed 0 --outcomes "$OUT"
+python -m pytest -q tests/test_results.py                       # must pass before you commit
+mkdir -p /kaggle/working/results_to_commit/results
+cp -r results/E0 /kaggle/working/results_to_commit/results/
+```
+
+It first checks the outcomes against the committed rows (681 probes and every finding's
+sensitivity and specificity must be identical) and stops otherwise. Then it prints and adds
+`auroc:<f>` (with its interval), `yes_rate:<f>`, `n_positives:<f>` and `n_negatives:<f>`;
+no committed number changes. Commit `results_to_commit/results/E0/nobudget/seed0/metrics.csv`.
+If the version's output no longer holds `outcomes.npz`, the rows come with the next E0
+evaluation instead.
+
 ## 4. What to commit back
 
 - `results/E0/nobudget/seed0/metrics.csv` (from `results_to_commit/`): the `teacher_*` rows
