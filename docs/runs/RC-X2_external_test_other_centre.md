@@ -79,8 +79,9 @@ identifiers, no per-image rows, no file names.
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
-python scripts/prepare_data.py overlap --data-root /kaggle/input/medcompress-data \
-    --images /kaggle/input/<polypgen-dataset>/<images-folder> --name polypgen \
+DATA=$(python scripts/find_inputs.py data) || exit 1         # found by its manifest
+IMAGES=/kaggle/input/datasets/<user>/<polypgen-dataset>/<images-folder>   # PolypGen has no manifest: give its folder
+python scripts/prepare_data.py overlap --data-root $DATA --images $IMAGES --name polypgen \
     --dedup-threshold 4
 ```
 

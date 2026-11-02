@@ -95,12 +95,13 @@
 - **Attach (Add Input), all private datasets:** `medcompress-data` (RC-D1 run 4b). To resume,
   also the output of the stopped notebook version. For `--extend`, also the teacher adapter
   hand-off.
-- **Checks before anything runs:** `--data-root /kaggle/input/<shared-data>` is verified
-  (the SHA-256 of every file), and the run stops if a file differs. The plan is read from
+- **Checks before anything runs:** `--data-root $DATA`, found by its manifest
+  (`DATA=$(python scripts/find_inputs.py data) || exit 1`), is verified (the SHA-256 of every
+  file), and the run stops if a file differs. The plan is read from
   RC-TT0's committed file, and the run stops if that file is missing.
 - **Use the cells of section 3** (Save & Run All). `notebooks/run_card.ipynb` with
-  `CARD = "RC-TT1"` (`python scripts/run_card.py --card RC-TT1 --data-root
-  /kaggle/input/medcompress-data`) also runs it, but it has no time budget: it is only safe if
+  `CARD = "RC-TT1"` (`python scripts/run_card.py --card RC-TT1`, inputs found by their
+  manifests) also runs it, but it has no time budget: it is only safe if
   one session is longer than the whole training. Steps:
   - train the teacher (and, at the end, the validation evaluation and Gate 1 when they can run)
 - **Hand-offs it writes:** `E0_teacher_adapter` under `/kaggle/working/handoff/`. Make it ONE
@@ -135,7 +136,7 @@ except metadata.PackageNotFoundError:
 sys.exit(0 if version >= (0, 16) else 1)
 PY
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
-DATA=/kaggle/input/medcompress-data
+DATA=$(python scripts/find_inputs.py data) || exit 1         # found by its manifest
 python scripts/prepare_data.py verify --data-root $DATA        # must print OK (8,511 files)
 python -m pytest -q tests/test_training.py -k "time_budget or stopped_training"   # tiny model, CPU
 python scripts/train_teacher.py --data-root $DATA --dry-run      # the plan; loads no model
@@ -187,7 +188,7 @@ except metadata.PackageNotFoundError:
 sys.exit(0 if version >= (0, 16) else 1)
 PY
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
-DATA=/kaggle/input/medcompress-data
+DATA=$(python scripts/find_inputs.py data) || exit 1         # found by its manifest
 python scripts/prepare_data.py verify --data-root $DATA        # must print OK (8,511 files)
 find /kaggle/input -path '*teacher_resume/current/progress.json'   # the state of session 1
 python scripts/train_teacher.py --data-root $DATA --stop-after-hours 11 \
@@ -212,8 +213,9 @@ ls /kaggle/working/handoff                                      # E0_teacher_ada
 **The one extension** (only if the quality rule fails; decided after Gate 1 and E1 seed 0):
 
 ```bash
-python scripts/train_teacher.py --data-root /kaggle/input/medcompress-data --extend \
-    --from /kaggle/input/<teacher-adapter> --stop-after-hours 11
+DATA=$(python scripts/find_inputs.py data) || exit 1
+ADAPTER=$(python scripts/find_inputs.py handoff E0_teacher_adapter) || exit 1
+python scripts/train_teacher.py --data-root $DATA --extend --from $ADAPTER --stop-after-hours 11
 ```
 
 ## 4. What to commit back
@@ -234,7 +236,7 @@ python scripts/train_teacher.py --data-root /kaggle/input/medcompress-data --ext
 | Plan followed | `teacher_train_steps`, `teacher_n_examples` | 2,375 and 38,000 (`ceil(N / 16)`, N as RC-TT0's `rule_n_examples_if_t4x2_counts_once`, capped at the training rows) |
 | Published targets used | `teacher_lora_target:<name>` | every published target adapts at least one layer (a projection of the decoder: 28, one per decoder layer) |
 | Training sane | `teacher_train_loss_final` | finite |
-| Hand-off intact | `python scripts/handoff.py verify /kaggle/input/<teacher-adapter>` | prints OK |
+| Hand-off intact | `python scripts/handoff.py verify $(python scripts/find_inputs.py handoff E0_teacher_adapter)` | prints OK |
 
 ## 6. Run report (filled by the person who ran it)
 

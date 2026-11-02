@@ -260,6 +260,36 @@ def cache_manifest_hash(cache_dir: Path) -> str:
     return str(_read_manifest(cache_dir)["manifest_sha256"])
 
 
+CACHE_PIN_KEY = "teacher_cache_manifest_sha256"
+"""``training.<key>``: the manifest hash of the cache every consumer must read (RC-E0b)."""
+
+
+def load_pinned_teacher_cache(config: Mapping[str, Any], cache_dir: Path) -> Iterator[CacheRecord]:
+    """:func:`load_teacher_cache` after checking the cache is the pinned one (RC-E0b's).
+
+    ``training.teacher_cache_manifest_sha256`` (``recovery.`` for the pruning arms) holds the
+    hash RC-E0b printed. A different cache (another teacher, other settings, a rebuilt one) is
+    refused before any record is read, as the shared data are refused when their split hash
+    differs.
+
+    Raises:
+        ConfigError: the cache's manifest hash is not the pinned one.
+    """
+    from medcompress.config import ConfigError, find_todos
+
+    pinned = (config.get("training") or {}).get(CACHE_PIN_KEY)
+    if pinned is None:
+        pinned = (config.get("recovery") or {}).get(CACHE_PIN_KEY)
+    if pinned is not None and not find_todos({"v": pinned}):
+        actual = cache_manifest_hash(Path(cache_dir))
+        if actual != str(pinned):
+            raise ConfigError(
+                f"the teacher cache at {cache_dir} has manifest {actual}, but the config pins "
+                f"{pinned} (RC-E0b): attach the e0-teacher-cache hand-off"
+            )
+    return load_teacher_cache(cache_dir)
+
+
 def load_teacher_cache(cache_dir: Path, *, verify: bool = True) -> Iterator[CacheRecord]:
     """Iterate cached records in the order they were written.
 

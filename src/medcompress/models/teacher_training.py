@@ -414,3 +414,57 @@ def saved_step(folder: Path) -> int:
         if progress.is_file():
             return int(json.loads(progress.read_text(encoding="utf-8")).get("step", 0))
     return 0
+
+
+TEACHER_TRAIN_SECONDS = "teacher_train_seconds"
+"""RC-TT1's training time, summed over its sessions (``scripts/train_teacher.py``)."""
+QUALITY_HEADLINE = "macro_balanced_accuracy"
+"""Rule 3's quality part compares the validation macro balanced accuracy of E0 and E1 seed 0."""
+
+
+def teacher_quality(results_root: Path, margin: float) -> tuple[bool | None, str]:
+    """Rule 3, quality part, from the committed validation rows.
+
+    Returns ``(passed, why)``. ``passed`` is ``None`` while E0's or E1 seed 0's validation row
+    is missing. After the one extension (``teacher_extension_examples`` > 0) the teacher is
+    accepted either way (pre-registration section 6), so it passes.
+    """
+
+    def values(run: str) -> dict[str, float]:
+        path = Path(results_root) / run / "nobudget" / "seed0" / "metrics.csv"
+        return read_values(path) if path.is_file() else {}
+
+    e0, e1 = values("E0"), values("E1")
+    if e0.get("teacher_extension_examples", 0.0) > 0:
+        return True, "the teacher was extended once: accepted either way (rule 3)"
+    if QUALITY_HEADLINE not in e0:
+        return None, "E0's validation macro balanced accuracy is not committed (RC-E0a)"
+    if QUALITY_HEADLINE not in e1:
+        return None, "E1 seed 0's validation macro balanced accuracy is not committed (RC-E1)"
+    teacher, student = e0[QUALITY_HEADLINE], e1[QUALITY_HEADLINE]
+    passed = teacher >= student + margin
+    sign = ">=" if passed else "<"
+    return passed, (f"E0 {teacher:.4f} {sign} E1 seed 0 {student:.4f} + {margin:g} "
+                    "(validation macro balanced accuracy)")  # fmt: skip
+
+
+def require_teacher_quality(config: Mapping[str, Any]) -> None:
+    """Refuse E2 until rule 3's quality part has been read and passed (or the extension ran).
+
+    If it fails, the teacher is trained once more (+50 % of N) and the cache is rebuilt, so an
+    E2 run on the present cache would be wasted.
+
+    Raises:
+        ConfigError: the rows are missing, or the teacher fails the margin.
+    """
+    from medcompress.config import ConfigError, load_config
+
+    settings = load_config("teacher_training.yaml").get("teacher_training", {})
+    margin = float(settings.get("quality", {}).get("margin_over_e1_seed0", 0.02))
+    passed, why = teacher_quality(Path(config["paths"]["results_root"]), margin)
+    if passed is None:
+        raise ConfigError(f"rule 3 cannot be read yet: {why}; E2 waits for it")
+    if not passed:
+        raise ConfigError(f"rule 3 fails: {why}. The teacher is extended once (+50 % of N) and "
+                          "the cache rebuilt before E2 (RC-TT1 --extend)")  # fmt: skip
+    print(f"rule 3 (teacher quality): {why}")

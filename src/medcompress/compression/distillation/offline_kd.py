@@ -123,6 +123,7 @@ _KNOWN_KEYS = frozenset(
     {
         "mode", "method", "lora", "steps", "learning_rate", "batch_size", "grad_accumulation",
         "kd_weight", "kd_temperature", "data_subset", "teacher_cache_from",
+        "teacher_cache_manifest_sha256",
     }
 )  # fmt: skip
 
@@ -550,11 +551,10 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
     train = load_prepared(Path(paths["data_root"]), dataset, Path(paths["private_root"]))["train"]
     records = None
     if cfg.mode == "offline_kd":
-        from medcompress.models.teacher_cache import load_teacher_cache
+        from medcompress.models.teacher_cache import load_pinned_teacher_cache
 
-        records = {
-            r.sample_id: r for r in load_teacher_cache(Path(paths["cache_root"]) / "teacher")
-        }
+        cache = Path(paths["cache_root"]) / "teacher"
+        records = {r.sample_id: r for r in load_pinned_teacher_cache(config, cache)}
     pool = training_pool(train, cfg.data_subset, data_seed(config))
     examples = examples_from_samples(pool, Path(paths["data_root"]), records=records)
     if records is not None:

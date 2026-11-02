@@ -281,10 +281,10 @@ def run_prune_and_recover(
 
         train = load_train_samples(config)
     if records is None:
-        from medcompress.models.teacher_cache import load_teacher_cache
+        from medcompress.models.teacher_cache import load_pinned_teacher_cache
 
         cache = Path(paths["cache_root"]) / "teacher"
-        records = {r.sample_id: r for r in load_teacher_cache(cache)}
+        records = {r.sample_id: r for r in load_pinned_teacher_cache(config, cache)}
     recovery = dict(config.get("recovery") or {})
     pool = training_pool(train, recovery.get("data_subset"), pool_seed)
     examples = examples_from_samples(pool, data_root, records=records)

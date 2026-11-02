@@ -5,6 +5,7 @@
 recovery:
   method: lora_plus_offline_kd
   teacher_cache_from: E0
+  teacher_cache_manifest_sha256: "d6ba0cb9d166cb2ae9a5dd8af5a1bbd2eebba904df0ccd795aded0d65b4f15d8"   # RC-E0b
   lora:
     rank: 16
     alpha: 32

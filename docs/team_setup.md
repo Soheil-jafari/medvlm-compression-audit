@@ -31,20 +31,30 @@ cd medvlm-compression-audit
 ## 3. Attach the shared datasets
 
 In the Kaggle notebook: **Add Input -> Datasets**, find the dataset (it is listed among the
-datasets shared with you) and add it. It appears read-only under `/kaggle/input/<name>/`.
+datasets shared with you) and add it. It appears read-only somewhere under `/kaggle/input/`
+(for our private datasets `/kaggle/input/datasets/<user>/<slug>/...`, sometimes a folder or two
+deeper). So no cell uses a fixed path: every input is **found by its manifest**
+(`scripts/find_inputs.py`, `src/medcompress/inputs.py`):
 
-- `DATA` in the notebook's first cell is the shared-data dataset of RC-D1, for example
-  `/kaggle/input/medcompress-data`.
-- `FROM` lists the hand-off datasets the card reads (section 2b of the card), for example
-  `["/kaggle/input/e0-teacher-cache", "/kaggle/input/e2-seed1-adapter"]`.
+- the shared data (RC-D1, `medcompress-data`): the folder of a `bundle_manifest.json` that has
+  a `private/` folder next to it: `DATA=$(python scripts/find_inputs.py data) || exit 1`;
+- a hand-off (`E0_teacher_adapter`, `E0_teacher_cache`, `E2_seed1_adapter` ...): the folder of
+  a `bundle_manifest.json` whose path contains the hand-off's name (case and `-` against `_` do
+  not matter, so the slug `e2-seed1-adapter` matches `E2_seed1_adapter`):
+  `CACHE=$(python scripts/find_inputs.py handoff E0_teacher_cache) || exit 1`;
+- `python scripts/find_inputs.py handoffs` lists every attached hand-off.
+
+If an input is missing (or attached twice), the command prints `STOP: ...` with what to attach
+and the cell stops. In `notebooks/run_card.ipynb`, leave `DATA = None` and `FROM = []`: the
+runner finds the shared data and every attached hand-off the same way.
 
 Before anything runs, the runner checks the SHA-256 of every file against the dataset's
 manifest. It stops if a file differs or if a hand-off the card needs is missing, so a wrong or
 incomplete dataset costs minutes, not GPU hours. You can check a dataset by hand:
 
 ```bash
-python scripts/prepare_data.py verify --data-root /kaggle/input/<shared-data>   # the shared data
-python scripts/handoff.py verify /kaggle/input/<hand-off>                       # a hand-off
+python scripts/prepare_data.py verify --data-root "$(python scripts/find_inputs.py data)"
+python scripts/handoff.py verify "$(python scripts/find_inputs.py handoff E2_seed1_adapter)"
 ```
 
 ## 4. Run a card with Save & Run All
@@ -112,8 +122,10 @@ settings. If the stopped version kept its output:
 2. Turn the saved state into a resume hand-off:
 
    ```bash
+   STATE=$(find /kaggle/input -type d -path '*checkpoints/E2/seed1/resume' | head -1)
+   [ -n "$STATE" ] || { echo "STOP: no saved state of E2 seed 1 attached"; exit 1; }
    python scripts/handoff.py export --kind resume --exp E2 --seed 1 \
-       -o paths.checkpoint_root=/kaggle/input/<stopped-run-output>/checkpoints \
+       -o paths.checkpoint_root="${STATE%/E2/seed1/resume}" \
        --out /kaggle/working/handoff/E2_seed1_resume
    ```
 

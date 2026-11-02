@@ -30,8 +30,8 @@ number depends on the size of the test split, so allow up to 30 minutes on a slo
 - **Who:** Soheil (CPU).
 - **Kaggle settings:** no GPU (CPU); Internet off is fine.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; outcomes of E0 and E2 (RC-R1) and of every E3-E8 session.
-- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
-- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-C1"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-C1 --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+- **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-C1"` and `SEED = None` (`DATA` and `FROM` stay empty); it runs `python scripts/run_card.py --card RC-C1`, which finds the shared data and every attached hand-off by their manifests. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
   - comparisons
   - comparisons, unfiltered test
   - tables and figures
@@ -41,24 +41,20 @@ number depends on the size of the test split, so allow up to 30 minutes on a slo
 
 ## 3. Commands
 
-```bash
-git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
-cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
-pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
-export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
-export MEDCOMPRESS_RESULTS_ROOT=$PWD/results
-# Copy every attached outputs dataset into $MEDCOMPRESS_OUTPUT_ROOT, keeping the layout
-# <ID>[/<variant>]/<budget|nobudget>/seed<k>/outcomes_test.npz, for example:
-#   mkdir -p $MEDCOMPRESS_OUTPUT_ROOT && cp -r /kaggle/input/<outputs-dataset>/* $MEDCOMPRESS_OUTPUT_ROOT/
-find $MEDCOMPRESS_OUTPUT_ROOT -name outcomes_test.npz | wc -l   # write this in section 6
-find $MEDCOMPRESS_OUTPUT_ROOT -name outcomes_test_unfiltered.npz | wc -l   # the same number
+One cell (Kaggle settings and inputs of section 2b; **Save Version -> Save & Run All**). It finds the shared data and the attached hand-offs by their manifests (`scripts/find_inputs.py`), stops with a clear message if the shared data are missing, and runs the steps of section 2b with `scripts/run_card.py`, which also checks that every hand-off the card reads is there. Then it links every attached outcomes hand-off into the outputs folder, and writes the files to commit under `/kaggle/working/results_to_commit/`.
 
-python -m pytest -q tests/test_compare_stage.py
-python scripts/09_compare_arms.py
-python scripts/09_compare_arms.py --unfiltered   # the unfiltered test (D02 amendment 6)
-# no --strict: the strict subset is the whole filtered test at F = 0.86 (D02 amendment 7)
-python scripts/08_aggregate_results.py
-python -m pytest -q tests/test_results.py tests/test_paper.py   # must pass before you commit
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-C1 2>&1 | tee /kaggle/working/run_card_RC-C1.txt
+echo "run_card exit code: ${PIPESTATUS[0]}"
+find -L /kaggle/working/outputs -name outcomes_test.npz | wc -l              # write this in section 6
+find -L /kaggle/working/outputs -name outcomes_test_unfiltered.npz | wc -l   # the same number
 ```
 
 `09_compare_arms.py` stops with "configuration incomplete" if the pre-registration is not

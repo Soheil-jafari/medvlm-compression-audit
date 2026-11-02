@@ -32,6 +32,7 @@ from medcompress.evaluation.report import (
 from medcompress.registry import PRIMARY_BUDGET
 
 TIME_METRICS: tuple[tuple[str, str], ...] = (
+    ("teacher_train_seconds", "Teacher training"),  # RC-TT1 (train_teacher.py's teacher_ rows)
     ("teacher_cache_seconds", "Teacher cache"),
     ("train_seconds", "Training"),
     ("scoring_seconds", "Scoring"),

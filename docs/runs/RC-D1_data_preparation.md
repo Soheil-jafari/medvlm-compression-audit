@@ -266,9 +266,9 @@ new CPU notebook:
   adds them itself.
 
 ```bash
-python scripts/run_card.py --card RC-D1-counts --data-root /kaggle/input/medcompress-data \
-    --embed-dir /kaggle/working/rc_d1_embed
-# by hand: python scripts/prepare_data.py counts --data-root /kaggle/input/medcompress-data \
+python scripts/run_card.py --card RC-D1-counts --embed-dir /kaggle/working/rc_d1_embed
+# (the shared data are found by their manifest; by hand: DATA=$(python scripts/find_inputs.py data))
+# python scripts/prepare_data.py counts --data-root $DATA \
 #     --split-seed 20261012 --close-bits 4 --mask-threshold 4 --embed-dir /kaggle/working/rc_d1_embed \
 #     --rule full:0.92:or_crop:0.80 --heldout-filter 0.86
 ```

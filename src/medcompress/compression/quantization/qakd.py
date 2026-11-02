@@ -443,11 +443,10 @@ def run_qakd_training(
 
         train = load_train_samples(config)
     if records is None:
-        from medcompress.models.teacher_cache import load_teacher_cache
+        from medcompress.models.teacher_cache import load_pinned_teacher_cache
 
-        records = {
-            r.sample_id: r for r in load_teacher_cache(Path(paths["cache_root"]) / "teacher")
-        }
+        cache = Path(paths["cache_root"]) / "teacher"
+        records = {r.sample_id: r for r in load_pinned_teacher_cache(config, cache)}
     pool = training_pool(train, cfg.data_subset, seed_for_pool)
     examples = examples_from_samples(pool, Path(paths["data_root"]), records=records)
     require_teacher_records(pool, examples)

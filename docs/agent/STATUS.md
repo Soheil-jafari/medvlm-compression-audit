@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-10-31, iteration 62 (interactive run mode)
+**Last updated:** 2026-11-02, iteration 63 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S05 + S07: RC-TT1 done (adapter `e0-teacher-adapter`); the evaluation settings frozen (pre-registration amendment of 2026-10-31); next RC-E0a (Gate 1) and RC-E0b (cache and E0 validation); RC-X2 part A for PolypGen
+**Current stage:** S06: RC-E0a and RC-E0b done (Gate 1 passed; cache `e0-teacher-cache`); next RC-E1 (seed 0 first, rule 3), then RC-E2 on three accounts; the freeze items before any compression run
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -83,6 +83,13 @@
    analysis against E0 (after Hooker et al.) in the comparison step. RC-E0a and RC-E0b ready.
    Next: RC-E0a, then RC-E0b; RC-X2 part A (PolypGen licence first); the co-primary
    combination; the negatives check (only images with an abnormality value are probed).
+   2026-11-02 (iteration 63): RC-E0a done (gate1_pass = 1; validation: 681 probes = 227
+   images x 3, macro balanced accuracy 0.803, specificity about 1.0, sensitivity 0.68 / 0.46 /
+   0.70; lesion-mask effect 0.36, CI 0.27-0.47; 13 small polyps of 86). RC-E0b done (one
+   session, 2.3 h projected; manifest d6ba0cb9..., pinned for every cache reader). Inputs are
+   now found by their manifests (`scripts/find_inputs.py`; the runner does it itself). E2 checks
+   rule 3 from the committed rows. Compression split by seed proposed (schedule section 7).
+   Next: RC-E1 seed 0, then the E2 seeds; the freeze items; commit RC-E0b's metrics rows.
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
    draft and freeze guard done (iteration 40). Pruning grid cards RC-E5 to RC-E8 done
    (iteration 41); ablation cards RC-A1 to RC-A6 done, A3 ranking and score reuse fixed
@@ -122,9 +129,9 @@ cards for the team (decision of 2026-10-12).
 | S02 | CPU infrastructure | done | - |
 | S03 | Data pipeline | done (RC-D1 run 4b, 2026-10-29; finding list frozen 2026-10-31) | - |
 | S04 | Model wrappers and unit surgery | done (RC-M1 passed 2026-10-15) | - |
-| S05 | Teacher: Gate 1, cache | RC-TT1 done 2026-10-31; settings frozen; RC-E0a and RC-E0b ready | team runs RC-E0a, then RC-E0b |
+| S05 | Teacher: Gate 1, cache | done (RC-TT1 2026-10-31; RC-E0a and RC-E0b 2026-11-01) | - |
 | S05b | Student checks (D05 amendment: one student) | RC-S0 done 2026-10-16: both pass G1; training size decided; student revision pinned; RC-S0b run 2 ready (image side) | RC-S0b, team GPU hours, G2; then the selection freeze |
-| S06 | Students E1, E2, budget reference | trainer done; recipe memo and run cards next | S05, S05b |
+| S06 | Students E1, E2, budget reference | RC-E1 ready (seed 0 first), RC-E2 ready after it (rule 3) | team runs RC-E1, RC-E2, then RC-B0 |
 | S07 | Pre-registration freeze | evaluation settings frozen 2026-10-31 (amendment, section 11); weights, budgets and the co-primary combination open | team answers, RC-B0 |
 | S08 | Quantization E3, E4, E9 | RC-Q0 done 2026-10-15 (TorchLinear, versions pinned); RC-E3, RC-E4, RC-E9 blocked | S07 freeze, E2, RC-D1 |
 | S09 | Pruning E5-E8, Gate 2 | code and run cards done (RC-G2, RC-E5 to RC-E8, all blocked) | D07 (scoring method, budgets), S07 freeze, E2 |
