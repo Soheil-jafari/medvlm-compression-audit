@@ -127,3 +127,56 @@ Things that change this schedule when they become known:
 - the A1/A2 reuse decision.
 
 The agent updates this file when each of them arrives.
+
+## 7. Compression runs E3-E8 across the three accounts (proposal, 2026-11-02)
+
+**Split by seed** (proposal; the team confirms): each account runs every compression arm of
+the seed whose E2 it trained (seed 0 Soheil, seed 1 Farzan, seed 2 Amir, as for E1 and E2).
+Then every run starts from an E2 adapter its own account made, and only outcomes and
+references cross between accounts. The card owners of `docs/runs/README.md` stay until the
+team confirms this.
+
+**Before any of them can run** (the stage scripts refuse a compression arm until the first
+holds):
+1. the pre-registration frozen (`preregistration.frozen_on`): the co-primary combination, the
+   finding weights (cap, tiers), the comparator, the headline accuracy, H2 matching and
+   McNemar, the A3 ranking, the reuse of E7, the training pool (`docs/decisions_log.md`, open
+   decisions);
+2. RC-B0 (E2 seed 0's footprint, twice) and then B1-B3 (`budgets.levels.*.target_fraction`),
+   and `budgets.measurement.hardware` (Amir), without which every benchmark step waits;
+3. `recovery.steps` and `recovery.data_subset` (proposal 157 and 2,500, `configs/recovery.yaml`);
+4. D07 section 1: how a unit is switched off while it is scored
+   (`pruning.clinical.ablation_method`), for E5-E7;
+5. the three E2 adapters, after rule 3 passed (E1 seed 0 first).
+
+| Account | Runs (in this order) | Attach (found by their manifests) | Hands back |
+|---|---|---|---|
+| Soheil, seed 0 | RC-B0; RC-G2 (B2, validation); RC-E3 s0; RC-E4 s0; RC-E5, E6, E7 s0 (G2's five B2 models reused); RC-E8 s0; then RC-R1 and RC-C1 | `medcompress-data`; `e2-seed0-adapter` (E3, E5-E8, B0, G2); `e0-teacher-cache` (E4, E5-E7, G2); `g2-b2-seed0-pruned` (E5-E7, optional); `e7-seed0-pruned` (E8); for RC-R1 also `e0-teacher-adapter` and the six E1/E2 adapters; for RC-C1 every `*_outcomes` | the results CSVs (git); `E3_seed0_outcomes` ... `E8_seed0_outcomes`, `E0_test_outcomes`, `E2_test_outcomes` (kept for RC-C1) |
+| Farzan, seed 1 | RC-E3 s1; RC-E4 s1; RC-E5, E6, E7 s1; RC-E8 s1; RC-E9 (the teacher at 4 bit, T4 x2) | `medcompress-data`; `e2-seed1-adapter`; `e0-teacher-cache`; `e7-seed1-pruned` (E8); `e0-teacher-adapter` (E9) | the results CSVs (git); `E3_seed1_outcomes` ... `E8_seed1_outcomes` to Soheil (RC-C1); `e1-seed1-adapter` and `e2-seed1-adapter` to Soheil (RC-R1) |
+| Amir, seed 2 | RC-E3 s2; RC-E4 s2; RC-E5, E6, E7 s2; RC-E8 s2 | `medcompress-data`; `e2-seed2-adapter`; `e0-teacher-cache`; `e7-seed2-pruned` (E8) | the results CSVs (git); `E3_seed2_outcomes` ... `E8_seed2_outcomes` to Soheil; `e1-seed2-adapter` and `e2-seed2-adapter` to Soheil |
+
+Each card's own hand-offs that stay in the account: `E3_seed<k>_quantized`, `E4_seed<k>_quantized`,
+`E5`/`E6`/`E7_seed<k>_pruned` (E7's is read by E8), `E8_seed<k>_quantized`. Make each folder
+under `/kaggle/working/handoff/` ONE private dataset named like the folder (`e7-seed1-pruned`),
+shared with the team: the cells find it by that name.
+
+**Hours per seed** (estimates; a run is evaluated on validation, the test and the unfiltered
+test, about **1.7 h** per run, scaled from E0's measured validation pass of 0.78 h with the
+student's speeds; the unfiltered test is larger, its labelled share assumed the same):
+
+| Card (one seed) | Runs | Known part | Evaluation | In all |
+|---|---|---|---|---|
+| RC-E3 | 3 (w4, w8, w8a8) | under 1 h each (GPTQ) | 3 x 1.7 h | under 8.1 h |
+| RC-E4 | 1 | 3.5-7.1 h (training) | 1.7 h | 5.2-8.8 h |
+| RC-E5 | 9 | 9 x 0.6 h recovery; scoring minutes | 9 x 1.7 h | about 20.7 h + 9 S |
+| RC-E6 | 3 | 3 x 0.6 h | 3 x 1.7 h | about 6.9 h + 3 S |
+| RC-E7 | 3 | 7.9 h scoring + 3 x 0.6 h | 3 x 1.7 h | about 14.8 h + 3 S |
+| RC-E8 | 3 | under 1 h each | 3 x 1.7 h | under 8.1 h |
+| **One seed** | 22 | | | **about 64-67 h + 15 S** |
+
+So each account needs about two to two and a half weeks of its 30 GPU hours for its seed (S, the
+budget searches, not measured). Soheil also has RC-R1 (about 9 h: E0 on both tests, about 2 h
+on T4 x2, and six student passes of about 1.2 h each; estimates) and RC-C1 (CPU); Farzan has
+RC-E9 (1-2 h plus the teacher's two test passes, about 2 h; estimates). Seed 0 saves the
+recovery of G2's five B2 runs.
+

@@ -14,7 +14,7 @@ Examples (Kaggle):
         --out /kaggle/working/handoff/E2_seed0_adapter
     python scripts/handoff.py export --kind teacher_cache --exp E0 \\
         --out /kaggle/working/handoff/E0_teacher_cache
-    python scripts/handoff.py verify /kaggle/input/<dataset>
+    python scripts/handoff.py verify "$(python scripts/find_inputs.py handoff E0_teacher_cache)"
 """
 
 from __future__ import annotations

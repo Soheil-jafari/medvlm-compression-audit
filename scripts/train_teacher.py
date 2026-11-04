@@ -23,9 +23,11 @@ have passed since the script started, and the script exits with code 3: the note
 then ends normally, its output keeps the saved state, and the next session resumes from it.
 
 Examples (Kaggle, from the repository root):
-    python scripts/train_teacher.py --data-root /kaggle/input/<shared-data> --dry-run
-    python scripts/train_teacher.py --data-root /kaggle/input/<shared-data> --stop-after-hours 11
-    python scripts/train_teacher.py --data-root ... --extend --from /kaggle/input/<teacher-adapter>
+    DATA=$(python scripts/find_inputs.py data) || exit 1
+    python scripts/train_teacher.py --data-root $DATA --dry-run
+    python scripts/train_teacher.py --data-root $DATA --stop-after-hours 11
+    python scripts/train_teacher.py --data-root $DATA --extend \
+        --from "$(python scripts/find_inputs.py handoff E0_teacher_adapter)"
 """
 
 from __future__ import annotations
@@ -171,6 +173,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
     from medcompress.utils.bundles import BundleError, attach_data, attach_handoff
 
     config = load_config("experiments/E0.yaml")
+    from medcompress.cli import warn_roots_inside_repo
+
+    warn_roots_inside_repo(config)
     try:
         attach_data(config, args.data_root)
         for path in args.handoffs:

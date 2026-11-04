@@ -32,6 +32,7 @@ from medcompress.evaluation.report import (
 from medcompress.registry import PRIMARY_BUDGET
 
 TIME_METRICS: tuple[tuple[str, str], ...] = (
+    ("teacher_train_seconds", "Teacher training"),  # RC-TT1 (train_teacher.py's teacher_ rows)
     ("teacher_cache_seconds", "Teacher cache"),
     ("train_seconds", "Training"),
     ("scoring_seconds", "Scoring"),
@@ -86,7 +87,8 @@ def _per_metric_table(summary: pd.DataFrame, metrics: Sequence[tuple[str, str]])
 
 
 def per_finding_table(summary: pd.DataFrame, kind: str) -> str:
-    """Sensitivity or specificity per finding (columns) and arm (rows), mean over seeds."""
+    """Sensitivity, specificity, AUROC or "yes" rate per finding (columns) and arm (rows), mean
+    over seeds."""
     prefix = f"{kind}:"
     findings = sorted(
         {m[len(prefix) :] for m in summary["metric"] if str(m).startswith(prefix)}
@@ -357,6 +359,8 @@ def write_appendix(
     tables = {
         "appendix_sensitivity.tex": per_finding_table(summary, "sensitivity"),
         "appendix_specificity.tex": per_finding_table(summary, "specificity"),
+        "appendix_auroc.tex": per_finding_table(summary, "auroc"),
+        "appendix_yes_rate.tex": per_finding_table(summary, "yes_rate"),
         "appendix_calibration.tex": _per_metric_table(summary, CALIBRATION_METRICS),
         "appendix_free_text.tex": _per_metric_table(summary, FREE_TEXT_METRICS),
         "appendix_e9.tex": e9_table(summary),

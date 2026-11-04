@@ -29,7 +29,7 @@ terms takes as long as it takes.
 - **Who:** Farzan (CPU).
 - **Kaggle settings:** no GPU (CPU); Internet off is fine.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1.
-- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-X1"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-X1`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-X1"` and `SEED = None` (`DATA` and `FROM` stay empty); it runs `python scripts/run_card.py --card RC-X1`, which finds the shared data and every attached hand-off by their manifests. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
   - overlap
 - **Hand-offs it writes:** none (its results reach the others through git).
 - **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
@@ -58,6 +58,9 @@ terms takes as long as it takes.
 ```bash
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
 python scripts/prepare_data.py overlap --data-root /kaggle/working/data \
     --private-dir /kaggle/input/<your-rc-d1-private> \

@@ -1,4 +1,4 @@
-"""Clinical metrics: per-finding sensitivity / specificity, macro-F1, overall accuracy.
+"""Clinical metrics: per-finding sensitivity / specificity / AUROC, macro-F1, overall accuracy.
 
 Unparseable answers (``None`` predictions) always count as errors: a missed
 positive or a false positive. Findings whose F1 is undefined (no positives and no
@@ -93,3 +93,25 @@ def overall_accuracy(correct: Sequence[bool | None]) -> float:
     if len(correct) == 0:
         raise ValueError("Need at least one answer.")
     return sum(1 for c in correct if c is True) / len(correct)
+
+
+def auroc(truth: Sequence[bool], score: Sequence[float]) -> float:
+    """Area under the ROC curve of ``score`` for the labels ``truth`` (NaN without both classes).
+
+    The Mann-Whitney form: the probability that a random positive scores above a random
+    negative, ties counting one half (average ranks). It depends only on the order of the
+    scores, so a shift of the yes/no threshold (a bias) leaves it unchanged, while a loss of
+    discrimination lowers it. Pre-registered secondary metric (2026-11-02).
+    """
+    import numpy as np
+    from scipy.stats import rankdata
+
+    labels = np.asarray(truth, dtype=bool)
+    values = np.asarray(score, dtype=float)
+    if labels.shape != values.shape:
+        raise ValueError("Labels and scores must have the same length.")
+    n_pos, n_neg = int(labels.sum()), int((~labels).sum())
+    if n_pos == 0 or n_neg == 0:
+        return math.nan
+    ranks = rankdata(values)
+    return float((ranks[labels].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))

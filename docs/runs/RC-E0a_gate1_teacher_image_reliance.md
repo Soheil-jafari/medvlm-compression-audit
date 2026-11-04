@@ -12,8 +12,8 @@
   2. score the teacher on the validation split with the full evaluation suite (the reference
      row of every comparison, and rule 3's quality check against E1 seed 0). This needs no
      cache, so it runs here, in the same session (moved from RC-E0b on 2026-10-31).
-- Status: `ready` (2026-10-31): RC-TT1 done (the adapter is the private dataset
-  `e0-teacher-adapter`); the evaluation settings are frozen (pre-registration section 11).
+- Status: `done` (2026-11-01): `gate1_pass` = 1; validation scored; `metrics.csv`
+  committed (section 6, `docs/results/E0.md`).
 
 ## 2. Requirements
 
@@ -52,8 +52,8 @@ committed counts):
 - **Kaggle settings:** GPU T4 x2 (both T4s); Internet on.
 - **Attach (Add Input), all private datasets:** `medcompress-data` (the shared data of
   RC-D1); `e0-teacher-adapter` (the teacher adapter).
-- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
-- **Unattended (Save & Run All):** the cell of section 3 (preferred), or `notebooks/run_card.ipynb` with `CARD = "RC-E0a"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E0a --data-root /kaggle/input/medcompress-data --from /kaggle/input/e0-teacher-adapter`. Steps:
+- **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** the cell of section 3 (preferred), or `notebooks/run_card.ipynb` with `CARD = "RC-E0a"` and `SEED = None` (`DATA` and `FROM` stay empty); it runs `python scripts/run_card.py --card RC-E0a`, which finds the shared data and every attached hand-off by their manifests. Steps:
   - gate 1
   - E0 validation
 - **Hand-offs it writes:** none (its results reach the others through git).
@@ -70,6 +70,9 @@ Input: `medcompress-data` and `e0-teacher-adapter`. One cell; nothing to edit:
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
 import sys
 from importlib import metadata
@@ -80,8 +83,8 @@ except metadata.PackageNotFoundError:
 sys.exit(0 if version >= (0, 16) else 1)
 PY
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
-DATA=/kaggle/input/medcompress-data
-ADAPTER=/kaggle/input/e0-teacher-adapter
+DATA=$(python scripts/find_inputs.py data) || exit 1         # found by its manifest
+ADAPTER=$(python scripts/find_inputs.py handoff E0_teacher_adapter) || exit 1
 python scripts/prepare_data.py verify --data-root $DATA        # must print OK (8,511 files)
 python scripts/handoff.py verify $ADAPTER                       # must print OK
 python scripts/00_check_teacher_image_reliance.py --exp E0 --seed 0 \
@@ -108,6 +111,20 @@ What it prints:
 If a script stops with "configuration incomplete", a setting is open: do not fill it in
 yourself, tell the agent through the inbox.
 
+### 3b. The per-finding AUROC and "yes" rate for E0 (2026-11-02): not possible from this run
+
+Pre-registration section 11 item 9. The plan was to recompute them on CPU from the probe
+scores this run saved (`scripts/rescore_probes.py`). That is not possible: the cell wrote
+`outputs/` inside the clone (the configs' relative default), and the session ended with
+`rm -rf medvlm-compression-audit`, which removed `outputs/E0/nobudget/seed0/outcomes.npz`.
+`metrics.csv` had been copied before and is committed, so no committed number is affected.
+
+So **E0's `auroc:<f>`, `yes_rate:<f>`, `n_positives:<f>` and `n_negatives:<f>` rows come with
+the next E0 evaluation**: on the test splits with RC-R1, and on validation only if E0 is
+evaluated there again (for example after rule 3's extension). No GPU run is added for them.
+Since 2026-11-04 every cell sets the output, checkpoint and cache roots under
+`/kaggle/working/`, outside the clone, and the scripts warn on Kaggle when a root is inside it.
+
 ## 4. What to commit back
 
 - `results/E0/nobudget/seed0/metrics.csv` (from `results_to_commit/`): the `teacher_*` rows
@@ -125,10 +142,27 @@ after it a failed gate stops the study (pre-registration section 6).
 
 ## 6. Run report (filled by the person who ran it)
 
-- Run by / date:
-- Commit actually used:
-- Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft"`):
-- Wall time (Gate 1; validation):
-- `gate1_pass` and the three checks:
-- `n_probes_scored`, `n_mask_positives`, `n_stratum:0`:
-- Anything unusual (errors, retries, changed settings):
+Reported by Soheil (2026-11-01); `results/E0/nobudget/seed0/metrics.csv` committed by Soheil
+(e46b39e).
+
+- Run by / date: Soheil, by 2026-11-01.
+- Commit actually used: not reported (after ccf6a7a, the probe wording fix: the template
+  "Is there {finding} in this image?" was in force).
+- Hardware and library versions: Kaggle T4 x2; versions not reported.
+- Wall time: the validation pass took 2,802 s (0.78 h, `evaluation_seconds`); Gate 1's own
+  time is not in the file.
+- `gate1_pass` and the three checks: **1**. `gate1_accuracy_ok` 1 (balanced accuracy 0.803 >=
+  0.65), `gate1_blank_drop_ok` 1 (drop 0.303 >= 0.10), `gate1_lesion_effect_ok` 1
+  (lesion-mask effect 0.360, CI 0.267-0.465, above 0). Gate 1 wrote 18 rows, the validation
+  81 rows (split val).
+- `n_probes_scored` 681 (227 images x 3 findings); `n_mask_positives` 86; `n_stratum:0` 13.
+- Anything unusual:
+  - only the 227 validation images with an abnormality answer are probed (163 of the 390 get
+    no probe): a finding's negatives are other abnormalities (the issue raised at the freeze);
+  - Gate 1's 14 image-reliance rows were replaced by the validation pass's rows of the same
+    names (both ran the same tests with seed 0); the three checks hold on the committed
+    values;
+  - the small polyps of validation are 13, not about a quarter of 86.
+
+The verdict proposal is in `docs/results/E0.md`; the team confirms it in
+`docs/decisions_log.md`.

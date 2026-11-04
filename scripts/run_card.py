@@ -8,11 +8,15 @@ steps (src/medcompress/cards.py); write the hand-offs for other accounts under
 <out>/handoff/; copy the results files to commit to <out>/results_to_commit/; print the
 card's section 6 and save it as <out>/run_report_<card>.md.
 
+Without --data-root and --from, the attached inputs are found by their manifests
+(src/medcompress/inputs.py): the shared data is the folder of a bundle_manifest.json with
+private/ next to it, and every other manifest folder under /kaggle/input is a hand-off. A card
+that needs the shared data stops with a clear message when it is not attached.
+
 Examples (Kaggle, from the repository root):
+    python scripts/run_card.py --card RC-E2 --seed 1          # inputs found by their manifests
     python scripts/run_card.py --card RC-D1 --kvasir-seg /kaggle/input/<kvasir-seg>
-    python scripts/run_card.py --card RC-E2 --seed 1 --data-root /kaggle/input/<shared-data> \\
-        --from /kaggle/input/<e0-teacher-cache>
-    python scripts/run_card.py --card RC-E5 --seed 2 --data-root ... --from ... --dry-run
+    python scripts/run_card.py --card RC-E5 --seed 2 --dry-run
 """
 
 from __future__ import annotations
@@ -106,8 +110,39 @@ def _finish(session: Session, code: int) -> int:
     return code
 
 
+def _makes_the_data(card: str) -> bool:
+    """RC-D1 builds the shared data (only its counts pass reads them)."""
+    upper = card.upper()
+    return upper.startswith("RC-D1") and upper != "RC-D1-COUNTS"
+
+
+def find_inputs(args: argparse.Namespace) -> str | None:
+    """Fill ``--data-root`` and ``--from`` from the attached manifests when they are not given.
+
+    Returns why the shared data were not found (``None`` when found or given): the caller
+    stops only if the card needs them.
+    """
+    from medcompress.inputs import InputNotFound, find_handoffs, find_shared_data
+
+    if _makes_the_data(args.card):
+        return None
+    missing = None
+    if args.data_root is None:
+        try:
+            args.data_root = find_shared_data()
+            print(f"shared data found by its manifest: {args.data_root}")
+        except InputNotFound as exc:
+            missing = str(exc)
+    if not args.handoffs:
+        args.handoffs = find_handoffs()
+        for path in args.handoffs:
+            print(f"hand-off found by its manifest: {path}")
+    return missing
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    no_data = find_inputs(args)
     out = _out_dir(args)
     try:
         plan = build_plan(
@@ -125,6 +160,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{plan.card} is `{status}`, not `ready`: see its card, section 2", file=sys.stderr)
         return 2
     print(f"{plan.card}: {plan.title} ({plan.gpus} GPU(s); card status `{status}`)")
+    if no_data is not None and any(step.inputs for step in plan.steps):
+        print(f"STOP: {no_data}", file=sys.stderr)
+        return INPUT_CHECK_FAILED
     if args.dry_run:
         for step in plan.steps:
             print(f"  {step.label}: {' '.join(step_command(step, args.data_root, args.handoffs))}")

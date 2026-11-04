@@ -8,10 +8,8 @@
   training pool (10,000 examples, `teacher_cache.pool_size`), for every distillation and
   recovery run (E2, E4, the recoveries). The E0 validation moved to RC-E0a (2026-10-31): it
   needs no cache.
-- Status: `ready` (2026-10-31), to run **after** RC-E0a's results are committed with
-  `gate1_pass` = 1 and the team has confirmed the verdict in `docs/decisions_log.md`. The
-  cache checks the committed `gate1_pass` itself and refuses to start otherwise (exit code 4,
-  before any download).
+- Status: `done` (2026-11-01): one session; the cache is the private dataset
+  `e0-teacher-cache` (manifest `d6ba0cb9...`, section 6).
 
 ## 2. Requirements
 
@@ -44,8 +42,8 @@ Hours (**C**, not measured yet):
 - **Who:** Soheil.
 - **Kaggle settings:** GPU T4 x2 (both T4s); Internet on.
 - **Attach (Add Input), all private datasets:** `medcompress-data` (the shared data of RC-D1); `e0-teacher-adapter` (the teacher adapter); from session 2 on, the previous session's output.
-- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
-- **Unattended (Save & Run All):** the cells of section 3 (preferred: they stop cleanly and resume), or `notebooks/run_card.ipynb` with `CARD = "RC-E0b"`; it runs `python scripts/run_card.py --card RC-E0b --data-root /kaggle/input/medcompress-data --from /kaggle/input/e0-teacher-adapter` without a time stop. Steps:
+- **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** the cells of section 3 (preferred: they stop cleanly and resume), or `notebooks/run_card.ipynb` with `CARD = "RC-E0b"`; it runs `python scripts/run_card.py --card RC-E0b` (inputs found by their manifests) without a time stop. Steps:
   - teacher cache
 - **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E0_teacher_cache`.
 - **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
@@ -66,6 +64,9 @@ Output). Nothing to edit:
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
 import sys
 from importlib import metadata
@@ -76,12 +77,11 @@ except metadata.PackageNotFoundError:
 sys.exit(0 if version >= (0, 16) else 1)
 PY
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
-DATA=/kaggle/input/medcompress-data
-ADAPTER=/kaggle/input/e0-teacher-adapter
+DATA=$(python scripts/find_inputs.py data) || exit 1         # found by its manifest
+ADAPTER=$(python scripts/find_inputs.py handoff E0_teacher_adapter) || exit 1
 python scripts/prepare_data.py verify --data-root $DATA        # must print OK (8,511 files)
 python scripts/handoff.py verify $ADAPTER                       # must print OK
 grep gate1_pass results/E0/nobudget/seed0/metrics.csv          # its value must be 1.0 (RC-E0a)
-export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
 PREV=$(find /kaggle/input -path '*cache/teacher/metadata.json' -printf '%h\n' 2>/dev/null | head -1)
 echo "shards of a previous session: ${PREV:-none}"
 python scripts/01_cache_teacher_outputs.py --exp E0 --seed 0 --data-root $DATA --from $ADAPTER \
@@ -126,10 +126,20 @@ recoveries) checks against it.
 
 ## 6. Run report (filled by the person who ran it)
 
-- Run by / date:
-- Commit actually used:
-- Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft"`):
-- The first-100 line (C):
-- Sessions (one line each: shards at the start and at the end, wall time, exit code):
-- Cache manifest hash (printed at the end) and the hand-off dataset's name:
-- Anything unusual (errors, retries, changed settings):
+Reported by Soheil (2026-11-01).
+
+- Run by / date: Soheil, by 2026-11-01.
+- Commit actually used: not reported.
+- Hardware and library versions: Kaggle T4 x2; versions not reported.
+- The first-100 line (C): the first **104** answers (100 rounded up to whole batches of 8)
+  took **86.7 s**; projected **2.3 h** for the 10,000 answers (0.83 s per answer, batched).
+  The estimate before the run (about 12.5 h, from the one-answer-at-a-time speed) was about 5
+  times too high: the batched generation is much faster.
+- Sessions: one; it finished without a stop (exit code 0).
+- Cache manifest hash: **`d6ba0cb9d166cb2ae9a5dd8af5a1bbd2eebba904df0ccd795aded0d65b4f15d8`**
+  (`teacher cache complete: 10000 samples`). Hand-off `handoff/E0_teacher_cache`, the private
+  Kaggle dataset **`e0-teacher-cache`**, shared with Amir and Farzan.
+- Anything unusual: the session's `metrics.csv` rows (`teacher_cache_first_answers`,
+  `teacher_cache_first_answers_seconds`, `teacher_cache_seconds`) are not in the committed
+  file yet: commit `results_to_commit/results/E0/nobudget/seed0/metrics.csv` of this session
+  (it holds RC-E0a's rows too).

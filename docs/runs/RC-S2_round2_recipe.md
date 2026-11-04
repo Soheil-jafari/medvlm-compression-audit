@@ -35,13 +35,14 @@
 ```bash
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 export HF_HOME=/kaggle/temp/hf
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
 export MEDCOMPRESS_DATA_ROOT=/kaggle/working/data                # your own copy (from RC-D1)
 export MEDCOMPRESS_PRIVATE_ROOT=/kaggle/input/<your-rc-d1-private>
 export MEDCOMPRESS_CACHE_ROOT=/kaggle/input/<teacher-cache>      # contains teacher/
-export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
-export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
 export MEDCOMPRESS_RESULTS_ROOT=$PWD/results
 
 # the five candidates with advance = 1 in results/selection/R1/ranking.csv, shared among you

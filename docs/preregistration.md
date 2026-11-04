@@ -96,7 +96,9 @@ accuracy while losing recall, which would make H1 easy to support. Proposal: H1 
 **macro balanced accuracy** (per finding, the mean of sensitivity and specificity, averaged over
 findings; `macro_balanced_accuracy`); the overall accuracy is still reported.
 
-**Secondary:** per-finding sensitivity and specificity, macro-F1, overall accuracy,
+**Secondary:** per-finding sensitivity and specificity, and next to them the per-finding
+AUROC from the probe scores (image-bootstrap 95 % interval) and the per-finding "yes" rate
+(added 2026-11-02, section 11 item 9), macro-F1, overall accuracy,
 blank-image accuracy drop and other-image tests, ECE (15 equal-width bins), Brier score, AURC, hallucination /
 omission / negation rates on 1,000 free-text answers, exact match and token F1, efficiency
 (parameters, file size, peak memory, cold and warm latency, throughput, energy where measurable,
@@ -296,6 +298,28 @@ waited on these settings, so no model has been scored. Every count comes from th
      (`domain.finding_names`), so the hallucination, omission and negation rates do not change
      with the probe wording ("no polyps" is still found).
    - The external test (PolypGen) uses the same template and the display name "a polyp".
+
+9. **Per-finding AUROC and "yes" rate** (Soheil, 2026-11-02; added after E0's validation was
+   seen and **before any student or compressed result**). E0's validation showed a very
+   conservative teacher: specificity about 1.0, sensitivity 0.68 (polyp), 0.46 (ulcerative
+   colitis), 0.70 (oesophagitis). Sensitivity and specificity depend on the yes/no threshold,
+   so a compression method that only shifts the bias cannot be told from one that loses
+   discrimination. So, for **every model** (E0-E9, A1-A6) and every split, a secondary metric:
+   - `auroc:<finding>`: the AUROC of the probe score (log P(yes) - log P(no), saved for every
+     probe) against the label, with the image-level percentile bootstrap 95 % interval (10,000
+     resamples, the run's seed, as for the other clinical metrics); left out when a finding has
+     only one class;
+   - `yes_rate:<finding>`: the share of that finding's probes answered "yes"; with
+     `n_positives:<finding>` and `n_negatives:<finding>` to read it against;
+   - reported next to sensitivity and specificity (`appendix_auroc.tex`,
+     `appendix_yes_rate.tex`). Reading: the same AUROC with another "yes" rate is a shift of
+     the bias; a lower AUROC is lost discrimination;
+   - descriptive: not part of H1-H4, no verdict, no multiplicity correction;
+   - no new GPU run: every later evaluation writes them itself. E0's validation rows could not
+     be recomputed (2026-11-04): its saved outcomes were removed with the repository clone at
+     the end of RC-E0a's session. They come with the next E0 evaluation (RC-R1 on the test
+     splits; validation only if E0 is evaluated there again). `scripts/rescore_probes.py`
+     stays for runs whose outcomes are kept.
 
 Still open before `preregistration.frozen_on` is set: how the two co-primary tests combine in a
 verdict, the finding weights (cap, tiers), the budgets and the other **[team]** items above.

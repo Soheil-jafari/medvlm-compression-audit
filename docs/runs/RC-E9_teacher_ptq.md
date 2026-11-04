@@ -33,8 +33,8 @@ in section 6 and stop: the agent will move that step to the CPU.
 - **Who:** Farzan.
 - **Kaggle settings:** GPU T4 x2 (both T4s); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher adapter.
-- **Checks before anything runs:** every stage command takes `--data-root /kaggle/input/<shared-data>` and one `--from /kaggle/input/<dataset>` per hand-off (add them to each stage command of section 3 when you run it by hand). The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
-- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E9"`, `SEED = None`, `DATA` and `FROM` filled in; it runs `python scripts/run_card.py --card RC-E9 --data-root /kaggle/input/<shared-data> --from /kaggle/input/<hand-off>`. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
+- **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
+- **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E9"` and `SEED = None` (`DATA` and `FROM` stay empty); it runs `python scripts/run_card.py --card RC-E9`, which finds the shared data and every attached hand-off by their manifests. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
   - run E9 seed0
   - test evaluation E9 seed0
 - **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E9_seed0_quantized`.
@@ -43,20 +43,30 @@ in section 6 and stop: the agent will move that step to the CPU.
 
 ## 3. Commands
 
-```bash
-git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
-cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
-export HF_HOME=/kaggle/temp/hf
-pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
-export MEDCOMPRESS_DATA_ROOT=/kaggle/working/data
-export MEDCOMPRESS_PRIVATE_ROOT=/kaggle/input/<your-rc-d1-private>
-export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
-export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
-export MEDCOMPRESS_RESULTS_ROOT=$PWD/results
+One cell (Kaggle settings and inputs of section 2b; **Save Version -> Save & Run All**). It finds the shared data and the attached hand-offs by their manifests (`scripts/find_inputs.py`), stops with a clear message if the shared data are missing, and runs the steps of section 2b with `scripts/run_card.py`, which also checks that every hand-off the card reads is there. Then it writes the hand-offs under `/kaggle/working/handoff/` and the files to commit under `/kaggle/working/results_to_commit/`.
 
-python scripts/run_experiment.py --exp E9 --seed 0
-python scripts/06_evaluate.py --exp E9 --seed 0 -o evaluation.split=test
-python -m pytest -q tests/test_results.py                  # must pass before you commit
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-E9 2>&1 | tee /kaggle/working/run_card_RC-E9.txt
+echo "run_card exit code: ${PIPESTATUS[0]}"
 ```
 
 Keep `outputs/` (the per-probe `outcomes*.npz` files) as a private dataset too: the paired

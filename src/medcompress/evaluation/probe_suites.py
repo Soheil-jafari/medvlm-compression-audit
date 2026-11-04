@@ -131,8 +131,14 @@ def clinical_metrics(
     alpha: float = 0.05,
     seed: int = 0,
 ) -> list[Metric]:
-    """Overall accuracy, macro-F1 and macro balanced accuracy (with bootstrap CIs), and
-    per-finding sensitivity / specificity.
+    """Overall accuracy, macro-F1 and macro balanced accuracy (with bootstrap CIs), and per
+    finding: sensitivity, specificity, AUROC (with a bootstrap CI), the "yes" rate and the
+    numbers of positive and negative probes.
+
+    The AUROC is computed from the saved scores (``margin`` = log P(yes) - log P(no)), so it
+    does not depend on the yes/no threshold; the "yes" rate shows that threshold. Together they
+    tell a method that only shifts the bias (same AUROC, other "yes" rate) from one that loses
+    discrimination (lower AUROC). Pre-registered secondary metrics (2026-11-02).
 
     The overall accuracy is the fraction of probes answered correctly; most probes ask about
     absent findings, so it mostly measures specificity. The macro balanced accuracy weighs
@@ -160,10 +166,50 @@ def clinical_metrics(
         truth[finding].append(bool(label))
         pred[finding].append(bool(answer))
     per_finding = clinical.per_finding_sensitivity_specificity(truth, pred)
-    for finding in findings:
+    codes_of = out.finding_index(findings)
+    images = np.asarray(out.sample_ids)
+    for code, finding in enumerate(findings):
         metrics.append(Metric(f"sensitivity:{finding}", per_finding[finding]["sensitivity"]))
         metrics.append(Metric(f"specificity:{finding}", per_finding[finding]["specificity"]))
+        metrics += discrimination_metrics(
+            out.truth[codes_of == code], out.yes[codes_of == code],
+            out.margin[codes_of == code], images[codes_of == code], finding,
+            n_resamples=n_resamples, alpha=alpha, seed=seed,
+        )  # fmt: skip
     return metrics
+
+
+def discrimination_metrics(
+    truth: np.ndarray,
+    yes: np.ndarray,
+    margin: np.ndarray,
+    images: np.ndarray,
+    finding: str,
+    *,
+    n_resamples: int,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> list[Metric]:
+    """``auroc:<f>`` (image-bootstrap CI), ``yes_rate:<f>``, ``n_positives:<f>``,
+    ``n_negatives:<f>`` of one finding's probes. The AUROC is left out without both classes."""
+    truth = np.asarray(truth, dtype=bool)
+    if truth.size == 0:
+        return []
+    metrics = [
+        Metric(f"yes_rate:{finding}", float(np.mean(np.asarray(yes, dtype=bool)))),
+        Metric(f"n_positives:{finding}", float(truth.sum())),
+        Metric(f"n_negatives:{finding}", float((~truth).sum())),
+    ]
+    if truth.all() or not truth.any():
+        return metrics
+    data = np.stack([truth.astype(float), np.asarray(margin, dtype=float)], axis=1)
+    value, low, high = bootstrap_ci(
+        lambda a: clinical.auroc(a[:, 0] > 0.5, a[:, 1]),
+        data,
+        clusters=np.asarray(images),
+        **_ci_kwargs(n_resamples, alpha, seed),
+    )
+    return [Metric(f"auroc:{finding}", value, low, high), *metrics]
 
 
 # ---------------------------------------------------------------- small findings

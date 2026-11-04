@@ -51,8 +51,9 @@ def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixtur
         # the settings are frozen (2026-10-31): these stop at the missing shared data
         ("01_cache_teacher_outputs.py", [], "gate1_pass"),  # the cache waits for Gate 1
         ("00_check_teacher_image_reliance.py", [], "--data-root"),
-        # the image side is set (2026-10-17): the stage stops at the missing shared data
-        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "--data-root"),
+        # E2 waits for rule 3 (E0 against E1 seed 0); E1 stops at the missing shared data
+        ("02_train_student.py", ["--exp", "E2", "--seed", "1"], "rule 3"),
+        ("02_train_student.py", ["--exp", "E1", "--seed", "1"], "--data-root"),
         (
             "06_evaluate.py",
             ["--exp", "A4", "--budget", "B2", "--variant", "n64"],

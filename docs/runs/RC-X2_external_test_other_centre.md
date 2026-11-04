@@ -78,9 +78,13 @@ identifiers, no per-image rows, no file names.
 ```bash
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
-python scripts/prepare_data.py overlap --data-root /kaggle/input/medcompress-data \
-    --images /kaggle/input/<polypgen-dataset>/<images-folder> --name polypgen \
+DATA=$(python scripts/find_inputs.py data) || exit 1         # found by its manifest
+IMAGES=/kaggle/input/datasets/<user>/<polypgen-dataset>/<images-folder>   # PolypGen has no manifest: give its folder
+python scripts/prepare_data.py overlap --data-root $DATA --images $IMAGES --name polypgen \
     --dedup-threshold 4
 ```
 

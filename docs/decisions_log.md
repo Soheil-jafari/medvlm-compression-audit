@@ -466,6 +466,37 @@ must be logged here.
   searched for the dataset's wording (`domain.finding_names`). Recorded in the freeze
   amendment (pre-registration section 11, item 8), D02, the paper's method section and RC-X2.
 
+- **2026-11-01 (Soheil): RC-E0a and RC-E0b done.**
+  - Gate 1 passes (`gate1_pass` 1): balanced accuracy 0.803 (>= 0.65), blank-image drop 0.303
+    (>= 0.10), lesion-mask effect 0.360 (CI 0.267-0.465, above 0). The verdict proposal is in
+    `docs/results/E0.md`; **[team]** confirm it here.
+  - E0 validation: 681 probes (227 labelled images x 3), macro balanced accuracy 0.803
+    (0.768-0.838); the negatives are other abnormalities only (no "none" answer exists).
+  - Teacher cache: one session (first 104 answers in 86.7 s, 2.3 h projected), manifest
+    **`d6ba0cb9d166cb2ae9a5dd8af5a1bbd2eebba904df0ccd795aded0d65b4f15d8`**, the private dataset
+    `e0-teacher-cache` shared with Amir and Farzan. The hash is pinned in
+    `configs/training.yaml` and `configs/recovery.yaml`; every reader refuses another cache.
+  - Rule 3's quality part is read when E1 seed 0 is committed; E2's training checks it.
+- **2026-11-02 (Soheil): per-finding AUROC and "yes" rate, a pre-registered secondary metric
+  for every model** (before any student or compressed result; pre-registration section 11
+  item 9). The AUROC of the probe scores with an image-bootstrap interval, the "yes" rate and
+  the class counts per finding, next to sensitivity and specificity, so a method that only
+  shifts the yes/no bias can be told from one that loses discrimination. E0's from its saved
+  validation outcomes on CPU (`scripts/rescore_probes.py`, RC-E0a section 3b).
+- **2026-11-04 (Soheil): path roots outside the clone; E0's AUROC with its next evaluation.**
+  RC-E0a's cell wrote `outputs/` inside the clone (the configs' relative default) and the
+  session ended with `rm -rf medvlm-compression-audit`, so `outcomes.npz` was lost and
+  `rescore_probes.py` could not run (`metrics.csv` was copied before and is committed). E0's
+  `auroc:`, `yes_rate:`, `n_positives:`, `n_negatives:` rows come with the next E0 evaluation.
+  Every card's cell now sets `MEDCOMPRESS_OUTPUT_ROOT`, `MEDCOMPRESS_CHECKPOINT_ROOT` and
+  `MEDCOMPRESS_CACHE_ROOT` under `/kaggle/working/` before any script runs, and on Kaggle the
+  scripts warn when one of them resolves inside the clone.
+- **2026-11-02 (Soheil): inputs found by their manifests.** No cell uses a fixed
+  `/kaggle/input` path any more: the shared data are the folder of a `bundle_manifest.json` with
+  `private/` next to it, a hand-off the folder of a `bundle_manifest.json` whose path contains
+  its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
+  are not given). A missing input stops the cell with a clear message.
+
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
@@ -477,7 +508,7 @@ must be logged here.
 | Code for amendment 7 | the external test's loader and probes and the split `external_test` in the evaluation; the comparisons on it; the verdicts for each of the three tests (today they read the primary rows only) | agent | after RC-X2 part A |
 | Published target modules | settled by RC-TT1 (2026-10-31): `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`, 28 decoder layers each (196); the printed line itself was not pasted | — | — |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
-| Label values (RC-D1 pass 2) | frozen 2026-10-31 (polyp, ulcerative colitis, oesophagitis). No counts pass is needed: the findings are read from the source answers when the data load. Open: only images with an abnormality value are probed (no "none" answer exists), so a finding's negatives are other abnormalities; the team reads E0's validation probe count | team | at RC-E0b |
+| Label values (RC-D1 pass 2) | frozen 2026-10-31 (polyp, ulcerative colitis, oesophagitis). Confirmed by E0's validation (2026-11-01): 681 probes = 227 of the 390 validation images x 3, so only images with an abnormality value are probed and a finding's negatives are other abnormalities, never normal mucosa. Keep it and state it as a limitation, or add normal images as negatives (that would be a change after a model result, E0's) | team | before the freeze |
 | Recovery steps | 25 % of 625 = 156.25; proposal 157 = `ceil(2,500 / 16)` (D06 memo) | team | before RC-E5 |
 | A1 and A2 reuse of E7's effects | D07 says they reuse E7's per-probe effects; the code scores them again (about 7.9 h per run at 672, an estimate). Either the agent adds the reuse (the per-probe effects must then be kept) or the schedule keeps the cost | team | before the freeze |
 | Budget hardware for stage 07 | `budgets.measurement.hardware` is open, so the benchmark step of RC-E1 and RC-E2 waits (the runner skips it and goes on) | Amir | before RC-B0 |
@@ -485,6 +516,7 @@ must be logged here.
 | Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
 | EndoBench terms | set aside by D02 amendment 7 (the external test is from another centre: PolypGen and/or GastroVision); reopen only if the team brings EndoBench back | Farzan | — |
 | Finding weights | the finding list and groups are frozen (2026-10-31); still open: cap (proposal 20) and the three tiers with multipliers 2.0 / 1.5 / 1.0, assigned from the finding names; the prevalences are 17.9 %, 15.3 %, 12.1 % | team | before E7 |
+| Compression split (agent proposal, 2026-11-02) | by seed: every compression arm of seed k on the account that trained E2 seed k (0 Soheil, 1 Farzan, 2 Amir); RC-B0 and RC-G2 with seed 0 (Soheil), RC-E9 Farzan; only outcomes and the E1/E2 adapters cross accounts (`docs/schedule.md` section 7) | team | before the freeze |
 | Comparator "best of E5/E6" (draft proposal) | the generic arm with the highest validation small-finding recall at B2 (mean of 3 seeds), the same for both primary endpoints | team | before the freeze |
 | Headline accuracy for H1 and H4 (draft proposal) | macro balanced accuracy instead of the overall probe accuracy, which mostly measures specificity; overall accuracy still reported | team | before the freeze |
 | A3 ranking (agent proposal, iteration 42) | A3 orders its random scores without dividing by the unit size (`score_normalisation: none`). Divided by size, a random score sends whole layers first (estimate: about 98 % of the removed parameters at a 30 % cut), so A3 would test random layer removal, not random choice of units. D07's per-parameter rule stays for every other arm | team | before the freeze |

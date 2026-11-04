@@ -133,6 +133,9 @@ within 4 bits); the committed calibration file was made with the old rule.
 ```bash
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 5
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps && pip install -q datasets
 
 DATA=/kaggle/input/<run-2-shared-data>                        # verified first (SHA-256)
@@ -190,6 +193,9 @@ its check) and prints section 5. Or by hand, in one CPU notebook:
 ```bash
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 5
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 grep "labels:chosen" results/data/near_duplicate_labels.csv  # the chosen rule must be there
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps && pip install -q datasets
 
@@ -266,9 +272,9 @@ new CPU notebook:
   adds them itself.
 
 ```bash
-python scripts/run_card.py --card RC-D1-counts --data-root /kaggle/input/medcompress-data \
-    --embed-dir /kaggle/working/rc_d1_embed
-# by hand: python scripts/prepare_data.py counts --data-root /kaggle/input/medcompress-data \
+python scripts/run_card.py --card RC-D1-counts --embed-dir /kaggle/working/rc_d1_embed
+# (the shared data are found by their manifest; by hand: DATA=$(python scripts/find_inputs.py data))
+# python scripts/prepare_data.py counts --data-root $DATA \
 #     --split-seed 20261012 --close-bits 4 --mask-threshold 4 --embed-dir /kaggle/working/rc_d1_embed \
 #     --rule full:0.92:or_crop:0.80 --heldout-filter 0.86
 ```
@@ -309,6 +315,9 @@ set -euo pipefail
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 grep "labels:either_rater:rule" results/data/near_duplicate_labels.csv
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps && pip install -q datasets
 
@@ -392,6 +401,9 @@ set -euo pipefail
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 grep "sweep:full:0.92:or_crop:0.80:within_guard" results/data/near_duplicate_sweep.csv \
     || { echo "commit results/data/near_duplicate_sweep.csv first (D02 amendment 6)"; exit 1; }
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps && pip install -q datasets
@@ -473,6 +485,9 @@ F=0.86                        # D02 amendment 7: the lowest F that meets the 50 
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 grep "filter_sweep:$F:test_floor_met" results/data/near_duplicate_filter_sweep.csv  # must say 1.0
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps && pip install -q datasets
 
