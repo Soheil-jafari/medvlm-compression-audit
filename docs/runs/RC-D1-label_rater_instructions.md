@@ -117,6 +117,9 @@ Two raters, no third member.
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
 ls /kaggle/input/rc-d1-labels-final
 python scripts/prepare_data.py score-labels --no-third-member --kappa-pairs 11-298 \

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -77,8 +78,60 @@ def resolve_config(args: argparse.Namespace) -> dict[str, Any]:
     if path is None:
         path = Path("base.yaml")
     config = load_config(path, args.override)
+    warn_roots_inside_repo(config)
     attach_inputs(config, getattr(args, "data_root", None), getattr(args, "handoffs", ()))
     return config
+
+
+ROOTS_OUTSIDE_THE_CLONE: tuple[tuple[str, str], ...] = (
+    ("output_root", "MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs"),
+    ("checkpoint_root", "MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints"),
+    ("cache_root", "MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache"),
+)
+"""The path roots whose files must outlive the clone (outcomes, adapters, the teacher cache)."""
+
+
+def on_kaggle() -> bool:
+    """True in a Kaggle notebook (``$MEDCOMPRESS_ON_KAGGLE`` = 1 or 0 overrides, for tests)."""
+    flag = os.environ.get("MEDCOMPRESS_ON_KAGGLE")
+    if flag is not None:
+        return flag == "1"
+    return Path("/kaggle/working").is_dir()
+
+
+def roots_inside_repo(config: Mapping[str, Any]) -> list[tuple[str, Path, str]]:
+    """``(root, resolved path, export to set)`` of every root that lies inside the clone."""
+    from medcompress.config import repo_root
+
+    repo = repo_root().resolve()
+    found = []
+    for key, export in ROOTS_OUTSIDE_THE_CLONE:
+        value = (config.get("paths") or {}).get(key)
+        if value is None:
+            continue
+        path = Path(str(value)).expanduser()
+        path = (path if path.is_absolute() else Path.cwd() / path).resolve()
+        if path == repo or path.is_relative_to(repo):
+            found.append((key, path, export))
+    return found
+
+
+def warn_roots_inside_repo(config: Mapping[str, Any]) -> list[str]:
+    """On Kaggle, warn (stderr) for each path root inside the clone; return the warnings.
+
+    A cell that removes the clone at the end would remove what was written there (RC-E0a's
+    ``outcomes.npz`` was lost that way, 2026-11-04). Nothing is changed: the run goes on.
+    """
+    if not on_kaggle():
+        return []
+    warnings = [
+        f"WARNING: paths.{key} is {path}, inside the repository clone: removing the clone "
+        f"removes it. Set `export {export}` before the scripts run."
+        for key, path, export in roots_inside_repo(config)
+    ]
+    for line in warnings:
+        print(line, file=sys.stderr)
+    return warnings
 
 
 def attach_inputs(config: dict[str, Any], data_root: Path | None, handoffs: Any = ()) -> None:

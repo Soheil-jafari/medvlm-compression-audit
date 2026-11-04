@@ -26,7 +26,24 @@ On your own machine (for committing results):
 ```bash
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 ```
+
+**Path roots outside the clone (2026-11-04).** The configs' default output, checkpoint and
+cache roots are relative paths, so they land inside the clone, and a cell that removes the
+clone at the end (`rm -rf medvlm-compression-audit`, to keep the version output small) removes
+them too. That deleted RC-E0a's `outcomes.npz`. So every cell sets, before any script runs:
+
+```bash
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
+```
+
+On Kaggle, every stage script prints a `WARNING` when one of these roots still resolves inside
+the clone (`src/medcompress/cli.py`), and `scripts/run_card.py` sets them itself.
 
 ## 3. Attach the shared datasets
 

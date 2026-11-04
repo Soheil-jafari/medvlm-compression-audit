@@ -91,7 +91,8 @@
    rule 3 from the committed rows. Compression split by seed proposed (schedule section 7).
    Next: RC-E1 seed 0, then the E2 seeds; the freeze items; commit RC-E0b's metrics rows.
    2026-11-02: per-finding AUROC and "yes" rate added as a pre-registered secondary metric for
-   every model (section 11 item 9); E0's from its saved outcomes on CPU (RC-E0a section 3b).
+   every model (section 11 item 9); E0's come with its next evaluation (outcomes lost with the
+   clone, 2026-11-04). Every cell now sets the path roots under /kaggle/working/.
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
    draft and freeze guard done (iteration 40). Pruning grid cards RC-E5 to RC-E8 done
    (iteration 41); ablation cards RC-A1 to RC-A6 done, A3 ranking and score reuse fixed

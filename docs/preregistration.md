@@ -315,9 +315,11 @@ waited on these settings, so no model has been scored. Every count comes from th
      `appendix_yes_rate.tex`). Reading: the same AUROC with another "yes" rate is a shift of
      the bias; a lower AUROC is lost discrimination;
    - descriptive: not part of H1-H4, no verdict, no multiplicity correction;
-   - no new GPU run: E0's are recomputed on CPU from its saved validation outcomes
-     (`scripts/rescore_probes.py`, which first checks the outcomes against the committed rows);
-     every later evaluation writes them itself.
+   - no new GPU run: every later evaluation writes them itself. E0's validation rows could not
+     be recomputed (2026-11-04): its saved outcomes were removed with the repository clone at
+     the end of RC-E0a's session. They come with the next E0 evaluation (RC-R1 on the test
+     splits; validation only if E0 is evaluated there again). `scripts/rescore_probes.py`
+     stays for runs whose outcomes are kept.
 
 Still open before `preregistration.frozen_on` is set: how the two co-primary tests combine in a
 verdict, the finding weights (cap, tiers), the budgets and the other **[team]** items above.

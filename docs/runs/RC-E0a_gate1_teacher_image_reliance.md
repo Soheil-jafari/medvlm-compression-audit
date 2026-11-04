@@ -70,6 +70,9 @@ Input: `medcompress-data` and `e0-teacher-adapter`. One cell; nothing to edit:
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
 import sys
 from importlib import metadata
@@ -108,35 +111,19 @@ What it prints:
 If a script stops with "configuration incomplete", a setting is open: do not fill it in
 yourself, tell the agent through the inbox.
 
-### 3b. The per-finding AUROC and "yes" rate for E0 (CPU, no GPU; added 2026-11-02)
+### 3b. The per-finding AUROC and "yes" rate for E0 (2026-11-02): not possible from this run
 
-Pre-registration section 11 item 9. The validation pass above saved every probe's score in
-`outputs/E0/nobudget/seed0/outcomes.npz` (in that notebook version's output), so the new rows
-are recomputed from it without a GPU. Kaggle settings: **Accelerator None**, Internet on.
-Add Input: the **output of the RC-E0a notebook version** (Your Work -> the notebook -> that
-version -> Output). One cell; nothing to edit:
+Pre-registration section 11 item 9. The plan was to recompute them on CPU from the probe
+scores this run saved (`scripts/rescore_probes.py`). That is not possible: the cell wrote
+`outputs/` inside the clone (the configs' relative default), and the session ended with
+`rm -rf medvlm-compression-audit`, which removed `outputs/E0/nobudget/seed0/outcomes.npz`.
+`metrics.csv` had been copied before and is committed, so no committed number is affected.
 
-```bash
-%%bash
-cd /kaggle/working && rm -rf medvlm-compression-audit
-git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
-cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
-pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
-OUT=$(find /kaggle/input -path '*outputs/E0/nobudget/seed0/outcomes.npz' | head -n 1)
-[ -n "$OUT" ] || { echo "STOP: no E0 outcomes.npz attached: add the output of the RC-E0a version"; exit 1; }
-echo "outcomes: $OUT"
-python scripts/rescore_probes.py --exp E0 --seed 0 --outcomes "$OUT"
-python -m pytest -q tests/test_results.py                       # must pass before you commit
-mkdir -p /kaggle/working/results_to_commit/results
-cp -r results/E0 /kaggle/working/results_to_commit/results/
-```
-
-It first checks the outcomes against the committed rows (681 probes and every finding's
-sensitivity and specificity must be identical) and stops otherwise. Then it prints and adds
-`auroc:<f>` (with its interval), `yes_rate:<f>`, `n_positives:<f>` and `n_negatives:<f>`;
-no committed number changes. Commit `results_to_commit/results/E0/nobudget/seed0/metrics.csv`.
-If the version's output no longer holds `outcomes.npz`, the rows come with the next E0
-evaluation instead.
+So **E0's `auroc:<f>`, `yes_rate:<f>`, `n_positives:<f>` and `n_negatives:<f>` rows come with
+the next E0 evaluation**: on the test splits with RC-R1, and on validation only if E0 is
+evaluated there again (for example after rule 3's extension). No GPU run is added for them.
+Since 2026-11-04 every cell sets the output, checkpoint and cache roots under
+`/kaggle/working/`, outside the clone, and the scripts warn on Kaggle when a root is inside it.
 
 ## 4. What to commit back
 

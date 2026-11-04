@@ -58,6 +58,9 @@ terms takes as long as it takes.
 ```bash
 git clone -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H        # write this in section 6
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
 python scripts/prepare_data.py overlap --data-root /kaggle/working/data \
     --private-dir /kaggle/input/<your-rc-d1-private> \

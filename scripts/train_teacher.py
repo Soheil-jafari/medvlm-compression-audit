@@ -173,6 +173,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
     from medcompress.utils.bundles import BundleError, attach_data, attach_handoff
 
     config = load_config("experiments/E0.yaml")
+    from medcompress.cli import warn_roots_inside_repo
+
+    warn_roots_inside_repo(config)
     try:
         attach_data(config, args.data_root)
         for path in args.handoffs:

@@ -106,6 +106,9 @@ Or by hand, in one CPU notebook cell:
 %%bash
 cd /kaggle/working && git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && git log -1 --format=%H
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
 python scripts/prepare_data.py embed --data-root /kaggle/input/<shared-data> \
     --out-dir /kaggle/working/rc_d1_embed --split-seed 20261012 --close-bits 4 \

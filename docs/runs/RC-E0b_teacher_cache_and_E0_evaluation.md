@@ -64,6 +64,9 @@ Output). Nothing to edit:
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
 python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
 import sys
 from importlib import metadata
@@ -79,7 +82,6 @@ ADAPTER=$(python scripts/find_inputs.py handoff E0_teacher_adapter) || exit 1
 python scripts/prepare_data.py verify --data-root $DATA        # must print OK (8,511 files)
 python scripts/handoff.py verify $ADAPTER                       # must print OK
 grep gate1_pass results/E0/nobudget/seed0/metrics.csv          # its value must be 1.0 (RC-E0a)
-export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
 PREV=$(find /kaggle/input -path '*cache/teacher/metadata.json' -printf '%h\n' 2>/dev/null | head -1)
 echo "shards of a previous session: ${PREV:-none}"
 python scripts/01_cache_teacher_outputs.py --exp E0 --seed 0 --data-root $DATA --from $ADAPTER \

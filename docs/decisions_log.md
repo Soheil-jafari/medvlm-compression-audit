@@ -483,6 +483,14 @@ must be logged here.
   the class counts per finding, next to sensitivity and specificity, so a method that only
   shifts the yes/no bias can be told from one that loses discrimination. E0's from its saved
   validation outcomes on CPU (`scripts/rescore_probes.py`, RC-E0a section 3b).
+- **2026-11-04 (Soheil): path roots outside the clone; E0's AUROC with its next evaluation.**
+  RC-E0a's cell wrote `outputs/` inside the clone (the configs' relative default) and the
+  session ended with `rm -rf medvlm-compression-audit`, so `outcomes.npz` was lost and
+  `rescore_probes.py` could not run (`metrics.csv` was copied before and is committed). E0's
+  `auroc:`, `yes_rate:`, `n_positives:`, `n_negatives:` rows come with the next E0 evaluation.
+  Every card's cell now sets `MEDCOMPRESS_OUTPUT_ROOT`, `MEDCOMPRESS_CHECKPOINT_ROOT` and
+  `MEDCOMPRESS_CACHE_ROOT` under `/kaggle/working/` before any script runs, and on Kaggle the
+  scripts warn when one of them resolves inside the clone.
 - **2026-11-02 (Soheil): inputs found by their manifests.** No cell uses a fixed
   `/kaggle/input` path any more: the shared data are the folder of a `bundle_manifest.json` with
   `private/` next to it, a hand-off the folder of a `bundle_manifest.json` whose path contains
