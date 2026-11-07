@@ -44,6 +44,11 @@ class Progress:
     losses: list[float] = field(default_factory=list)
     ce_losses: list[float] = field(default_factory=list)
     kd_losses: list[float] = field(default_factory=list)
+    nonfinite_steps: list[int] = field(default_factory=list)
+    """Steps (1-based) whose loss was not finite (NaN or inf)."""
+    nonfinite_microbatches: int = 0
+    skipped_steps: list[int] = field(default_factory=list)
+    """Steps whose optimizer update the fp16 loss scaler skipped (non-finite gradients)."""
 
 
 def run_fingerprint(

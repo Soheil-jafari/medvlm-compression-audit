@@ -14,6 +14,7 @@ pass serves both terms. The recipe is shared with the recovery of pruned models
 
 from __future__ import annotations
 
+import json
 import math
 import random
 import time
@@ -139,11 +140,41 @@ class TrainResult:
     ce_losses: list[float] = field(default_factory=list)
     kd_losses: list[float] = field(default_factory=list)
     peak_gpu_bytes: int | None = None
+    nonfinite_steps: list[int] = field(default_factory=list)
+    nonfinite_microbatches: int = 0
+    skipped_steps: list[int] = field(default_factory=list)
 
     def final_loss(self, last: int = 10) -> float:
-        """Mean of the last ``last`` step losses (NaN if no step ran)."""
+        """Mean of the last ``last`` step losses (NaN if no step ran, or if one of them is)."""
         tail = self.losses[-last:]
         return sum(tail) / len(tail) if tail else math.nan
+
+    def final_loss_finite(self, last: int = 10) -> float:
+        """Mean of the last ``last`` finite step losses (NaN if there is none)."""
+        tail = [x for x in self.losses if math.isfinite(x)][-last:]
+        return sum(tail) / len(tail) if tail else math.nan
+
+    def history(self) -> dict[str, Any]:
+        """The per-step record kept next to the adapter (``train_history.json``)."""
+        return {
+            "steps": self.steps,
+            "losses": [x if math.isfinite(x) else None for x in self.losses],
+            "ce_losses": [x if math.isfinite(x) else None for x in self.ce_losses],
+            "kd_losses": [x if math.isfinite(x) else None for x in self.kd_losses],
+            "nonfinite_steps": list(self.nonfinite_steps),
+            "nonfinite_microbatches": self.nonfinite_microbatches,
+            "skipped_steps": list(self.skipped_steps),
+        }
+
+
+class NonFiniteAdapter(RuntimeError):
+    """A trainable weight became NaN or inf: the run stops and saves nothing."""
+
+
+HISTORY_FILE = "train_history.json"
+"""Per-step losses and the non-finite / skipped steps, written into the adapter folder."""
+LOG_EVERY = 25
+"""Steps between the progress lines a training run prints."""
 
 
 def select_subset(sample_ids: Sequence[str], n: int | None, seed: int) -> list[int]:
@@ -437,11 +468,15 @@ def train_lora(
             with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp):
                 loss, ce, kl = _step_loss(module, gt, teacher, cfg)
             scaler.scale(loss / cfg.grad_accumulation).backward()
-            totals[0] += float(loss.detach()) / cfg.grad_accumulation
+            value = float(loss.detach())
+            if not math.isfinite(value):
+                progress.nonfinite_microbatches += 1
+            totals[0] += value / cfg.grad_accumulation
             totals[1] += ce / cfg.grad_accumulation
             totals[2] += kl / cfg.grad_accumulation
         scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(params, clip)
+        scale_before = scaler.get_scale() if amp else None
         scaler.step(optimizer)
         scaler.update()
         optimizer.zero_grad(set_to_none=True)
@@ -450,7 +485,17 @@ def train_lora(
         progress.kd_losses.append(totals[2])
         progress.step = step + 1
         progress.examples_seen += per_step
+        if not math.isfinite(totals[0]):
+            progress.nonfinite_steps.append(progress.step)
+        if scale_before is not None and scaler.get_scale() < scale_before:
+            progress.skipped_steps.append(progress.step)  # the scaler skipped this update
         saved = store is not None and store.due(progress.step, cfg.steps)
+        if saved or progress.step == cfg.steps or progress.step % LOG_EVERY == 0:
+            _check_finite(named_trainable(module), progress.step)  # never save a broken state
+        if progress.step % LOG_EVERY == 0 or progress.step == cfg.steps:
+            print(f"step {progress.step}/{cfg.steps}: loss {totals[0]:.4f}; non-finite steps "
+                  f"{len(progress.nonfinite_steps)}, skipped updates {len(progress.skipped_steps)}",
+                  flush=True)  # fmt: skip
         if saved and store is not None:
             done = progress.seconds + time.perf_counter() - start
             store.save(Progress(**{**progress.__dict__, "seconds": done}), save_state)
@@ -467,10 +512,40 @@ def train_lora(
         losses=list(progress.losses),
         ce_losses=list(progress.ce_losses),
         kd_losses=list(progress.kd_losses),
+        nonfinite_steps=list(progress.nonfinite_steps),
+        nonfinite_microbatches=progress.nonfinite_microbatches,
+        skipped_steps=list(progress.skipped_steps),
     )
     result.peak_gpu_bytes = peak_gpu_bytes()
     module.eval()
     return result
+
+
+def named_trainable(module: Any) -> dict[str, Any]:
+    """The trainable parameters by name (the LoRA weights)."""
+    return {n: p for n, p in module.named_parameters() if p.requires_grad}
+
+
+def nonfinite_tensors(tensors: Mapping[str, Any]) -> dict[str, int]:
+    """``{name: number of NaN or inf values}`` of every tensor that has any."""
+    import torch
+
+    found = {}
+    for name, value in tensors.items():
+        bad = int((~torch.isfinite(value.detach().float())).sum())
+        if bad:
+            found[name] = bad
+    return found
+
+
+def _check_finite(tensors: Mapping[str, Any], step: int) -> None:
+    bad = nonfinite_tensors(tensors)
+    if bad:
+        first = ", ".join(f"{n} ({k})" for n, k in list(bad.items())[:5])
+        raise NonFiniteAdapter(
+            f"the adapter became non-finite at step {step}: {len(bad)} tensor(s) hold NaN or "
+            f"inf, e.g. {first}. Nothing is saved; tell the agent (keep the last 30 log lines)"
+        )
 
 
 def train_student_sft(
@@ -575,6 +650,9 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
     from medcompress.compression.lora import save_adapter
 
     save_adapter(student, run_folder / "adapter")
+    (run_folder / "adapter" / HISTORY_FILE).write_text(
+        json.dumps(result.history(), indent=1), encoding="utf-8"
+    )  # the per-step losses stay with the adapter (and its hand-off)
     ResumeStore(resume_dir, "").clear()
     rows = [
         {"experiment": tag, "budget": "", "seed": seed, "metric": name, "value": float(value)}
@@ -582,8 +660,13 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
             ("train_steps", result.steps),
             ("train_examples_seen", result.examples_seen),
             ("train_loss_final", result.final_loss()),
+            ("train_loss_final_finite", result.final_loss_finite()),
+            ("train_nonfinite_steps", len(result.nonfinite_steps)),
+            ("train_nonfinite_microbatches", result.nonfinite_microbatches),
+            ("train_skipped_steps", len(result.skipped_steps)),
             ("train_seconds", result.seconds),
         )
+        if math.isfinite(float(value))  # a NaN final loss is left out; the counts say why
     ]
     if result.peak_gpu_bytes is not None:
         rows.append(
@@ -599,4 +682,6 @@ def run_student_training(config: Mapping[str, Any], run: RunContext | None) -> N
         run.run_dir(paths["results_root"]) if run is not None else Path(paths["results_root"])
     ) / "metrics.csv"
     upsert_results(rows, target)
-    print(f"trained {result.steps} steps, final loss {result.final_loss():.4f}; wrote {target}")
+    print(f"trained {result.steps} steps, final loss {result.final_loss():.4f} (finite steps: "
+          f"{result.final_loss_finite():.4f}); non-finite steps {len(result.nonfinite_steps)}, "
+          f"skipped updates {len(result.skipped_steps)}; wrote {target}")  # fmt: skip

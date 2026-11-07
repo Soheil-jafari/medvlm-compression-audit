@@ -8,7 +8,8 @@
   top-20 token log-probabilities (KD weight 0.5, temperature 2), evaluate it on the validation
   split and measure its footprint. E2 is the starting point of every compression arm and the
   reference of the budgets.
-- Status: `ready` (2026-11-02), to start **after E1 seed 0's validation row is committed**: the training reads rule 3 from the committed rows and refuses to start until it can (exit code 4, before the model is loaded).
+- Status: `ready` (2026-11-06): rule 3 passes (E0 0.803 >= E1 seed 0 0.592 + 0.02); start after
+  RC-E1 section 3b (seed 0's adapter check) and the team's decision on seed 0.
 
 ## 2. Requirements
 

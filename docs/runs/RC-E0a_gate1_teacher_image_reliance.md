@@ -125,6 +125,49 @@ evaluated there again (for example after rule 3's extension). No GPU run is adde
 Since 2026-11-04 every cell sets the output, checkpoint and cache roots under
 `/kaggle/working/`, outside the clone, and the scripts warn on Kaggle when a root is inside it.
 
+### 3c. E0's validation again, for the operating point (GPU; 2026-11-06)
+
+Pre-registration section 11 item 10: every model's thresholds at specificity 0.95 are fitted on
+its validation probes. E0's validation outcomes were lost (section 3b), so E0 is scored on
+validation once more: this writes the `op_threshold:<f>` rows RC-R1's test evaluation needs, the
+operating-point metrics, and the AUROC and "yes" rate rows of item 9. Gate 1 is not run again.
+**GPU T4 x2**, Internet on; Add Input: `medcompress-data`, `e0-teacher-adapter`. About **0.8 h**
+(the first pass took 2,802 s) plus setup. One cell; nothing to edit:
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+DATA=$(python scripts/find_inputs.py data) || exit 1
+ADAPTER=$(python scripts/find_inputs.py handoff E0_teacher_adapter) || exit 1
+python scripts/prepare_data.py verify --data-root $DATA         # must print OK (8,511 files)
+python scripts/06_evaluate.py --exp E0 --seed 0 --data-root $DATA --from $ADAPTER \
+    2>&1 | tee /kaggle/working/rc_e0a_validation_op.txt
+echo "validation exit code: ${PIPESTATUS[0]}"
+python -m pytest -q tests/test_results.py                       # must pass before you commit
+mkdir -p /kaggle/working/results_to_commit/results
+cp -r results/E0 /kaggle/working/results_to_commit/results/
+grep -E "op_|auroc|yes_rate|macro_balanced_accuracy" results/E0/nobudget/seed0/metrics.csv
+```
+
+The validation rows are replaced by the new pass (same probes, same seed; the image side and the
+adapter are the same, the Kaggle image may differ, see the environment record). Gate 1's verdict
+rows stay.
+
 ## 4. What to commit back
 
 - `results/E0/nobudget/seed0/metrics.csv` (from `results_to_commit/`): the `teacher_*` rows

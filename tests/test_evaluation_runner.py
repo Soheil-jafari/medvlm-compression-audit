@@ -372,9 +372,19 @@ def test_the_unfiltered_test_is_locked_and_scored_into_its_own_files(
         yaml.safe_dump({"preregistration": {"frozen_on": "2026-11-01"}})
     )
     assert resolve_settings(unfiltered).split == "test_unfiltered"
+    with pytest.raises(ConfigError, match="validation operating point"):
+        run_evaluation(test_config, run, model=Detector(min_pixels=20), samples=samples)
+    validation = eval_config(root, suites=["clinical"])  # fits the operating point
+    run_evaluation(validation, run, model=Detector(min_pixels=20), samples=samples)
+    (root / "weights.yaml").write_text(
+        yaml.safe_dump({"preregistration": {"frozen_on": "2026-11-01"}})
+    )
     run_evaluation(test_config, run, model=Detector(min_pixels=20), samples=samples)
     run_evaluation(unfiltered, run, model=Detector(min_pixels=1), samples=samples)
     folder = root / "results" / "E2" / "nobudget" / "seed0"
+    val = pd.read_csv(folder / "metrics.csv").set_index("metric")["value"]
+    used = pd.read_csv(folder / "metrics_test_unfiltered.csv").set_index("metric")["value"]
+    assert used["op_threshold:polyp"] == val["op_threshold:polyp"]  # the validation threshold
     test = pd.read_csv(folder / "metrics_test.csv").set_index("metric")["value"]
     other = pd.read_csv(folder / "metrics_test_unfiltered.csv").set_index("metric")["value"]
     assert test["sensitivity:polyp"] == pytest.approx(5 / 6)  # not overwritten

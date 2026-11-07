@@ -1,9 +1,9 @@
-# Run card RC-E8: E7 + 4-bit quantization (E8), 3 budgets x 3 seeds
+# Run card RC-E8: E7 + 4-bit quantization (E8), B2 x 3 seeds, B1 and B3 seed 0 (trend)
 
 ## 1. What and why
 
 - Stage: S09
-- Experiments: E8 = each E7 pruned and recovered model (budgets B1, B2, B3, seeds 0, 1, 2)
+- Experiments: E8 = each E7 pruned and recovered model (budget B2 with seeds 0, 1, 2, and B1 and B3 with seed 0 only (the trend, pre-registration section 11 item 11; decided 2026-11-06). The cell of a seed 1 or 2 session runs B2 only)
   quantized with the E3 `w4` recipe (GPTQ, groups of 128, the same 128 calibration images of
   that seed). 9 runs, scored on validation and test and timed with the budget protocol.
 - Purpose: whether pruning and quantization combine, at the same budgets.

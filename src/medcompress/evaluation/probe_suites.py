@@ -354,3 +354,100 @@ def calibration_metrics(out: ProbeOutcomes, *, n_bins: int) -> list[Metric]:
     for level, value in calibration.risk_at_coverage(confidence, out.correct).items():
         metrics.append(Metric(f"risk_at_coverage:{level}", value))
     return metrics
+
+
+# ------------------------------------------------------------- operating point
+
+OP_SPECIFICITY = 0.95
+"""Pre-registered operating point (2026-11-06): per model and finding, the probe-score
+threshold that gives specificity 0.95 on that finding's validation negatives."""
+OP_PREFIX = "op_"
+OP_THRESHOLD = "op_threshold"
+
+
+def fit_thresholds(
+    out: ProbeOutcomes, findings: Sequence[str], specificity: float = OP_SPECIFICITY
+) -> dict[str, float]:
+    """``{finding: threshold}`` on the score (``margin``) with specificity >= ``specificity``.
+
+    The threshold is the k-th smallest margin of the finding's negatives, k =
+    ceil(specificity x negatives), and a probe answers "yes" when its margin is above it: at
+    most ``1 - specificity`` of the negatives lie above, so on the split it was fitted on the
+    specificity is ``specificity`` or a little more (ties). NaN without negatives.
+    """
+    codes = out.finding_index(findings)
+    thresholds = {}
+    for code, finding in enumerate(findings):
+        negatives = np.sort(out.margin[(codes == code) & ~out.truth])
+        if negatives.size == 0:
+            thresholds[finding] = math.nan
+            continue
+        k = max(1, math.ceil(specificity * negatives.size - 1e-9))
+        thresholds[finding] = float(negatives[k - 1])
+    return thresholds
+
+
+def operating_point_answers(out: ProbeOutcomes, thresholds: Mapping[str, float]) -> np.ndarray:
+    """The "yes" answers at the operating point: margin above the finding's threshold.
+
+    A finding without a threshold (no validation negatives, so none could be fitted) keeps its
+    plain yes/no answers.
+    """
+    limits = np.array([thresholds.get(f, math.nan) for f in out.findings], dtype=float)
+    return np.where(np.isnan(limits), out.yes, out.margin > np.nan_to_num(limits))
+
+
+def operating_point_metrics(
+    out: ProbeOutcomes,
+    findings: Sequence[str],
+    thresholds: Mapping[str, float],
+    *,
+    size_thresholds: Sequence[float] | None,
+    mask_findings: Sequence[str] | None,
+    n_resamples: int,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> list[Metric]:
+    """The clinical metrics at the operating point, prefixed ``op_``.
+
+    ``op_threshold:<f>``, ``op_sensitivity:<f>``, ``op_specificity:<f>``, ``op_yes_rate:<f>``,
+    ``op_macro_balanced_accuracy`` (CI; the headline accuracy of H1 and H4), and with the
+    lesion-size thresholds ``op_small_finding_recall`` (CI; the primary endpoint) and
+    ``op_recall_stratum:<s>``. On validation the thresholds are fitted on the same probes, so
+    the specificity there is 0.95 by construction; every test uses them unchanged.
+    """
+    from dataclasses import replace
+
+    at = replace(out, yes=operating_point_answers(out, thresholds))
+    metrics = [Metric("op_target_specificity", OP_SPECIFICITY)]
+    metrics += [Metric(f"{OP_THRESHOLD}:{f}", float(thresholds[f])) for f in findings]
+    codes = np.stack([at.finding_index(findings), at.truth.astype(int), at.yes.astype(int)], axis=1)
+    kwargs = {**_ci_kwargs(n_resamples, alpha, seed), "clusters": np.asarray(at.sample_ids)}
+    balanced = bootstrap_ci(
+        lambda a: _macro_balanced_accuracy_from_codes(a, len(findings)), codes, **kwargs
+    )
+    metrics.append(Metric("op_macro_balanced_accuracy", *balanced))
+    index = at.finding_index(findings)
+    for code, finding in enumerate(findings):
+        rows = index == code
+        truth, yes = at.truth[rows], at.yes[rows]
+        sens = float(yes[truth].mean()) if truth.any() else math.nan
+        spec = float((~yes[~truth]).mean()) if (~truth).any() else math.nan
+        metrics += [
+            Metric(f"op_sensitivity:{finding}", sens),
+            Metric(f"op_specificity:{finding}", spec),
+            Metric(f"op_yes_rate:{finding}", float(yes.mean()) if rows.any() else math.nan),
+        ]
+    if size_thresholds is not None and mask_findings is not None:
+        keep, _ = small_positive_strata(at, size_thresholds, mask_findings)
+        if keep.any():
+            small = small_finding_metrics(
+                at, size_thresholds, mask_findings, n_resamples=n_resamples, alpha=alpha, seed=seed
+            )
+            wanted = ("small_finding_recall", "recall_stratum:")
+            metrics += [
+                Metric(OP_PREFIX + m.name, m.value, m.ci_low, m.ci_high)
+                for m in small
+                if m.name.startswith(wanted)
+            ]
+    return metrics

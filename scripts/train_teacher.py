@@ -36,6 +36,7 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -173,9 +174,11 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
     from medcompress.utils.bundles import BundleError, attach_data, attach_handoff
 
     config = load_config("experiments/E0.yaml")
-    from medcompress.cli import warn_roots_inside_repo
+    from medcompress.cli import note_environment, warn_roots_inside_repo
+    from medcompress.config import RunContext
 
     warn_roots_inside_repo(config)
+    note_environment(config, RunContext("E0", seed=0), "train_teacher")
     try:
         attach_data(config, args.data_root)
         for path in args.handoffs:
@@ -351,6 +354,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
             ("n_examples", n), ("extension_examples", record["extension_examples"]),
             ("train_steps", result.steps), ("train_examples_seen", result.examples_seen),
             ("train_seconds", result.seconds), ("train_loss_final", result.final_loss()),
+            ("train_loss_final_finite", result.final_loss_finite()),
+            ("train_nonfinite_steps", len(result.nonfinite_steps)),
+            ("train_skipped_steps", len(result.skipped_steps)),
             ("setup_fp16_2gpu", float(fp16)),
             ("gradient_checkpointing", float(plan.gradient_checkpointing)),
             ("train_peak_gpu_bytes", float(result.peak_gpu_bytes or 0)),
@@ -359,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - one linear pr
             ("lora_adapted_layers", float(sum(counts.values()))),
             ("t4x2_counts_once", float(once)),
         )
+        if math.isfinite(float(value))  # a NaN final loss is left out; the counts say why
     ]  # fmt: skip
     rows += [
         {"experiment": "E0", "budget": "", "seed": 0, "metric": f"teacher_lora_target:{name}",

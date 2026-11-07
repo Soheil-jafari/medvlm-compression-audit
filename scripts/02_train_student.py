@@ -44,7 +44,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser(__doc__.splitlines()[0])
     args, run = parse_stage_args(parser, argv, script=SCRIPT, default_exp=None, require_budget=True)
     config = resolve_config(args)
-    return run_stage("02_train_student", train, config=config, run=run)
+    from medcompress.compression.distillation.offline_kd import NonFiniteAdapter
+
+    try:
+        return run_stage("02_train_student", train, config=config, run=run)
+    except NonFiniteAdapter as exc:
+        print(f"STOP: {exc}", file=sys.stderr)
+        return NON_FINITE_ADAPTER
+
+
+NON_FINITE_ADAPTER = 6
+"""Exit code when a trainable weight became NaN or inf (nothing was saved)."""
 
 
 if __name__ == "__main__":

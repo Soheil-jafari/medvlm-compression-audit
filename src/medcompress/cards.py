@@ -213,6 +213,13 @@ def _pick(values: Sequence[str], wanted: Sequence[str] | None) -> tuple[str, ...
     return tuple(v for v in values if v in wanted)
 
 
+def _seed_budgets(seed: int, budgets: Sequence[str]) -> list[str]:
+    """B2 for every seed; B1 and B3 for seed 0 only, the trend (decided 2026-11-06)."""
+    from medcompress.registry import TREND_BUDGETS, TREND_SEEDS
+
+    return [b for b in budgets if b not in TREND_BUDGETS or seed in TREND_SEEDS]
+
+
 def _seed(card: str, seed: int | None, allowed: Sequence[int]) -> int:
     if seed is None:
         raise CardError(f"{card} runs one seed per session: give --seed ({list(allowed)})")
@@ -455,7 +462,7 @@ def build_plan(
         s = _seed(card, seed, SEEDS)
         exp = card[-2:]
         criteria = _pick(E5_CRITERIA, variants) if exp == "E5" else (None,)
-        runs = [Run(exp, s, b, v) for v in criteria for b in picked_budgets]
+        runs = [Run(exp, s, b, v) for v in criteria for b in _seed_budgets(s, picked_budgets)]
         kept = runs if exp == "E7" else [r for r in runs if r.budget == "B2"]  # E8 / RC-T1
         handoffs = [Handoff("outcomes", tuple(runs), f"{exp}_seed{s}_outcomes")]
         if kept:
@@ -469,7 +476,7 @@ def build_plan(
         )  # fmt: skip
     if card == "RC-E8":
         s = _seed(card, seed, SEEDS)
-        runs = [Run("E8", s, b) for b in picked_budgets]
+        runs = [Run("E8", s, b) for b in _seed_budgets(s, picked_budgets)]
         steps = [step for run in runs for step in (_experiment(run), *_test_evals(run))]
         b2 = tuple(r for r in runs if r.budget == "B2")  # RC-T1 times B2
         return CardPlan(

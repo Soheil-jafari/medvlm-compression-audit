@@ -91,6 +91,32 @@ ROOTS_OUTSIDE_THE_CLONE: tuple[tuple[str, str], ...] = (
 """The path roots whose files must outlive the clone (outcomes, adapters, the teacher cache)."""
 
 
+def records_environment() -> bool:
+    """Whether stages write ``environment.json``: on Kaggle, or with
+    ``$MEDCOMPRESS_RECORD_ENVIRONMENT`` = 1 (the rented GPU of RC-T1); 0 turns it off."""
+    flag = os.environ.get("MEDCOMPRESS_RECORD_ENVIRONMENT")
+    if flag is not None:
+        return flag == "1"
+    return on_kaggle()
+
+
+def note_environment(config: Mapping[str, Any], run: Any, stage: str) -> None:
+    """Print the torch build, CUDA, driver, transformers and peft versions and add them to
+    ``results/<run dir>/environment.json`` (``utils/environment.py``)."""
+    if not records_environment() or not hasattr(run, "run_dir"):
+        return
+    from medcompress.utils.environment import environment_record, record_environment, summary_line
+
+    record = environment_record()
+    print(f"[{stage}] {summary_line(record)}")
+    results_root = (config.get("paths") or {}).get("results_root")
+    if results_root is not None:
+        try:
+            record_environment(run.run_dir(Path(str(results_root))), stage, record)
+        except OSError as exc:  # never stop a run for its record
+            print(f"[{stage}] could not write environment.json: {exc}", file=sys.stderr)
+
+
 def on_kaggle() -> bool:
     """True in a Kaggle notebook (``$MEDCOMPRESS_ON_KAGGLE`` = 1 or 0 overrides, for tests)."""
     flag = os.environ.get("MEDCOMPRESS_ON_KAGGLE")
@@ -283,6 +309,8 @@ def run_stage(stage: str, func: Callable[..., Any], /, **kwargs: Any) -> int:
         run, config = kwargs.get("run"), kwargs.get("config")
         if config is not None and getattr(run, "experiment_id", None) in COMPRESSION_ARMS:
             require_frozen_preregistration(config)
+        if config is not None and run is not None:
+            note_environment(config, run, stage)
         func(**kwargs)
     except NotImplementedError as exc:
         print(f"[{stage}] not implemented yet: {exc}")

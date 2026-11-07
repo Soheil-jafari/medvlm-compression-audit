@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-11-02, iteration 63 (interactive run mode)
+**Last updated:** 2026-11-06, iteration 64 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S06: RC-E0a and RC-E0b done (Gate 1 passed; cache `e0-teacher-cache`); next RC-E1 (seed 0 first, rule 3), then RC-E2 on three accounts; the freeze items before any compression run
+**Current stage:** S06: E1 done (3 seeds, rule 3 passes); seed 0's adapter check, the operating-point rows (E0 validation again, E1 from saved outcomes), then RC-E2 on three accounts; the freeze items
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action

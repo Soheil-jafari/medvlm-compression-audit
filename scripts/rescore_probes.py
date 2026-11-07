@@ -2,8 +2,10 @@
 """Add the per-finding AUROC and "yes" rate to a run from its saved probe outcomes (CPU).
 
 The secondary metrics pre-registered on 2026-11-02 (``auroc:<f>`` with its image-bootstrap
-CI, ``yes_rate:<f>``, ``n_positives:<f>``, ``n_negatives:<f>``) are computed by every
-evaluation from now on. A run scored before that keeps its per-probe outcomes
+CI, ``yes_rate:<f>``, ``n_positives:<f>``, ``n_negatives:<f>``) and the operating point of
+2026-11-06 (``op_threshold:<f>`` at specificity 0.95 on validation, ``op_sensitivity:<f>``,
+``op_small_finding_recall`` ...; a test split reads the run's committed validation thresholds)
+are computed by every evaluation from now on. A run scored before that keeps its per-probe outcomes
 (``outcomes.npz`` under the output root), so they are recomputed here without a GPU, with the
 same settings and bootstrap seed the evaluation uses.
 
@@ -35,8 +37,10 @@ from medcompress.cli import (  # noqa: E402
 )
 from medcompress.config import ConfigError, RunContext  # noqa: E402
 
-NEW_PREFIXES = ("auroc:", "yes_rate:", "n_positives:", "n_negatives:")
-"""The rows this script writes (the pre-registered secondary metrics of 2026-11-02)."""
+NEW_PREFIXES = ("auroc:", "yes_rate:", "n_positives:", "n_negatives:", "op_")
+"""The rows this script writes: the secondary metrics of 2026-11-02 and the operating point of
+2026-11-06 (``op_*``: thresholds at specificity 0.95 fitted on validation, and the metrics at
+them)."""
 TOLERANCE = 1e-9
 
 
@@ -52,8 +56,18 @@ def rescore(config: dict, run: RunContext | None, outcomes: Path) -> None:
     """Recompute the new rows from ``outcomes`` and upsert them (see the module docstring)."""
     import numpy as np
 
-    from medcompress.evaluation.probe_suites import ProbeOutcomes, clinical_metrics
-    from medcompress.evaluation.runner import RUN_FILES_BY_SPLIT, resolve_settings, to_rows
+    from medcompress.evaluation.probe_suites import (
+        ProbeOutcomes,
+        clinical_metrics,
+        fit_thresholds,
+        operating_point_metrics,
+    )
+    from medcompress.evaluation.runner import (
+        RUN_FILES_BY_SPLIT,
+        resolve_settings,
+        to_rows,
+        validation_thresholds,
+    )
     from medcompress.utils.io import upsert_results
 
     if run is None:
@@ -72,9 +86,18 @@ def rescore(config: dict, run: RunContext | None, outcomes: Path) -> None:
         area=arrays["probe_area"].astype(float),
         has_mask=arrays["probe_has_mask"].astype(bool),
     )
-    metrics = clinical_metrics(
-        out, settings.findings, n_resamples=int(settings.n_resamples or 10_000),
-        alpha=settings.alpha, seed=run.seed,
+    n = int(settings.n_resamples or 10_000)
+    metrics = clinical_metrics(out, settings.findings, n_resamples=n, alpha=settings.alpha,
+                               seed=run.seed)  # fmt: skip
+    if settings.split == "val":
+        thresholds = fit_thresholds(out, settings.findings)
+    else:
+        thresholds = validation_thresholds(
+            Path(config["paths"]["results_root"]), run, settings.findings
+        )
+    metrics += operating_point_metrics(
+        out, settings.findings, thresholds, size_thresholds=settings.thresholds,
+        mask_findings=settings.mask_findings, n_resamples=n, alpha=settings.alpha, seed=run.seed,
     )  # fmt: skip
     target = run.run_dir(config["paths"]["results_root"]) / RUN_FILES_BY_SPLIT[settings.split][0]
     committed = committed_values(target)

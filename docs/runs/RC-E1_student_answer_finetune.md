@@ -7,7 +7,9 @@
 - Purpose: train the chosen student with LoRA on the ground-truth answers only (KD weight 0),
   then score it on the validation split with the full evaluation suite, so that E2 (the same
   recipe plus distillation) has its control.
-- Status: `ready` (2026-11-02): the evaluation settings are frozen and E0's validation is committed. **Seed 0 first** (Soheil): E2 waits for its validation row (rule 3). Seeds 1 and 2 can run at any time, in parallel.
+- Status: `done` (2026-11-06): seeds 0, 1 and 2 trained and scored on validation; rule 3
+  passes. Open: seed 0's adapter check (section 3b) and the operating-point rows of all three
+  (section 3c), before E2.
 
 ## 2. Requirements
 
@@ -104,6 +106,72 @@ Then: make `/kaggle/working/handoff/E1_seed<k>_adapter` ONE private Kaggle datas
 `results_to_commit/results/E1/nobudget/seed<k>/metrics.csv`. The benchmark step (stage 07) is
 not in this cell: it waits on `budgets.measurement.hardware` (open, Amir).
 
+### 3b. Seed 0's adapter check (CPU, no GPU; 2026-11-06)
+
+Seed 0 logged `final loss nan` (seeds 1 and 2: 0.548, 0.523), but its validation is normal. The
+final loss is the mean of the last 10 step losses, so one non-finite step makes it NaN; the fp16
+loss scaler then skips that update, which would leave the adapter intact. This cell checks the
+adapter. **Accelerator None**, Internet on; Add Input: `e1-seed0-adapter` (and, if you have it,
+the output of the E1 seed 0 notebook version). One cell; nothing to edit:
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
+ADAPTER=$(python scripts/find_inputs.py handoff E1_seed0_adapter) || exit 1
+python scripts/handoff.py verify "$ADAPTER"                     # must print OK
+PROGRESS=$(find /kaggle/input -path '*E1/seed0/resume/current/progress.json' | head -n 1)
+python scripts/inspect_adapter.py "$ADAPTER" ${PROGRESS:+--progress "$PROGRESS"}
+echo "inspect exit code: $? (0 = every tensor finite, 6 = not)"
+```
+
+It prints each adapter file's tensors and values and every tensor with NaN or inf, then any loss
+history. **This run kept none**: the training's resume state (which holds the per-step losses)
+is removed once the adapter is saved, and the run printed no per-step lines. Since 2026-11-06
+every training run writes `train_history.json` into its adapter folder (per-step losses, the
+non-finite steps, the skipped updates), prints a line every 25 steps, writes
+`train_nonfinite_steps`, `train_nonfinite_microbatches`, `train_skipped_steps` and
+`train_loss_final_finite` to `metrics.csv`, and stops (exit code 6, nothing saved) if a
+trainable weight becomes NaN or inf.
+
+### 3c. The operating point for E1 (CPU if the outcomes were kept; 2026-11-06)
+
+Pre-registration section 11 item 10: each model's thresholds at specificity 0.95 are fitted on
+its validation probes and written as `op_threshold:<f>`, with the metrics at them. E1's
+validation ran before that, so its `op_*` rows are missing, and its test evaluation (RC-R1)
+refuses to run without them. If the E1 session kept `outputs/` outside the clone (cells since
+2026-11-04), they come from the saved scores, on CPU, in about a minute per seed. **Accelerator
+None**; Add Input: the output of the E1 notebook version of that seed. Edit only `SEED`:
+
+```bash
+%%bash
+SEED=0   # 0, 1 or 2: the seed whose notebook output is attached
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
+OUT=$(find /kaggle/input -path "*outputs/E1/nobudget/seed${SEED}/outcomes.npz" | head -n 1)
+[ -n "$OUT" ] || { echo "STOP: E1 seed $SEED's outcomes.npz is not attached or was not kept: evaluate it on validation again (GPU, about 0.5 h)"; exit 1; }
+python scripts/rescore_probes.py --exp E1 --seed $SEED --outcomes "$OUT"
+python -m pytest -q tests/test_results.py                       # must pass before you commit
+mkdir -p /kaggle/working/results_to_commit/results
+cp -r results/E1 /kaggle/working/results_to_commit/results/
+```
+
+It first checks the outcomes against the committed rows (681 probes, every sensitivity and
+specificity), then adds the AUROC, "yes" rate and `op_*` rows; no committed number changes. If
+the outcomes were not kept, run the validation again on GPU instead (T4 x2, about 0.5 h per seed,
+measured 1,704-1,896 s): the RC-E1 cell above without the training lines (`06_evaluate.py` only,
+with the adapter attached: `--from "$(python scripts/find_inputs.py handoff E1_seed${SEED}_adapter)"`).
+
 ## 4. What to commit back
 
 For each seed `k`:
@@ -124,11 +192,35 @@ team before anything is compressed.
 
 ## 6. Run report (filled by the person who ran it)
 
-- Run by / date:
-- Commit actually used:
-- Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft"`):
-- Per seed: wall time, peak GPU memory (`train_peak_gpu_bytes`), seconds per update
-  (`train_seconds` / `train_steps`), final training loss; for seed 0, whether the micro-batch
-  of 4 fitted:
-- Name of the private datasets with your adapters and `outcomes.npz` files:
-- Anything unusual (errors, retries, changed settings):
+Reported by Soheil (2026-11-06); the three `metrics.csv` were uploaded as `metrics0/1/2.csv`
+(173a3db) and renamed to `metrics.csv` (rows unchanged), so the aggregation and the rule 3
+check find them. Seed 0's `train_loss_final` row read `nan`, which the results schema does not
+accept: it was removed from the file and is recorded here.
+
+| | seed 0 | seed 1 | seed 2 |
+|---|---|---|---|
+| `train_steps` / examples | 625 / 10,000 | 625 / 10,000 | 625 / 10,000 |
+| `train_loss_final` (mean of the last 10 steps) | **nan** (row removed) | 0.548 | 0.523 |
+| `train_seconds` | 8,409 (2.34 h) | 9,132 (2.54 h) | 9,183 (2.55 h) |
+| `train_peak_gpu_bytes` | 12,651,514,880 | 12,639,033,856 | 12,651,042,816 |
+| validation `macro_balanced_accuracy` | 0.592 (0.571-0.614) | 0.546 (0.532-0.560) | 0.557 (0.541-0.575) |
+| sensitivity polyp / UC / oesophagitis | 0.48 / 0.06 / 0.05 | 0.28 / 0.00 / 0.00 | 0.32 / 0.00 / 0.03 |
+| AUROC polyp / UC / oesophagitis | 0.995 / 0.598 / 0.917 | 0.996 / 0.670 / 0.928 | 0.995 / 0.576 / 0.931 |
+| `small_finding_recall` (13 small polyps) | 0.69 (0.42-0.93) | 0.46 (0.18-0.75) | 0.62 (0.33-0.89) |
+| `lesion_mask_effect` | 0.28 (0.17-0.38) | 0.09 (0.02-0.16) | 0.19 (0.10-0.27) |
+| `evaluation_seconds` | 1,704 | 1,881 | 1,896 |
+
+- Run by / date: seed 0 Soheil, seeds 1 and 2 as split (section 2b); committed 2026-11-06.
+- Commit actually used: not reported.
+- Hardware and library versions: T4 x2 (one T4 used); **Torch 2.11.0+cu130** (the teacher ran
+  on 2.11.0+cu128; TensorFlow 2.20 -> 2.21): the Kaggle image changed between RC-TT1 / RC-E0
+  and E1. Recorded in the decisions log; every stage now writes the versions to
+  `environment.json` (section 2b).
+- Memory: 12.65 GB at peak of the T4's 15.6 GB; micro-batch 1 x 16 fits on real data.
+- **Rule 3 (teacher quality) passes:** E0's validation macro balanced accuracy 0.803 >= E1
+  seed 0's 0.592 + 0.02 = 0.612 (pre-registration section 6). No teacher extension; E2 may
+  start.
+- Anything unusual: seed 0's NaN final loss (section 3b); all three students are very
+  conservative ("yes" rates: polyp 0.13-0.22, UC 0-0.04, oesophagitis 0-0.01) while their
+  scores rank polyp and oesophagitis well, which led to the operating point (pre-registration
+  section 11 item 10).

@@ -8,7 +8,8 @@ saved for every arm (``outcomes_test.npz``).
 
 * An **item** is one probe (image, finding). An item **flips** for an arm when the arm's
   majority answer over its seeds (yes or no; 3 seeds, so no ties) differs from E0's answer
-  (the teacher, seed 0). The answer is compared, not its correctness.
+  (the teacher, seed 0). The answer is compared, not its correctness. Since 2026-11-06 both
+  answers are those at each model's operating point (specificity 0.95 on validation).
 * For each arm (method, variant and budget) the rows are:
   - ``n_items``, ``n_flips`` and ``flip_rate`` (all items);
   - per finding ``f``: ``flip_rate:<f>``, ``flip_share:<f>`` (the finding's part of the flips)
@@ -79,7 +80,7 @@ def flip_items(
         sample_ids=tuple(reference["probe_sample_ids"].astype(str)[order]),
         findings=tuple(names),
         truth=reference["probe_truth"].astype(bool)[order],
-        yes=reference["probe_yes"].astype(bool)[order],
+        yes=_answers_at_operating_point(reference)[order],
         margin=reference["probe_margin"].astype(float)[order],
         area=area,
         has_mask=np.asarray(has_mask).astype(bool)[order],
@@ -96,6 +97,14 @@ def flip_items(
         n_strata=len(thresholds) + 1,
         reference_yes=out.yes,
     )
+
+
+def _answers_at_operating_point(reference: Mapping[str, np.ndarray]) -> np.ndarray:
+    """E0's answers at its operating point (``probe_yes_op``, since 2026-11-06)."""
+    if "probe_yes_op" not in reference:
+        raise ValueError("E0's outcomes have no operating-point answers (probe_yes_op): they "
+                         "were saved before 2026-11-06; evaluate E0 again")  # fmt: skip
+    return reference["probe_yes_op"].astype(bool)
 
 
 def majority_yes(majority_correct: np.ndarray, truth: np.ndarray) -> np.ndarray:
