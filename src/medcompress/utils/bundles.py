@@ -83,7 +83,27 @@ COMPAT_KEYS: tuple[str, ...] = (
     "teacher_revision",
     "training.data_subset",
 )
-"""Settings a run that reads a hand-off must share with the run that wrote it."""
+"""Settings a run that reads a hand-off must share with the run that wrote it (the default,
+for every hand-off made from the student: adapter, resume, pruned, quantized, outcomes)."""
+TEACHER_COMPAT_KEYS: tuple[str, ...] = (
+    "inputs.image_longest_side",
+    "seeds.data_split",
+    "teacher",
+    "teacher_revision",
+    "training.data_subset",
+)
+"""What can change a teacher hand-off's content: the teacher, its revision, the image side and
+the training pool (its seed and size). The student is not among them: the teacher adapter and
+the teacher cache are written by E0, whose config names no student, and read by E2, E4, the
+recoveries, RC-R1 and E9, which do (a false stop of E2 seed 0, 2026-11-07). The decoding
+settings of the cache (``max_new_tokens``, ``top_k``), its sample ids and the teacher's config
+hash are in the cache's own metadata, covered by the pinned manifest hash
+(``training.teacher_cache_manifest_sha256``)."""
+COMPAT_KEYS_BY_KIND: Mapping[str, tuple[str, ...]] = {
+    "teacher_cache": TEACHER_COMPAT_KEYS,
+    "teacher_adapter": TEACHER_COMPAT_KEYS,
+}
+"""The compared settings per hand-off kind; any other kind compares :data:`COMPAT_KEYS`."""
 _CHUNK = 1 << 20
 
 
@@ -160,8 +180,13 @@ def _model_revision(path: Any) -> str | None:
 
 def compat_values(config: Mapping[str, Any]) -> dict[str, Any]:
     """The settings of :data:`COMPAT_KEYS` in a resolved config (``None`` where absent)."""
+    from medcompress.config import find_todos
+
     components = config.get("components") or {}
-    student = (config.get("model") or {}).get("config") or components.get("student")
+    named = (config.get("model") or {}).get("config")
+    if named is not None and find_todos({"v": named}):
+        named = None  # an open placeholder names no student (E0's config)
+    student = named or components.get("student")
     teacher = components.get("teacher")
     return {
         "inputs.image_longest_side": (config.get("inputs") or {}).get("image_longest_side"),
@@ -332,17 +357,25 @@ def verified_token(bundle: Bundle) -> str:
 
 
 def check_compat(bundle: Bundle, config: Mapping[str, Any]) -> None:
-    """Stop if a setting of :data:`COMPAT_KEYS` differs between the writer and this run.
+    """Stop if a compared setting differs between the writer and this run.
 
-    A setting that one side does not have (``None``) is not compared.
+    The compared settings depend on the hand-off's kind (:data:`COMPAT_KEYS_BY_KIND`; the
+    teacher's hand-offs ignore the student). A setting that one side does not have (``None``)
+    or still has open (a ``TODO`` placeholder) is not compared: it is no value to clash with.
     """
+    from medcompress.config import find_todos
+
+    def known(value: Any) -> bool:
+        return value is not None and not find_todos({"v": value})
+
     theirs = bundle.meta.get("compat") or {}
     ours = compat_values(config)
+    keys = COMPAT_KEYS_BY_KIND.get(bundle.kind, COMPAT_KEYS)
     clashes = [
         f"{key}: {theirs.get(key)!r} there, {ours.get(key)!r} here"
-        for key in COMPAT_KEYS
-        if theirs.get(key) is not None
-        and ours.get(key) is not None
+        for key in keys
+        if known(theirs.get(key))
+        and known(ours.get(key))
         and str(theirs.get(key)) != str(ours.get(key))
     ]
     if clashes:
