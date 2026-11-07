@@ -1145,3 +1145,13 @@ Append-only, newest at the bottom. One entry per iteration:
 - Next: pin the embedding model's revision and licence from RC-D1-embed's printout; the labels'
   scores; run 4.
 - Needs the team: RC-D1-embed (Soheil), a second rater, RC-D1-label, run 4.
+
+## Iteration 65: 2026-11-07 (interactive)
+- Stage / item: S06, RC-E2.
+- 2026-11-07 E2 seed 0 OOM on one T4 (torch.OutOfMemoryError, 14.56 GiB, in `_step_loss`: when the teacher's cached answer differs from the ground truth, two forward passes kept both autograd graphs alive until one backward). Fix: the CE term is backpropagated first and its graph freed, then the teacher batch is forwarded and the KL term backpropagated (`offline_kd._step_backward`); no change to loss or settings; E2 seeds 0, 1, 2 all run on the fix commit.
+- Verified: the gradients of the split backward equal those of one combined backward on the tiny
+  model, for a teacher-differs and a teacher-same example (`tests/test_training.py`); run here
+  with torch 2.11.0 on CPU, with the other torch tests (training, recovery, QAKD, selection).
+- Recovery (`compression/recovery.py` -> `train_offline_kd` -> `train_lora`) and QAKD (`train_lora`)
+  go through the same step and need no further change.
+

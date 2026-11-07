@@ -584,3 +584,38 @@ def test_a_stopped_training_resumes_from_its_last_saved_step(
             _wrapper(), _examples(), dataclasses.replace(cfg, learning_rate=5e-3), seed=3,
             resume_dir=folder,
         )  # fmt: skip
+
+
+@pytest.mark.parametrize("differs", [True, False], ids=["teacher-differs", "teacher-same"])
+def test_the_split_backward_gives_the_combined_gradients(differs: bool) -> None:
+    """E2's KD step backpropagates CE and KL one after the other when the teacher's answer
+    differs (only one graph alive: E2 seed 0's OOM on one T4, 2026-11-07); the gradients and
+    the returned numbers must equal those of one backward of the combined loss."""
+    import contextlib
+
+    answers = ["No polyp here", "Yes a polyp"] if differs else None
+    examples = _teacher_records(_examples(2), answers=answers)
+    cfg = _config(mode="offline_kd", kd_weight=0.5, kd_temperature=2.0, batch_size=1)
+    student = _wrapper(seed=0)
+    lora.attach_lora(student, LORA)
+    module = student.module
+    module.eval()  # no dropout: the two passes see the same network
+    params = {n: p for n, p in module.named_parameters() if p.requires_grad}
+    for example in examples:
+        gt, teacher = offline_kd._micro_batches(student, [example], cfg)
+        assert (teacher is not None) == differs
+        for p in params.values():
+            p.grad = None
+        loss, ce, kl = offline_kd._step_loss(module, gt, teacher, cfg)
+        loss.backward()
+        combined = {n: p.grad.detach().clone() for n, p in params.items()}
+        for p in params.values():
+            p.grad = None
+        value, ce2, kl2 = offline_kd._step_backward(
+            module, gt, teacher, cfg, backward=lambda t: t.backward(),
+            autocast=contextlib.nullcontext,
+        )  # fmt: skip
+        assert value == pytest.approx(float(loss.detach()), rel=1e-5)
+        assert (ce2, kl2) == pytest.approx((ce, kl), rel=1e-5)
+        for name, grad in combined.items():
+            assert torch.allclose(params[name].grad, grad, rtol=1e-5, atol=1e-7), name

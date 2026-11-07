@@ -128,6 +128,7 @@ is compressed.
 
 ## 6. Run report (filled by the person who ran it)
 
+- 2026-11-07 E2 seed 0 OOM on one T4 (torch.OutOfMemoryError, 14.56 GiB, in `_step_loss`: when the teacher's cached answer differs from the ground truth, two forward passes kept both autograd graphs alive until one backward). Fix: the CE term is backpropagated first and its graph freed, then the teacher batch is forwarded and the KL term backpropagated (`offline_kd._step_backward`); no change to loss or settings; E2 seeds 0, 1, 2 all run on the fix commit.
 - Run by / date:
 - Commit actually used:
 - Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft"`):

@@ -483,6 +483,17 @@ must be logged here.
   the class counts per finding, next to sensitivity and specificity, so a method that only
   shifts the yes/no bias can be told from one that loses discrimination. E0's from its saved
   validation outcomes on CPU (`scripts/rescore_probes.py`, RC-E0a section 3b).
+- **2026-11-07 (Soheil): E2 seed 0's out-of-memory fixed: an implementation change, not a design
+  change.** E2 seed 0 ran out of memory on one T4 (14.56 GiB) in the KD step: when the
+  teacher's cached answer differs from the ground truth, the step made two forward passes and
+  kept both graphs until one backward of `(1 - w) * ce + w * kl`. The loss is linear, so the
+  step now backpropagates the CE term first, frees it, then forwards the teacher batch and
+  backpropagates the KL term, through the same loss scaler and the same 1 / accumulation
+  scaling (`offline_kd._step_backward`). The same loss, the same gradients up to rounding (a test
+  checks them), the same logged numbers; no config value, hyper-parameter, seed, data order or
+  hash changes, and gradient checkpointing stays off. The one-pass path (teacher answer equal to
+  the ground truth) and E1's (`kd_weight` 0) are unchanged. E2 seeds 0, 1 and 2 all run on the
+  fix commit; recovery and E4 use the same step.
 - **2026-11-07 (Soheil): E2 seed 0's false stop fixed.** E2 seed 0 stopped at once (exit
   code 5: "E0 teacher_cache was made with other settings: student: 'TODO' there,
   'models/qwen2_5_vl_3b_student.yaml' here"; run on 73efbc4). The hand-off check compared the
