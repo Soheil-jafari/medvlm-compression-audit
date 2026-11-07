@@ -80,7 +80,9 @@ incomplete or unfrozen table for a final run.
 **Primary** (at B2, 3 seeds, on each of the two co-primary tests of D02 amendment 7: the reduced-leakage internal test, i.e. the filtered test split at F = 0.86, and the external test from another centre; how the two combine **[team]**, before the freeze):
 
 1. **Small-finding recall:** recall of positive probes of the mask findings in the smallest
-   lesion-area stratum.
+   lesion-area stratum, **at the model's operating point** (section 11 item 10: the probe-score
+   threshold fixed on validation at specificity 0.95 for that finding, applied unchanged to
+   every test; `op_small_finding_recall`).
 2. **Lesion-mask effect:** flip rate with the lesion masked minus flip rate with an
    area-matched random region masked (mid-grey fill 128), on positive mask-finding probes.
 
@@ -94,9 +96,17 @@ split, so H3 cannot win against a weak comparator.
 findings (most images lack most findings), so a model that drifts towards "no" keeps a high
 accuracy while losing recall, which would make H1 easy to support. Proposal: H1 and H4 use the
 **macro balanced accuracy** (per finding, the mean of sensitivity and specificity, averaged over
-findings; `macro_balanced_accuracy`); the overall accuracy is still reported.
+findings), **at the operating point** since 2026-11-06 (`op_macro_balanced_accuracy`, section
+11 item 10); the plain yes/no macro balanced accuracy and the overall accuracy are still
+reported, as secondary. (Rule 3's quality check of the teacher keeps the plain macro balanced
+accuracy it was pre-registered with, and was read with it.)
 
-**Secondary:** per-finding sensitivity and specificity, and next to them the per-finding
+**At the operating point** (section 11 item 10): per-finding sensitivity and specificity, the
+small-finding recall and its strata, the headline accuracy, the flip analysis and the McNemar
+answers. The AUROC is reported next to them.
+
+**Secondary:** the plain yes/no metrics (the answer the model gives, "yes" when log P(yes) >
+log P(no)): per-finding sensitivity and specificity, and next to them the per-finding
 AUROC from the probe scores (image-bootstrap 95 % interval) and the per-finding "yes" rate
 (added 2026-11-02, section 11 item 9), macro-F1, overall accuracy,
 blank-image accuracy drop and other-image tests, ECE (15 equal-width bins), Brier score, AURC, hallucination /
@@ -110,18 +120,25 @@ has no rare group (section 2). The flip analysis of section 11 is a secondary an
 - **Bootstrap:** paired percentile bootstrap with 10,000 resamples (D06) that resamples
   **images**: all probes of one image are drawn together (`statistics.resample_indices` with
   `clusters`; iteration 35). Random seed of the bootstrap: 0. 95 % intervals.
-- **Seeds:** for each arm, the per-image outcomes are averaged over its 3 seeds, then images are
-  bootstrapped (`evaluation/comparisons.py`); seed means and SDs are reported next to them.
+- **Seeds** (section 11 item 11): E1 and E2 have 3 seeds; every compressed arm has 3 seeds at
+  the primary budget **B2** (and without a budget: E3, E4); **B1 and B3 have seed 0 only** and
+  are reported as the trend. For each arm the per-image outcomes are averaged over its seeds,
+  then images are bootstrapped (`evaluation/comparisons.py`); seed means and SDs are reported
+  next to them.
 - **Tests:** McNemar per finding (exact binomial below 25 discordant pairs, otherwise
   chi-square with continuity correction), Holm correction across findings; the two primary
   endpoints are Holm-corrected together.
 - **Verdicts** (`evaluation/verdicts.py`, written to `docs/results/VERDICTS.md`):
   H1 supported if every arm's CI of (relative drop in small-finding recall minus relative drop
-  in the headline accuracy) is above 0, not supported if any is below 0; H2 supported if the CI
+  in the headline accuracy, both at the operating point) is above 0, not supported if any is
+  below 0, over the arms with 3 seeds (B2 and the arms without a budget; B1 and B3 are the
+  trend, not part of the verdict); H2 supported if the CI
   of (best pruning arm minus E3 `w8`) small-finding recall is below 0, not supported if above 0;
   H3 supported if both primary differences are above 0 with Holm-adjusted p < 0.05, not
   supported if either CI lies at or below 0; H4 supported if any Kendall tau between the
-  accuracy ranking and a clinical ranking has a CI upper bound below 1. Otherwise inconclusive.
+  accuracy ranking and a clinical ranking (both at the operating point, over the 3-seed arms)
+  has a CI upper bound below 1. Otherwise inconclusive. The small-finding recall of H2 and H3
+  is at the operating point too.
   The verdicts are reported for each of the three tests (D02 amendment 7, with the strict
   subset dropped on 2026-10-29): the filtered test, the external test and the unfiltered
   test.
@@ -129,16 +146,19 @@ has no rare group (section 2). The flip analysis of section 11 is a secondary an
   sequence of image-level resamples (seed 0) is shared by every arm and every comparison. An
   arm with a missing seed is left out and listed, never compared on fewer seeds.
   - H1 for every arm of E3-E8 (each variant and budget): the relative drop against E2 of the
-    small-finding recall minus that of the headline accuracy. (The same with the rare-group
+    small-finding recall minus that of the headline accuracy, at the operating point. The
+    trend arms (B1, B3, seed 0) are compared with E2 seed 0 and reported apart. (The same with the rare-group
     recall is not computed: no rare group, 2026-10-31.)
   - H2 **[team]** proposal: E3 `w8` is compared at the budget whose target is nearest to its
     measured peak memory, against the generic pruning arm (E5 criteria, E6) with the highest
-    validation small-finding recall at that budget (mean of 3 seeds).
-  - H4: the compressed students E3-E8 at every budget, ranked by the headline accuracy and by
+    validation small-finding recall at that budget (at the operating point; mean of its
+    seeds: 3 at B2, seed 0 alone at B1 or B3).
+  - H4: the compressed students E3-E8 with 3 seeds (B2 and no budget), ranked by the headline
+    accuracy and by
     small-finding recall and ECE (negated, so higher is better in both); the rare-group ranking
     is dropped with the rare group (2026-10-31).
   - McNemar per finding **[team]** proposal: on each probe's majority answer over the 3 seeds
-    (right in at least 2), for E7 against the comparator and for H2.
+    (right in at least 2) at the operating point, for E7 against the comparator and for H2.
 - **Answer parsing:** probes are scored, never parsed, so they cannot be unparseable. Free-text
   answers count as "yes"/"no" only if they start with that word after leading punctuation
   (`clinical.parse_yes_no`); anything else is an error.
@@ -320,6 +340,37 @@ waited on these settings, so no model has been scored. Every count comes from th
      the end of RC-E0a's session. They come with the next E0 evaluation (RC-R1 on the test
      splits; validation only if E0 is evaluated there again). `scripts/rescore_probes.py`
      stays for runs whose outcomes are kept.
+
+10. **Probe operating point** (Soheil, 2026-11-06; decided after seeing E0 and E1 on
+    validation, **before any compression result and before the freeze**). The students answer
+    "yes" very rarely (E1 sensitivity: ulcerative colitis 0-6 %, oesophagitis 0-5 %) while
+    their scores still rank the probes well (AUROC: polyp about 0.995, oesophagitis 0.92-0.93;
+    ulcerative colitis only 0.58-0.67). The plain yes/no answer therefore mostly measures each
+    model's bias, not what it can tell apart.
+    - For each model (every run: each arm, variant, budget and seed) and each finding, a
+      threshold on the probe score (log P(yes) - log P(no)) is fixed on **validation** at
+      **specificity 0.95** on that finding's validation negatives: the k-th smallest negative
+      score, k = ceil(0.95 x negatives); "yes" when the score is above it
+      (`probe_suites.fit_thresholds`, `op_threshold:<f>`).
+    - The thresholds are applied **unchanged** to every test (filtered, unfiltered, external):
+      a test evaluation reads them from the run's committed validation rows and refuses to run
+      without them.
+    - Sensitivity, the small-finding recall (the clinical primary endpoint), the headline
+      balanced accuracy, the flip analysis and the McNemar answers use this operating point
+      (`op_*` rows, `probe_yes_op`); the AUROC is reported next to it; the plain yes/no metrics
+      stay, as secondary. On validation the specificity is 0.95 by construction, so the
+      validation op rows are descriptive; the comparisons are on the tests.
+    - The lesion-mask effect (primary endpoint 2) and Gate 1 keep the plain answers and the
+      margin effect, as pre-registered.
+    - E0 and E1 get the new rows from their next evaluation: E0 needs its validation pass again
+      (its saved outcomes were lost, 2026-11-04; about 0.8 h on T4 x2), E1 from its saved
+      validation outcomes on CPU if they were kept (`scripts/rescore_probes.py`), else a
+      validation pass per seed (about 0.5 h each). No training is repeated.
+11. **Seeds per budget** (Soheil, 2026-11-06, before the freeze, to save GPU hours): 3 seeds
+    (0, 1, 2) at the primary budget B2 for every compressed arm (and E3, E4 without a budget);
+    **seed 0 only at B1 and B3**, reported as the trend and stated so in the paper. E1 and E2
+    keep 3 seeds. The trend arms are compared with E2 seed 0, and they are not part of the
+    verdicts (H1, H4).
 
 Still open before `preregistration.frozen_on` is set: how the two co-primary tests combine in a
 verdict, the finding weights (cap, tiers), the budgets and the other **[team]** items above.

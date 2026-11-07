@@ -1,9 +1,9 @@
-# Run card RC-E6: output-similarity layer pruning (E6), 3 budgets x 3 seeds
+# Run card RC-E6: output-similarity layer pruning (E6), B2 x 3 seeds, B1 and B3 seed 0 (trend)
 
 ## 1. What and why
 
 - Stage: S09
-- Experiments: E6 (layers only, scored once and removed in one shot; D07 deviation), budgets B1, B2, B3, seeds 0, 1, 2
+- Experiments: E6 (layers only, scored once and removed in one shot; D07 deviation), budget B2 with seeds 0, 1, 2, and B1 and B3 with seed 0 only (the trend, pre-registration section 11 item 11; decided 2026-11-06). The cell of a seed 1 or 2 session runs B2 only
 - Runs: 9. Each run is scored on the **validation** split and on the **test** split
   (compression runs come after the freeze, so the test split is open), and timed with the
   budget protocol.

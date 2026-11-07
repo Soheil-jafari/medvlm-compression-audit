@@ -483,6 +483,32 @@ must be logged here.
   the class counts per finding, next to sensitivity and specificity, so a method that only
   shifts the yes/no bias can be told from one that loses discrimination. E0's from its saved
   validation outcomes on CPU (`scripts/rescore_probes.py`, RC-E0a section 3b).
+- **2026-11-06 (Soheil): E1 done, rule 3 passes; seed 0's NaN loss; the Kaggle image changed;
+  the probe operating point; seeds per budget.**
+  - E1 seeds 0, 1, 2 trained (625 steps, 2.34-2.55 h each) and scored on validation: macro
+    balanced accuracy 0.592 / 0.546 / 0.557. **Rule 3 passes:** E0's 0.803 >= E1 seed 0's
+    0.592 + 0.02 = 0.612. No teacher extension; E2 may start.
+  - Seed 0 logged `final loss nan` (seeds 1, 2: 0.548, 0.523); its validation is normal. The
+    final loss is the mean of the last 10 step losses, so one non-finite step gives NaN; the
+    fp16 loss scaler skips such an update. The run kept no per-step history. A CPU check of its
+    adapter (RC-E1 section 3b) comes first; then the team decides whether seed 0 is kept or
+    rerun (agent's proposal: keep it if every tensor is finite). The training now counts
+    non-finite losses and skipped updates (`metrics.csv`), keeps `train_history.json` with the
+    adapter, and stops if the adapter becomes non-finite. The `nan` row was removed from seed
+    0's file (the schema needs numbers).
+  - **Environment drift:** the teacher (RC-TT1, RC-E0a, RC-E0b) ran on Torch 2.11.0+cu128, E1 on
+    2.11.0+cu130 (TensorFlow 2.20 -> 2.21): the Kaggle image changed. Every stage now writes
+    the torch build, CUDA, cuDNN, the driver, the GPUs and the transformers, peft and other
+    versions to `results/<run dir>/environment.json`.
+  - **Probe operating point** (pre-registration section 11 item 10; after seeing E0 and E1 on
+    validation, before any compression result and before the freeze): per model and finding,
+    the score threshold at specificity 0.95 on validation, applied unchanged to every test.
+    Sensitivity, small-polyp recall, the headline accuracy, the flips and McNemar use it; AUROC
+    next to it; plain yes/no secondary. E0 needs its validation pass again (about 0.8 h); E1's
+    rows come from its saved outcomes on CPU if kept, else 0.5 h of validation per seed.
+  - **Seeds per budget** (item 11, before the freeze): 3 seeds at B2 for every arm, seed 0 only
+    at B1 and B3 (the trend, stated in the paper); E1 and E2 keep 3 seeds. The compression
+    split is recomputed (`docs/schedule.md` section 7).
 - **2026-11-04 (Soheil): path roots outside the clone; E0's AUROC with its next evaluation.**
   RC-E0a's cell wrote `outputs/` inside the clone (the configs' relative default) and the
   session ended with `rm -rf medvlm-compression-audit`, so `outcomes.npz` was lost and

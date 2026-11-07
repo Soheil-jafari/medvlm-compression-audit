@@ -18,10 +18,25 @@ budgets:    matched budgets this experiment is run at (empty = not budget-matche
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 BUDGET_IDS: tuple[str, ...] = ("B1", "B2", "B3")
 PRIMARY_BUDGET = "B2"
+TREND_BUDGETS: tuple[str, ...] = ("B1", "B3")
+"""Budgets run with seed 0 only, reported as the trend (decided 2026-11-06, before the
+freeze): every arm has its 3 seeds at B2 (and without a budget); B1 and B3 have seed 0."""
+TREND_SEEDS: tuple[int, ...] = (0,)
+
+
+def seeds_at(seeds: Sequence[int], budget: str | None) -> tuple[int, ...]:
+    """The seeds an arm runs at ``budget``: all of them at B2 or without a budget, seed 0 at
+    B1 and B3 (the trend)."""
+    if budget in TREND_BUDGETS:
+        return tuple(s for s in seeds if s in TREND_SEEDS)
+    return tuple(seeds)
+
+
 TRAINING_SEEDS: tuple[int, ...] = (0, 1, 2)
 
 S = "scripts/"

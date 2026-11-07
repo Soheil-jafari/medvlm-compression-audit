@@ -29,7 +29,7 @@ def _tree(root: Path) -> None:
                     "experiment": "E7",
                     "budget": "B2",
                     "seed": seed,
-                    "metric": "small_finding_recall",
+                    "metric": "op_small_finding_recall",
                     "value": value,
                 }
             ],
@@ -73,7 +73,7 @@ def test_tables_contain_generated_numbers(tmp_path: Path) -> None:
     primary = primary_table(summary)
     assert "0.050 [0.010, 0.090]" in primary and "0.012" in primary
     macros = numbers_tex(summary)
-    assert "\\newcommand{\\resESevenBTwoSmallFindingRecall}{0.720}" in macros
+    assert "\\newcommand{\\resESevenBTwoOpSmallFindingRecall}{0.720}" in macros
     assert "\\newcommand{\\resESevenVsBestBTwoDiffSmallFindingRecallLow}{0.010}" in macros
 
 
@@ -86,7 +86,7 @@ def test_arms_identical_to_e7_show_e7_only_without_runs_of_their_own(tmp_path: P
     assert "(= E7)" not in next(line for line in lines if line.startswith("A4:n64"))
     append_results(
         [{"experiment": "A4:n128", "budget": "B2", "seed": 0,
-          "metric": "small_finding_recall", "value": 0.5}],
+          "metric": "op_small_finding_recall", "value": 0.5}],
         tmp_path / "results" / "A4" / "n128" / "B2" / "seed0" / "metrics.csv",
     )  # fmt: skip
     summary = summarise_over_seeds(load_results(tmp_path / "results"))
@@ -98,8 +98,8 @@ def test_fmt_and_macro_names() -> None:
     assert fmt_mean_sd({"mean": 0.5, "sd": float("nan")}) == "0.500"
     assert fmt_mean_sd(None) == MISSING
     assert (
-        macro_name("E5:taylor", "B2", "small_finding_recall")
-        == "resEFiveTaylorBTwoSmallFindingRecall"
+        macro_name("E5:taylor", "B2", "op_small_finding_recall")
+        == "resEFiveTaylorBTwoOpSmallFindingRecall"
     )
 
 
@@ -114,7 +114,7 @@ def _test_split_copy(root: Path) -> None:
                     "experiment": "E7",
                     "budget": "B2",
                     "seed": seed,
-                    "metric": "small_finding_recall",
+                    "metric": "op_small_finding_recall",
                     "value": 0.111,
                 }
             ],
@@ -139,7 +139,7 @@ def test_aggregate_results_end_to_end(tmp_path: Path) -> None:
     assert "0.720" in main and "0.111" not in main
     assert "0.111" not in (tmp_path / "tables" / "numbers.tex").read_text()
     by_arm = pd.read_csv(tmp_path / "summary" / "by_arm.csv", keep_default_na=False)
-    e7 = by_arm[(by_arm["experiment"] == "E7") & (by_arm["metric"] == "small_finding_recall")]
+    e7 = by_arm[(by_arm["experiment"] == "E7") & (by_arm["metric"] == "op_small_finding_recall")]
     assert sorted(zip(e7["split"], e7["mean"].round(3), strict=True)) == [
         ("test", 0.72),
         ("val", 0.111),
@@ -159,7 +159,7 @@ def test_the_sensitivity_analyses_get_their_own_macros_and_stay_out_of_the_table
     for seed in range(3):  # the unfiltered test (D02 amendment 6): its own run file
         append_results(
             [{"experiment": "E7", "budget": "B2", "seed": seed,
-              "metric": "small_finding_recall", "value": 0.555}],
+              "metric": "op_small_finding_recall", "value": 0.555}],
             root / "E7" / "B2" / f"seed{seed}" / "metrics_test_unfiltered.csv",
         )  # fmt: skip
     for folder, value in (("comparisons_unfiltered", 0.333), ("comparisons_strict", 0.444)):
@@ -178,8 +178,8 @@ def test_the_sensitivity_analyses_get_their_own_macros_and_stay_out_of_the_table
         figures_dir=tmp_path / "figures", verdicts_path=tmp_path / "VERDICTS.md",
     )  # fmt: skip
     numbers = (tmp_path / "tables" / "numbers.tex").read_text()
-    assert "\\newcommand{\\resESevenBTwoSmallFindingRecall}{0.720}" in numbers  # primary
-    assert "\\newcommand{\\resTestUnfilteredESevenBTwoSmallFindingRecall}{0.555}" in numbers
+    assert "\\newcommand{\\resESevenBTwoOpSmallFindingRecall}{0.720}" in numbers  # primary
+    assert "\\newcommand{\\resTestUnfilteredESevenBTwoOpSmallFindingRecall}{0.555}" in numbers
     assert (
         "\\newcommand{\\resTestUnfilteredESevenVsBestBTwoDiffSmallFindingRecall}{0.333}" in numbers
     )

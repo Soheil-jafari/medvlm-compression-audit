@@ -50,6 +50,7 @@ def _arrays(quality: float, seed: int, flip: float = 0.5) -> dict[str, np.ndarra
         "probe_findings": labels["names"],
         "probe_truth": truth,
         "probe_yes": yes,
+        "probe_yes_op": yes,  # the answers at the operating point (2026-11-06)
         "probe_margin": margin,
         "probe_area": labels["area"],
         "probe_has_mask": labels["masked"],
@@ -193,7 +194,7 @@ def _write_tree(root: Path, config: dict, *, drop: tuple[str, int] | None = None
             if experiment in ("E5", "E6"):
                 rows = [
                     {"experiment": label, "budget": "B2", "seed": seed,
-                     "metric": "small_finding_recall", "value": quality},
+                     "metric": "op_small_finding_recall", "value": quality},
                     {"experiment": label, "budget": "B2", "seed": seed,
                      "metric": "budget_target", "value": 6.0e9},
                 ]  # fmt: skip

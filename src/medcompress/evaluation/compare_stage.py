@@ -48,7 +48,7 @@ from medcompress.evaluation.statistics import (
     percentile_ci,
     resample_indices,
 )
-from medcompress.registry import BUDGET_IDS, PRIMARY_BUDGET, REGISTRY
+from medcompress.registry import BUDGET_IDS, PRIMARY_BUDGET, REGISTRY, TREND_BUDGETS, seeds_at
 
 STRICT_FILE = "strict_test.json"
 """RC-D1 run 4's strict test subset (D02 amendment 3): img_ids, in the private folder."""
@@ -69,6 +69,10 @@ OURS = "E7"
 BOOTSTRAP_SEED = 0
 HEADLINES: tuple[str, ...] = ("overall_accuracy", "macro_balanced_accuracy")
 SMALL = "small_finding_recall"
+"""Comparison rows keep this name; since 2026-11-06 it is the recall at the operating point."""
+OP_SMALL = "op_small_finding_recall"
+"""The validation metric the comparators are chosen on (H2, H3): at the operating point."""
+OP_ANSWERS = "probe_yes_op"
 RARE = "rare_recall"
 ECE = "ece"
 MASK_EFFECT = "lesion_mask_effect"
@@ -140,6 +144,9 @@ class ArmOutcomes:
     confidence: np.ndarray
     majority: np.ndarray
     audit_effect: np.ndarray
+    correct_plain: np.ndarray | None = None
+    """Correctness of the plain yes/no answers (for the ECE); ``correct`` and ``majority``
+    are at the operating point (2026-11-06)."""
 
 
 def _keys(sample_ids: np.ndarray, findings: np.ndarray) -> np.ndarray:
@@ -214,8 +221,12 @@ def _order(keys: np.ndarray, reference: np.ndarray, what: str) -> np.ndarray:
 def arm_outcomes(
     arm: Arm, seeds: Sequence[int], per_seed: Sequence[Mapping[str, np.ndarray]], table: ProbeTable
 ) -> ArmOutcomes:
-    """Average one arm's per-seed arrays over the seeds, aligned with ``table``."""
-    correct, confidence, effect = [], [], []
+    """Average one arm's per-seed arrays over the seeds, aligned with ``table``.
+
+    The answers are those at the operating point (``probe_yes_op``); outcomes saved before
+    2026-11-06 have none and are refused.
+    """
+    correct, plain, confidence, effect = [], [], [], []
     for seed, arrays in zip(seeds, per_seed, strict=True):
         what = f"{arm.name} seed {seed}"
         order = _order(
@@ -224,10 +235,15 @@ def arm_outcomes(
         truth = arrays["probe_truth"].astype(bool)[order]
         if not np.array_equal(truth, table.truth):
             raise ValueError(f"{what}: probe labels differ from the reference run")
+        if OP_ANSWERS not in arrays:
+            raise ValueError(f"{what}: no operating-point answers ({OP_ANSWERS}): these outcomes "
+                             "were saved before 2026-11-06; evaluate the run again")  # fmt: skip
         yes = arrays["probe_yes"].astype(bool)[order]
+        yes_op = arrays[OP_ANSWERS].astype(bool)[order]
         margin = arrays["probe_margin"].astype(float)[order]
         p_yes = 1.0 / (1.0 + np.exp(-np.clip(margin, -50.0, 50.0)))
-        correct.append((yes == truth).astype(float))
+        correct.append((yes_op == truth).astype(float))
+        plain.append((yes == truth).astype(float))
         confidence.append(np.maximum(p_yes, 1.0 - p_yes))
         audit = _order(
             _keys(arrays["audit_sample_ids"], arrays["audit_findings"]), table.audit_keys, what
@@ -242,6 +258,7 @@ def arm_outcomes(
         confidence=np.mean(confidence, axis=0),
         majority=hits > 0.5,
         audit_effect=np.mean(effect, axis=0),
+        correct_plain=np.mean(plain, axis=0),
     )
 
 
@@ -278,7 +295,8 @@ def restrict(
     )  # fmt: skip
     arms = [
         replace(o, correct=o.correct[keep], confidence=o.confidence[keep],
-                majority=o.majority[keep], audit_effect=o.audit_effect[audit])
+                majority=o.majority[keep], audit_effect=o.audit_effect[audit],
+                correct_plain=None if o.correct_plain is None else o.correct_plain[keep])
         for o in outcomes
     ]  # fmt: skip
     return small, arms
@@ -310,7 +328,8 @@ class Scorer:
             head = float(c.mean())
         else:
             head = _balanced(t.codes[idx], truth, c, self.n_findings)
-        gap = c - outcomes.confidence[idx]
+        plain = outcomes.correct if outcomes.correct_plain is None else outcomes.correct_plain
+        gap = plain[idx] - outcomes.confidence[idx]  # calibration: the plain answers
         ece = float(np.abs(np.bincount(bins[idx], weights=gap, minlength=self.n_bins)).sum())
         return np.array(
             [head, _masked_mean(c, t.small[idx]), _masked_mean(c, t.rare[idx]), ece / len(c)]
@@ -569,7 +588,7 @@ def load_arms(
     found: dict[Arm, list[dict[str, np.ndarray]]] = {}
     incomplete = []
     for arm in arms:
-        seeds = seeds_of[arm.label.partition(":")[0]]
+        seeds = arm_seeds(arm, seeds_of)
         paths = [run.run_dir(output_root) / outcomes_file for run in arm.runs(seeds)]
         missing = [p for p in paths if not p.is_file()]
         if missing:
@@ -577,6 +596,11 @@ def load_arms(
             continue
         found[arm] = [read_outcomes(p) for p in paths]
     return found, incomplete
+
+
+def arm_seeds(arm: Arm, seeds_of: Mapping[str, Sequence[int]]) -> tuple[int, ...]:
+    """The seeds of an arm: all at B2 and without a budget, seed 0 at B1 and B3 (the trend)."""
+    return seeds_at(seeds_of[arm.label.partition(":")[0]], arm.budget or None)
 
 
 def write_comparisons(
@@ -648,7 +672,10 @@ def run_comparisons(
         groups,
     )
     arms = list(found)
-    outcomes = [arm_outcomes(a, seeds_of[a.label.partition(":")[0]], found[a], table) for a in arms]
+    outcomes = [arm_outcomes(a, arm_seeds(a, seeds_of), found[a], table) for a in arms]
+    trend_ref = Arm(REFERENCE, "seed0")  # the trend arms (one seed) against E2 seed 0
+    arms.append(trend_ref)
+    outcomes.append(arm_outcomes(trend_ref, (0,), found[Arm(REFERENCE)][:1], table))
     folder = UNFILTERED_DIR if unfiltered else "comparisons"
     if strict:
         keep = strict_images(Path(config["paths"]["private_root"]))
@@ -679,15 +706,17 @@ def run_comparisons(
         ),
     }
 
-    # H1: every compressed arm against E2
+    # H1: every compressed arm against E2 (the trend arms at B1 and B3, seed 0 only, against
+    # E2 seed 0; their rows are reported as the trend and left out of the verdicts)
     for arm in arms:
         if arm.label != REFERENCE:
             name = f"{arm.label}_vs_{REFERENCE}"
-            rows += drop_gap_rows(observed, draws, index[arm], ref, name, arm.budget, alpha)
+            against = index[trend_ref] if arm.budget in TREND_BUDGETS else ref
+            rows += drop_gap_rows(observed, draws, index[arm], against, name, arm.budget, alpha)
 
     # H3: E7 against the best of E5 / E6 at B2, chosen on validation
     generic = [a.label for e in GENERIC_PRUNING for a in arms_of(e) if a.budget == PRIMARY_BUDGET]
-    scores, why = validation_means(results, generic, PRIMARY_BUDGET, SMALL, seeds_of["E5"])
+    scores, why = validation_means(results, generic, PRIMARY_BUDGET, OP_SMALL, seeds_of["E5"])
     ours = Arm(OURS, PRIMARY_BUDGET)
     if scores is None:
         choices["h3"] = {"skipped": why}
@@ -723,7 +752,9 @@ def run_comparisons(
     else:
         budget = matched["budget"]
         labels = [a.label for e in GENERIC_PRUNING for a in arms_of(e) if a.budget == budget]
-        scores, why = validation_means(results, labels, budget, SMALL, seeds_of["E5"])
+        scores, why = validation_means(
+            results, labels, budget, OP_SMALL, seeds_at(seeds_of["E5"], budget)
+        )
         if scores is None:
             choices["h2"] = {**matched, "skipped": why}
         else:
@@ -744,7 +775,7 @@ def run_comparisons(
                 choices["h2"]["skipped"] = "test outcomes of the arm or of E3 w8 are incomplete"
 
     # H4: the compressed arms ranked by the headline and by the clinical metrics
-    ranked = [index[a] for a in arms if a.label != REFERENCE]
+    ranked = [index[a] for a in arms if a.label != REFERENCE and a.budget not in TREND_BUDGETS]
     if len(ranked) >= 2:
         rows += tau_rows(observed, draws, ranked, alpha)
 
@@ -752,7 +783,8 @@ def run_comparisons(
     if strict:
         choices["flips"] = {"skipped": "not computed on the strict subset"}
     else:
-        flips, why = flip_comparison(output_root, outcomes_file, table, outcomes, settings,
+        compared = [o for o in outcomes if o.arm != trend_ref]
+        flips, why = flip_comparison(output_root, outcomes_file, table, compared, settings,
                                      n_resamples=resamples, alpha=alpha)  # fmt: skip
         rows += flips
         choices["flips"] = (

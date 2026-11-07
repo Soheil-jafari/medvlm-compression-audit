@@ -44,7 +44,7 @@ def synthetic_summary() -> pd.DataFrame:
         _row("E2", "", m, v)
         for m, v in [
             ("overall_accuracy", 0.80),
-            ("small_finding_recall", 0.70),
+            ("op_small_finding_recall", 0.70),
             ("lesion_mask_effect", 0.40),
             ("peak_memory_bytes", 1e9),
             ("rare_recall:rare", 0.60),
@@ -62,7 +62,7 @@ def synthetic_summary() -> pd.DataFrame:
     ]:
         rows += [
             _row(arm, budget, "overall_accuracy", acc),
-            _row(arm, budget, "small_finding_recall", small),
+            _row(arm, budget, "op_small_finding_recall", small),
             _row(arm, budget, "ece", 0.07),
             _row(arm, budget, "lesion_flip_rate", 0.4),
             _row(arm, budget, "random_flip_rate", 0.1),
@@ -70,7 +70,7 @@ def synthetic_summary() -> pd.DataFrame:
     for budget, mem, small in [("B1", 0.75e9, 0.66), ("B2", 0.6e9, 0.62), ("B3", 0.5e9, 0.55)]:
         rows += [_row("E7", budget, "peak_memory_bytes", mem)]
         if budget != "B2":
-            rows += [_row("E7", budget, "small_finding_recall", small)]
+            rows += [_row("E7", budget, "op_small_finding_recall", small)]
     rows += [_row("E3:w4", "", "peak_memory_bytes", 0.4e9)]
     return pd.DataFrame(rows)
 
@@ -150,6 +150,11 @@ def _written_metric_names() -> set[str]:
     )
     metrics = ps.clinical_metrics(out, ["polyp", "bleeding"], n_resamples=5)
     metrics += ps.small_finding_metrics(out, [0.006, 0.013, 0.018], ["polyp"], n_resamples=5)
+    thresholds = ps.fit_thresholds(out, ["polyp", "bleeding"])
+    metrics += ps.operating_point_metrics(
+        out, ["polyp", "bleeding"], thresholds, size_thresholds=[0.006, 0.013, 0.018],
+        mask_findings=["polyp"], n_resamples=5,
+    )  # fmt: skip
     metrics += ps.rare_finding_metrics(out, {"common": ["polyp"], "rare": ["bleeding"]})
     metrics += ps.calibration_metrics(out, n_bins=5)
     flips = np.array([True, False, True])
@@ -176,10 +181,10 @@ def test_the_a4_curve_uses_e7_for_the_size_identical_to_e7(
 ) -> None:
     from medcompress.evaluation import figures
 
-    rows = [_row("A4:n32", "B2", "small_finding_recall", 0.5),
-            _row("A4:n64", "B2", "small_finding_recall", 0.55),
-            _row("E7", "B2", "small_finding_recall", 0.62),
-            _row("A4:n256", "B2", "small_finding_recall", 0.63)]  # fmt: skip
+    rows = [_row("A4:n32", "B2", "op_small_finding_recall", 0.5),
+            _row("A4:n64", "B2", "op_small_finding_recall", 0.55),
+            _row("E7", "B2", "op_small_finding_recall", 0.62),
+            _row("A4:n256", "B2", "op_small_finding_recall", 0.63)]  # fmt: skip
     path = figures.calibration_size_curve(pd.DataFrame(rows), tmp_path / "a4.pdf")
     assert path.read_bytes().startswith(b"%PDF")
     drawn: list[tuple] = []

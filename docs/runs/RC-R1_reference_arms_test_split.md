@@ -13,6 +13,12 @@
 
 ## 2. Requirements
 
+- **Operating point first (2026-11-06):** every test evaluation reads the run's validation
+  thresholds (`op_threshold:<f>`) from its committed `metrics.csv` and refuses to run without
+  them. E0: its validation again (RC-E0a section 3c, about 0.8 h). E1: from the saved validation
+  outcomes on CPU (RC-E1 section 3c), or its validation again (about 0.5 h per seed). E2: its
+  own validation pass writes them.
+
 Blocked until all of these are true; the agent sets the status to `ready` when they are:
 
 - The pre-registration is frozen (`preregistration.frozen_on` set); before that the evaluation

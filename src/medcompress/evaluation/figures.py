@@ -22,10 +22,11 @@ import pandas as pd
 
 from medcompress.evaluation.report import (
     ACCURACY,
-    BALANCED_ACCURACY,
     MASK_EFFECT,
     SMALL_RECALL,
+    SMALL_RECALL_ROWS,
     arm_labels,
+    per_run_headline,
 )
 from medcompress.registry import BUDGET_IDS, PRIMARY_BUDGET
 
@@ -48,7 +49,10 @@ PEAK_MEMORY = "peak_memory_bytes"
 FLIP_LESION = "lesion_flip_rate"  # written by the lesion-mask audit (image_reliance.py)
 FLIP_RANDOM = "random_flip_rate"
 RANKING_COMPARISON = "accuracy_vs_clinical"
-HEADLINE_LABELS: Mapping[str, str] = {ACCURACY: "Accuracy", BALANCED_ACCURACY: "Balanced accuracy"}
+HEADLINE_LABELS: Mapping[str, str] = {
+    ACCURACY: "Accuracy",
+    "macro_balanced_accuracy": "Balanced accuracy (operating point)",
+}
 
 
 def family_of(arm: str) -> str:
@@ -140,11 +144,11 @@ def _family_legend(ax: Any, families: set[str]) -> None:
 
 def headline_vs_hidden(summary: pd.DataFrame, path: Path, headline: str = ACCURACY) -> Path:
     """F1 (H1): drop in the headline accuracy vs drop in small-finding recall, relative to E2."""
-    ref_acc = _mean(summary, "E2", "", headline)
+    ref_acc = _mean(summary, "E2", "", per_run_headline(headline))
     ref_small = _mean(summary, "E2", "", SMALL_RECALL)
     points = []
     for arm, budget in compressed_arms():
-        acc = _mean(summary, arm, budget, headline)
+        acc = _mean(summary, arm, budget, per_run_headline(headline))
         small = _mean(summary, arm, budget, SMALL_RECALL)
         if not any(math.isnan(v) for v in (ref_acc, ref_small, acc, small)):
             points.append((arm, ref_acc - acc, ref_small - small))
@@ -275,7 +279,7 @@ def rank_order(summary: pd.DataFrame, path: Path, headline: str = ACCURACY) -> P
     """F4 (H4): rank of each compressed arm by the headline accuracy vs by small-finding recall."""
     rows = []
     for arm, budget in compressed_arms():
-        acc = _mean(summary, arm, budget, headline)
+        acc = _mean(summary, arm, budget, per_run_headline(headline))
         small = _mean(summary, arm, budget, SMALL_RECALL)
         if not (math.isnan(acc) or math.isnan(small)):
             rows.append((arm, acc, small))
@@ -299,7 +303,7 @@ def rank_order(summary: pd.DataFrame, path: Path, headline: str = ACCURACY) -> P
             fontsize=6,
             color=INK_SECONDARY,
         )
-    tau = _mean(summary, RANKING_COMPARISON, "", f"tau:{SMALL_RECALL}")
+    tau = _mean(summary, RANKING_COMPARISON, "", f"tau:{SMALL_RECALL_ROWS}")
     if not math.isnan(tau):
         ax.set_title(f"Kendall's tau = {tau:.2f}", fontsize=7, color=INK_SECONDARY)
     ax.set_xlabel(f"Rank by {HEADLINE_LABELS[headline].lower()}")

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from medcompress.registry import PRIMARY_BUDGET
+from medcompress.registry import PRIMARY_BUDGET, TREND_BUDGETS
 
 ALPHA = 0.05
 SUPPORTED = "supported"
@@ -69,6 +69,8 @@ def _describe(row: pd.Series) -> str:
 def verdict_h1(summary: pd.DataFrame) -> Verdict:
     """H1: hidden damage exceeds headline damage for every compression family."""
     rows = _rows(summary, "_vs_E2", metric="diff:drop_gap")
+    if not rows.empty:  # B1 and B3 have seed 0 only: the trend, not part of the verdict
+        rows = rows[~rows["budget"].fillna("").isin(TREND_BUDGETS)]
     rule = "supported if every arm's CI is above 0; not supported if any CI is below 0"
     statement = "Damage to small findings exceeds damage to accuracy, for every family."
     if rows.empty:

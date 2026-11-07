@@ -83,8 +83,10 @@ def test_each_run_reads_the_e2_of_its_own_seed_and_the_hand_offs_it_needs() -> N
     assert labels["RC-E3_seed2"] == ["E2 seed2 adapter"]
     assert labels["RC-E4_seed1"] == ["teacher cache"]  # E4 starts from the pretrained student
     assert labels["RC-B0"] == ["E2 seed0 adapter"]
-    assert labels["RC-E8_seed1"] == [
-        "E2 seed1 adapter", "E7 B1 seed1 pruned", "E7 B2 seed1 pruned", "E7 B3 seed1 pruned",
+    # seeds 1 and 2 run B2 only; B1 and B3 are seed 0's trend (2026-11-06)
+    assert labels["RC-E8_seed1"] == ["E2 seed1 adapter", "E7 B2 seed1 pruned"]
+    assert labels["RC-E8_seed0"] == [
+        "E2 seed0 adapter", "E7 B1 seed0 pruned", "E7 B2 seed0 pruned", "E7 B3 seed0 pruned",
     ]  # fmt: skip
     for s in (0, 1, 2):
         assert labels[f"RC-E7_seed{s}"][:2] == [f"E2 seed{s} adapter", "teacher cache"]

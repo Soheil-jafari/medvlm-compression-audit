@@ -407,8 +407,13 @@ def evaluate_model(
     settings: EvalSettings,
     data_root: Path,
     seed: int,
+    thresholds: Mapping[str, float] | None = None,
 ) -> EvaluationResult:
     """Score the suites in ``settings.suites`` for one model on ``samples``.
+
+    ``thresholds``: the model's operating point (``probe_suites.fit_thresholds``), fitted on
+    its validation probes; ``None`` fits them on these probes (the validation pass). The
+    operating-point rows (``op_*``) and answers (``probe_yes_op``) come with the clinical suite.
 
     Used by the evaluation stage and by student selection (which keeps the per-probe
     answers for its paired bootstrap).
@@ -442,6 +447,19 @@ def evaluate_model(
             metrics += probe_suites.clinical_metrics(
                 out, settings.findings, n_resamples=n, alpha=alpha, seed=seed
             )
+            fitted = (
+                dict(thresholds) if thresholds is not None
+                else probe_suites.fit_thresholds(out, settings.findings)
+            )  # fmt: skip
+            small = "small_findings" in wanted
+            metrics += probe_suites.operating_point_metrics(
+                out, settings.findings, fitted,
+                size_thresholds=settings.thresholds if small else None,
+                mask_findings=settings.mask_findings if small else None,
+                n_resamples=int(n or 10_000), alpha=alpha, seed=seed,
+            )  # fmt: skip
+            arrays["probe_yes_op"] = probe_suites.operating_point_answers(out, fitted)
+            arrays["probe_op_threshold"] = np.array([fitted[f] for f in out.findings])
         if "small_findings" in wanted:
             metrics += probe_suites.small_finding_metrics(
                 out,
@@ -488,6 +506,39 @@ def evaluate_model(
 
 
 # --------------------------------------------------------------------- rows
+
+
+def validation_thresholds(
+    results_root: Path, run: RunContext, findings: Sequence[str]
+) -> dict[str, float]:
+    """The run's operating point from its committed validation rows (``op_threshold:<f>``).
+
+    Every test split uses the thresholds fitted on the same model's validation probes,
+    unchanged (pre-registration, 2026-11-06).
+
+    Raises:
+        ConfigError: the run's validation rows have no threshold for a finding.
+    """
+    import csv
+
+    from medcompress.config import ConfigError
+    from medcompress.evaluation.probe_suites import OP_THRESHOLD
+
+    path = run.run_dir(Path(results_root)) / RUN_FILES_BY_SPLIT["val"][0]
+    values: dict[str, float] = {}
+    if path.is_file():
+        with path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                if row["metric"].startswith(f"{OP_THRESHOLD}:") and row["value"]:
+                    values[row["metric"].split(":", 1)[1]] = float(row["value"])
+    missing = [f for f in findings if f not in values or math.isnan(values[f])]
+    if missing:
+        raise ConfigError(
+            f"the validation operating point of {run.experiment_tag} seed {run.seed} is not in "
+            f"{path} ({', '.join(missing)}): evaluate it on validation first (or add it from "
+            "its saved validation outcomes with scripts/rescore_probes.py)"
+        )
+    return {f: values[f] for f in findings}
 
 
 def to_rows(metrics: Sequence[Metric], tag: str, budget: str, seed: int) -> list[dict[str, Any]]:
@@ -553,11 +604,14 @@ def run_evaluation(
             data_root, dataset, Path(paths["private_root"]),
             unfiltered_test=settings.split == "test_unfiltered",
         )[settings.split]  # fmt: skip
+    thresholds = None
+    if settings.split in TEST_SPLITS and "clinical" in settings.suites:
+        thresholds = validation_thresholds(Path(paths["results_root"]), run, settings.findings)
     if model is None:
         model = load_run_model(config, run, int(side))
     seed = run.seed
     started = time.perf_counter()
-    result = evaluate_model(model, samples, settings, data_root, seed)
+    result = evaluate_model(model, samples, settings, data_root, seed, thresholds=thresholds)
     seconds = time.perf_counter() - started  # compute used (appendix)
     metrics, arrays = [*result.metrics, Metric("evaluation_seconds", seconds)], result.arrays
     budget = run.budget or ""
