@@ -529,6 +529,50 @@ must be logged here.
     lists (E3, E4, E8, A1-A6: seed 0), `by_arm.csv` gains a `tier` column, the paper tables a
     Seeds column. Farzan's assignments removed from the schedule; seed 1 of the main tier, RC-E9
     and the E7 / E8 trend have no owner yet ([team]).
+- **2026-11-08 (Soheil and Amir; Soheil delegated the choices to the research lead; Farzan is
+  not an author): the pre-freeze decisions** (pre-registration section 11 item 14; nothing
+  frozen; `frozen_on` stays TODO). Each with its reason:
+  1. Finding weights: `w_c = min(1 / prevalence_c, cap) * tier`, cap 20, normalisation none;
+     tiers by rule from the names (action 2.0, follow_up 1.5, other 1.0); polyp action,
+     oesophagitis and ulcerative colitis follow_up; prevalence from the RC-D1 run 4b counts
+     (810, 691, 546 of 4,513), final weights 11.1432, 9.7967, 12.3983
+     (`finding_weights.yaml`). Reason: an explainable priority fixed before any compression
+     result; A1 and A2 are its check.
+  2. Scoring method: exact for layers and KV groups, first-order for channel groups (E7 config);
+     the 30-group check a report (below 0.7 stop and ask). Reason: about 7.9 h against about
+     236 h per seed; Molchanov et al. 2019.
+  3. Recovery: 157 updates on the first 2,500 examples of the fixed pool, identical for every
+     pruning arm (`recovery.yaml`). Reason: the identical recovery is the fairness rule.
+  4. A3 without the per-unit division; E7 reused for `A4:n128` and `A5:logprob_drop`.
+  5. Headline: macro balanced accuracy at the operating point; McNemar on the 3-seed majority.
+  6. H2 confirmatory: E3 `w8` in the 3-seed tier (about 5.4 GPU h more); its matched arm the
+     best pruning arm at the budget nearest `w8`'s peak; flagged if that budget is not B2 (it
+     then needs seeds 1 and 2). E3 `w4` seed 0. Code: `seed_plan` (E3 `w8` and the H2 arm in
+     the main tier), the comparison step (the flag), RC-E3 seeds 1 and 2 (`w8` only, behind
+     the futility gate); H1's verdict reads the pruning arms only.
+  7. Co-primary tests: supported only if supported on both (intersection-union, no alpha
+     split), partly supported on one, reported per test (`verdicts.combine_tests`).
+  8. Budgets frozen as 15 / 30 / 45 % of E2's decoder-layer bytes; hardware "Kaggle Tesla T4";
+     RC-B0 only converts (code: `budgets.decoder_bytes_removed`, the target = peak minus that
+     share of `decoder_layers_bytes`). The timing GPU stays open and does not block.
+  9. Secondary analyses: (a) the operating-point recall over all mask-positive polyps (row
+     `op_mask_positive_recall`); (b) the headline without ulcerative colitis (new row
+     `op_macro_balanced_accuracy_without:ulcerative_colitis`); (c) E2 against E0 (new rows
+     `E2_vs_E0`: the small-finding recall difference, next to the flips).
+  10. PolypGen: CC BY 4.0 per Ali et al., Sci Data 2023 (research use allowed; citation and
+      acknowledgement required); the Synapse terms are Amir's step at the download. Loader and
+      overlap check written (`data/polypgen.py`, `scripts/polypgen.py`): clusters by sequence;
+      our q1 unchanged; C4 (Oslo) reported apart and the test without C4 a sensitivity
+      analysis (agent's addition, before any result).
+  11. E1 seed 1 final: no operating-point rows; E1's test (RC-R1) uses seed 0 only (code:
+      RC-R1's plan). `e1-seed2-adapter` recorded (Amir).
+  12. Team: Soheil and Amir approve the freeze; Farzan left the project; three accounts x 30 h
+      = 90 h per week (one lent by Farzan); every hand-off shared to Soheil's account; the
+      schedule rebalanced (about 78-88 h per account) with owners for every card.
+  13. Freeze-list item 19 confirmed (A1 at B2 only; A6 `heads_channels` without layers); the
+      settled items marked handled in the inbox with where they were decided.
+  14. E11 (clinical mixed-precision quantization) and E12 (its generic control) documented
+      only, conditional on a feasibility check of per-layer bit widths with real kernels.
 - **2026-11-08 (Soheil and Amir, delegated to the research lead): pre-freeze additions**
   (pre-registration section 11 item 13; before any compression result; nothing frozen).
   (1) Correction to the freeze list, item 2: "if the check fails, channel groups are scored
@@ -648,28 +692,28 @@ must be logged here.
 |---|---|---|---|
 | Kaggle session time limit | still not verified here; RC-TT1's 11.0 h session ran and its saved state carried into session 2 (2026-10-31), so the 11-h stop works in practice | team (check on Kaggle) | before the next long run |
 | The two raters' names (RC-D1-label) | who rater 1 and rater 2 are, for the run report (D02 amendment 4: two raters, no third member) | team | at RC-D1-label's scoring |
-| Co-primary tests: how they combine (D02 amendment 7) | whether a hypothesis needs support on both co-primary tests (the reduced-leakage internal test and the external test), and whether the Holm correction of the two primary endpoints also spans the two tests | team | before the freeze |
-| The external test (D02 amendment 7) | **PolypGen first** (2026-10-31: masks and many polyps). RC-X2 part A: the exact licence (or stop), the centres, its masks, the overlap with our images. GastroVision later, if at all (the agent recalls, unverified, that it is partly from Bærum Hospital, like HyperKvasir) | Farzan proposed (as for EndoBench); team confirms | before RC-X2 part B |
-| Code for amendment 7 | the external test's loader and probes and the split `external_test` in the evaluation; the comparisons on it; the verdicts for each of the three tests (today they read the primary rows only) | agent | after RC-X2 part A |
+| Co-primary tests: how they combine (D02 amendment 7) | **decided 2026-11-08**: supported only if supported on both (intersection-union), partly supported on one | — | — |
+| The external test (D02 amendment 7) | **PolypGen**, CC BY 4.0 (Ali et al., Sci Data 2023); loader and overlap check written 2026-11-08; the download and the Synapse terms: Amir | Amir | at the download |
+| Code for amendment 7 | done: the PolypGen loader, the overlap check, the verdict combination; still to write: the `external_test` split in the evaluation and its comparisons | agent | before RC-X2's evaluation |
 | Published target modules | settled by RC-TT1 (2026-10-31): `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`, 28 decoder layers each (196); the printed line itself was not pasted | — | — |
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
 | Label values (RC-D1 pass 2) | frozen 2026-10-31 (polyp, ulcerative colitis, oesophagitis). Confirmed by E0's validation (2026-11-01): 681 probes = 227 of the 390 validation images x 3, so only images with an abnormality value are probed and a finding's negatives are other abnormalities, never normal mucosa. Keep it and state it as a limitation, or add normal images as negatives (that would be a change after a model result, E0's) | team | before the freeze |
-| Recovery steps | 25 % of 625 = 156.25; proposal 157 = `ceil(2,500 / 16)` (D06 memo) | team | before RC-E5 |
+| Recovery steps | **decided 2026-11-08**: 157 updates on the first 2,500 examples | — | — |
 | A1 and A2 reuse of E7's effects | **done 2026-11-08**: the clinical criterion keeps per-finding effects; A1 and A2 re-weight E7's of the same seed (`pruning/stage.py`) | — | — |
-| Budget hardware for stage 07 | `budgets.measurement.hardware` is open, so the benchmark step of RC-E1 and RC-E2 waits (the runner skips it and goes on) | Amir | before RC-B0 |
-| Student amendment | tell Amir and Farzan that one student is used (D05 amendment) | Soheil | before RC-E1 |
-| Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
+| Budget hardware for stage 07 | **decided 2026-11-08**: Kaggle Tesla T4 | — | — |
+| Student amendment | moot (Farzan left; Soheil and Amir know it) | — | — |
+| Fixed training pool | **decided** (iteration 36; confirmed 2026-11-08) | — | — |
 | EndoBench terms | set aside by D02 amendment 7 (the external test is from another centre: PolypGen and/or GastroVision); reopen only if the team brings EndoBench back | Farzan | — |
-| Finding weights | the finding list and groups are frozen (2026-10-31); still open: cap (proposal 20) and the three tiers with multipliers 2.0 / 1.5 / 1.0, assigned from the finding names; the prevalences are 17.9 %, 15.3 %, 12.1 % | team | before E7 |
-| Compression split (agent proposal, 2026-11-02; revised 2026-11-08) | seed plan: seed 0 of every arm (Soheil: B2 and no budget, the E6 trend, ablations; Amir: the E5 trend); main tier seed 2 Amir; **seed 1 of the main tier, RC-E9 and the E7 / E8 trend have no owner** (Farzan's assignments removed); the loads are uneven (Soheil about 153-160 h, Amir about 49 h, unowned about 34 h; `docs/schedule.md` section 7) | team | before the freeze |
+| Finding weights | **decided 2026-11-08**: cap 20; tiers action 2.0 / follow_up 1.5 / other 1.0; polyp action, oesophagitis and ulcerative colitis follow_up | — | — |
+| Compression split | **decided 2026-11-08**: rebalanced over three accounts (Soheil, Amir, account 3 lent by Farzan; `docs/schedule.md` section 7) | — | — |
 | Comparator "best of E5/E6" | **decided 2026-11-08** (Soheil and Amir, seed plan): validation, seed 0, B2, ordered by (i) `op_small_finding_recall`, (ii) `op_mask_positive_recall`, (iii) `op_small_margin_mean`, (iv) name; only the chosen arm runs seeds 1 and 2 (pre-registration section 5 and section 11 item 12) | — | — |
-| Headline accuracy for H1 and H4 (draft proposal) | macro balanced accuracy instead of the overall probe accuracy, which mostly measures specificity; overall accuracy still reported | team | before the freeze |
-| A3 ranking (agent proposal, iteration 42) | A3 orders its random scores without dividing by the unit size (`score_normalisation: none`). Divided by size, a random score sends whole layers first (estimate: about 98 % of the removed parameters at a 30 % cut), so A3 would test random layer removal, not random choice of units. D07's per-parameter rule stays for every other arm | team | before the freeze |
-| Reuse of E7 for identical ablation arms (agent proposal) | `A4:n128` and `A5:logprob_drop` have exactly E7's settings (test), so E7's B2 runs are reported for them (27 ablation runs instead of 33). If D07 section 1 uses the first-order estimate for some units, A5 moves to the exactly scored units and `A5:logprob_drop` is run | team | before the freeze |
-| H2 matching and McNemar (agent proposal, iteration 43) | H2: E3 `w8` against the generic pruning arm with the highest validation small-finding recall at the budget whose target is nearest to `w8`'s measured peak memory. McNemar per finding on each probe's majority answer over the 3 seeds | team | before the freeze |
-| H2 under the seed plan (2026-11-08) | E3 `w8` is seed 0 only, so H2 (best pruning against `w8`) is exploratory as written; give `w8` and the matched pruning arm seeds 1 and 2, or keep H2 exploratory | team | before the freeze |
+| Headline accuracy for H1 and H4 | **decided 2026-11-08**: macro balanced accuracy at the operating point | — | — |
+| A3 ranking | **decided 2026-11-08**: random scores not divided by the unit size | — | — |
+| Reuse of E7 for identical ablation arms | **decided 2026-11-08**: E7 stands for `A4:n128` and `A5:logprob_drop` | — | — |
+| H2 matching and McNemar | **decided 2026-11-08** (H2 confirmatory with E3 `w8` on 3 seeds; McNemar on the 3-seed majority) | — | — |
+| H2 under the seed plan | **decided 2026-11-08**: E3 `w8` joins the 3-seed tier | — | — |
 | E10 code still to come | the 4-bit E10 (GPTQ `w4` of the merged 2B) and its two exploratory comparisons (matched memory against the nearest pruned 3B arm; 4 bit against E8) in the comparison step | agent | before RC-E10 is `ready` |
-| E10 owner | RC-E10 has no owner yet | team | before RC-E10 |
-| E3 `w4` at seeds 1 and 2 | about +5.4 GPU h, only if 4-bit enters a headline claim (seed plan item 2) | team | before the freeze |
-| Budgets and timing hardware | B1-B3 fractions (rule after RC-B0) and the rented GPU type; metric, tolerance and protocol are decided | Amir | TODO |
+| E10 owner | **Soheil** (2026-11-08) | — | — |
+| E3 `w4` at seeds 1 and 2 | **decided 2026-11-08**: seed 0 only | — | — |
+| Budgets and timing hardware | budgets **decided 2026-11-08** (15 / 30 / 45 % of the decoder bytes; RC-B0 converts); the rented timing GPU (RC-T1) still open, does not block the freeze | team | before RC-T1 |
 | Venue | e.g. MICCAI (Springer LNCS template) | team | TODO |

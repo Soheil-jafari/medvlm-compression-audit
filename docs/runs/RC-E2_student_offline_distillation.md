@@ -40,7 +40,7 @@ ground truth.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** seed 0 Soheil (done 2026-11-08); seed 1 **[team]** (no owner yet), seed 2 Amir, both after the futility check (seed plan of 2026-11-08). Card owner: Soheil.
+- **Who:** seed 0 Soheil (done 2026-11-08); seed 1 Soheil on account 3 (lent by Farzan), seed 2 Amir, both after the futility check (seed plan of 2026-11-08). Card owner: Soheil.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher cache.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
@@ -59,7 +59,7 @@ All**. Add Input: `medcompress-data` and `e0-teacher-cache`. One cell; edit only
 
 ```bash
 %%bash
-SEED=0   # 0 (done); 1 [team] and 2 Amir only after the futility check: the only line to edit
+SEED=0   # 0 (done); 1 (account 3) and 2 (Amir) only after the futility check: the only line to edit
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"

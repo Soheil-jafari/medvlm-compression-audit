@@ -3,7 +3,7 @@
 ## 1. What and why
 
 - Stage: S11
-- Experiments: E0 (seed 0), E1 (seeds 0, 1, 2) and E2 (seeds 0, 1, 2; seed 0 only after a futility stop, seed plan of 2026-11-08: the plan reads `results/seed_plan/comparator_B2.json`), no budget.
+- Experiments: E0 (seed 0), E1 (**seed 0 only**: seed 1's outputs were lost; E1 is a control outside the 3-seed tier, 2026-11-08) and E2 (seeds 0, 1, 2; seed 0 only after a futility stop, seed plan of 2026-11-08: the plan reads `results/seed_plan/comparator_B2.json`), no budget.
 - Runs: 7 evaluations on the **test** split. Nothing is trained.
 - Purpose: E0, E1 and E2 are trained and evaluated on the validation split before the
   pre-registration is frozen, while the test split is still locked. Every comparison of the

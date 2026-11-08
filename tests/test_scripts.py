@@ -61,14 +61,10 @@ def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixtur
         ),
         ("select_student.py", ["--round", "R1", "--candidate", "qwen3_vl_2b"], "compute_unit_b"),
         ("select_student.py", ["--rank", "R1"], "run the round before ranking it"),
-        ("04_score_pruning_units.py", ["--exp", "E7"], "pruning.clinical.ablation_method"),
-        ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "training.steps"),
-        (
-            "05_prune_and_recover.py",
-            ["--exp", "E7", "--budget", "B2"],
-            "budgets.levels.B2.target_fraction",
-        ),
-        ("07_benchmark_efficiency.py", ["--exp", "E9"], "budgets.measurement.hardware"),
+        # every setting is decided (2026-11-08): after the freeze the stages wait for inputs
+        ("04_score_pruning_units.py", ["--exp", "E7"], "the E2 seed 0 adapter"),
+        ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "no unit scores"),
+        ("07_benchmark_efficiency.py", ["--exp", "E9"], "teacher_adapter"),
         ("03_quantize.py", ["--exp", "E3", "--variant", "w4"], "--data-root"),
         ("03_quantize.py", ["--exp", "E8", "--budget", "B2"], "--data-root"),
         ("run_experiment.py", ["--exp", "E3", "--variant", "w4", "--seed", "0"], "--data-root"),

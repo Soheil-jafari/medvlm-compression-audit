@@ -59,8 +59,12 @@ def test_unfrozen_template_is_refused() -> None:
     template = load_config(config_root() / "preregistration" / "finding_weights.yaml")
     with pytest.raises(ValueError, match="not frozen"):
         load_finding_weights(template)
-    with pytest.raises(ValueError, match="Incomplete"):
-        load_finding_weights(template, require_frozen=False)
+    # the values are decided (2026-11-08) and match the formula; only the freeze is missing
+    rows = load_finding_weights(template, require_frozen=False)
+    tiers = load_tier_multipliers(template)
+    weights = compute_weights([r.finding for r in rows], rows, "clinical", tier_multipliers=tiers)
+    assert weights == {"polyp": 11.143241, "ulcerative_colitis": 9.796686,
+                       "oesophagitis": 12.398334}  # fmt: skip
 
 
 def test_compute_weights_schemes() -> None:

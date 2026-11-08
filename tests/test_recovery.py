@@ -157,7 +157,7 @@ def test_the_prune_stage_lists_every_open_setting_at_once(tmp_path: Path) -> Non
         "pruning.removal.schedule",
         "training.steps",
         "mlp_channel_group_size",
-        "budgets.levels.B1.target_fraction",
+        "budgets.levels.B1.decoder_bytes_removed",
         "budgets.measurement.hardware",
     ):
         assert key in message, key

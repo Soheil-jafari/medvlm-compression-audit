@@ -49,7 +49,7 @@ under 1 h, about 1.7 h of evaluation per model, the schedule's figures).
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-11-08)
 
-- **Who:** **[team]** (no owner yet).
+- **Who:** Soheil (account 1; 2026-11-08).
 - **Kaggle settings:** GPU T4 x2 (the training uses one T4); Internet on (the 2B download and
   the tokenizer files).
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher cache.

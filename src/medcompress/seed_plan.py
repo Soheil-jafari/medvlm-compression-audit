@@ -2,6 +2,10 @@
 
 * **Main-claim tier, 3 seeds (0, 1, 2):** E2, E7 at B2 and the comparator at B2. H1-H3 are
   confirmatory on this tier only.
+* **H2 joins the 3-seed tier** (2026-11-08): E3 ``w8`` (seeds 0, 1, 2; each E2 seed quantized
+  deterministically) and the pruning arm H2 is matched with (the best pruning arm at the budget
+  nearest E3 ``w8``'s measured peak). At B2 that arm is the comparator; at another budget it
+  needs seeds 1 and 2 too, which the comparison step flags. E3 ``w4`` stays seed 0.
 * **Secondary, 3 seeds:** A1 (uniform finding weights) at B2, for the pre-specified secondary
   comparison E7 against A1 (amendment of 2026-11-08, item 8). Not part of any confirmatory
   verdict. It re-weights E7's per-finding effects (no scoring of its own) and runs seeds 1 and
@@ -41,6 +45,8 @@ EXPLORATORY_SEEDS: tuple[int, ...] = (0,)
 PRIMARY_BUDGET = "B2"
 OURS = "E7"
 REFERENCE = "E2"
+QUANT_W8 = "E3:w8"
+"""H2's quantized arm, in the 3-seed tier since 2026-11-08 (H2 stays confirmatory)."""
 CONTROL = "E1"
 """E1 ran its 3 seeds before the amendment; they are kept (the control of E2)."""
 COMPARATOR_CANDIDATES: tuple[str, ...] = ("E5:magnitude", "E5:activation", "E5:taylor", "E6")
@@ -196,9 +202,15 @@ def _strata_recall(values: Mapping[str, float]) -> float:
 # ---------------------------------------------------------------------- the tiers
 
 
-def is_main(label: str, budget: str, comparator: str | None) -> bool:
-    """Whether ``label`` at ``budget`` (``""`` = none) is in the main-claim tier."""
-    if label == REFERENCE and not budget:
+def is_main(
+    label: str, budget: str, comparator: str | None, h2_arm: tuple[str, str] | None = None
+) -> bool:
+    """Whether ``label`` at ``budget`` (``""`` = none) is in the main-claim tier.
+
+    ``h2_arm`` is H2's matched pruning arm ``(label, budget)`` once it is known."""
+    if (label == REFERENCE or label == QUANT_W8) and not budget:
+        return True
+    if h2_arm is not None and (label, budget) == tuple(h2_arm):
         return True
     if budget != PRIMARY_BUDGET:
         return False
@@ -210,21 +222,25 @@ def is_secondary(label: str, budget: str) -> bool:
     return (label, budget) in SECONDARY_ARMS
 
 
-def tier(label: str, budget: str, comparator: str | None) -> str:
+def tier(
+    label: str, budget: str, comparator: str | None, h2_arm: tuple[str, str] | None = None
+) -> str:
     """:data:`MAIN`, :data:`SECONDARY` or :data:`EXPLORATORY`."""
-    if is_main(label, budget, comparator):
+    if is_main(label, budget, comparator, h2_arm):
         return MAIN
     return SECONDARY if is_secondary(label, budget) else EXPLORATORY
 
 
-def planned_seeds(label: str, budget: str, comparator: str | None) -> tuple[int, ...]:
+def planned_seeds(
+    label: str, budget: str, comparator: str | None, h2_arm: tuple[str, str] | None = None
+) -> tuple[int, ...]:
     """The seeds the plan runs: 3 for the main tier (and E1, already run), seed 0 otherwise.
 
     Before the comparator is chosen (``None``) the candidates have seed 0 only.
     """
     if label == CONTROL and not budget:
         return SEEDS
-    three = is_main(label, budget, comparator) or is_secondary(label, budget)
+    three = is_main(label, budget, comparator, h2_arm) or is_secondary(label, budget)
     return SEEDS if three else EXPLORATORY_SEEDS
 
 
@@ -259,7 +275,7 @@ def choice_record(scores: Mapping[str, RankScore], ours: RankScore | None) -> di
         record["seeds_1_2"] = (
             "stop: E7 ranks below the comparator; seed 0 is reported as exploratory"
             if stop
-            else "run: E2, E7, the comparator and A1 (secondary) at seeds 1 and 2"
+            else "run: E2, E7, the comparator, E3 w8 (H2) and A1 (secondary) at seeds 1 and 2"
         )
     return record
 

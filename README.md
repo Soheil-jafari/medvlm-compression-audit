@@ -48,12 +48,15 @@ methods.
 | Evaluation axes and statistics plan | Decided | `docs/experiment_plan.md`, `docs/preregistration.md` |
 | Primary endpoints: small-finding recall and lesion-mask effect at B2, E7 vs best of E5/E6 | Decided | `docs/preregistration.md` |
 | Seed plan: 3 seeds for the main-claim tier (E2, E7 and the comparator at B2), seed 0 for every other arm; futility-only stopping rule (amendment of 2026-11-08, Soheil and Amir) | Decided | `docs/preregistration.md` section 11 item 12, `src/medcompress/seed_plan.py` |
-| Medical domain (lead: GI endoscopy; alternative: retinal fundus) | **Open** | `configs/domain/` |
-| Teacher and student (must share a tokenizer) | **Open** | `configs/models/` |
-| Datasets | **Open** | `configs/data/` |
-| Finding list and finding weights | **Open** | `configs/preregistration/finding_weights.yaml` |
-| Budget levels B1-B3 and timing hardware | **Open** | `configs/budgets.yaml` |
-| Quantization backends | **Open** | `requirements/train.txt`, `configs/experiments/E3.yaml` |
+| Medical domain: GI endoscopy | Decided (D02) | `configs/domain/` |
+| Teacher Qwen2.5-VL-7B with our Kvasir LoRA; student Qwen2.5-VL-3B (shared tokenizer) | Decided (D01, D05) | `configs/models/` |
+| Data: Kvasir-VQA-x1 re-split by image; external co-primary test PolypGen | Decided (D02 amendments) | `configs/data/`, `docs/runs/RC-X2_*.md` |
+| Finding list (polyp, ulcerative colitis, oesophagitis) and finding weights (cap 20; tiers action 2.0 / follow-up 1.5 / other 1.0, by rule from the names) | Decided (2026-10-31, 2026-11-08) | `configs/preregistration/finding_weights.yaml`, pre-registration section 3 |
+| Budgets B1 / B2 / B3: 15 / 30 / 45 % of E2's decoder bytes removed, matched on the Kaggle T4 | Decided (2026-11-08) | `configs/budgets.yaml` |
+| Scoring method, recovery (157 updates on 2,500 examples, identical for every pruning arm: the fairness rule), A3 ranking, reuse of E7 | Decided (2026-11-08) | pre-registration section 7 |
+| How the two co-primary tests combine: supported only if supported on both (intersection-union), partly supported on one | Decided (2026-11-08) | pre-registration section 6 |
+| Quantization backends (GPTQ w4 / w8, LLM.int8) | Decided (D08) | `configs/quantization.yaml` |
+| Timing GPU for the final numbers (RC-T1) | **Open** (does not block the freeze) | `configs/base.yaml` |
 | Venue | **Open** | `docs/decisions_log.md` |
 
 All open items are listed with dates in `docs/decisions_log.md`.
@@ -90,7 +93,7 @@ tests/                   import, config, registry, script and utility tests
 | E0 | Teacher, full precision | pretrained | - | 1 |
 | E1 | Student fine-tuned on correct answers only, full precision | pretrained | - | 3 |
 | E2 | Student + offline distillation, full precision (start of all compression arms) | pretrained (+E0 cache) | - | 3 |
-| E3 | E2 + post-training quantization (W8 / W4 via GPTQ/AWQ; W8A8 where supported) | E2 | measured | 1 (seed 0) |
+| E3 | E2 + post-training quantization (GPTQ `w8` / `w4`; LLM.int8 `w8a8`) | E2 | measured | `w8`: 3 (H2); `w4`, `w8a8`: 1 |
 | E4 | Student trained with quantization-aware distillation (GRACE-style) | pretrained (+E0 cache) | measured | 1 (seed 0) |
 | E5 | E2 + generic structured pruning (magnitude, activation/Wanda-style, Taylor) + recovery | E2 | B1-B3 | 1; 3 for the comparator at B2 |
 | E6 | E2 + output-similarity layer pruning (Khan et al. style) + recovery | E2 | B1-B3 | 1; 3 if it is the comparator (B2) |
@@ -99,6 +102,8 @@ tests/                   import, config, registry, script and utility tests
 | E9 | Teacher quantized to 4-bit (supplementary, matched memory) | E0 | measured | 1 |
 | E10 | Native Qwen3-VL-2B (the D05 fallback), E2 recipe (E1 if its tokenizer does not match the cache); exploratory, at matched memory and at 4 bit | pretrained (+E0 cache) | measured | 1 (seed 0) |
 | A1 | Unweighted criterion (w_c = 1); also the pre-specified secondary comparison E7 vs A1 | E2 | B2 | 3 (secondary) |
+| E11 | *Exploratory, not built:* clinical mixed-precision quantization (per-layer 4 / 8 bit by the clinically weighted sensitivity), only if per-layer bit widths run with real kernels | E2 | measured | 1 (if feasible) |
+| E12 | *Exploratory, not built:* its generic control (unweighted sensitivity) | E2 | measured | 1 (if feasible) |
 | A2 | Rarity-only weights | E2 | B2 | 1 (seed 0) |
 | A3 | Random removal | E2 | B2 | 1 (seed 0) |
 | A4 | Calibration set size 32 / 64 / 128 / 256 | E2 | B2 | 1 (seed 0) |
@@ -110,14 +115,18 @@ Run `python scripts/run_experiment.py --list` for the live registry.
 
 ### Seeds (pre-registration section 11 item 12, 2026-11-08)
 
-- **Three seeds (0, 1, 2) only where the main claim is made:** E2, E7 at B2, and the comparator
-  at B2. H1-H3 (E7 against E2 and against the comparator, the primary endpoints) are
+- **Three seeds (0, 1, 2) only where the main claim is made:** E2, E7 at B2, the comparator
+  at B2, and E3 `w8` with its matched pruning arm for H2 (H2 stays confirmatory; decided
+  2026-11-08). H1-H3 (E7 against E2 and against the comparator, the primary endpoints) are
   confirmatory on these runs only. E1 keeps the 3 seeds it already ran. **A1** (uniform
   weights) at B2 also has 3 seeds, for the pre-specified **secondary** comparison E7 against A1
   (no verdict); it re-weights E7's per-finding effects, so its seeds 1 and 2 cost about 6 GPU h.
-- **Seed 0 only for everything else**, reported as exploratory: the other E5 / E6 arms, all E3
-  variants, E4, E8, E9, E10, every arm at B1 and B3, the other ablations and the
+- **Seed 0 only for everything else**, reported as exploratory: the other E5 / E6 arms, E3
+  `w4` and `w8a8`, E4, E8, E9, E10, every arm at B1 and B3, the other ablations and the
   training-length check.
+- **Verdicts on the two co-primary tests:** a hypothesis is supported only if it is supported
+  on both the internal filtered test and the external test (PolypGen), partly supported if on
+  one; each test is reported either way.
   H4 (the ranking of E3-E8) is exploratory too. A single-seed difference smaller than E7's
   spread over its 3 seeds at B2 is reported as within run-to-run noise.
 - **Why:** on E1's 3 seeds the seed-to-seed spread of the small-polyp recall and of the AUROC
@@ -132,9 +141,9 @@ Run `python scripts/run_experiment.py --list` for the live registry.
   E7 at B2 ranks below the comparator by the same ordering. Then the study stops and reports
   seed 0 as exploratory. Stopping only for futility does not raise the false-positive rate.
 - **GPU hours** (estimates, with E2's measured 27.2 s per distillation update): about 234-241 h
-  for the whole remaining plan, of which about 38 h are seeds 1 and 2 of the main tier and about
-  6 h those of A1, and about 8 h E10 (4 h for its card, the rest its 4-bit run and test
-  evaluations; `docs/schedule.md` section 7), against about 360 h or
+  for the whole remaining plan, plus 5.4 h for E3 `w8`'s seeds 1 and 2 (about 239-246 h), of
+  which about 49 h are seeds 1 and 2 of the 3-seed tier, and about 8 h E10; at 90 h per week
+  (three Kaggle accounts) about 2.7 weeks of GPU time (`docs/schedule.md` section 7), against about 360 h or
   more with 3 seeds for every arm at B2. (A1 and A2 no longer score on their own: they
   re-weight E7's effects, which saves about 16 h of scoring.)
 
@@ -165,13 +174,10 @@ GPU sessions additionally run `make install-train`. Paths are set with
 
 ## Team
 
-| Member | Provisional role |
-|---|---|
-| Amir | Pruning, clinical criterion, efficiency measurements |
-| Soheil | Teacher/student setup, distillation, quantization, recovery training |
-| Farzan | Datasets, masks, evaluation harness, statistics |
-
-Roles are provisional. See `docs/team.md` for review rules.
+Authors: **Soheil** (lead; teacher/student setup, distillation, quantization, recovery, data,
+evaluation and statistics) and **Amir** (pruning, the clinical criterion, efficiency). Farzan
+left the project on 2026-11-08 and lends one Kaggle account. The pre-registration freeze needs
+both authors' approval. See `docs/team.md` for review rules.
 
 ## Policies
 

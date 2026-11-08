@@ -18,8 +18,17 @@
   - before the agent writes a loader, the team confirms that we may use PolypGen, that its
     images come from other centres than our Kvasir images, what its masks hold, and how many
     of its images are near-copies of ours.
-- Who: **[team]** (proposal: Farzan, as for EndoBench).
-- Status: `blocked` (the licence is not checked). Nothing is downloaded.
+- Who: **Amir** (the download and the two CPU steps; 2026-11-08).
+- Status: `blocked` until the download (2026-11-08): the licence is recorded from the paper
+  (Ali et al., Sci Data 2023: **CC BY 4.0**, research use allowed, citation and acknowledgement
+  required; the paper's commercial-use wording is inconsistent, irrelevant for academic use);
+  confirming the Synapse page's terms is Amir's step when he downloads, and does not block the
+  freeze. The loader and the overlap check are written (`src/medcompress/data/polypgen.py`,
+  `scripts/polypgen.py describe` and `overlap`), to be run before any download is used. Centre
+  C4 is Oslo: its counts are reported apart, and the external test without C4 is a
+  sensitivity analysis. The bootstrap clusters by video sequence, not by frame. The small-polyp
+  threshold is our training q1, unchanged. Still to write (agent): the `external_test` split in
+  the evaluation, its comparisons and the per-test verdicts (`verdicts.combine_tests` exists).
 - Part B (the loader, the probes, the evaluation of every model on this test and the
   comparisons on it) is written by the agent from what this part reports (section 7 below is
   its plan). It is not written yet.

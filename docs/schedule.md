@@ -5,7 +5,8 @@ measurements at the decided image side 672 (synthetic probes) and the decided re
 (micro-batch 1 x 16), unless the row names another source. Where a number cannot be known yet,
 it is written as a symbol and stays **unknown** until the named run measures it.
 
-Budget: 90 Kaggle GPU hours per week, 30 per person (Soheil, Amir, Farzan; decision of
+Budget: 90 Kaggle GPU hours per week, 30 per account (since 2026-11-08: Soheil's, Amir's and
+account 3, lent by Farzan, who left the project; first decided
 2026-10-17). A T4 x2 session counts **once** against the weekly quota (measured 2026-10-19: a
 17-minute T4 x2 session used 16 minutes), so the hours of the cards on T4 x2 (RC-TT1, RC-E0a,
 RC-E0b, RC-E9, RC-R1's teacher pass, RC-L1's cache extension) count as written. Not known here:
@@ -56,7 +57,8 @@ so 27.2 s is the estimate; a pruned student may be somewhat faster, which is not
 
 Known total: see section 7 (recomputed 2026-11-08 for the seed plan of pre-registration
 section 11 item 12: 3 seeds for the main tier only, seed 0 for every other arm): about
-**234-241 GPU hours** for the remaining plan (recomputed again on 2026-11-08 for the pre-freeze
+**234-241 GPU hours**, plus 5.4 h for E3 `w8`'s seeds 1 and 2 (H2, decided later on
+2026-11-08), so about 239-246 h, for the remaining plan (recomputed on 2026-11-08 for the pre-freeze
 additions: A1 and A2 re-weight E7's effects, A1 at B2 gets seeds 1 and 2, E10 is added),
 estimates, plus C, 2 C, G and the budget searches S. (Before the seed plan, with 3 seeds at B2 for every arm: about 329-351 h; with 3 seeds at
 every budget and 13.6 s per update: 285-297 h.) A1 and A2 no longer score again what E7 scored: they
@@ -76,7 +78,8 @@ RC-D1 pass 1 (shared data) ──> label values (agent, team) ──> RC-D1 pass
                                                                              │ (hand-off: teacher cache)
                           RC-E2 seed 0 (done 2026-11-08) <───────────────────┤
                                │ (hand-off: e2-seed0-adapter)                └──> RC-E4 seed 0 (cache only)
-                          RC-B0 (E2 seed 0) ──> B1-B3 ──> FREEZE (all three approve)
+                          FREEZE (Soheil and Amir approve; B1-B3 frozen as decoder-byte fractions)
+                          RC-B0 (E2 seed 0) converts B1-B3 to GB
                                                                │
          ┌───────────────┬───────────────────┬────────────────┼─────────────────┐
        RC-E3 seed 0    RC-E9            RC-G2 (B2, seed 0)   RC-A1..A6 seed 0 (after E7 B2)
@@ -111,15 +114,16 @@ are given against the 30 h each person has. The unknown parts are named next to 
 | 2 | RC-TT1, our teacher's training: **done 2026-10-31** (two sessions, 15.17 h of training measured); then RC-E0a (Gate 1 and the E0 validation, about 2 h plus setup, an estimate) and RC-E0b (the cache, C unknown; `--stop-after-hours 9` this week, the rest next) with our adapter (T4 x2); RC-E1 seed 0 | RC-E1 seed 1 | RC-E1 seed 2 | 14.7 + 2.4 + G + C + 2 V / 2.4 + V / 2.4 + V |
 | 3 | RC-E2 seed 0 (done 2026-11-08); RC-B0 (minutes, E2 seed 0 hand-off). Then B1-B3 and the **freeze** | — | — | 4.72 + 0.53 (measured) / 0 / 0 |
 
-From week 4 on, by phase (seed plan of 2026-11-08; Farzan's assignments removed; **[team]** =
-no owner yet). The hours are in section 7.
+From week 4 on, by phase (seed plan of 2026-11-08; rebalanced on 2026-11-08 over the three
+Kaggle accounts: Soheil's, Amir's, and account 3, lent by Farzan, whose sessions Soheil starts;
+every hand-off is shared to Soheil's account). The hours are in section 7.
 
-| Phase | Soheil | Amir | **[team]** (no owner yet) |
+| Phase | Soheil (account 1) | Amir (account 2) | Account 3 (lent; Soheil starts it) |
 |---|---|---|---|
-| A. after the freeze | RC-G2 (the five B2 runs of seed 0: E5 x 3, E6, E7); then `scripts/choose_comparator.py` (CPU): the comparator and the futility decision | | |
-| B. seed 0 of the rest (exploratory) | RC-E3 seed 0 (`w8`, `w4`, `w8a8`); RC-E4 seed 0; RC-E8 seed 0 at B2; the E6 trend (B1, B3); RC-A1..A6 seed 0 (proposal of the cards) | the E5 trend (B1, B3) | RC-E9; the E7 and E8 trend (B1, B3); RC-E10 (E10, the native 2B) |
-| C. main tier seeds 1 and 2 (only without a futility stop) | | seed 2: RC-E2, then E7 and the comparator at B2, and A1 at B2 (secondary) | seed 1: RC-E2, then E7 and the comparator at B2, and A1 at B2 (secondary) |
-| D. tests and the rest | RC-R1; E0's validation again (RC-E0a section 3c); RC-L1 E2@30k and the cache extension; RC-C1 (CPU) | RC-L1 E7@30k; RC-T1 on the rented GPU (not Kaggle) | |
+| A. after the freeze | RC-G2 (the five B2 runs of seed 0: E5 x 3, E6, E7); then `scripts/choose_comparator.py` (CPU): the comparator and the futility decision | RC-B0 (minutes; the card's owner); the PolypGen download and `scripts/polypgen.py describe` / `overlap` (CPU) | |
+| B. seed 0 of the rest (exploratory) | RC-E3 seed 0 (`w8`, `w4`, `w8a8`); RC-E4 seed 0; RC-E8 seed 0 at B2; RC-E10; RC-A4 `n32` | the E5 trend (B1, B3); RC-A4 `n64`, `n256` | the E6, E7 and E8 trend (B1, B3); RC-E9; RC-A1, RC-A2, RC-A3, RC-A5, RC-A6 seed 0 |
+| C. seeds 1 and 2 (only without a futility stop) | | seed 2: RC-E2, then E7 and the comparator at B2, A1 at B2, E3 `w8` | seed 1: the same |
+| D. tests and the rest | RC-R1 (E1 seed 0 only); E0's validation again (RC-E0a section 3c); RC-L1 E2@30k and the cache extension; RC-C1 (CPU) | RC-L1 E7@30k; RC-T1 on the rented GPU (not Kaggle, when the GPU is chosen) | |
 
 Week 2 held RC-TT1 (15.17 h measured) and E1 seed 0 (2.34 h measured). E2 seeds 1 and 2 are no
 longer in week 3: under the futility rule they run in phase C, after seed 0's check.
@@ -137,8 +141,8 @@ longer in week 3: under the futility rule they run in phase C, after seed 0's ch
 
 RC-D1-embed -> the pair labels (two raters) -> RC-D1-label -> RC-D1 pass 1 (run 4) -> label values ->
 RC-D1 pass 2 -> finding list ->
-RC-E0a (Gate 1, E0 validation) -> RC-E0b (the teacher cache, **C unknown**) -> RC-E2 seed 0 -> RC-B0 -> B1-B3
-and the freeze -> RC-G2 -> `choose_comparator.py` (the futility rule) -> E2, E7 and the
+RC-E0a (Gate 1, E0 validation) -> RC-E0b (the teacher cache, **C unknown**) -> RC-E2 seed 0 -> the decisions of 2026-11-08 -> the freeze -> RC-B0 (B1-B3 in GB)
+-> RC-G2 -> `choose_comparator.py` (the futility rule) -> E2, E7 and the
 comparator at seeds 1 and 2 -> RC-R1 -> RC-C1. The seed-0 runs of phase B, the ablations and
 RC-L1 are needed for the paper but not for the confirmatory comparisons (H1-H3).
 
@@ -160,23 +164,21 @@ tier run only if E7 at B2 does not rank below the comparator on validation, seed
 futility rule, read by the run cards from `results/seed_plan/comparator_B2.json`). Never 2
 seeds.
 
-**Split** (Farzan's assignments removed, 2026-11-08): Soheil keeps seed 0 at B2 and without a
-budget, Amir seed 2 of the main tier and the E5 trend; seed 1 of the main tier, RC-E9 and the
-E7 / E8 trend have **no owner yet [team]**. The seed-0 trend runs read Soheil's
-`e2-seed0-adapter` (a cross-account hand-off) and seed 0's committed pruning scores
-(`unit_scores.csv` and its settings file; commit them before the trend runs, or the scoring
-runs again).
+**Split** (rebalanced 2026-11-08 over the three accounts; Farzan left the project and lends
+account 3, whose sessions Soheil starts; every hand-off is shared to Soheil's account). The
+seed-0 trend runs read Soheil's `e2-seed0-adapter` and seed 0's committed pruning scores
+(`unit_scores.csv`, `unit_effects.csv` and their settings files; commit them before the trend
+runs, or the scoring runs again).
 
-**Before any of them can run:** the freeze (`preregistration.frozen_on`); RC-B0 and B1-B3;
-`budgets.measurement.hardware` (Amir); `recovery.steps` and `recovery.data_subset`; D07 section
-1 (`pruning.clinical.ablation_method`); E2 seed 0's adapter (done). Seeds 1 and 2 also need the
-committed comparator choice and their own E2 adapters (phase C).
+**Before any of them can run:** the freeze (`preregistration.frozen_on`; every setting is
+decided since 2026-11-08); RC-B0, which converts B1-B3 into GB; E2 seed 0's adapter (done).
+Seeds 1 and 2 also need the committed comparator choice and their own E2 adapters (phase C).
 
 | Account | Runs | Card commands (`scripts/run_card.py`, inputs found by their manifests) | Attach | Hands back |
 |---|---|---|---|---|
-| Soheil | RC-B0; RC-G2; seed 0 at B2 and without a budget: E3 (3 variants), E4, E8; the E6 trend (B1, B3); RC-A1..A6 seed 0; E0's validation again (RC-E0a section 3c); RC-R1; RC-C1; RC-L1 E2@30k | `--card RC-G2`; then `python scripts/choose_comparator.py` (CPU); `--card RC-E3 --seed 0`; `--card RC-E4 --seed 0`; `--card RC-E8 --seed 0 --budget B2`; `--card RC-E6 --seed 0 --budget B1 --budget B3`; `--card RC-A<n> --seed 0` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`, `g2-b2-seed0-pruned`, `e7-seed0-pruned` (E8); for RC-R1 `e0-teacher-adapter` and the E1 / E2 adapters; for RC-C1 every `*_outcomes` | results (git), including seed 0's `unit_scores.csv` and `results/seed_plan/comparator_B2.json`; `e2-seed0-adapter` to the other accounts |
-| Amir | the E5 trend of seed 0 (B1, B3); main tier **seed 2**: E2, then E7 and the comparator at B2; RC-L1 E7@30k | `--card RC-E5 --seed 0 --budget B1 --budget B3`; `--card RC-E2 --seed 2`; `--card RC-E7 --seed 2`; `--card RC-E5 --seed 2` or `--card RC-E6 --seed 2` (whichever holds the comparator) | `medcompress-data`, `e2-seed0-adapter` (trend), `e2-seed2-adapter`, `e0-teacher-cache` | results (git); the `*_outcomes` of seed 2 and of the trend runs, and `e2-seed2-adapter`, to Soheil |
-| **[team]** (no owner) | main tier **seed 1** (as seed 2); RC-E9; the E7 and E8 trend of seed 0 (B1, B3) | `--card RC-E2 --seed 1`; `--card RC-E7 --seed 1`; the comparator's card `--seed 1`; `--card RC-E9`; `--card RC-E7 --seed 0 --budget B1 --budget B3`; `--card RC-E8 --seed 0 --budget B1 --budget B3` | as seed 2, with `e2-seed1-adapter`; `e0-teacher-adapter` (E9); `e7-seed0-pruned` (E8 trend) | results (git); the outcomes and `e2-seed1-adapter` to Soheil |
+| Soheil (1) | RC-G2; seed 0 at B2 and without a budget: E3 (3 variants), E4, E8; RC-E10; RC-A4 `n32`; E0's validation again; RC-R1; RC-C1; RC-L1 E2@30k | `--card RC-G2`; `python scripts/choose_comparator.py`; `--card RC-E3 --seed 0`; `--card RC-E4 --seed 0`; `--card RC-E8 --seed 0 --budget B2`; `--card RC-E10`; `--card RC-A4 --seed 0 --variant n32` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`, `g2-b2-seed0-pruned`, `e7-seed0-pruned`; for RC-R1 `e0-teacher-adapter`, `e1-seed0-adapter` and the E2 adapters; for RC-C1 every `*_outcomes` | results (git), including seed 0's scores and effects and `results/seed_plan/comparator_B2.json` |
+| Amir (2) | RC-B0; the E5 trend (B1, B3); RC-A4 `n64`, `n256`; seed 2 of the 3-seed tier: E2, then E7 and the comparator at B2, A1 at B2, E3 `w8`; RC-L1 E7@30k; the PolypGen download | `--card RC-E5 --seed 0 --budget B1 --budget B3`; `--card RC-A4 --seed 0 --variant n64 --variant n256`; `--card RC-E2 --seed 2`; `--card RC-E7 --seed 2`; the comparator's card `--seed 2`; `--card RC-A1 --seed 2`; `--card RC-E3 --seed 2` | `medcompress-data`, `e2-seed0-adapter`, `e2-seed2-adapter`, `e0-teacher-cache` | results (git); the outcomes and `e2-seed2-adapter`, shared to Soheil |
+| Account 3 (Soheil) | the E6, E7 and E8 trend (B1, B3); RC-E9; RC-A1, A2, A3, A5, A6 seed 0; seed 1 of the 3-seed tier (as seed 2) | `--card RC-E6 --seed 0 --budget B1 --budget B3`; `--card RC-E7 --seed 0 --budget B1 --budget B3`; `--card RC-E8 --seed 0 --budget B1 --budget B3`; `--card RC-E9`; `--card RC-A<n> --seed 0`; seed 1 as Amir's seed 2 | as above, with `e2-seed1-adapter`; `e0-teacher-adapter` (E9) | results (git); outcomes and adapters shared to Soheil |
 
 Make every folder under `/kaggle/working/handoff/` ONE private dataset named like the folder
 (`e7-seed1-pruned`), shared with the team.
@@ -194,6 +196,7 @@ training + 0.53 h validation, measured on seed 0).
 | Seed 0's trend at B1 and B3: E5 (6), E6 (2), E7 (2), E8 (2) | 12 | 10 x 1.2 h recovery; E8 2 x under 1 h | 12 x 1.7 h | **34.2 h** + 10 S (E5 17.3, E6 5.8, E7 5.8, E8 5.4) |
 | Main tier, seeds 1 and 2 (not run after a futility stop) | 2 x 3 | per seed: E2 5.2 h; E7 7.9 h scoring + 1.2 h recovery; the comparator 1.2 h recovery (E5 / E6 scoring: minutes) | per seed 2 x 1.7 h | **37.8 h** (18.9 per seed: E2 5.2, E7 10.8, comparator 2.9) + 4 S |
 | A1 at B2, seeds 1 and 2 (secondary; under the futility rule) | 2 | per seed 1.2 h recovery (E7's effects re-weighted, no scoring) | 2 x 1.7 h | **5.8 h** + 2 S |
+| E3 `w8`, seeds 1 and 2 (H2; under the futility rule; added 2026-11-08) | 2 | per seed GPTQ under 1 h (deterministic) | 2 x 1.7 h | **5.4 h** |
 | Ablations, seed 0 (A1, A2, A3, A4 x 3, A5, A6 x 2; `A4:n128` and `A5:logprob_drop` are E7) | 9 | 48.3 h (37.7 h scoring: A1 and A2 re-weight E7's effects; + 9 x 1.2 h recovery) | 9 x 1.7 h | **63.7 h** + 9 S (was 79.5 h with A1 and A2 scoring) |
 | RC-E10 (seed 0) | 1 (+ its 4-bit run) | about 4 h (the card: training on the 2B, not measured, and its validation); GPTQ `w4` under 1 h | 4-bit validation 1.7 h; the tests about 1.2 h | about **7.9 h** |
 | RC-L1 (seed 0) | 2 | E2@30k 14.2 h; E7@30k recovery 3.5 h and scoring 7.9 h | 2 x 1.7 h | **29.0 h** + 2 C + S |
@@ -201,17 +204,20 @@ training + 0.53 h validation, measured on seed 0).
 | E0's validation again | 1 | | 0.8 h (measured first pass) | **0.8 h** |
 | RC-E9 | 1 | 1-2 h | the teacher's two tests, about 2 h | about **3.5 h** |
 
-| Account | Load (known part, estimates) |
+| Account | Load (known part, estimates; rebalanced 2026-11-08) |
 |---|---|
-| Soheil | 41.9-49.0 (seed 0 at B2 and no budget) + 5.8 (E6 trend) + 63.7 (ablations) + 9 (RC-R1) + 0.8 (E0) + 15.9 (RC-L1 E2@30k) = **about 137.1-144.2 h** (plus 2 C) |
-| Amir | 17.3 (E5 trend) + 18.9 (main tier seed 2) + 2.9 (A1 seed 2) + 13.1 (RC-L1 E7@30k) = **about 52.2 h** |
-| **[team]** (no owner) | 18.9 (main tier seed 1) + 2.9 (A1 seed 1) + 3.5 (RC-E9) + 11.2 (E7, E8 trend) + 7.9 (RC-E10) = **about 44.4 h** |
+| Soheil (1) | 41.9-49.0 (seed 0 at B2 and no budget, with RC-G2) + 7.9 (RC-E10) + 4.9 (A4 `n32`) + 9 (RC-R1) + 0.8 (E0) + 15.9 (RC-L1 E2@30k) = **about 80.4-87.5 h** (plus 2 C) |
+| Amir (2) | 17.3 (E5 trend) + 25.7 (A4 `n64`, `n256`) + 24.5 (seed 2: E2 5.2, E7 10.8, comparator 2.9, A1 2.9, E3 `w8` 2.7) + 13.1 (RC-L1 E7@30k) = **about 80.6 h** |
+| Account 3 (Soheil) | 17.0 (E6, E7, E8 trend) + 3.5 (RC-E9) + 33.2 (A1, A2, A3, A5, A6 seed 0) + 24.5 (seed 1, as seed 2) = **about 78.2 h** |
 
-In all about **234-241 GPU h** plus the budget searches S and 2 C (not measured): about 190-197
-h of seed-0 work and 43.6 h for seeds 1 and 2 of the main tier and A1, which a futility stop
-saves.
-Against about 360 h or more with 3 seeds for every arm at B2. (Soheil's summary figure for the
-whole plan was about 190 h; the itemised total is higher mainly by the ablations' evaluation
-passes, 15.3 h, RC-L1, 29.0 h, and now E10, 7.9 h.) The loads are uneven as the owners stand
-(Soheil about 137-144 h, between four and five weeks at 30 h per week): **[team]**, how to
-share the ablations and the unowned runs.
+In all about **234-241 GPU h** (the estimate of this file before E3 `w8` joined the 3-seed tier)
+**plus 5.4 h for E3 `w8`'s seeds 1 and 2: about 239-246 h**, plus the budget searches S and 2 C
+(not measured). At **90 h per week** (three accounts x 30 h) that is about **2.7 weeks** of GPU
+time (2.6 weeks for 234-241 h). The phases are partly sequential (seeds 1 and 2 wait for seed
+0's futility check), so the calendar is longer than the GPU time: phase A about a week, B and C
+about two, D about half a week, if each account runs its 30 h. About 49 h (the seeds 1 and 2 of
+the 3-seed tier: E2, E7, the comparator, A1, E3 `w8`) are saved by a futility stop. Soheil's
+summary figure for the whole plan was about 190 h; the itemised total is higher mainly by the
+ablations' evaluation passes (15.3 h), RC-L1 (29.0 h) and E10 (7.9 h). If H2's matched budget
+is not B2, its pruning arm needs seeds 1 and 2 too (about 5.8 h more; flagged by the comparison
+step).

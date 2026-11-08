@@ -448,8 +448,15 @@ def build_plan(
             needs=(Need("adapter", Run("E2")),), internet=True,
         )  # fmt: skip
     if card == "RC-E3":
-        s = _seed(card, seed, EXPLORATORY_ONLY)
-        runs = [Run("E3", s, variant=v) for v in _pick(E3_VARIANTS, variants)]
+        # w8 is in the 3-seed tier for H2 (2026-11-08): seeds 1 and 2 quantize w8 only, behind
+        # the futility gate; w4 and w8a8 stay seed 0
+        s = _seed(card, seed, SEEDS)
+        chosen = _pick(E3_VARIANTS, variants) if s == 0 else ("w8",)
+        if s != 0:
+            _main_tier_go(card, s)
+            if variants and set(variants) != {"w8"}:
+                raise CardError(f"{card} seed {s} runs w8 only (w4 and w8a8 are seed 0 only)")
+        runs = [Run("E3", s, variant=v) for v in chosen]
         steps = [step for run in runs for step in (_experiment(run), *_test_evals(run))]
         return CardPlan(
             card, f"E3 post-training quantization, seed {s}", 1, tuple(steps),
@@ -541,7 +548,9 @@ def build_plan(
         _no_seed(card, seed)
         choice = seed_plan_choice()  # E2 seeds 1 and 2 exist only if the futility rule let them
         e2_seeds = SEEDS if choice is not None and choice.get("futility_stop") is False else (0,)
-        runs = [Run("E0")] + [Run("E1", s) for s in SEEDS] + [Run("E2", s) for s in e2_seeds]
+        # E1: seed 0 only on the test (2026-11-08: seed 1's outputs were lost; E1 is a control
+        # outside the 3-seed tier)
+        runs = [Run("E0"), Run("E1", 0)] + [Run("E2", s) for s in e2_seeds]
         e2 = tuple(r for r in runs if r.exp == "E2")  # RC-C1 compares E2 with every arm
         return CardPlan(
             card, "E0, E1, E2 on the test split", 2,

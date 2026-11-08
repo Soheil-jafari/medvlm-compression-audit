@@ -174,7 +174,7 @@ def test_the_drop_gap_is_positive_when_recall_falls_more_than_the_headline() -> 
 
 QUALITY = {"E2": 0.85, "E3:w8": 0.8, "E7": 0.82, "E5:magnitude": 0.7, "E5:activation": 0.72,
            "E5:taylor": 0.75, "E6": 0.65, "A1": 0.78}  # fmt: skip
-MAIN = {"E2", "E7", "E5:taylor", "A1"}
+MAIN = {"E2", "E7", "E5:taylor", "A1", "E3:w8"}
 """3 seeds: the main tier with the comparator E5:taylor (the highest validation recall below),
 and A1 at B2 for the secondary comparison E7 vs A1."""
 """The main tier with the comparator E5:taylor (the highest validation recall below)."""
@@ -265,9 +265,11 @@ def test_the_stage_writes_the_evidence_of_every_hypothesis(tmp_path: Path) -> No
     taus = set(summary[summary["experiment"] == "accuracy_vs_clinical"]["metric"])
     assert taus == {"tau:small_finding_recall", "tau:rare_recall", "tau:ece"}
     h1, h2, h3, h4 = all_verdicts(summary)
-    assert PENDING not in (h1.verdict, h3.verdict)
-    assert h2.verdict == EXPLORATORY  # E3 w8 is seed 0 only by the plan
+    assert PENDING not in (h1.verdict, h2.verdict, h3.verdict)
+    assert h2.verdict != EXPLORATORY  # E3 w8 and the comparator at B2 both have 3 seeds
     assert h4.verdict == EXPLORATORY
+    assert choices["tiers"]["E3:w8"] == {"tier": "main", "seeds": [0, 1, 2]}
+    assert "flag" not in choices["h2"]  # matched at B2: the arm is the comparator
     assert set(summary[summary["experiment"] == "E7_vs_best"]["tier"]) == {"confirmatory"}
 
 
@@ -300,16 +302,17 @@ def test_a_seed0_only_arm_is_reported_and_not_tested(tmp_path: Path) -> None:
 
     choices, results, written = _run(tmp_path)
     folder = results / "comparisons"
-    for arm in ("E5-magnitude", "E5-activation", "E6", "E3-w8"):
-        budget = "nobudget" if arm == "E3-w8" else "B2"
-        assert folder / f"{arm}_vs_E2_seed0" / budget / "comparison.csv" in written  # reported
+    for arm in ("E5-magnitude", "E5-activation", "E6"):
+        assert folder / f"{arm}_vs_E2_seed0" / "B2" / "comparison.csv" in written  # reported
         assert not (folder / f"{arm}_vs_E2").exists()  # never tested against the 3-seed E2
     summary = summarise_over_seeds(paper_rows(load_results(results)))
     seed0 = summary[summary["experiment"] == "E5:magnitude_vs_E2_seed0"]
     assert not seed0.empty and set(seed0["tier"]) == {"exploratory"}
     used = verdict_h1(summary).evidence
     assert used and all(e.split()[0] in ("E7_vs_E2", "E5:taylor_vs_E2") for e in used)
-    assert (folder / "best_pruning_vs_E3-w8_seed0").exists()  # H2: exploratory
+    assert (folder / "best_pruning_vs_E3-w8").exists()  # H2: confirmatory on 3 seeds each
+    w8 = summary[summary["experiment"] == "E3:w8_vs_E2"]
+    assert not w8.empty and set(w8["tier"]) == {"secondary"}  # 3 seeds, but not an H1 arm
 
 
 def test_an_arm_with_two_seeds_is_refused(tmp_path: Path) -> None:
@@ -378,3 +381,53 @@ def test_the_stage_needs_the_freeze_and_a_known_headline(tmp_path: Path) -> None
     )
     with pytest.raises(ConfigError, match="locked"):
         cs.run_comparisons(config)
+
+
+def test_h2_is_flagged_when_the_matched_budget_is_not_b2(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _write_tree(tmp_path, config)
+    res = Path(config["paths"]["results_root"])
+    row = {"experiment": "E3:w8", "budget": "", "seed": 0, "metric": "peak_memory_bytes",
+           "value": 7.1e9}  # nearest the B1 target (7.0e9)  # fmt: skip
+    for seed in (0, 1, 2):
+        path = RunContext("E3", seed=seed, variant="w8").run_dir(res) / "efficiency.csv"
+        path.unlink()
+        append_results([{**row, "seed": seed}], path)
+    for number, label in enumerate(("E5:magnitude", "E5:activation", "E5:taylor", "E6")):
+        experiment, _, variant = label.partition(":")
+        run = RunContext(experiment, seed=0, budget="B1", variant=variant or None)
+        append_results(_val_rows(label, "B1", 0.5 + number / 10, 0.5, 0.5),
+                       run.run_dir(res) / "metrics.csv")  # fmt: skip
+    out = RunContext("E6", seed=0, budget="B1").run_dir(Path(config["paths"]["output_root"]))
+    out.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out / cs.OUTCOMES_FILE, **_arrays(0.6, seed=777))
+    cs.run_comparisons(config, n_resamples=20)
+    choices = json.loads((res / "comparisons" / cs.CHOICES_FILE).read_text())
+    assert choices["h2"]["budget"] == "B1" and choices["h2"]["arm"] == "E6"
+    assert "E6@B1 needs seeds 1 and 2" in choices["h2"]["flag"]
+    assert choices["h2"]["exploratory"] == "a side has seed 0 only"  # E6@B1 has seed 0 only
+
+
+def test_e2_against_e0_is_a_secondary_row_when_e0_is_there(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _write_tree(tmp_path, config)
+    out = Path(config["paths"]["output_root"])
+    path = RunContext("E0", seed=0).run_dir(out) / cs.OUTCOMES_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, **_arrays(0.9, seed=999, flip=0.9))
+    cs.run_comparisons(config, n_resamples=20)
+    res = Path(config["paths"]["results_root"])
+    rows = (res / "comparisons" / "E2_vs_E0" / "nobudget" / "comparison.csv").read_text()
+    assert "diff:small_finding_recall" in rows and "flip_rate" in rows  # with the flips
+
+
+def test_the_two_co_primary_tests_combine_by_intersection_union() -> None:
+    from medcompress.evaluation import verdicts as v
+
+    assert v.combine_tests(v.SUPPORTED, v.SUPPORTED) == v.SUPPORTED
+    assert v.combine_tests(v.SUPPORTED, v.NOT_SUPPORTED) == v.PARTLY_SUPPORTED
+    assert v.combine_tests(v.INCONCLUSIVE, v.SUPPORTED) == v.PARTLY_SUPPORTED
+    assert v.combine_tests(v.NOT_SUPPORTED, v.NOT_SUPPORTED) == v.NOT_SUPPORTED
+    assert v.combine_tests(v.NOT_SUPPORTED, v.INCONCLUSIVE) == v.INCONCLUSIVE
+    assert v.combine_tests(v.PENDING, v.NOT_SUPPORTED) == v.PENDING
+    assert v.combine_tests(v.EXPLORATORY, v.EXPLORATORY) == v.EXPLORATORY

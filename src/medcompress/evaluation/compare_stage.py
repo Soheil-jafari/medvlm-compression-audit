@@ -592,6 +592,7 @@ def load_arms(
     arms: Sequence[Arm],
     comparator: str | None,
     outcomes_file: str = OUTCOMES_FILE,
+    h2_arm: tuple[str, str] | None = None,
 ) -> tuple[dict[Arm, LoadedArm], list[str]]:
     """The arrays of every arm by the seed plan, and notes on what was left out or narrowed.
 
@@ -614,7 +615,7 @@ def load_arms(
             if present:
                 notes.append(f"{arm.name}: seed 0 missing (seeds {list(present)} not used)")
             continue
-        planned = planned_seeds(arm.label, arm.budget, comparator)
+        planned = planned_seeds(arm.label, arm.budget, comparator, h2_arm)
         if planned == SEEDS and present == SEEDS:
             use = SEEDS
         else:
@@ -697,10 +698,28 @@ def run_comparisons(
             h3_choice["futility_stop"] = futility_stop(scores_b2[OURS], best_score)
     except SeedPlanError as exc:
         h3_choice = {"skipped": f"comparator not chosen: {exc}"}
+    # H2's matched pruning arm (in the 3-seed tier since 2026-11-08), from the committed rows
+    matched, h2_why = matched_budget(results)
+    h2_arm: tuple[str, str] | None = None
+    h2_choice: dict[str, Any] = {"skipped": h2_why} if matched is None else dict(matched)
+    if matched is not None:
+        budget = matched["budget"]
+        scores = scores_from_rows(results, generic_b2, budget=budget)
+        missing = [c for c in generic_b2 if c not in scores]
+        if missing:
+            h2_choice["skipped"] = f"no validation rows at seed 0, {budget} for {missing}"
+        else:
+            ordered = rank(scores.values())
+            h2_arm = (ordered[0].label, budget)
+            h2_choice.update(arm=ordered[0].label, ordering=[s.label for s in ordered])
+            if budget != PRIMARY_BUDGET:
+                h2_choice["flag"] = (f"the matched budget is {budget}, not B2: "
+                                     f"{ordered[0].label}@{budget} needs seeds 1 and 2 for a "
+                                     "confirmatory H2")  # fmt: skip
     wanted = [Arm(REFERENCE)] + [arm for e in COMPRESSED for arm in arms_of(e)]
     wanted.append(Arm(UNIFORM_WEIGHTS, PRIMARY_BUDGET))  # the secondary comparison only
     outcomes_file = UNFILTERED_OUTCOMES_FILE if unfiltered else OUTCOMES_FILE
-    found, notes = load_arms(output_root, wanted, comparator, outcomes_file)
+    found, notes = load_arms(output_root, wanted, comparator, outcomes_file, h2_arm)
     if Arm(REFERENCE) not in found:
         raise ConfigError(f"the outcomes of {REFERENCE} (seed 0 at least, {outcomes_file}) are "
                           f"needed under {output_root}")  # fmt: skip
@@ -721,6 +740,11 @@ def run_comparisons(
         if loaded.main:
             keys.append((arm, True))
             outcomes.append(arm_outcomes(arm, loaded.seeds, loaded.arrays, table))
+    teacher = Arm(flips_mod.REFERENCE)  # secondary (2026-11-08): what distillation forgets
+    teacher_path = RunContext(teacher.label, seed=0).run_dir(output_root) / outcomes_file
+    if teacher_path.is_file():
+        keys.append((teacher, False))
+        outcomes.append(arm_outcomes(teacher, (0,), [read_outcomes(teacher_path)], table))
     folder = UNFILTERED_DIR if unfiltered else "comparisons"
     if strict:
         keep = strict_images(Path(config["paths"]["private_root"]))
@@ -742,7 +766,9 @@ def run_comparisons(
         "arms": [a.name for a in found],
         "tiers": {
             a.name: {
-                "tier": tier(a.label, a.budget, comparator) if loaded.main else "exploratory",
+                "tier": tier(a.label, a.budget, comparator, h2_arm)
+                if loaded.main
+                else "exploratory",
                 "seeds": list(loaded.seeds),
             }
             for a, loaded in found.items()
@@ -805,31 +831,29 @@ def run_comparisons(
             rows += add_holm_rows(primary, [SMALL, MASK_EFFECT])
             rows += mcnemar_rows(table, a, b, name, PRIMARY_BUDGET)
 
-    # H2: the best generic pruning arm against E3 w8 at the matched budget
-    matched, why = matched_budget(results)
-    if matched is None:
-        choices["h2"] = {"skipped": why}
-    else:
-        budget = matched["budget"]
-        scores = scores_from_rows(results, generic_b2, budget=budget)
-        missing = [c for c in generic_b2 if c not in scores]
-        if missing:
-            choices["h2"] = {**matched, "skipped": f"no validation rows at seed 0, {budget} "
-                                                   f"for {missing}"}  # fmt: skip
+    # H2: the best generic pruning arm against E3 w8 at the matched budget (chosen above)
+    choices["h2"] = h2_choice
+    if h2_arm is not None:
+        best = Arm(*h2_arm)
+        both = pair(best, Arm(QUANT_W8))
+        if both is None:
+            choices["h2"]["skipped"] = "test outcomes of the arm or of E3 w8 are incomplete"
         else:
-            best = Arm(rank(scores.values())[0].label, budget)
-            choices["h2"] = {**matched, "arm": best.label,
-                             "ordering": [s.label for s in rank(scores.values())]}  # fmt: skip
-            both = pair(best, Arm(QUANT_W8))
-            if both is None:
-                choices["h2"]["skipped"] = "test outcomes of the arm or of E3 w8 are incomplete"
-            else:
-                i, j, suffix = both
-                if suffix:
-                    choices["h2"]["exploratory"] = "a side has seed 0 only (E3 w8 by the plan)"
-                name = f"best_pruning_vs_{QUANT_W8}{suffix}"
-                rows += paired_rows(observed, draws, i, j, name, budget, alpha)
-                rows += mcnemar_rows(table, outcomes[i], outcomes[j], name, budget)
+            i, j, suffix = both
+            if suffix:
+                choices["h2"]["exploratory"] = "a side has seed 0 only"
+            name = f"best_pruning_vs_{QUANT_W8}{suffix}"
+            rows += paired_rows(observed, draws, i, j, name, best.budget, alpha)
+            rows += mcnemar_rows(table, outcomes[i], outcomes[j], name, best.budget)
+
+    # secondary (2026-11-08): E2 against E0, the small-finding recall that distillation loses
+    if (teacher, False) in index:
+        e2 = index[(reference, True)] if (reference, True) in index else index[(reference, False)]
+        rows += paired_rows(observed, draws, e2, index[(teacher, False)],
+                            f"{REFERENCE}_vs_{teacher.label}", "", alpha)  # fmt: skip
+        choices["secondary_e2_vs_e0"] = "E2 minus E0 (seed 0): small-finding recall"
+    else:
+        choices["secondary_e2_vs_e0"] = {"skipped": f"no outcomes of E0 seed 0 ({outcomes_file})"}
 
     # secondary (pre-specified 2026-11-08, no verdict): E7 against A1, the uniform weights
     ours, uniform = Arm(OURS, PRIMARY_BUDGET), Arm(UNIFORM_WEIGHTS, PRIMARY_BUDGET)

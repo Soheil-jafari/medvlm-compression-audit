@@ -358,6 +358,9 @@ def calibration_metrics(out: ProbeOutcomes, *, n_bins: int) -> list[Metric]:
 
 # ------------------------------------------------------------- operating point
 
+HEADLINE_WITHOUT: tuple[str, ...] = ("ulcerative_colitis",)
+"""Secondary (pre-registered 2026-11-08): the headline accuracy at the operating point without
+this finding, whose scores barely separate the classes (E2 seed 0: op sensitivity 0.27)."""
 OP_SPECIFICITY = 0.95
 """Pre-registered operating point (2026-11-06): per model and finding, the probe-score
 threshold that gives specificity 0.95 on that finding's validation negatives."""
@@ -427,6 +430,17 @@ def operating_point_metrics(
         lambda a: _macro_balanced_accuracy_from_codes(a, len(findings)), codes, **kwargs
     )
     metrics.append(Metric("op_macro_balanced_accuracy", *balanced))
+    for left_out in HEADLINE_WITHOUT:  # secondary (2026-11-08): the headline without a finding
+        if left_out in findings and len(findings) > 1:
+            code = list(findings).index(left_out)
+            kept = codes[codes[:, 0] != code]
+            remap = np.array([i - (i > code) for i in range(len(findings))])
+            kept = np.stack([remap[kept[:, 0]], kept[:, 1], kept[:, 2]], axis=1)
+            value = bootstrap_ci(
+                lambda a: _macro_balanced_accuracy_from_codes(a, len(findings) - 1), kept,
+                **{**kwargs, "clusters": np.asarray(at.sample_ids)[codes[:, 0] != code]},
+            )  # fmt: skip
+            metrics.append(Metric(f"op_macro_balanced_accuracy_without:{left_out}", *value))
     index = at.finding_index(findings)
     for code, finding in enumerate(findings):
         rows = index == code

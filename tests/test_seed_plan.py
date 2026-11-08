@@ -143,6 +143,12 @@ def test_seeds_1_and_2_wait_for_the_choice_and_stop_on_futility(
     assert runs == ["run A1 B2 seed2"]
     with pytest.raises(CardError, match="not 1"):
         build_plan("RC-A2", 1)  # the other ablations stay at seed 0
+    runs = [s.label for s in build_plan("RC-E3", 1).steps if s.label.startswith("run")]
+    assert runs == ["run E3 w8 seed1"]  # H2's quantized arm only
+    with pytest.raises(CardError, match="w8 only"):
+        build_plan("RC-E3", 2, variants=["w4"])
+    needs = [n.label for n in build_plan("RC-R1").needs]
+    assert "E1 seed0 adapter" in needs and "E1 seed1 adapter" not in needs  # E1: seed 0 only
     with pytest.raises(CardError, match="the comparator is E6"):
         build_plan("RC-E5", 1)
     needs = [n.label for n in build_plan("RC-R1").needs]

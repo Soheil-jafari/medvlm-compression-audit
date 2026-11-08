@@ -1,8 +1,9 @@
 # PRE-REGISTERED finding weights for the clinical pruning criterion (E7, E8, A2, A4-A6).
-# DRAFT (2026-10-12): rules are written down; the values follow from the RC-D1 counts and the
-# team's decisions (docs/preregistration.md sections 2 and 3). Set frozen_on / frozen_by /
-# commit only at the freeze; until then every compression run is refused.
+# Values decided by Soheil and Amir on 2026-11-08 (the choices delegated to the research lead;
+# docs/preregistration.md section 3, decisions log). Set frozen_on / frozen_by / commit only at
+# the freeze; until then every compression run is refused.
 # After freezing, changes require a dated entry in docs/decisions_log.md.
+# A1 (uniform weights) and A2 (rarity only) are the pre-registered check of this choice.
 preregistration:
   document: docs/preregistration.md
   frozen_on: TODO
@@ -12,27 +13,37 @@ preregistration:
 
 weighting:
   formula: "w_c = min(1 / prevalence_c, cap) * tier_multiplier(importance_tier_c)"
-  prevalence_source: "results/data/summary.csv, metric prevalence:<finding> (RC-D1, training images)"
-  cap: TODO                               # team; proposal 20 (every finding below 5 % prevalence
-                                          # gets the same rarity factor)
-  normalisation: TODO                     # team; proposal none (a common factor does not change
-                                          # the removal order; reports also show weights rescaled
-                                          # to sum to the number of findings)
-  tiers:                                  # team; proposal below, multipliers to be confirmed
-    - tier: TODO                          # proposal "action": calls for action at the same examination
-      multiplier: TODO                    # proposal 2.0
-      definition: TODO
-    - tier: TODO                          # proposal "follow_up": changes follow-up
-      multiplier: TODO                    # proposal 1.5
-      definition: TODO
-    - tier: TODO                          # proposal "other"
-      multiplier: TODO                    # proposal 1.0
-      definition: TODO
+  prevalence_source: "results/data/summary.csv (RC-D1 run 4b, split_sha256 54dfa70a...): answer_count:abnormalities:<finding>:train / images:train (4,513)"
+  cap: 20                                 # 2026-11-08: keeps one very rare finding from dominating;
+                                          # none of the three findings reaches it (all above 5 %)
+  normalisation: none                     # 2026-11-08: the criterion only ranks units, so a common
+                                          # factor changes nothing
+  tiers:                                  # 2026-11-08: assigned by rule from the finding names only
+    - tier: action
+      multiplier: 2.0
+      definition: "a treatment is performed during the same examination (e.g. resection)"
+    - tier: follow_up
+      multiplier: 1.5
+      definition: "changes treatment or follow-up but is not treated during the examination"
+    - tier: other
+      multiplier: 1.0
+      definition: "everything else"
 
-# One row per finding in the frozen finding list C (rule: docs/preregistration.md section 2).
+# One row per finding in the frozen finding list C (docs/preregistration.md section 2).
+# prevalence = training images with the value / 4,513 (6 decimals); final_weight = the formula.
 findings:
-  - finding: TODO
-    prevalence: TODO
-    importance_tier: TODO
-    cap: TODO
-    final_weight: TODO
+  - finding: polyp                        # 810 / 4,513; removed during the colonoscopy: action
+    prevalence: 0.179481
+    importance_tier: action
+    cap: 20
+    final_weight: 11.143241               # min(5.571620, 20) x 2.0
+  - finding: ulcerative_colitis           # 691 / 4,513; changes treatment, not treated in the exam
+    prevalence: 0.153113
+    importance_tier: follow_up
+    cap: 20
+    final_weight: 9.796686                # min(6.531124, 20) x 1.5
+  - finding: oesophagitis                 # 546 / 4,513; changes treatment, not treated in the exam
+    prevalence: 0.120984
+    importance_tier: follow_up
+    cap: 20
+    final_weight: 12.398334               # min(8.265556, 20) x 1.5

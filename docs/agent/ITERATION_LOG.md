@@ -1201,3 +1201,14 @@ Append-only, newest at the bottom. One entry per iteration:
 - A torch-only test (`test_the_real_configs_name_every_open_setting`) had been failing since the
   image side and `max_new_tokens` were set; updated to the real open settings.
 
+## Iteration 70: 2026-11-08 (interactive)
+- Stage / item: S07, the pre-freeze decisions (pre-registration section 11 item 14).
+- Configs: finding weights filled from the RC-D1 counts; E7 scoring method; recovery 157 x
+  2,500; budgets as decoder-byte fractions and the T4; E3 seeds; config notes confirmed.
+- Code: the budget rule (`budgets.py`, `recovery.py`), H2 in the 3-seed tier (`seed_plan`,
+  comparison step, RC-E3), `verdicts.combine_tests` and H1 on the pruning arms, the headline
+  without ulcerative colitis, E2 against E0, RC-R1 with E1 seed 0, the PolypGen loader and
+  overlap check (`data/polypgen.py`, `scripts/polypgen.py`); tests for each.
+- Docs: pre-registration (every [team] item resolved, items 14 and section 12), README, inbox,
+  schedule (three accounts, owners), team docs, run cards, related work, decisions log.
+

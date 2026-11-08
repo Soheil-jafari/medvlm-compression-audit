@@ -36,7 +36,7 @@ the runs over sessions and team members freely.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** card owner Amir; seed 0 Soheil (proposal, docs/schedule.md); seed 1 **[team]** (no owner yet), seed 2 Amir, after the futility check.
+- **Who:** card owner Amir; seed 0 on account 3 (Soheil; docs/schedule.md section 7); seed 1 Soheil on account 3 (lent by Farzan), seed 2 Amir, after the futility check.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter; teacher cache.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.

@@ -36,7 +36,7 @@ members freely.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** card owner Amir; seed 0 Amir (after RC-G2; the B2 run is RC-G2's, Soheil); seeds 1 and 2 only if E6 is the comparator: seed 1 **[team]** (no owner yet), seed 2 Amir.
+- **Who:** card owner Amir; seed 0: B2 in RC-G2 (Soheil), B1 and B3 on account 3 (Soheil); seeds 1 and 2 only if E6 is the comparator: seed 1 Soheil on account 3 (lent by Farzan), seed 2 Amir.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter; teacher cache.
   Seed 0 also attaches the pruned models of RC-G2 (`G2_B2_seed0_pruned`): its B2 runs are then not run again, only their test evaluation.

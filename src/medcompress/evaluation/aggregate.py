@@ -267,6 +267,9 @@ def seed_tier(experiment: str, n_seeds: int) -> str:
             return "exploratory"
         if experiment == "E7_vs_A1":
             return "secondary"  # pre-specified, no verdict (2026-11-08)
+        arm = experiment.rsplit("_vs_", 1)[0].split(":")[0]
+        if experiment.endswith("_vs_E2") and arm not in ("E5", "E6", "E7"):
+            return "secondary"  # a 3-seed arm outside H1 (E3 w8, in the tier for H2)
         return "confirmatory"
     base, _ = split_experiment(experiment)
     if base not in REGISTRY:

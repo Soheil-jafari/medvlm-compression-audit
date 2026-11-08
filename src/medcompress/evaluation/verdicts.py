@@ -38,9 +38,32 @@ SUPPORTED = "supported"
 NOT_SUPPORTED = "not supported"
 INCONCLUSIVE = "inconclusive"
 PENDING = "pending"
+PARTLY_SUPPORTED = "partly supported"
+"""Supported on one of the two co-primary tests only (2026-11-08)."""
 EXPLORATORY = "exploratory"
 """Rows from seed-0-only arms: reported with their intervals, no confirmatory claim."""
 SEED0_SUFFIX = "_seed0"
+PRUNING_ARMS: tuple[str, ...] = ("E5", "E6", "E7")
+
+
+def combine_tests(internal: str, external: str) -> str:
+    """The verdict of a hypothesis over the two co-primary tests (D02 amendment 7; decided
+    2026-11-08): **supported** only if supported on both the internal filtered test and the
+    external test (intersection-union, no alpha split); **partly supported** if supported on
+    one; otherwise **not supported** if not supported on both, **pending** if either is
+    pending, else inconclusive. Exploratory stays exploratory. Reported per test either way."""
+    pair = {internal, external}
+    if EXPLORATORY in pair:
+        return EXPLORATORY
+    if internal == SUPPORTED and external == SUPPORTED:
+        return SUPPORTED
+    if SUPPORTED in pair:
+        return PARTLY_SUPPORTED
+    if PENDING in pair:
+        return PENDING
+    if internal == NOT_SUPPORTED and external == NOT_SUPPORTED:
+        return NOT_SUPPORTED
+    return INCONCLUSIVE
 
 
 @dataclass(frozen=True)
@@ -78,6 +101,9 @@ def _describe(row: pd.Series) -> str:
 def verdict_h1(summary: pd.DataFrame) -> Verdict:
     """H1: hidden damage exceeds headline damage for every compression family."""
     rows = _rows(summary, "_vs_E2", metric="diff:drop_gap")  # the 3-seed tier only
+    if not rows.empty:  # H1 is about the pruning arms of the main tier (E3 w8 has 3 seeds for H2)
+        arm = rows["experiment"].str.rsplit("_vs_", n=1).str[0].str.split(":").str[0]
+        rows = rows[arm.isin(PRUNING_ARMS)]
     rule = (
         "supported if every 3-seed arm's CI is above 0; not supported if any CI is below 0 "
         "(seed-0 arms: exploratory, not read)"

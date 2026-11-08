@@ -51,12 +51,12 @@ def _run(variant: str | None = None, seed: int = 0, budget: str | None = None) -
 
 
 def test_the_real_configs_name_every_open_setting() -> None:
-    """The grid and calibration sizes are decided (D07); what is left is named in one error.
-
-    The image side (672, 2026-10-17) and ``max_new_tokens`` (the D04 rule, 2026-10-31) are set,
-    so E5 and E6 have nothing open; E7 waits on D07 section 1 (the scoring method)."""
-    for experiment, variant in (("E5", "taylor"), ("E6", None)):
+    """The grid, calibration sizes, image side, ``max_new_tokens`` and (2026-11-08) the scoring
+    method are decided, so E5, E6 and E7 have nothing open."""
+    for experiment, variant in (("E5", "taylor"), ("E6", None), ("E7", None)):
         config, _ = load_experiment(experiment)
+        settings = stage.ScoringSettings.from_config(config, variant)
+        assert settings.calibration_size in (None, 128)
         run = RunContext(experiment, seed=0, variant=variant)
         collect_open_settings(
             lambda config=config, variant=variant: stage.ScoringSettings.from_config(
@@ -65,21 +65,6 @@ def test_the_real_configs_name_every_open_setting() -> None:
             lambda config=config, run=run: stage._check_criterion(config, run),
             lambda config=config: stage._check_side(config, None),
         )
-    expected = {"E7": (None, ["pruning.clinical.ablation_method"])}
-    for experiment, (variant, keys) in expected.items():
-        config, _ = load_experiment(experiment)
-        settings = stage.ScoringSettings.from_config(config, variant)
-        assert settings.calibration_size in (None, 128)
-        run = RunContext(experiment, seed=0, variant=variant)
-        with pytest.raises(ConfigError) as caught:
-            collect_open_settings(
-                lambda config=config, variant=variant: stage.ScoringSettings.from_config(
-                    config, variant
-                ),
-                lambda config=config, run=run: stage._check_criterion(config, run),
-                lambda config=config: stage._check_side(config, None),
-            )
-        assert str(caught.value) == f"settings still open: {', '.join(keys)}"
 
 
 def test_variants_resolve_the_criterion_the_sizes_and_the_unit_types() -> None:

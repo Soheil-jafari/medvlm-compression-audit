@@ -10,7 +10,7 @@ Students (E1, E2) & Learning rate, schedule, warm-up & 0.0001 / linear / 20 \\
 Students (E1, E2) & Micro-batch x accumulation & 1 / 16 \\
 Students (E1, E2) & KD weight / temperature & 0.5 / 2 \\
 Students (E1, E2) & Steps / training pool & 625 / 10000 \\
-Recovery (E5-E7, A1-A6) & Steps / examples & -- / -- \\
+Recovery (E5-E7, A1-A6) & Steps / examples & 157 / 2500 \\
 Recovery (E5-E7, A1-A6) & Learning rate / KD weight & 0.0001 / 0.5 \\
 Pruning & Unit types & decoder\_layer, attention\_head, mlp\_channel\_group \\
 Pruning & Channel group / calibration images & 128 / 128 \\
@@ -18,7 +18,7 @@ Pruning & Protected layers (first / last) & 2 / 1 \\
 Pruning & Ranking / schedule & per\_parameter / one\_shot \\
 Pruning & Ranking of A3 (random scores) & none \\
 Clinical criterion & Effect / weights / negatives per positive & logprob\_drop / clinical / 1 \\
-Clinical criterion & Scoring method & -- \\
+Clinical criterion & Scoring method & decoder\_layer: exact, attention\_head: exact, mlp\_channel\_group: first\_order \\
 Quantization & w4: backend / bits / group & gptq / 4 / 128 \\
 Quantization & w8: backend / bits / group & gptq / 8 / 128 \\
 Quantization & w8a8: backend / weight bits / activation bits & llm\_int8 / 8 / 8 \\

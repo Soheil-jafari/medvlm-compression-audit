@@ -42,11 +42,14 @@ class BudgetSpec:
     reference_experiment: str
     tolerance: float | None
     description: str = ""
+    decoder_bytes_removed: float | None = None
+    """The pre-registered rule (2026-11-08): remove this fraction of E2's decoder-layer bytes;
+    the target is E2's measured peak minus it (RC-B0 measures both)."""
 
     @property
     def is_frozen(self) -> bool:
-        """True once a numeric target fraction has been set (no longer a placeholder)."""
-        return self.target_fraction is not None
+        """True once the level has a rule or a number (no longer a placeholder)."""
+        return self.target_fraction is not None or self.decoder_bytes_removed is not None
 
 
 def load_budget_specs(config: Mapping[str, Any]) -> dict[str, BudgetSpec]:
@@ -68,6 +71,7 @@ def load_budget_specs(config: Mapping[str, Any]) -> dict[str, BudgetSpec]:
             raise ConfigError(f"budgets.levels is missing {budget_id}")
         level = levels[budget_id] or {}
         fraction = level.get("target_fraction")
+        removed = level.get("decoder_bytes_removed")
         specs[budget_id] = BudgetSpec(
             id=budget_id,
             metric=str(metric),
@@ -75,6 +79,7 @@ def load_budget_specs(config: Mapping[str, Any]) -> dict[str, BudgetSpec]:
             reference_experiment=str(reference),
             tolerance=float(tolerance) if isinstance(tolerance, int | float) else None,
             description=str(level.get("description", "")),
+            decoder_bytes_removed=None if removed is None else float(removed),
         )
     return specs
 
@@ -152,17 +157,39 @@ def report_for_metric(metric: str, value: float) -> EfficiencyReport:
     )
 
 
-def target_value(spec: BudgetSpec, reference: EfficiencyReport) -> float:
+def target_value(
+    spec: BudgetSpec, reference: EfficiencyReport, *, decoder_bytes: float | None = None
+) -> float:
     """Return the absolute target (bytes or seconds) for a budget level.
 
-    target = target_fraction * reference metric. Placeholder budgets
-    (``spec.is_frozen`` is False) are refused.
+    With ``decoder_bytes_removed`` (the pre-registered rule): target = the reference peak
+    memory minus that fraction of the reference's decoder-layer bytes (``decoder_bytes``, from
+    RC-B0's ``decoder_layers_bytes`` row). Otherwise target = target_fraction * reference
+    metric. Placeholder budgets are refused.
 
     Used by: E5-E8, A1-A6.
     """
+    if spec.decoder_bytes_removed is not None:
+        if spec.metric != "peak_memory":
+            raise ValueError("the decoder-bytes rule needs the peak-memory metric")
+        if decoder_bytes is None:
+            raise ValueError(f"budget {spec.id}: the reference's decoder_layers_bytes is needed")
+        return metric_value(reference, spec.metric) - spec.decoder_bytes_removed * decoder_bytes
     if spec.target_fraction is None:
         raise ValueError(f"Budget {spec.id} is a placeholder; freeze it first.")
     return spec.target_fraction * metric_value(reference, spec.metric)
+
+
+def reference_decoder_bytes(
+    results_root: Path | str, reference_experiment: str, *, seed: int = 0
+) -> float:
+    """The reference arm's ``decoder_layers_bytes`` (RC-B0's ``efficiency.csv``)."""
+    path = Path(results_root) / reference_experiment / "nobudget" / f"seed{seed}" / "efficiency.csv"
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            if row["metric"] == "decoder_layers_bytes":
+                return float(row["value"])
+    raise ValueError(f"{path} has no decoder_layers_bytes row: run RC-B0 (stage 07) first")
 
 
 def within_budget(measured: EfficiencyReport, spec: BudgetSpec, target: float) -> bool:
@@ -306,14 +333,18 @@ def budget_spec_for_run(config: Mapping[str, Any], budget: str) -> BudgetSpec:
         for key in ("metric", "tolerance")
         if block.get(key) is None or find_todos({"v": block.get(key)})
     ]
-    if spec.target_fraction is None:
-        open_keys.append(f"budgets.levels.{budget}.target_fraction")
+    if spec.target_fraction is None and spec.decoder_bytes_removed is None:
+        open_keys.append(f"budgets.levels.{budget}.decoder_bytes_removed")
     if open_keys:
         raise ConfigError(f"settings still open: {', '.join(open_keys)}")
     if spec.metric not in BUDGET_METRICS:
         raise ConfigError(f"budgets.metric must be one of {BUDGET_METRICS}, got {spec.metric!r}")
-    if not 0.0 < spec.target_fraction < 1.0:
-        raise ConfigError(f"budgets.levels.{budget}.target_fraction must be in (0, 1)")
+    value = spec.decoder_bytes_removed
+    name = "decoder_bytes_removed"
+    if value is None:
+        value, name = spec.target_fraction, "target_fraction"
+    if not 0.0 < float(value) < 1.0:
+        raise ConfigError(f"budgets.levels.{budget}.{name} must be in (0, 1)")
     return spec
 
 

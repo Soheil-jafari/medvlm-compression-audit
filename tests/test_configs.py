@@ -69,7 +69,7 @@ def test_experiment_config_matches_registry(exp_id: str) -> None:
     assert exp.seeds, f"{exp_id} lists no seeds"
     # the seed plan of 2026-11-08: 3 seeds where a main-tier arm can come from (E2, E7 and the
     # comparator among E5 / E6; E1 ran its 3 before), seed 0 for every other arm
-    if exp_id in ("E1", "E2", "E5", "E6", "E7", "A1"):  # A1: the secondary comparison
+    if exp_id in ("E1", "E2", "E3", "E5", "E6", "E7", "A1"):  # A1 secondary; E3 w8 for H2
         assert exp.seeds == TRAINING_SEEDS, f"{exp_id} must list seeds 0, 1 and 2"
     else:
         assert exp.seeds == (0,), f"{exp_id} runs seed 0 only (exploratory)"

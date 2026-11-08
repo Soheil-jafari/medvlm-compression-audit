@@ -84,7 +84,9 @@ def test_three_seeds_for_the_main_tier_and_seed0_for_every_other_arm() -> None:
     assert sp.planned_seeds("E5:taylor", "B2", "E5:taylor") == (0, 1, 2)
     assert sp.planned_seeds("E5:taylor", "B2", "E6") == (0,)  # not the comparator
     assert sp.planned_seeds("E5:taylor", "B2", None) == (0,)  # before the choice
-    for label, budget in (("E3:w4", ""), ("E3:w8", ""), ("E4", ""), ("E8", "B2"), ("E9", ""),
+    assert sp.planned_seeds("E3:w8", "", None) == (0, 1, 2)  # H2 stays confirmatory (2026-11-08)
+    assert sp.planned_seeds("E6", "B1", "E5:taylor", h2_arm=("E6", "B1")) == (0, 1, 2)
+    for label, budget in (("E3:w4", ""), ("E4", ""), ("E8", "B2"), ("E9", ""),
                           ("A2", "B2"), ("A4:n32", "B2")):  # fmt: skip
         assert sp.planned_seeds(label, budget, "E6") == (0,)
         assert sp.tier(label, budget, "E6") == sp.EXPLORATORY
@@ -166,3 +168,25 @@ def test_the_skipped_step_report_maps_a_step_to_its_examples(
     row = module.features(3, [(True, 12, 4), (False, 30, 9), (True, 5, 2)])
     assert (row.differs, row.teacher_tokens_max, row.gt_words_max) == (2, 30, 9)
     assert module.mid_rank(2, [1, 2, 2, 3]) == 0.5
+
+
+def test_the_headline_without_ulcerative_colitis_is_a_secondary_row() -> None:
+    names = ("polyp", "ulcerative_colitis")
+    out = _outcomes()
+    renamed = ps.ProbeOutcomes(
+        sample_ids=out.sample_ids, findings=tuple(np.tile(names, len(out.truth) // 2)),
+        truth=out.truth, yes=out.yes, margin=out.margin, area=out.area, has_mask=out.has_mask,
+    )  # fmt: skip
+    thresholds = ps.fit_thresholds(renamed, names)
+    rows = {
+        m.name: m
+        for m in ps.operating_point_metrics(
+            renamed, names, thresholds, size_thresholds=None, mask_findings=None, n_resamples=50
+        )
+    }
+    without = rows["op_macro_balanced_accuracy_without:ulcerative_colitis"]
+    yes = ps.operating_point_answers(renamed, thresholds)
+    polyp = np.array(renamed.findings) == "polyp"
+    expected = (yes[polyp & renamed.truth].mean() + (~yes[polyp & ~renamed.truth]).mean()) / 2
+    assert without.value == pytest.approx(expected)  # polyp alone
+    assert without.ci_low <= without.value <= without.ci_high

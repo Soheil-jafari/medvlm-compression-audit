@@ -8,9 +8,10 @@
   then score it on the validation split with the full evaluation suite, so that E2 (the same
   recipe plus distillation) has its control.
 - Status: `done` (2026-11-06): seeds 0, 1 and 2 trained and scored on validation; rule 3
-  passes. Section 3c: seeds 0 and 2 rescored (2026-11-08); seed 1 open (its notebook output and
-  adapter were not kept on Farzan's account; Soheil has asked Farzan). Open too: seed 0's
-  adapter check (section 3b).
+  passes. Section 3c: seeds 0 and 2 rescored (2026-11-08). Seed 1 is **final** (2026-11-08):
+  its outputs were lost, it has no operating-point rows and keeps its committed default-cutoff
+  validation rows; E1's test evaluation (RC-R1) uses seed 0 only (E1 is a control outside the
+  3-seed tier). Open: seed 0's adapter check (section 3b).
 
 ## 2. Requirements
 
@@ -232,7 +233,7 @@ Section 3c (the operating-point rows, CPU):
 
 | | seed 0 | seed 1 | seed 2 |
 |---|---|---|---|
-| Run by / date / commit | Soheil, Kaggle CPU notebook, 2026-11-08, commit b5f6197 | open: the notebook output and adapter were not kept (Farzan's account); Soheil has asked Farzan | the agent, locally on CPU (not Kaggle), 2026-11-08, commit 18c29e5, from Amir's saved outcomes (uploaded as `outcomes1.npz`, SHA-256 63a64a27...; kept outside the repository) |
+| Run by / date / commit | Soheil, Kaggle CPU notebook, 2026-11-08, commit b5f6197 | **final: none** (the notebook output and adapter were lost; no operating-point rows; not waiting on anyone, 2026-11-08) | the agent, locally on CPU (not Kaggle), 2026-11-08, commit 18c29e5, from Amir's saved outcomes (uploaded as `outcomes1.npz`, SHA-256 63a64a27...; kept outside the repository) |
 | Environment | torch 2.11.0+cpu, transformers 5.20.2 (CPU only; the GPU runs used torch 2.11.0+cu130, transformers 5.19.0) | | Python 3.13.16, numpy 2.5.3, pandas 3.0.5, scipy 1.18.1, no torch (the rescoring reads the saved scores only) |
 | Check against the committed rows | 7 rows (681 probes, the three sensitivities and specificities) identical to the saved outcomes; `tests/test_results.py` 6 passed | | the same 7 rows identical; every one of the 97 committed rows unchanged; `tests/test_results.py` 6 passed |
 | Rows written | 31 (the 12 AUROC / "yes" rate / class-count rows, already committed and unchanged, and 19 new `op_*` rows) | | 33 (the same 12, unchanged, and 21 new `op_*` rows: the 19 of seed 0 plus the comparator tie-break rows `op_mask_positive_recall` and `op_small_margin_mean`, added to the code after seed 0's rescoring) |
@@ -247,3 +248,6 @@ The operating point is fitted on these same validation probes, so these numbers 
 (optimistic); the test split reads the thresholds unchanged. Seed 0's `metrics.csv` committed as
 uploaded (rows in the rescoring's order); seed 2's written by `scripts/rescore_probes.py` here
 (the `.npz` is never committed).
+
+Adapters: seed 0 `e1-seed0-adapter`; **seed 2 `e1-seed2-adapter`** (Amir made the dataset,
+2026-11-08); seed 1 none (lost).

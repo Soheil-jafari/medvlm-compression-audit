@@ -137,7 +137,7 @@ def test_budget_specs_are_read_frozen_or_refused(tmp_path: Path) -> None:
     config = {"components": {"budgets": str(path)}}
     with pytest.raises(ConfigError) as caught:
         budget_spec_for_run(config, "B2")
-    for key in ("budgets.metric", "budgets.tolerance", "budgets.levels.B2.target_fraction"):
+    for key in ("budgets.metric", "budgets.tolerance", "budgets.levels.B2.decoder_bytes_removed"):
         assert key in str(caught.value)
     block.update(metric="peak_memory", tolerance=0.03)
     levels["B2"]["target_fraction"] = 0.6
@@ -179,3 +179,27 @@ def test_the_reference_is_read_back_from_the_efficiency_file_of_e2(tmp_path: Pat
     assert report_for_metric("latency", 0.5).warm_latency_s == 0.5
     with pytest.raises(ValueError, match="metric"):
         report_for_metric("energy", 1.0)
+
+
+def test_the_decoder_bytes_rule_turns_the_fractions_into_bytes(tmp_path: Path) -> None:
+    from medcompress.budgets import (
+        EfficiencyReport,
+        load_budget_specs,
+        reference_decoder_bytes,
+        target_value,
+    )
+    from medcompress.config import load_config
+
+    specs = load_budget_specs(load_config("budgets.yaml"))  # the decided values (2026-11-08)
+    assert [specs[b].decoder_bytes_removed for b in ("B1", "B2", "B3")] == [0.15, 0.30, 0.45]
+    reference = EfficiencyReport(peak_memory_bytes=10_000)
+    assert target_value(specs["B2"], reference, decoder_bytes=6_000) == 10_000 - 0.30 * 6_000
+    with pytest.raises(ValueError, match="decoder_layers_bytes"):
+        target_value(specs["B2"], reference)
+    folder = tmp_path / "E2" / "nobudget" / "seed0"
+    folder.mkdir(parents=True)
+    (folder / "efficiency.csv").write_text(
+        "experiment,budget,seed,metric,value,ci_low,ci_high\n"
+        "E2,,0,peak_memory_bytes,10000,,\nE2,,0,decoder_layers_bytes,6000,,\n"
+    )
+    assert reference_decoder_bytes(tmp_path, "E2") == 6000.0

@@ -7,7 +7,7 @@ experiment:
   description: Clinical criterion with uniform finding weights (w_c = 1).
   kind: ablation
   variant_of: E7
-  budgets: [B2]                           # TODO: confirm ablations run at the primary budget only
+  budgets: [B2]                           # confirmed 2026-11-08 (freeze list item 19): B2 only
   seeds: [0, 1, 2]                        # 3 seeds at B2: secondary comparison E7 vs A1 (2026-11-08)
   outputs:
     - results/A1/B2/seed{0,1,2}/metrics.csv

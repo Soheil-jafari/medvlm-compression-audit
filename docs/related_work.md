@@ -59,6 +59,17 @@ never as the original methods:
 
 The comparator is the best of these four on validation (pre-registration section 5).
 
+## Mixed-precision quantization (E11, E12: exploratory, not built)
+
+HAQ and HAWQ (2019) assign bit widths per layer from a sensitivity measure (hardware feedback,
+the Hessian). Our planned E11 does the same with a **clinically weighted** sensitivity: each
+decoder layer alone is quantized to 4 bit and the drop in the correct answer is measured with
+the same probes, weights and calibration images as E7; the most sensitive layers stay at 8 bit
+until the memory target (the midpoint between E3 `w4` and `w8`) is reached. E12 is the same
+procedure with an unweighted sensitivity. Both run only if a feasibility check shows that our
+evaluation stack runs per-layer bit widths with real low-precision kernels; otherwise they are
+reported as not run and listed as future work (pre-registration section 12).
+
 ## Not included, with reasons
 
 - **FLAP, SliceGPT:** the comparator is already the best of four standard criteria in one

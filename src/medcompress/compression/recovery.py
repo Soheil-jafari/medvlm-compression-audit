@@ -198,6 +198,7 @@ def run_prune_and_recover(
     records: Mapping[str, Any] | None = None,
     measure: Callable[[Sequence[PrunableUnit]], float] | None = None,
     reference_value: float | None = None,
+    reference_decoder_bytes: float | None = None,
 ) -> None:
     """Stage entry point for ``scripts/05_prune_and_recover.py``.
 
@@ -212,7 +213,8 @@ def run_prune_and_recover(
     The keyword arguments replace what the stage loads itself (tests, other front ends):
     ``student_factory`` gives a fresh unpruned E2 student, ``train`` the training split,
     ``records`` the cached teacher outputs by sample id, ``measure`` the measured metric of
-    a removal set and ``reference_value`` the metric of E2.
+    a removal set, ``reference_value`` the metric of E2 and ``reference_decoder_bytes`` its
+    decoder-layer bytes (the budget rule).
 
     Used by: E5, E6, E7, A1-A6.
     """
@@ -256,13 +258,18 @@ def run_prune_and_recover(
         raise ValueError(f"unit scores lack {len(unknown)} of the units, e.g. {unknown[:3]}")
     ordered, protected = plan_removal(units, scores, settings.removal)
 
+    from medcompress.budgets import reference_decoder_bytes as read_decoder_bytes
+
     if reference_value is None:
         from medcompress.budgets import reference_report
 
         reference = reference_report(paths["results_root"], spec.reference_experiment)
     else:
         reference = report_for_metric(spec.metric, reference_value)
-    target = target_value(spec, reference)
+    decoder_bytes = reference_decoder_bytes
+    if spec.decoder_bytes_removed is not None and decoder_bytes is None:
+        decoder_bytes = read_decoder_bytes(paths["results_root"], spec.reference_experiment)
+    target = target_value(spec, reference, decoder_bytes=decoder_bytes)
     if measure is None:
         measure = _default_measure(config, factory, settings, data_root)
     search = search_matched_budget(
