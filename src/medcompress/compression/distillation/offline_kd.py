@@ -18,7 +18,7 @@ import json
 import math
 import random
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -333,6 +333,51 @@ def _step_loss(
     return combined_kd_loss(ce, kl, kd_weight=cfg.kd_weight), float(ce.detach()), float(kl.detach())
 
 
+def _step_backward(
+    module: Any,
+    gt: Batch,
+    teacher: Batch | None,
+    cfg: TrainConfig,
+    *,
+    backward: Callable[[Any], None],
+    autocast: Callable[[], Any],
+) -> tuple[float, float, float]:
+    """Forward and backward of one micro-batch; returns ``(loss, ce, kl)`` as numbers.
+
+    ``backward(t)`` runs the (scaled) backward of a loss tensor; ``autocast()`` opens the mixed
+    precision context of the forward passes.
+
+    * ``kd_weight <= 0``, or the teacher's answer equals the ground truth (``teacher is None``):
+      one forward pass, then one backward of :func:`_step_loss`'s loss, exactly as before.
+    * The teacher's answer differs: the loss ``(1 - w) * ce + w * kl`` is linear, so its
+      gradient is the sum of the two terms' gradients. The CE term is backpropagated first and
+      its graph freed, then the teacher batch is forwarded and the KL term backpropagated.
+      Only one graph is alive at a time (E2 seed 0 ran out of memory on one T4 with both,
+      2026-11-07). Same loss, same gradients up to rounding, same returned numbers.
+    """
+    w = cfg.kd_weight
+    if w <= 0 or teacher is None:
+        with autocast():
+            loss, ce, kl = _step_loss(module, gt, teacher, cfg)
+        backward(loss)
+        return float(loss.detach()), ce, kl
+    if not 0.0 <= w <= 1.0:  # the check of combined_kd_loss
+        raise ValueError("kd_weight must be between 0 and 1")
+    with autocast():
+        ce_term = answer_ce_loss(forward_answer_logits(module, gt), gt.targets)
+        part = (1.0 - w) * ce_term
+    backward(part)
+    ce = float(ce_term.detach())
+    del ce_term, part  # free the ground-truth graph before the teacher's forward pass
+    with autocast():
+        kl_term = _kd_term(forward_answer_logits(module, teacher), teacher, cfg)
+        part = w * kl_term
+    backward(part)
+    kl = float(kl_term.detach())
+    del kl_term, part
+    return (1.0 - w) * ce + w * kl, ce, kl
+
+
 def _learning_rate(cfg: TrainConfig, step: int) -> float:
     warmup = int(cfg.extra.get("warmup_steps", 0))
     if warmup and step < warmup:
@@ -465,10 +510,13 @@ def train_lora(
             gt, teacher = _micro_batches(student, [examples[i] for i in idx], cfg)
             gt = move(gt, device)
             teacher = move(teacher, device) if teacher is not None else None
-            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp):
-                loss, ce, kl = _step_loss(module, gt, teacher, cfg)
-            scaler.scale(loss / cfg.grad_accumulation).backward()
-            value = float(loss.detach())
+            value, ce, kl = _step_backward(
+                module, gt, teacher, cfg,
+                backward=lambda t: scaler.scale(t / cfg.grad_accumulation).backward(),
+                autocast=lambda: torch.autocast(
+                    device_type=device.type, dtype=torch.float16, enabled=amp
+                ),
+            )  # fmt: skip
             if not math.isfinite(value):
                 progress.nonfinite_microbatches += 1
             totals[0] += value / cfg.grad_accumulation

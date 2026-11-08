@@ -483,6 +483,27 @@ must be logged here.
   the class counts per finding, next to sensitivity and specificity, so a method that only
   shifts the yes/no bias can be told from one that loses discrimination. E0's from its saved
   validation outcomes on CPU (`scripts/rescore_probes.py`, RC-E0a section 3b).
+- **2026-11-07 (Soheil): E2 seed 0's out-of-memory fixed: an implementation change, not a design
+  change.** E2 seed 0 ran out of memory on one T4 (14.56 GiB) in the KD step: when the
+  teacher's cached answer differs from the ground truth, the step made two forward passes and
+  kept both graphs until one backward of `(1 - w) * ce + w * kl`. The loss is linear, so the
+  step now backpropagates the CE term first, frees it, then forwards the teacher batch and
+  backpropagates the KL term, through the same loss scaler and the same 1 / accumulation
+  scaling (`offline_kd._step_backward`). The same loss, the same gradients up to rounding (a test
+  checks them), the same logged numbers; no config value, hyper-parameter, seed, data order or
+  hash changes, and gradient checkpointing stays off. The one-pass path (teacher answer equal to
+  the ground truth) and E1's (`kd_weight` 0) are unchanged. E2 seeds 0, 1 and 2 all run on the
+  fix commit; recovery and E4 use the same step.
+- **2026-11-07 (Soheil): E2 seed 0's false stop fixed.** E2 seed 0 stopped at once (exit
+  code 5: "E0 teacher_cache was made with other settings: student: 'TODO' there,
+  'models/qwen2_5_vl_3b_student.yaml' here"; run on 73efbc4). The hand-off check compared the
+  student for every kind, but the teacher cache and the teacher adapter are written by E0,
+  whose config names no student, and their content does not depend on it. Now the compared
+  settings depend on the kind: the teacher's hand-offs compare the teacher, its revision, the
+  image side, the data seed and the pool size; every student hand-off (adapter, resume, pruned,
+  quantized, outcomes) still compares the student too; a `TODO` is never compared as a value.
+  The committed cache (`e0-teacher-cache`, manifest d6ba0cb9...) stays valid and is not
+  rebuilt: its files and manifest are unchanged, and the E2 cell is unchanged.
 - **2026-11-06 (Soheil): E1 done, rule 3 passes; seed 0's NaN loss; the Kaggle image changed;
   the probe operating point; seeds per budget.**
   - E1 seeds 0, 1, 2 trained (625 steps, 2.34-2.55 h each) and scored on validation: macro
