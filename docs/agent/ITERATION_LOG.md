@@ -1183,3 +1183,10 @@ Append-only, newest at the bottom. One entry per iteration:
 - Found while implementing: H2 is exploratory as written (E3 `w8` seed 0 only); E2 seeds 1 and
   2 now wait for the futility check (they are main-tier seeds). Both are with the team.
 
+## Iteration 68: 2026-11-08 (interactive)
+- Stage / item: S06, RC-E1 section 3c, seed 2.
+- `scripts/rescore_probes.py --exp E1 --seed 2` run here on CPU from Amir's saved outcomes (kept
+  in the scratchpad, never committed): 7 committed rows identical, no row changed, 21 `op_*` rows
+  added to `results/E1/nobudget/seed2/metrics.csv`. RC-E1 section 6, `docs/results/E1.md` and
+  `E2.md` updated. Seed 1: no outputs; the amendment text for that case waits for Farzan's answer.
+

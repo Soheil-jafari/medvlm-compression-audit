@@ -529,6 +529,13 @@ must be logged here.
     lists (E3, E4, E8, A1-A6: seed 0), `by_arm.csv` gains a `tier` column, the paper tables a
     Seeds column. Farzan's assignments removed from the schedule; seed 1 of the main tier, RC-E9
     and the E7 / E8 trend have no owner yet ([team]).
+- **2026-11-08 (Soheil): E1 seed 2's operating-point rows** (RC-E1 section 3c), rescored by the
+  agent locally on CPU from Amir's saved outcomes (commit 18c29e5; Python 3.13.16, numpy 2.5.3,
+  no torch): the 7 check rows identical, no committed row changed, 21 `op_*` rows added. At the
+  operating point (validation, in-sample): macro balanced accuracy 0.750; sensitivity polyp
+  0.971, ulcerative colitis 0.000, oesophagitis 0.676; small-polyp recall 13 of 13. E1 seed 1's
+  notebook output and adapter were not kept (Farzan's account); Soheil has asked Farzan. The
+  amendment text for the case that they are not recovered is held until that answer.
 - **2026-11-08 (Soheil): E1 seed 0's operating-point rows** (RC-E1 section 3c, CPU, Kaggle,
   commit b5f6197, torch 2.11.0+cpu, transformers 5.20.2): `metrics.csv` committed unchanged;
   the 7 committed check rows were identical to the saved outcomes. At the operating point

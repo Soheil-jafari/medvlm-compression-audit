@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-11-08, iteration 67 (interactive run mode)
+**Last updated:** 2026-11-08, iteration 68 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S06/S07: E1 done (3 seeds; seed 0's operating-point rows in, seeds 1 and 2 open); E2 seed 0 done (2026-11-08); seed plan amended (2026-11-08): E2 seeds 1 and 2 wait for seed 0's futility check (after RC-G2), seed 1 has no owner [team]; E2 seed 0's skipped steps (RC-E2 section 6b, CPU); the freeze items
+**Current stage:** S06/S07: E1 done (3 seeds; operating-point rows for seeds 0 and 2, seed 1's outputs not kept: Farzan asked); E2 seed 0 done (2026-11-08); seed plan amended (2026-11-08): E2 seeds 1 and 2 wait for seed 0's futility check (after RC-G2), seed 1 has no owner [team]; E2 seed 0's skipped steps (RC-E2 section 6b, CPU); the freeze items
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -101,8 +101,9 @@
    open); the commit hash from the `e2-seed0-adapter` manifest into RC-E2 section 6; the
    skipped-step report (RC-E2 section 6b, CPU); E1's `op_*` rows (RC-E1 section 3c), then the
    E2-minus-E1 comparison at the operating point.
-   2026-11-08 (iteration 67): E1 seed 0's `op_*` rows committed (RC-E1 section 3c; seeds 1 and
-   2 open). E2 seed 0 minus E1 seed 0 at the operating point in `docs/results/E2.md`
+   2026-11-08 (iteration 67): E1 seed 0's `op_*` rows committed (RC-E1 section 3c); seed 2's
+   rescored locally from Amir's outcomes (iteration 68); seed 1's outputs were not kept (Soheil
+   has asked Farzan). E2 seed 0 minus E1 seed 0 at the operating point in `docs/results/E2.md`
    (validation, in-sample). **Seed plan amended** (Soheil and Amir, pre-registration section 11
    item 12): 3 seeds only for E2, E7 at B2 and the comparator at B2; seed 0 for everything else
    (exploratory); never 2 seeds; the comparator by a 4-step ordering on validation seed 0;
@@ -150,7 +151,7 @@ cards for the team (decision of 2026-10-12).
 | S04 | Model wrappers and unit surgery | done (RC-M1 passed 2026-10-15) | - |
 | S05 | Teacher: Gate 1, cache | done (RC-TT1 2026-10-31; RC-E0a and RC-E0b 2026-11-01) | - |
 | S05b | Student checks (D05 amendment: one student) | RC-S0 done 2026-10-16: both pass G1; training size decided; student revision pinned; RC-S0b run 2 ready (image side) | RC-S0b, team GPU hours, G2; then the selection freeze |
-| S06 | Students E1, E2, budget reference | RC-E1 done (3 seeds; seed 0's `op_*` rows in, seeds 1 and 2 open); RC-E2 seed 0 done 2026-11-08; seeds 1 and 2 after seed 0's futility check (seed plan, 2026-11-08) | RC-B0, the freeze, RC-G2, `choose_comparator.py`; then E2 seeds 1 (owner [team]) and 2 (Amir) |
+| S06 | Students E1, E2, budget reference | RC-E1 done (3 seeds; `op_*` rows for seeds 0 and 2; seed 1's outputs not kept); RC-E2 seed 0 done 2026-11-08; seeds 1 and 2 after seed 0's futility check (seed plan, 2026-11-08) | RC-B0, the freeze, RC-G2, `choose_comparator.py`; then E2 seeds 1 (owner [team]) and 2 (Amir) |
 | S07 | Pre-registration freeze | not frozen; amendments before the freeze: evaluation settings 2026-10-31, AUROC 2026-11-02, operating point and trend seeds 2026-11-06, seed plan 2026-11-08 (section 11 items 1-12); weights, budgets, the co-primary combination, H2 under the seed plan open | team answers, RC-B0 |
 | S08 | Quantization E3, E4, E9 | RC-Q0 done 2026-10-15 (TorchLinear, versions pinned); RC-E3, RC-E4, RC-E9 blocked | S07 freeze, E2, RC-D1 |
 | S09 | Pruning E5-E8, Gate 2 | code and run cards done (RC-G2, RC-E5 to RC-E8, all blocked) | D07 (scoring method, budgets), S07 freeze, E2 |

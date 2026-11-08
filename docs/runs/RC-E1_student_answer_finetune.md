@@ -8,8 +8,9 @@
   then score it on the validation split with the full evaluation suite, so that E2 (the same
   recipe plus distillation) has its control.
 - Status: `done` (2026-11-06): seeds 0, 1 and 2 trained and scored on validation; rule 3
-  passes. Section 3c: seed 0 rescored (2026-11-08); seeds 1 and 2 still open (seed 1's notebook
-  output is Farzan's, seed 2's is Amir's). Open too: seed 0's adapter check (section 3b).
+  passes. Section 3c: seeds 0 and 2 rescored (2026-11-08); seed 1 open (its notebook output and
+  adapter were not kept on Farzan's account; Soheil has asked Farzan). Open too: seed 0's
+  adapter check (section 3b).
 
 ## 2. Requirements
 
@@ -231,16 +232,18 @@ Section 3c (the operating-point rows, CPU):
 
 | | seed 0 | seed 1 | seed 2 |
 |---|---|---|---|
-| Run by / date / commit | Soheil, Kaggle CPU notebook, 2026-11-08, commit b5f6197 | open (Farzan's notebook output) | open (Amir's notebook output) |
-| Environment | torch 2.11.0+cpu, transformers 5.20.2 (CPU only; the GPU runs used torch 2.11.0+cu130, transformers 5.19.0) | | |
-| Check against the committed rows | 7 rows (681 probes, the three sensitivities and specificities) identical to the saved outcomes; `tests/test_results.py` 6 passed | | |
-| Rows written | 31 (the 12 AUROC / "yes" rate / class-count rows, already committed and unchanged, and 19 new `op_*` rows) | | |
-| `op_threshold:polyp` / `ulcerative_colitis` / `oesophagitis` | -9.241 / -0.083 / -1.705 | | |
-| `op_macro_balanced_accuracy` | 0.758 (0.728-0.787) | | |
-| `op_sensitivity:polyp` / `ulcerative_colitis` / `oesophagitis` | 0.990 / 0.082 / 0.622 | | |
-| `op_specificity` (all findings) | 0.951-0.953 | | |
-| `op_small_finding_recall` | 1.00 (13 of 13; interval 1.00-1.00, degenerate) | | |
+| Run by / date / commit | Soheil, Kaggle CPU notebook, 2026-11-08, commit b5f6197 | open: the notebook output and adapter were not kept (Farzan's account); Soheil has asked Farzan | the agent, locally on CPU (not Kaggle), 2026-11-08, commit 18c29e5, from Amir's saved outcomes (uploaded as `outcomes1.npz`, SHA-256 63a64a27...; kept outside the repository) |
+| Environment | torch 2.11.0+cpu, transformers 5.20.2 (CPU only; the GPU runs used torch 2.11.0+cu130, transformers 5.19.0) | | Python 3.13.16, numpy 2.5.3, pandas 3.0.5, scipy 1.18.1, no torch (the rescoring reads the saved scores only) |
+| Check against the committed rows | 7 rows (681 probes, the three sensitivities and specificities) identical to the saved outcomes; `tests/test_results.py` 6 passed | | the same 7 rows identical; every one of the 97 committed rows unchanged; `tests/test_results.py` 6 passed |
+| Rows written | 31 (the 12 AUROC / "yes" rate / class-count rows, already committed and unchanged, and 19 new `op_*` rows) | | 33 (the same 12, unchanged, and 21 new `op_*` rows: the 19 of seed 0 plus the comparator tie-break rows `op_mask_positive_recall` and `op_small_margin_mean`, added to the code after seed 0's rescoring) |
+| `op_threshold:polyp` / `ulcerative_colitis` / `oesophagitis` | -9.241 / -0.083 / -1.705 | | -10.546 / -0.319 / -1.696 |
+| `op_macro_balanced_accuracy` | 0.758 (0.728-0.787) | | 0.750 (0.720-0.778) |
+| `op_sensitivity:polyp` / `ulcerative_colitis` / `oesophagitis` | 0.990 / 0.082 / 0.622 | | 0.971 / 0.000 / 0.676 |
+| `op_specificity` (all findings) | 0.951-0.953 | | 0.951-0.953 |
+| `op_small_finding_recall` | 1.00 (13 of 13; interval 1.00-1.00, degenerate) | | 1.00 (13 of 13; degenerate interval) |
+| `op_mask_positive_recall` / `op_small_margin_mean` | not written (rescored before these rows existed) | | 0.988 (85 of 86) / 10.275 |
 
 The operating point is fitted on these same validation probes, so these numbers are in-sample
-(optimistic); the test split reads the thresholds unchanged. `metrics.csv` committed as
-uploaded (rows in the rescoring's order).
+(optimistic); the test split reads the thresholds unchanged. Seed 0's `metrics.csv` committed as
+uploaded (rows in the rescoring's order); seed 2's written by `scripts/rescore_probes.py` here
+(the `.npz` is never committed).
