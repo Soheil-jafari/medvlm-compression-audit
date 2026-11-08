@@ -13,6 +13,20 @@ when average accuracy holds. Our one new method is a structured-pruning criterio
 that scores units by how much fixed yes/no finding probes depend on them, weighted
 by capped inverse prevalence and clinical importance.
 
+**Positioning** ([`docs/related_work.md`](docs/related_work.md)). The closest prior work weights
+importance by patient group (FairPrune), by class (class-aware pruning), by the long tail
+(LTAP) or by domain (D-Pruner, unstructured), or changes the calibration data for a domain
+(MixCal, unstructured / 2:4); the closest medical study (Khan et al. 2025) removes layers of
+LLaVA by output similarity and adds AWQ, scored by an LLM judge on 39 test images with no
+per-finding or small-lesion analysis. What is new here: structured pruning of a medical VLM;
+importance = the drop in the correct answer per clinical finding, weighted by a pre-registered
+clinical-priority rule; evaluation on small-lesion recall and lesion-mask reliance; and a
+matched-memory comparison of pruning, quantization and distillation. A1 and A2 are the
+in-framework analogues of task-aware and long-tail-aware (LTAP-style) weighting. Our generic
+arms are re-implementations in one framework with identical recovery (magnitude, Taylor in the
+LLM-Pruner style, activation, and E6 in the ShortGPT / Khan et al. style), never the original
+methods.
+
 > **Status: scaffolding only. No methods are implemented.** Every algorithm is a
 > documented stub that raises `NotImplementedError`. Only infrastructure (config
 > loading, experiment registry, CLI parsing, small utilities) runs. No data, model
@@ -83,7 +97,8 @@ tests/                   import, config, registry, script and utility tests
 | E7 | E2 + clinical pruning criterion (ours) + recovery | E2 | B1-B3 | 3 at B2; 1 at B1, B3 |
 | E8 | E7 + 4-bit post-training quantization | E7 | B1-B3 | 1 (seed 0) |
 | E9 | Teacher quantized to 4-bit (supplementary, matched memory) | E0 | measured | 1 |
-| A1 | Unweighted criterion (w_c = 1) | E2 | B2 | 1 (seed 0) |
+| E10 | Native Qwen3-VL-2B (the D05 fallback), E2 recipe (E1 if its tokenizer does not match the cache); exploratory, at matched memory and at 4 bit | pretrained (+E0 cache) | measured | 1 (seed 0) |
+| A1 | Unweighted criterion (w_c = 1); also the pre-specified secondary comparison E7 vs A1 | E2 | B2 | 3 (secondary) |
 | A2 | Rarity-only weights | E2 | B2 | 1 (seed 0) |
 | A3 | Random removal | E2 | B2 | 1 (seed 0) |
 | A4 | Calibration set size 32 / 64 / 128 / 256 | E2 | B2 | 1 (seed 0) |
@@ -97,9 +112,12 @@ Run `python scripts/run_experiment.py --list` for the live registry.
 
 - **Three seeds (0, 1, 2) only where the main claim is made:** E2, E7 at B2, and the comparator
   at B2. H1-H3 (E7 against E2 and against the comparator, the primary endpoints) are
-  confirmatory on these runs only. E1 keeps the 3 seeds it already ran.
+  confirmatory on these runs only. E1 keeps the 3 seeds it already ran. **A1** (uniform
+  weights) at B2 also has 3 seeds, for the pre-specified **secondary** comparison E7 against A1
+  (no verdict); it re-weights E7's per-finding effects, so its seeds 1 and 2 cost about 6 GPU h.
 - **Seed 0 only for everything else**, reported as exploratory: the other E5 / E6 arms, all E3
-  variants, E4, E8, E9, every arm at B1 and B3, the ablations and the training-length check.
+  variants, E4, E8, E9, E10, every arm at B1 and B3, the other ablations and the
+  training-length check.
   H4 (the ranking of E3-E8) is exploratory too. A single-seed difference smaller than E7's
   spread over its 3 seeds at B2 is reported as within run-to-run noise.
 - **Why:** on E1's 3 seeds the seed-to-seed spread of the small-polyp recall and of the AUROC
@@ -113,9 +131,12 @@ Run `python scripts/run_experiment.py --list` for the live registry.
 - **Stopping rule (futility only):** after seed 0, seeds 1 and 2 of the main tier run unless
   E7 at B2 ranks below the comparator by the same ordering. Then the study stops and reports
   seed 0 as exploratory. Stopping only for futility does not raise the false-positive rate.
-- **GPU hours** (estimates, with E2's measured 27.2 s per distillation update): about 236-243 h
-  for the whole remaining plan, of which about 38 h are seeds 1 and 2 of the main tier
-  (`docs/schedule.md` section 7), against about 360 h or more with 3 seeds for every arm at B2.
+- **GPU hours** (estimates, with E2's measured 27.2 s per distillation update): about 234-241 h
+  for the whole remaining plan, of which about 38 h are seeds 1 and 2 of the main tier and about
+  6 h those of A1, and about 8 h E10 (4 h for its card, the rest its 4-bit run and test
+  evaluations; `docs/schedule.md` section 7), against about 360 h or
+  more with 3 seeds for every arm at B2. (A1 and A2 no longer score on their own: they
+  re-weight E7's effects, which saves about 16 h of scoring.)
 
 ## Quickstart
 

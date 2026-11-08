@@ -3,6 +3,7 @@
 ## 1. What and why
 
 - **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** E7 at B2 is in the main-claim tier: seeds 0, 1 and 2. B1 and B3: seed 0 only (exploratory). Seeds 1 and 2 run only after seed 0's futility check (`scripts/choose_comparator.py`, after RC-G2): if E7 at B2 ranks below the comparator on validation, seed 0, the study stops and seed 0 is reported as exploratory. The plan refuses a seed 1 or 2 session before `results/seed_plan/comparator_B2.json` is committed, or when it says stop.
+- **Per-finding effects (2026-11-08):** the scoring also writes `results/E7/nobudget/seed<k>/unit_effects.csv` (unit, finding, effect) and its settings file; commit them with `unit_scores.csv`: A1 and A2 of the same seed re-weight them instead of scoring again.
 - Stage: S09
 - Experiments: E7 (ours), budget B2 with seeds 0, 1, 2, and B1 and B3 with seed 0 only (the trend, pre-registration section 11 item 11; decided 2026-11-06). The cell of a seed 1 or 2 session runs B2 only; the evaluation includes the mask audit
 - Runs: 9. Each run is scored on the **validation** split and on the **test** split

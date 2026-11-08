@@ -1190,3 +1190,14 @@ Append-only, newest at the bottom. One entry per iteration:
   added to `results/E1/nobudget/seed2/metrics.csv`. RC-E1 section 6, `docs/results/E1.md` and
   `E2.md` updated. Seed 1: no outputs; the amendment text for that case waits for Farzan's answer.
 
+## Iteration 69: 2026-11-08 (interactive)
+- Stage / item: S07 (pre-freeze additions, pre-registration section 11 item 13), S09, S10.
+- The D07 correction (no exact fallback for channel groups; the 30-group check is a report).
+- A1 at B2 in the 3-seed secondary tier: `seed_plan`, the comparison step (`E7_vs_A1`), RC-A1,
+  the config, tests. A1 / A2 re-weight E7's per-finding effects (`unit_effects.csv`), tested
+  on the tiny model.
+- E10: registry, config, `scripts/check_tokenizer_match.py`, RC-E10 card and plan, tests.
+- `docs/related_work.md`, the README positioning, schedule recomputed (about 234-241 h).
+- A torch-only test (`test_the_real_configs_name_every_open_setting`) had been failing since the
+  image side and `max_new_tokens` were set; updated to the real open settings.
+

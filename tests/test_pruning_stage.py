@@ -51,12 +51,21 @@ def _run(variant: str | None = None, seed: int = 0, budget: str | None = None) -
 
 
 def test_the_real_configs_name_every_open_setting() -> None:
-    """The grid and calibration sizes are decided (D07); what is left is named in one error."""
-    expected = {
-        "E5": ("taylor", ["inputs.image_longest_side"]),
-        "E6": (None, ["evaluation.max_new_tokens", "inputs.image_longest_side"]),
-        "E7": (None, ["pruning.clinical.ablation_method", "inputs.image_longest_side"]),
-    }
+    """The grid and calibration sizes are decided (D07); what is left is named in one error.
+
+    The image side (672, 2026-10-17) and ``max_new_tokens`` (the D04 rule, 2026-10-31) are set,
+    so E5 and E6 have nothing open; E7 waits on D07 section 1 (the scoring method)."""
+    for experiment, variant in (("E5", "taylor"), ("E6", None)):
+        config, _ = load_experiment(experiment)
+        run = RunContext(experiment, seed=0, variant=variant)
+        collect_open_settings(
+            lambda config=config, variant=variant: stage.ScoringSettings.from_config(
+                config, variant
+            ),
+            lambda config=config, run=run: stage._check_criterion(config, run),
+            lambda config=config: stage._check_side(config, None),
+        )
+    expected = {"E7": (None, ["pruning.clinical.ablation_method"])}
     for experiment, (variant, keys) in expected.items():
         config, _ = load_experiment(experiment)
         settings = stage.ScoringSettings.from_config(config, variant)
@@ -255,3 +264,71 @@ def test_open_settings_stop_the_stage_before_a_model_is_loaded(
     monkeypatch.undo()
     with pytest.raises(ConfigError, match="image_longest_side"):
         stage.score_units_for_experiment(config, _run())
+
+
+def test_a1_and_a2_reweight_e7s_per_finding_effects_without_a_model(tmp_path: Path) -> None:
+    import yaml
+
+    train = write_dataset(tmp_path)
+    table = {
+        "preregistration": {"frozen_on": "2026-11-01"},
+        "weighting": {"normalisation": "none", "tiers": [{"tier": "high", "multiplier": 2.0},
+                                                         {"tier": "low", "multiplier": 1.0}]},
+        "findings": [
+            {"finding": "polyp", "prevalence": 0.5, "importance_tier": "high", "cap": 10,
+             "final_weight": 4.0},
+            {"finding": "bleeding", "prevalence": 0.25, "importance_tier": "low", "cap": 2,
+             "final_weight": 2.0},
+        ],
+    }  # fmt: skip
+
+    def config(weighting: str) -> dict[str, Any]:
+        out = _config(
+            tmp_path,
+            criterion="clinical",
+            clinical={"delta": "logprob_drop", "weighting": weighting,
+                      "negatives_per_positive": None, "negative_delta": "keep",
+                      "ablation_method": {"decoder_layer": "exact", "attention_head": "exact",
+                                          "mlp_channel_group": "first_order"},
+                      "batch_size": 4},
+        )  # fmt: skip
+        (tmp_path / "weights.yaml").write_text(yaml.safe_dump(table))
+        return out
+
+    e7 = stage.run_scoring(config("clinical"), RunContext("E7", seed=1),
+                           tiny_vlm.tiny_wrapper(seed=0), train)  # fmt: skip
+    effects = stage.read_effects(e7.with_name(stage.EFFECTS_FILE))
+    scores = common.read_unit_scores(e7)
+    assert set(effects) == set(scores) and len(scores) == 18
+    weights = {"polyp": 4.0, "bleeding": 2.0}
+    for unit_id, value in scores.items():  # E7's own score is the weighted sum of its effects
+        expected = sum(weights[f] * v for f, v in effects[unit_id].items())
+        assert value == pytest.approx(expected, rel=1e-9, abs=1e-12)
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("a model was loaded")
+
+    original = stage.load_scoring_model
+    stage.load_scoring_model = boom  # A1 and A2 must not load the student
+    try:
+        for exp, scheme in (("A1", "uniform"), ("A2", "rarity_only")):
+            stage.score_units_for_experiment(config(scheme), RunContext(exp, seed=1), train=train)
+            path = tmp_path / f"results/{exp}/nobudget/seed1/unit_scores.csv"
+            got = common.read_unit_scores(path)
+            # uniform: 1 each; rarity only: min(1 / 0.5, 10) = 2 and min(1 / 0.25, 2) = 2
+            w = (
+                {"polyp": 1.0, "bleeding": 1.0}
+                if scheme == "uniform"
+                else {"polyp": 2.0, "bleeding": 2.0}
+            )
+            for unit_id, per in effects.items():
+                assert got[unit_id] == pytest.approx(sum(w[f] * v for f, v in per.items()))
+            assert got != scores  # not E7's clinical weights
+    finally:
+        stage.load_scoring_model = original
+    # another seed has no E7 effects: A1 would score itself (here: the model is needed)
+    with pytest.raises(ConfigError):
+        stage.score_units_for_experiment(
+            {**config("uniform"), "inputs": {"image_longest_side": "TODO"}},
+            RunContext("A1", seed=2), train=train,
+        )  # fmt: skip

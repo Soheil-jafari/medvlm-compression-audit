@@ -18,6 +18,7 @@ The registry (`src/medcompress/registry.py`) is the source of truth;
 | E7 | **Clinical pruning criterion (ours)** + recovery | E2 | E0 cache | B1-B3 | 3 at B2; 1 (seed 0) at B1, B3 | 04, 05, 06, 07 | unit scores, metrics, mask audit |
 | E8 | E7 + 4-bit PTQ | E7 | - | B1-B3 | 1 (seed 0) | 03, 06, 07 | metrics |
 | E9 | Teacher at 4-bit (supplementary, matched memory) | E0 | - | measured | 1 | 03, 06, 07 | metrics |
+| E10 | Native Qwen3-VL-2B (D05 fallback), E2 recipe, or E1 if its tokenizer does not match the cache (RC-E10 step 1); exploratory, compared at matched memory with the nearest pruned 3B arm and at 4 bit with E8 | pretrained | E0 cache | measured | 1 (seed 0) | 02, 06, 07 | adapter, metrics |
 
 Scripts: `00_check_teacher_image_reliance`, `01_cache_teacher_outputs`,
 `02_train_student`, `03_quantize`, `04_score_pruning_units`, `05_prune_and_recover`,
@@ -81,7 +82,8 @@ own threshold, then the name; `scripts/choose_comparator.py`).
 Seeds (pre-registration section 11 item 12, amendment of 2026-11-08): the **main-claim tier**
 (E2, E7 at B2, the comparator at B2) has 3 seeds; every other arm has seed 0 only and is
 exploratory; no arm has 2 seeds. Seeds 1 and 2 of the main tier run only if E7 at B2 does not
-rank below the comparator on validation, seed 0 (the futility rule).
+rank below the comparator on validation, seed 0 (the futility rule). A1 at B2 also has 3 seeds,
+for the pre-specified secondary comparison E7 against A1 (item 13; no verdict).
 
 ## Run count (for compute planning)
 
@@ -91,7 +93,9 @@ rank below the comparator on validation, seed 0 (the futility rule).
 | PTQ (E3: 3 variants x seed 0; E8: 3 budgets x seed 0; E9: 1) | 3 + 3 + 1 = 7 |
 | Pruning + recovery, seed 0 (E5: 3 criteria x 3 budgets; E6, E7: 3 budgets each) | 9 + 3 + 3 = 15 |
 | Pruning + recovery, seeds 1 and 2 of the main tier (E7 and the comparator at B2; not run after a futility stop) | 2 + 2 = 4 |
-| Ablations, seed 0 (A1-A3: 1 each; A4: 4; A5: 2; A6: 2; 2 fewer if `A4:n128` and `A5:logprob_drop` reuse E7) | 11 (9) |
+| Ablations, seed 0 (A1-A3: 1 each; A4: 4; A5: 2; A6: 2; 2 fewer if `A4:n128` and `A5:logprob_drop` reuse E7); A1 and A2 re-weight E7's effects (no scoring) | 11 (9) |
+| A1 at B2, seeds 1 and 2 (the secondary comparison E7 vs A1; under the futility rule) | 2 |
+| E10 (seed 0) and its 4-bit run | 2 |
 | Training-length check (E2 and E7 at B2 with 30,000 examples, seed 0; pre-registration section 6) | 2 |
 
 Every run is followed by evaluation (06) and benchmarking (07).

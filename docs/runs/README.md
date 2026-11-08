@@ -51,12 +51,13 @@ Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unf
 | [RC-E3](RC-E3_ptq.md) | S08 | E3: GPTQ w4, w8 and LLM.int8 w8a8 of E2, seed 0 (exploratory) | Soheil | blocked (RC-E2, RC-D1, freeze; RC-Q0 met) |
 | [RC-E4](RC-E4_qakd.md) | S08 | E4: quantization-aware distillation (D08 option B), seed 0 (exploratory) | Soheil | blocked (RC-E0b, E2 settings, freeze; RC-Q0 met) |
 | [RC-E9](RC-E9_teacher_ptq.md) | S08 | E9: the teacher at 4 bit (supplementary) | [team] (no owner yet) | blocked (RC-TT1, RC-D1, freeze; RC-Q0 met) |
+| [RC-E10](RC-E10_native_small_student.md) | S06/S11 | E10: native Qwen3-VL-2B (D05 fallback), E2 recipe (E1 if its tokenizer does not match the cache), seed 0, exploratory; matched memory against the nearest pruned 3B arm and at 4 bit against E8 (about 4 h, an estimate) | [team] (no owner yet) | blocked (tokenizer check; the 4-bit E10 and the comparison code; RC-B0; freeze for the test) |
 | [RC-G2](RC-G2_gate2_pilot.md) | S09 | Gate 2 pilot at B2 (validation): E5 (3 criteria), E6, E7 | Amir | blocked (RC-E2, RC-B0, D07 scoring method, finding weights) |
 | [RC-E5](RC-E5_generic_pruning_grid.md) | S09 | E5: magnitude, activation, Taylor x B1-B3, seed 0 (9 runs); the comparator at B2 also seeds 1, 2 | Amir (card); seeds 0 Amir, 1 [team], 2 Amir | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-G2) |
 | [RC-E6](RC-E6_output_similarity_grid.md) | S09 | E6: output-similarity layer pruning x B1-B3, seed 0 (3 runs); seeds 1, 2 at B2 if it is the comparator | Amir (card); seeds 0 Amir, 1 [team], 2 Amir | blocked (as RC-E5) |
 | [RC-E7](RC-E7_clinical_pruning_grid.md) | S09 | E7: clinical criterion x B2 x 3 seeds (main tier), B1 and B3 seed 0 (5 runs) | Amir (card); seeds 0 Amir, 1 [team], 2 Amir | blocked (as RC-E5, weights frozen) |
 | [RC-E8](RC-E8_clinical_pruning_plus_ptq4.md) | S09 | E8: E7 + 4-bit GPTQ x B1-B3, seed 0 (3 runs) | Amir (card); seed 0 | blocked (RC-E7, freeze; RC-Q0 met) |
-| [RC-A1](RC-A1_unweighted_criterion.md) | S10 | A1: unweighted clinical criterion, B2, seed 0 (exploratory) | Amir (card); seed 0 Soheil (proposal) | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-E7 at B2) |
+| [RC-A1](RC-A1_unweighted_criterion.md) | S10 | A1: unweighted clinical criterion, B2, 3 seeds (secondary comparison E7 vs A1; re-weights E7's effects) | Amir (card); seeds 0 Soheil (proposal), 1 [team], 2 Amir | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-E7 at B2) |
 | [RC-A2](RC-A2_rarity_only_weights.md) | S10 | A2: rarity-only weights, B2, seed 0 (exploratory) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |
 | [RC-A3](RC-A3_random_removal.md) | S10 | A3: random removal, B2, seed 0 (exploratory) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |
 | [RC-A4](RC-A4_calibration_size.md) | S10 | A4: 32 / 64 / 256 calibration images, B2, seed 0 (128 = E7) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |

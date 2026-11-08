@@ -83,11 +83,17 @@ the study at each side decides it.
 The method itself (section 1) is still open. The number of probes follows the frozen finding
 list.
 
-**Code differs from the text above (found 2026-10-17).** A1 and A2 do not reuse E7's
-effects: each run scores its units again and keeps only the summed score, not the per-probe
-effects. As the code stands, each costs a full clinical scoring run (about 7.9 h per seed at
-672). `docs/schedule.md` counts that cost. Adding the reuse needs the per-probe effects of E7 to
-be kept; this is an open item for the team (decisions log).
+**Code differs from the text above (found 2026-10-17; fixed 2026-11-08).** A1 and A2 did not
+reuse E7's effects. Since 2026-11-08 the clinical scoring keeps each unit's per-finding effects
+(`unit_effects.csv`), and A1 and A2 re-weight E7's of the same seed instead of scoring again
+(`compression/pruning/stage.py`): the importance is linear in the weights.
+
+**Correction of 2026-11-08 (pre-registration section 11 item 13).** The freeze list's "if the
+check fails, channel groups are scored exactly" is dropped (about 236 h per seed). The rule
+below stands: the 30-group check is a report, and below a rank correlation of 0.7 the agent
+stops and asks the team. Basis of the first-order scoring of channel groups: Molchanov et al.,
+CVPR 2019, who report a correlation above 93 % between the Taylor estimate and the true
+importance.
 With the measured speed the proposed mix costs about 3.8 h of scoring per seed of E7, about
 11.5 h for its three seeds (A1 and A2 reuse these effects); exact scoring of every unit, about
 114 h per seed, is out of reach. For the 2B fallback the proposed mix would cost about 3.3 h per

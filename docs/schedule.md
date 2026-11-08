@@ -56,11 +56,12 @@ so 27.2 s is the estimate; a pruned student may be somewhat faster, which is not
 
 Known total: see section 7 (recomputed 2026-11-08 for the seed plan of pre-registration
 section 11 item 12: 3 seeds for the main tier only, seed 0 for every other arm): about
-**236-243 GPU hours** for the remaining plan, estimates, plus C, 2 C, G and the budget searches
-S. (Before the seed plan, with 3 seeds at B2 for every arm: about 329-351 h; with 3 seeds at
-every budget and 13.6 s per update: 285-297 h.) About 16 h of the ablations' 64.2 h is A1 and
-A2 scoring again what E7 scored; the team decides whether to add the reuse D07 describes
-(decisions log).
+**234-241 GPU hours** for the remaining plan (recomputed again on 2026-11-08 for the pre-freeze
+additions: A1 and A2 re-weight E7's effects, A1 at B2 gets seeds 1 and 2, E10 is added),
+estimates, plus C, 2 C, G and the budget searches S. (Before the seed plan, with 3 seeds at B2 for every arm: about 329-351 h; with 3 seeds at
+every budget and 13.6 s per update: 285-297 h.) A1 and A2 no longer score again what E7 scored: they
+re-weight E7's per-finding effects of the same seed (implemented 2026-11-08), which saves about
+15.8 h of scoring at seed 0.
 
 ## 3. Dependency chain
 
@@ -116,8 +117,8 @@ no owner yet). The hours are in section 7.
 | Phase | Soheil | Amir | **[team]** (no owner yet) |
 |---|---|---|---|
 | A. after the freeze | RC-G2 (the five B2 runs of seed 0: E5 x 3, E6, E7); then `scripts/choose_comparator.py` (CPU): the comparator and the futility decision | | |
-| B. seed 0 of the rest (exploratory) | RC-E3 seed 0 (`w8`, `w4`, `w8a8`); RC-E4 seed 0; RC-E8 seed 0 at B2; the E6 trend (B1, B3); RC-A1..A6 seed 0 (proposal of the cards) | the E5 trend (B1, B3) | RC-E9; the E7 and E8 trend (B1, B3) |
-| C. main tier seeds 1 and 2 (only without a futility stop) | | seed 2: RC-E2, then E7 and the comparator at B2 | seed 1: RC-E2, then E7 and the comparator at B2 |
+| B. seed 0 of the rest (exploratory) | RC-E3 seed 0 (`w8`, `w4`, `w8a8`); RC-E4 seed 0; RC-E8 seed 0 at B2; the E6 trend (B1, B3); RC-A1..A6 seed 0 (proposal of the cards) | the E5 trend (B1, B3) | RC-E9; the E7 and E8 trend (B1, B3); RC-E10 (E10, the native 2B) |
+| C. main tier seeds 1 and 2 (only without a futility stop) | | seed 2: RC-E2, then E7 and the comparator at B2, and A1 at B2 (secondary) | seed 1: RC-E2, then E7 and the comparator at B2, and A1 at B2 (secondary) |
 | D. tests and the rest | RC-R1; E0's validation again (RC-E0a section 3c); RC-L1 E2@30k and the cache extension; RC-C1 (CPU) | RC-L1 E7@30k; RC-T1 on the rented GPU (not Kaggle) | |
 
 Week 2 held RC-TT1 (15.17 h measured) and E1 seed 0 (2.34 h measured). E2 seeds 1 and 2 are no
@@ -192,7 +193,9 @@ training + 0.53 h validation, measured on seed 0).
 | Seed 0 at B2 and without a budget: E3 (3), E4 (1), E5 (3), E6 (1), E7 (1), E8 (1); RC-G2's five runs are these B2 runs | 10 | E3 3 x under 1 h; E4 7.1-14.1 h; recoveries 5 x 1.2 h; E7 scoring 7.9 h; E8 under 1 h | 10 x 1.7 h | **41.9-49.0 h** + 5 S |
 | Seed 0's trend at B1 and B3: E5 (6), E6 (2), E7 (2), E8 (2) | 12 | 10 x 1.2 h recovery; E8 2 x under 1 h | 12 x 1.7 h | **34.2 h** + 10 S (E5 17.3, E6 5.8, E7 5.8, E8 5.4) |
 | Main tier, seeds 1 and 2 (not run after a futility stop) | 2 x 3 | per seed: E2 5.2 h; E7 7.9 h scoring + 1.2 h recovery; the comparator 1.2 h recovery (E5 / E6 scoring: minutes) | per seed 2 x 1.7 h | **37.8 h** (18.9 per seed: E2 5.2, E7 10.8, comparator 2.9) + 4 S |
-| Ablations, seed 0 (A1, A2, A3, A4 x 3, A5, A6 x 2; `A4:n128` and `A5:logprob_drop` are E7) | 9 | 64.2 h (53.5 h scoring + 9 x 1.2 h recovery) | 9 x 1.7 h | **79.5 h** + 9 S |
+| A1 at B2, seeds 1 and 2 (secondary; under the futility rule) | 2 | per seed 1.2 h recovery (E7's effects re-weighted, no scoring) | 2 x 1.7 h | **5.8 h** + 2 S |
+| Ablations, seed 0 (A1, A2, A3, A4 x 3, A5, A6 x 2; `A4:n128` and `A5:logprob_drop` are E7) | 9 | 48.3 h (37.7 h scoring: A1 and A2 re-weight E7's effects; + 9 x 1.2 h recovery) | 9 x 1.7 h | **63.7 h** + 9 S (was 79.5 h with A1 and A2 scoring) |
+| RC-E10 (seed 0) | 1 (+ its 4-bit run) | about 4 h (the card: training on the 2B, not measured, and its validation); GPTQ `w4` under 1 h | 4-bit validation 1.7 h; the tests about 1.2 h | about **7.9 h** |
 | RC-L1 (seed 0) | 2 | E2@30k 14.2 h; E7@30k recovery 3.5 h and scoring 7.9 h | 2 x 1.7 h | **29.0 h** + 2 C + S |
 | RC-R1 | 7 test pairs (E2 seeds 1, 2 only without a futility stop) | | E0 about 2 h (T4 x2), six students about 1.2 h each | about **9 h** |
 | E0's validation again | 1 | | 0.8 h (measured first pass) | **0.8 h** |
@@ -200,14 +203,15 @@ training + 0.53 h validation, measured on seed 0).
 
 | Account | Load (known part, estimates) |
 |---|---|
-| Soheil | 41.9-49.0 (seed 0 at B2 and no budget) + 5.8 (E6 trend) + 79.5 (ablations) + 9 (RC-R1) + 0.8 (E0) + 15.9 (RC-L1 E2@30k) = **about 152.9-160.0 h** (plus 2 C) |
-| Amir | 17.3 (E5 trend) + 18.9 (main tier seed 2) + 13.1 (RC-L1 E7@30k) = **about 49.3 h** |
-| **[team]** (no owner) | 18.9 (main tier seed 1) + 3.5 (RC-E9) + 11.2 (E7, E8 trend) = **about 33.6 h** |
+| Soheil | 41.9-49.0 (seed 0 at B2 and no budget) + 5.8 (E6 trend) + 63.7 (ablations) + 9 (RC-R1) + 0.8 (E0) + 15.9 (RC-L1 E2@30k) = **about 137.1-144.2 h** (plus 2 C) |
+| Amir | 17.3 (E5 trend) + 18.9 (main tier seed 2) + 2.9 (A1 seed 2) + 13.1 (RC-L1 E7@30k) = **about 52.2 h** |
+| **[team]** (no owner) | 18.9 (main tier seed 1) + 2.9 (A1 seed 1) + 3.5 (RC-E9) + 11.2 (E7, E8 trend) + 7.9 (RC-E10) = **about 44.4 h** |
 
-In all about **236-243 GPU h** plus the budget searches S and 2 C (not measured): about 198-205
-h of seed-0 work and 37.8 h for seeds 1 and 2 of the main tier, which a futility stop saves.
+In all about **234-241 GPU h** plus the budget searches S and 2 C (not measured): about 190-197
+h of seed-0 work and 43.6 h for seeds 1 and 2 of the main tier and A1, which a futility stop
+saves.
 Against about 360 h or more with 3 seeds for every arm at B2. (Soheil's summary figure for the
-whole plan is about 190 h; the itemised total here is higher mainly by the ablations'
-evaluation passes, 15.3 h, and RC-L1, 29.0 h: without them about 191-199 h.) The loads are uneven as
-the owners stand (Soheil about 153-160 h, about five weeks at 30 h per week): **[team]**, how
-to share the ablations and the unowned runs.
+whole plan was about 190 h; the itemised total is higher mainly by the ablations' evaluation
+passes, 15.3 h, RC-L1, 29.0 h, and now E10, 7.9 h.) The loads are uneven as the owners stand
+(Soheil about 137-144 h, between four and five weeks at 30 h per week): **[team]**, how to
+share the ablations and the unowned runs.

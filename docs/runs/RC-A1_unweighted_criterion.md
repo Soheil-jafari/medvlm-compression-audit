@@ -1,8 +1,8 @@
-# Run card RC-A1: unweighted clinical criterion (A1), B2, seed 0
+# Run card RC-A1: unweighted clinical criterion (A1), B2: seed 0, and seeds 1, 2 for the secondary comparison
 
 ## 1. What and why
 
-- **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** seed 0 only, reported as exploratory / descriptive (no confirmatory test); the plan (`scripts/run_card.py`) refuses seeds 1 and 2. This replaces the seed counts written below. A single-seed difference is read against E7's spread over its 3 seeds at B2: smaller than that spread = within run-to-run noise.
+- **Seeds (seed plan, pre-registration section 11 items 12 and 13, Soheil and Amir, 2026-11-08):** A1 at B2 has seeds 0, 1 and 2 for the **pre-specified secondary comparison E7 against A1** (no verdict; pre-registration section 5). Seeds 1 and 2 run under the same futility rule as the main tier (the plan refuses them before `results/seed_plan/comparator_B2.json` is committed, or when it says stop). **No scoring of its own:** A1 re-weights E7's per-finding effects of the same seed (`unit_effects.csv`, committed with E7's `unit_scores.csv`), so each seed is a recovery and the evaluations (about 2.9 h per seed, an estimate). This replaces the seed counts written below.
 - Stage: S10
 - Experiment: A1: the clinical criterion with every finding weighted 1
   (`pruning.clinical.weighting: uniform`); everything else as E7.
@@ -36,7 +36,7 @@ the runs over sessions and team members freely.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** card owner Amir; seed 0 Soheil (proposal, docs/schedule.md); no seeds 1 and 2 (seed plan of 2026-11-08).
+- **Who:** card owner Amir; seed 0 Soheil (proposal, docs/schedule.md); seed 1 **[team]** (no owner yet), seed 2 Amir, after the futility check.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter; teacher cache.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.

@@ -4,6 +4,12 @@ The scores do not depend on the budget, so they are written once per (experiment
 seed) to the run directory without a budget; stage 05 reads them back for every budget.
 A second call with the same settings reuses the file instead of scoring again, because
 exact scoring of a full unit set takes hours on a T4.
+
+The clinical criterion also writes its per-finding effects (``unit_effects.csv``: for every
+unit and finding, the mean Delta over the finding's probes, or the first-order gate gradient
+of the finding's mean log-probability). The score is ``sum_c w_c * effect_c``, so A1 (uniform
+weights) and A2 (rarity only), whose other settings equal E7's, re-weight E7's effects of the
+same seed instead of scoring again (D07 section 1; decided 2026-11-08): no model is loaded.
 """
 
 from __future__ import annotations
@@ -32,6 +38,11 @@ if TYPE_CHECKING:
 
 SCORES_FILE = "unit_scores.csv"
 SETTINGS_FILE = "unit_scores.settings.json"
+EFFECTS_FILE = "unit_effects.csv"
+EFFECTS_SETTINGS_FILE = "unit_effects.settings.json"
+EFFECTS_SOURCE = "E7"
+"""The run whose per-finding effects A1 and A2 re-weight (same seed)."""
+REWEIGHTED_SCHEMES: tuple[str, ...] = ("uniform", "rarity_only")
 
 
 def _open(value: Any) -> bool:
@@ -152,6 +163,120 @@ def _fingerprint(
     return json.loads(json.dumps(values, sort_keys=True, default=str))
 
 
+def effects_fingerprint(fingerprint: Mapping[str, Any]) -> dict[str, Any]:
+    """The scores fingerprint without what only the weights change (the weighting scheme, the
+    weight table) and without the variant: equal for E7 and for A1 / A2 of the same seed."""
+    out = json.loads(json.dumps(dict(fingerprint)))
+    out.pop("variant", None)
+    criterion = out.get("criterion_settings") or {}
+    criterion.pop("weights", None)
+    if isinstance(criterion.get("section"), dict):
+        criterion["section"].pop("weighting", None)
+    return out
+
+
+def write_effects(target: Path, effects: Mapping[str, Mapping[str, float]],
+                  fingerprint: Mapping[str, Any]) -> Path:  # fmt: skip
+    """Write ``unit_effects.csv`` (unit_id, finding, effect) and its settings file."""
+    import csv
+
+    from medcompress.utils.io import write_json
+
+    path = target.with_name(EFFECTS_FILE)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(("unit_id", "finding", "effect"))
+        for unit_id in sorted(effects):
+            for finding in sorted(effects[unit_id]):
+                writer.writerow((unit_id, finding, repr(float(effects[unit_id][finding]))))
+    write_json(effects_fingerprint(fingerprint), path.with_name(EFFECTS_SETTINGS_FILE))
+    return path
+
+
+def read_effects(path: Path) -> dict[str, dict[str, float]]:
+    """``{unit_id: {finding: effect}}`` of a ``unit_effects.csv``."""
+    import csv
+
+    out: dict[str, dict[str, float]] = {}
+    with Path(path).open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            out.setdefault(row["unit_id"], {})[row["finding"]] = float(row["effect"])
+    return out
+
+
+def reweight_source(
+    config: Mapping[str, Any], run: RunContext, settings: ScoringSettings
+) -> Path | None:
+    """E7's run folder of the same seed when its per-finding effects can stand in for scoring
+    ``run`` (A1 / A2 with otherwise equal settings), else None."""
+    from medcompress.compression.pruning.criteria.clinical import ClinicalSettings
+    from medcompress.utils.io import read_json
+
+    if settings.criterion != "clinical" or run.experiment_id == EFFECTS_SOURCE:
+        return None
+    effective = apply_variant(config, run.variant)
+    if ClinicalSettings.from_config(effective).weighting not in REWEIGHTED_SCHEMES:
+        return None
+    source = RunContext(EFFECTS_SOURCE, seed=run.seed).run_dir(config["paths"]["results_root"])
+    files = (source / EFFECTS_FILE, source / EFFECTS_SETTINGS_FILE, source / SCORES_FILE)
+    if not all(f.is_file() for f in files):
+        return None
+    fingerprint = _fingerprint(effective, settings, run)
+    return source if read_json(files[1]) == effects_fingerprint(fingerprint) else None
+
+
+def reweight_from_source(
+    config: Mapping[str, Any], run: RunContext, settings: ScoringSettings
+) -> Path | None:
+    """Write the scores of A1 / A2 from E7's per-finding effects of the same seed, if they
+    were made with the same settings apart from the weights; None otherwise (score as usual).
+    """
+    import csv
+
+    from medcompress.compression.pruning.criteria.clinical import (
+        ClinicalSettings,
+        finding_weights_for,
+        weighted_sum,
+    )
+    from medcompress.utils.io import upsert_results, write_json
+
+    source = reweight_source(config, run, settings)
+    if source is None:
+        return None
+    effective = apply_variant(config, run.variant)
+    clinical = ClinicalSettings.from_config(effective)
+    fingerprint = _fingerprint(effective, settings, run)
+    effects_path, scores_source = source / EFFECTS_FILE, source / SCORES_FILE
+    effects = read_effects(effects_path)
+    findings = sorted({f for per_unit in effects.values() for f in per_unit})
+    weights = finding_weights_for(effective, findings, clinical.weighting,
+                                  allow_unfrozen=clinical.debug_unfrozen_weights)  # fmt: skip
+    target = scores_path(config, run)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with scores_source.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if {r["unit_id"] for r in rows} != set(effects):
+        raise ValueError(f"{effects_path} and {scores_source} hold different units")
+    with target.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({**row, "score": repr(weighted_sum(effects[row["unit_id"]], weights))})
+    write_json(fingerprint, target.with_name(SETTINGS_FILE))
+    upsert_results(
+        [
+            {"experiment": run.experiment_tag, "budget": "", "seed": run.seed, "metric": m,
+             "value": v}
+            for m, v in (("scoring_units", len(rows)), ("scoring_reweighted_from_e7", 1.0),
+                         ("scoring_seconds", 0.0))
+        ],
+        target.with_name("metrics.csv"),
+    )  # fmt: skip
+    print(f"re-weighted {EFFECTS_SOURCE} seed {run.seed}'s per-finding effects with "
+          f"{clinical.weighting} weights ({len(rows)} units); wrote {target}")  # fmt: skip
+    return target
+
+
 def _reusable(target: Path, fingerprint: Mapping[str, Any]) -> bool:
     """True when ``target`` was written with exactly these settings."""
     from medcompress.utils.io import read_json
@@ -215,6 +340,9 @@ def run_scoring(
 
     write_unit_scores(target, units, scores)
     write_json(fingerprint, target.with_name(SETTINGS_FILE))
+    effects = getattr(instance, "finding_effects", None)
+    if effects:  # the clinical criterion: kept so A1 and A2 can re-weight them
+        write_effects(target, effects, fingerprint)
     rows = [
         {"experiment": run.experiment_tag, "budget": "", "seed": run.seed, "metric": m, "value": v}
         for m, v in (
@@ -315,16 +443,24 @@ def score_units_for_experiment(
         effective = apply_variant(config, run.variant)
         return _reusable(scores_path(config, run), _fingerprint(effective, holder["settings"], run))
 
+    def reweighted() -> bool:
+        """True when E7's per-finding effects stand in for scoring (A1, A2): no model."""
+        if model is not None or criterion is not None or force or "settings" not in holder:
+            return False
+        return reweight_source(config, run, holder["settings"]) is not None
+
     collect_open_settings(  # fail early, before any model is loaded, with everything that is open
         lambda: holder.update(settings=ScoringSettings.from_config(config, run.variant)),
         lambda: _check_criterion(config, run),
-        lambda: None if reusable() else _check_side(config, model),
+        lambda: None if reusable() or reweighted() else _check_side(config, model),
     )
     settings = holder["settings"]
     target = scores_path(config, run)
     if reusable():
         print(f"reusing {target} (same settings)")
         return  # nothing to load: the scores of these settings exist already
+    if reweighted() and reweight_from_source(config, run, settings) is not None:
+        return  # A1 / A2: E7's per-finding effects re-weighted, no model loaded
     if model is None:
         model = load_scoring_model(config, run)
     if train is None:

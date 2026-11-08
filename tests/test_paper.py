@@ -56,9 +56,9 @@ def test_committed_generated_files_are_current(tmp_path: Path) -> None:
     )
     for fresh in sorted((tmp_path / "tables").glob("*.tex")):
         committed = PAPER / "tables" / fresh.name
-        assert (
-            committed.read_text() == fresh.read_text()
-        ), f"{committed} is stale: run python scripts/08_aggregate_results.py"
+        assert committed.read_text() == fresh.read_text(), (
+            f"{committed} is stale: run python scripts/08_aggregate_results.py"
+        )
     assert (REPO / "docs" / "results" / "VERDICTS.md").read_text() == (
         tmp_path / "VERDICTS.md"
     ).read_text()

@@ -173,8 +173,10 @@ def test_the_drop_gap_is_positive_when_recall_falls_more_than_the_headline() -> 
 
 
 QUALITY = {"E2": 0.85, "E3:w8": 0.8, "E7": 0.82, "E5:magnitude": 0.7, "E5:activation": 0.72,
-           "E5:taylor": 0.75, "E6": 0.65}  # fmt: skip
-MAIN = {"E2", "E7", "E5:taylor"}
+           "E5:taylor": 0.75, "E6": 0.65, "A1": 0.78}  # fmt: skip
+MAIN = {"E2", "E7", "E5:taylor", "A1"}
+"""3 seeds: the main tier with the comparator E5:taylor (the highest validation recall below),
+and A1 at B2 for the secondary comparison E7 vs A1."""
 """The main tier with the comparator E5:taylor (the highest validation recall below)."""
 
 
@@ -200,7 +202,7 @@ def _write_tree(
     """Test outcomes by the seed plan (3 seeds for :data:`MAIN`, seed 0 otherwise, or
     ``seeds``), seed 0's validation rows of the candidates and E7 at B2, the budget rows."""
     out, res = Path(config["paths"]["output_root"]), Path(config["paths"]["results_root"])
-    budgets = {"E7": "B2", "E5": "B2", "E6": "B2"}
+    budgets = {"E7": "B2", "E5": "B2", "E6": "B2", "A1": "B2"}
     validation = validation or {}
     for number, (label, quality) in enumerate(QUALITY.items()):
         experiment, _, variant = label.partition(":")
@@ -267,6 +269,29 @@ def test_the_stage_writes_the_evidence_of_every_hypothesis(tmp_path: Path) -> No
     assert h2.verdict == EXPLORATORY  # E3 w8 is seed 0 only by the plan
     assert h4.verdict == EXPLORATORY
     assert set(summary[summary["experiment"] == "E7_vs_best"]["tier"]) == {"confirmatory"}
+
+
+def test_e7_against_a1_is_a_secondary_comparison_on_3_seeds(tmp_path: Path) -> None:
+    from medcompress.evaluation.aggregate import load_results, paper_rows, summarise_over_seeds
+    from medcompress.evaluation.verdicts import all_verdicts
+
+    choices, results, written = _run(tmp_path)
+    assert choices["secondary_e7_vs_a1"] == {"name": "E7_vs_A1", "seeds": [0, 1, 2]}
+    assert choices["tiers"]["A1@B2"] == {"tier": "secondary", "seeds": [0, 1, 2]}
+    assert results / "comparisons" / "E7_vs_A1" / "B2" / "comparison.csv" in written
+    assert not (results / "comparisons" / "A1_vs_E2").exists()  # not an H1 arm
+    summary = summarise_over_seeds(paper_rows(load_results(results)))
+    rows = summary[summary["experiment"] == "E7_vs_A1"]
+    assert {"diff:small_finding_recall", "p:small_finding_recall", "diff:lesion_mask_effect",
+            "mcnemar_p:polyp"} <= set(rows["metric"])  # fmt: skip
+    assert set(rows["tier"]) == {"secondary"}
+    for verdict in all_verdicts(summary):  # never read by a verdict
+        assert not any(e.startswith("E7_vs_A1") for e in verdict.evidence)
+    # A1 with seed 0 only (a futility stop): the rows are exploratory
+    again = tmp_path / "again"
+    again.mkdir()
+    choices, results, _ = _run(again, seeds={"A1": (0,)})
+    assert choices["secondary_e7_vs_a1"]["name"] == "E7_vs_A1_seed0"
 
 
 def test_a_seed0_only_arm_is_reported_and_not_tested(tmp_path: Path) -> None:

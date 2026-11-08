@@ -99,6 +99,14 @@ endpoint, chosen without the test split, so H3 cannot win against a weak compara
 alone can tie at the ceiling and leave the choice to the name. (Replaces "averaged over its 3
 seeds".)
 
+**Pre-specified secondary comparison** (section 11 item 13, 2026-11-08): **E7 against A1**
+(uniform finding weights) at B2, on 3 seeds each, on the two primary endpoints (difference with
+its image-bootstrap interval and unadjusted p) and McNemar per finding (`E7_vs_A1`). It asks
+whether the clinical weights matter beyond probe effects alone. It is **not part of any
+confirmatory verdict** and not in the Holm family of the primary endpoints. A1 re-weights E7's
+per-finding effects of the same seed (no scoring of its own), and its seeds 1 and 2 run under
+the same futility rule as the main tier.
+
 **Headline accuracy for H1 and H4 [team]:** the overall probe accuracy is dominated by absent
 findings (most images lack most findings), so a model that drifts towards "no" keeps a high
 accuracy while losing recall, which would make H1 easy to support. Proposal: H1 and H4 use the
@@ -131,7 +139,8 @@ has no rare group (section 2). The flip analysis of section 11 is a secondary an
   tier** has 3 seeds (0, 1, 2): E2, E7 at B2 and the comparator at B2. **Every other arm has
   seed 0 only** and is reported as exploratory / descriptive: the other E5 / E6 arms, every E3
   variant (`w8`, `w4`, `w8a8`), E4, E8, E9, every arm at B1 and B3, the ablations A1-A6 and the
-  training-length check. E1 keeps the 3 seeds it ran before the amendment. **No arm has 2
+  training-length check. E1 keeps the 3 seeds it ran before the amendment. A1 at B2 has 3
+  seeds for the pre-specified secondary comparison E7 against A1 (item 13). **No arm has 2
   seeds** (the majority answer is "right in more than half of the seeds", so with 2 a 1-1
   split counts as wrong; `seed_plan.check_seed_count`). For a 3-seed arm the per-image outcomes
   are averaged over its seeds, then images are bootstrapped (`evaluation/compare_stage.py`);
@@ -235,11 +244,11 @@ has no rare group (section 2). The flip analysis of section 11 is a secondary an
 |---|---|---|
 | Training (E1, E2, E4) | LoRA rank 16, alpha 32, dropout 0.05 on all decoder projections; AdamW 1e-4, linear decay, 20 warm-up steps, 16 examples per update as micro-batch 1 x 16 accumulation steps without gradient checkpointing (D06 amendment, 2026-10-17), KD weight 0.5, temperature 2; one pass over the pool: 10,000 examples, 625 steps (decided 2026-10-16); the training-length check adds E2 and E7 at 30,000 examples (section 6) | D06 |
 | Recovery (E5-E7, A1-A6) | the same adapter, optimiser and loss; 25 % of the E2 steps on the first 25 % of the pool; identical for every arm (fingerprint logged) | D06 |
-| Pruning | units: decoder layers, KV groups, MLP channel groups of 128; score per parameter; first 2 and last 1 layers protected; 128 calibration images; one-shot removal; 1 negative per positive; signed effects; probe batch 4; how a unit is switched off while scored **[team]** (D07 section 1) | D07 |
+| Pruning | units: decoder layers, KV groups, MLP channel groups of 128; score per parameter; first 2 and last 1 layers protected; 128 calibration images; one-shot removal; 1 negative per positive; signed effects; probe batch 4; how a unit is switched off while scored **[team]** (D07 section 1; proposal: exact for decoder layers and KV groups, **first-order** for MLP channel groups, the basis being Molchanov et al., CVPR 2019, who report a correlation above 93 % between the Taylor estimate and the true importance; RC-G2's check on 30 channel groups is a **report**: if its rank correlation is below 0.7 the agent stops and asks the team; channel groups are **not** scored exactly as a fallback, about 236 h per seed: correction of 2026-11-08, section 11 item 13) | D07 |
 | Quantization | E3 `w4`, `w8`: GPTQ, groups of 128, 128 calibration images, decoder linear layers only; `w8a8`: LLM.int8; E8, E9: the `w4` recipe; kernel class and versions from RC-Q0 | D08 |
 | E4 | 4-bit learned step sizes (groups of 128), LoRA through the rounding, GRACE's confidence-gated decoupled distillation on the cached top-20 (alpha 1, beta 4, T 2) | D08 |
-| Ablations (B2, seed 0 only, exploratory; amendment of 2026-11-08) | A1 weights 1; A2 rarity only; A3 random order over E7's units, ranked **without** the per-parameter division **[team]** confirm (with it, whole layers would go first: an estimate from the student's unit sizes gives about 98 % of the removed parameters at a 30 % cut, so A3 would be random layer removal; without it about half); A4 32 / 64 / 128 / 256 nested calibration images; A5 KL effect (scored exactly; if D07 section 1 uses the first-order estimate for some units, both A5 variants run on the exactly scored unit types only); A6 layers only / KV and channel groups only | S10, iteration 42 |
-| Reuse of E7 **[team]** | proposal: `A4:n128` and `A5:logprob_drop` have exactly E7's settings (a test checks it), so E7's B2 runs are reported for them (6 runs fewer) | iteration 42 |
+| Ablations (B2, seed 0 only, exploratory; amendment of 2026-11-08; A1 also seeds 1 and 2 for the secondary comparison, item 13) | A1 weights 1; A2 rarity only; A3 random order over E7's units, ranked **without** the per-parameter division **[team]** confirm (with it, whole layers would go first: an estimate from the student's unit sizes gives about 98 % of the removed parameters at a 30 % cut, so A3 would be random layer removal; without it about half); A4 32 / 64 / 128 / 256 nested calibration images; A5 KL effect (scored exactly; if D07 section 1 uses the first-order estimate for some units, both A5 variants run on the exactly scored unit types only); A6 layers only / KV and channel groups only | S10, iteration 42 |
+| Reuse of E7 **[team]** | proposal: `A4:n128` and `A5:logprob_drop` have exactly E7's settings (a test checks it), so E7's B2 runs are reported for them (6 runs fewer). **A1 and A2 re-weight E7's per-finding effects** of the same seed (D07; implemented 2026-11-08, `pruning/stage.py`): the importance is linear in the weights, so no scoring of their own | iteration 42; item 13 |
 
 ## 8. Deviations from the methods we follow (declared in advance)
 
@@ -461,6 +470,33 @@ waited on these settings, so no model has been scored. Every count comes from th
       is 0.136. Which "yes/no rate" the 0.104 refers to is not stated (the `yes_rate:polyp` SD
       is 0.048, `original_yes_rate` 0.115). The conclusion (the seed spread is within the
       sampling noise, except the ulcerative colitis AUROC) is the same either way.
+
+13. **Pre-freeze additions** (approved by Soheil and Amir on 2026-11-08, delegated to the
+    research lead; before any compression result).
+    1. **Correction to the freeze list, item 2:** "if the check fails, channel groups are scored
+       exactly" is dropped (about 236 h per seed, not feasible). D07's rule stays: RC-G2's
+       check on 30 channel groups is a report; if its rank correlation with the estimate is
+       below 0.7, the agent stops and asks the team. The basis of the first-order scoring of
+       channel groups: Molchanov et al., CVPR 2019, report a correlation above 93 % between
+       the Taylor estimate and the true importance.
+    2. **A1 joins the 3-seed tier at B2** as a **pre-specified secondary** comparison, E7
+       against A1 (section 5). Not part of the confirmatory verdicts. It re-weights E7's
+       per-finding effects: recovery and evaluation only, about 6 GPU h for seeds 1 and 2 (an
+       estimate). It runs under the same futility rule as the main tier.
+    3. **E10, an exploratory baseline:** a natively small model at matched memory.
+       Qwen3-VL-2B (the D05 fallback), trained once with the E2 recipe, seed 0, then evaluated
+       like every arm. First, its tokenizer is checked against the teacher cache's top-20
+       token ids (`scripts/check_tokenizer_match.py`: every id the cache uses maps to the same
+       token, and at least 99 % of the cached answers are re-encoded exactly). If it fails, it
+       is trained with the E1 recipe (answers only) and the paper says so. Compared at matched
+       peak memory with the pruned 3B arm nearest its footprint (after RC-B0), and at 4 bit
+       against E8. Run card RC-E10 (about 4 GPU h, an estimate). Descriptive, no verdict.
+    4. **Positioning** (`docs/related_work.md`): the closest prior work, what is new here, and
+       which methods are left out and why. The generic arms are re-implementations in one
+       framework with identical recovery, named as such (magnitude, Taylor in the
+       LLM-Pruner style, activation, and E6 in the ShortGPT / Khan et al. style), never as the
+       original methods. A1 and A2 are the in-framework analogues of task-aware and
+       long-tail-aware (LTAP-style) weighting.
 
 Still open before `preregistration.frozen_on` is set: how the two co-primary tests combine in a
 verdict, the finding weights (cap, tiers), the budgets and the other **[team]** items above.

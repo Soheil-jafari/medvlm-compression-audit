@@ -529,6 +529,33 @@ must be logged here.
     lists (E3, E4, E8, A1-A6: seed 0), `by_arm.csv` gains a `tier` column, the paper tables a
     Seeds column. Farzan's assignments removed from the schedule; seed 1 of the main tier, RC-E9
     and the E7 / E8 trend have no owner yet ([team]).
+- **2026-11-08 (Soheil and Amir, delegated to the research lead): pre-freeze additions**
+  (pre-registration section 11 item 13; before any compression result; nothing frozen).
+  (1) Correction to the freeze list, item 2: "if the check fails, channel groups are scored
+  exactly" is dropped (about 236 h per seed). D07's rule stays: RC-G2's 30-group check is a
+  report; below a rank correlation of 0.7 the agent stops and asks the team. Basis of the
+  first-order scoring of channel groups: Molchanov et al., CVPR 2019 (a correlation above 93 %
+  of the Taylor estimate with the true importance). The scoring method itself (D07 section 1,
+  `pruning.clinical.ablation_method`) is still open in the config: the proposal is written next
+  to it. (2) A1 (uniform weights) joins the 3-seed tier at B2 as a pre-specified secondary
+  comparison, E7 against A1, outside the confirmatory verdicts; it re-weights E7's per-finding
+  effects (recovery and evaluation only, about 6 GPU h for seeds 1 and 2) and runs under the
+  same futility rule. (3) E10, an exploratory baseline: Qwen3-VL-2B (the D05 fallback),
+  trained once with the E2 recipe at seed 0 (the E1 recipe if its tokenizer does not match the
+  cache's top-20 ids), compared at matched peak memory with the nearest pruned 3B arm and at
+  4 bit against E8; run card RC-E10, about 4 GPU h. (4) `docs/related_work.md` and the README
+  positioning paragraph.
+  - Code: the clinical criterion now keeps its per-finding effects (`unit_effects.csv`) and
+    A1 / A2 re-weight E7's of the same seed without loading a model (`pruning/stage.py`; this
+    closes the open item "A1 and A2 reuse of E7's effects", about 15.8 h of scoring saved at
+    seed 0). The first-order part of E7's scoring now runs one backward pass per finding (each
+    probe is still forwarded once); the score is the same weighted sum, by linearity.
+    `seed_plan` has a secondary tier (A1 at B2), the comparison step writes `E7_vs_A1` (no
+    verdict reads it), RC-A1 runs seeds 1 and 2 behind the futility gate. E10: registry,
+    config (`training.mode` open until the check), `scripts/check_tokenizer_match.py`, the
+    RC-E10 plan. Still to come for E10 (agent): its 4-bit run and its two comparisons.
+  - The hub is not reachable from the agent's session, so the tokenizer check runs on Kaggle
+    (RC-E10 step 1).
 - **2026-11-08 (Soheil): E1 seed 2's operating-point rows** (RC-E1 section 3c), rescored by the
   agent locally on CPU from Amir's saved outcomes (commit 18c29e5; Python 3.13.16, numpy 2.5.3,
   no torch): the 7 check rows identical, no committed row changed, 21 `op_*` rows added. At the
@@ -628,7 +655,7 @@ must be logged here.
 | RC-X1 and the two stages | RC-X1's overlap count uses the dHash alone (4 bits); whether it uses the same two stages as RC-D1, so external images that are adjacent frames of our images are counted too | team | before RC-X1 part A |
 | Label values (RC-D1 pass 2) | frozen 2026-10-31 (polyp, ulcerative colitis, oesophagitis). Confirmed by E0's validation (2026-11-01): 681 probes = 227 of the 390 validation images x 3, so only images with an abnormality value are probed and a finding's negatives are other abnormalities, never normal mucosa. Keep it and state it as a limitation, or add normal images as negatives (that would be a change after a model result, E0's) | team | before the freeze |
 | Recovery steps | 25 % of 625 = 156.25; proposal 157 = `ceil(2,500 / 16)` (D06 memo) | team | before RC-E5 |
-| A1 and A2 reuse of E7's effects | D07 says they reuse E7's per-probe effects; the code scores them again (about 7.9 h per run at 672, an estimate). Either the agent adds the reuse (the per-probe effects must then be kept) or the schedule keeps the cost | team | before the freeze |
+| A1 and A2 reuse of E7's effects | **done 2026-11-08**: the clinical criterion keeps per-finding effects; A1 and A2 re-weight E7's of the same seed (`pruning/stage.py`) | — | — |
 | Budget hardware for stage 07 | `budgets.measurement.hardware` is open, so the benchmark step of RC-E1 and RC-E2 waits (the runner skips it and goes on) | Amir | before RC-B0 |
 | Student amendment | tell Amir and Farzan that one student is used (D05 amendment) | Soheil | before RC-E1 |
 | Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
@@ -641,6 +668,8 @@ must be logged here.
 | Reuse of E7 for identical ablation arms (agent proposal) | `A4:n128` and `A5:logprob_drop` have exactly E7's settings (test), so E7's B2 runs are reported for them (27 ablation runs instead of 33). If D07 section 1 uses the first-order estimate for some units, A5 moves to the exactly scored units and `A5:logprob_drop` is run | team | before the freeze |
 | H2 matching and McNemar (agent proposal, iteration 43) | H2: E3 `w8` against the generic pruning arm with the highest validation small-finding recall at the budget whose target is nearest to `w8`'s measured peak memory. McNemar per finding on each probe's majority answer over the 3 seeds | team | before the freeze |
 | H2 under the seed plan (2026-11-08) | E3 `w8` is seed 0 only, so H2 (best pruning against `w8`) is exploratory as written; give `w8` and the matched pruning arm seeds 1 and 2, or keep H2 exploratory | team | before the freeze |
+| E10 code still to come | the 4-bit E10 (GPTQ `w4` of the merged 2B) and its two exploratory comparisons (matched memory against the nearest pruned 3B arm; 4 bit against E8) in the comparison step | agent | before RC-E10 is `ready` |
+| E10 owner | RC-E10 has no owner yet | team | before RC-E10 |
 | E3 `w4` at seeds 1 and 2 | about +5.4 GPU h, only if 4-bit enters a headline claim (seed plan item 2) | team | before the freeze |
 | Budgets and timing hardware | B1-B3 fractions (rule after RC-B0) and the rented GPU type; metric, tolerance and protocol are decided | Amir | TODO |
 | Venue | e.g. MICCAI (Springer LNCS template) | team | TODO |

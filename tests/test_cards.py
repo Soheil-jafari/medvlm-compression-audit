@@ -37,7 +37,7 @@ EXTRA = {
 SPLIT = {"RC-E1", "RC-E2", "RC-E3", "RC-E4", "RC-E5", "RC-E6", "RC-E7", "RC-E8"} | {
     f"RC-A{n}" for n in range(1, 7)
 }
-THREE_SEEDS = {"RC-E1", "RC-E2", "RC-E5", "RC-E7"}
+THREE_SEEDS = {"RC-E1", "RC-E2", "RC-E5", "RC-E7", "RC-A1"}
 """With the comparator E5:taylor (the fixture below): the cards with seeds 1 and 2."""
 CHOICE = {"comparator": "E5:taylor", "futility_stop": False}
 

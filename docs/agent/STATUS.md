@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-11-08, iteration 68 (interactive run mode)
+**Last updated:** 2026-11-08, iteration 69 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S06/S07: E1 done (3 seeds; operating-point rows for seeds 0 and 2, seed 1's outputs not kept: Farzan asked); E2 seed 0 done (2026-11-08); seed plan amended (2026-11-08): E2 seeds 1 and 2 wait for seed 0's futility check (after RC-G2), seed 1 has no owner [team]; E2 seed 0's skipped steps (RC-E2 section 6b, CPU); the freeze items
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
@@ -101,6 +101,11 @@
    open); the commit hash from the `e2-seed0-adapter` manifest into RC-E2 section 6; the
    skipped-step report (RC-E2 section 6b, CPU); E1's `op_*` rows (RC-E1 section 3c), then the
    E2-minus-E1 comparison at the operating point.
+   2026-11-08 (iteration 69): pre-freeze additions (Soheil and Amir, section 11 item 13): the
+   D07 30-group check stays a report (no exact fallback; Molchanov et al. 2019); A1 at B2 gets
+   3 seeds for the secondary comparison E7 vs A1 and re-weights E7's per-finding effects (code
+   done); E10 (native 2B, exploratory) registered with RC-E10 and the tokenizer check;
+   `docs/related_work.md`. Next for E10 (agent): its 4-bit run and comparisons.
    2026-11-08 (iteration 67): E1 seed 0's `op_*` rows committed (RC-E1 section 3c); seed 2's
    rescored locally from Amir's outcomes (iteration 68); seed 1's outputs were not kept (Soheil
    has asked Farzan). E2 seed 0 minus E1 seed 0 at the operating point in `docs/results/E2.md`

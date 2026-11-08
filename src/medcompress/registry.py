@@ -206,6 +206,20 @@ _SPECS: tuple[ExperimentSpec, ...] = (
         outputs=_outputs("E9"),
     ),
     ExperimentSpec(
+        id="E10",
+        title="Native small student at matched memory (exploratory)",
+        description="Qwen3-VL-2B (the D05 fallback) trained once with the E2 recipe (the E1 "
+        "recipe if its tokenizer does not match the teacher cache), seed 0; compared at "
+        "matched peak memory with the nearest pruned 3B arm and at 4 bit with E8.",
+        kind="main",
+        parent=None,
+        requires=("E0",),
+        stages=("train", "evaluate", "benchmark"),
+        scripts=(TRAIN_STUDENT, EVALUATE, BENCHMARK),
+        outputs=_outputs("E10", "checkpoints/E10/ (not committed)"),
+        trains=True,
+    ),
+    ExperimentSpec(
         id="A1",
         title="Ablation: unweighted criterion (w_c = 1)",
         description="Clinical criterion with uniform finding weights.",

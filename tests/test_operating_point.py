@@ -85,10 +85,12 @@ def test_three_seeds_for_the_main_tier_and_seed0_for_every_other_arm() -> None:
     assert sp.planned_seeds("E5:taylor", "B2", "E6") == (0,)  # not the comparator
     assert sp.planned_seeds("E5:taylor", "B2", None) == (0,)  # before the choice
     for label, budget in (("E3:w4", ""), ("E3:w8", ""), ("E4", ""), ("E8", "B2"), ("E9", ""),
-                          ("A1", "B2"), ("A4:n32", "B2")):  # fmt: skip
+                          ("A2", "B2"), ("A4:n32", "B2")):  # fmt: skip
         assert sp.planned_seeds(label, budget, "E6") == (0,)
         assert sp.tier(label, budget, "E6") == sp.EXPLORATORY
     assert sp.planned_seeds("E1", "", None) == (0, 1, 2)  # run before the amendment, kept
+    assert sp.planned_seeds("A1", "B2", None) == (0, 1, 2)  # the secondary comparison E7 vs A1
+    assert sp.tier("A1", "B2", "E6") == sp.SECONDARY
 
 
 def test_seed0_rows_are_left_out_of_the_h1_verdict() -> None:

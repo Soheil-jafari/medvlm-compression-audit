@@ -35,5 +35,8 @@ pruning:
     probe_template: from_domain           # configs/domain/<domain>.yaml probe.template
     negatives_per_positive: 1             # D07 (2026-10-12)
     negative_delta: keep                  # D07 (2026-10-12): signed effects
-    ablation_method: TODO                 # how a unit is disabled during scoring
+    ablation_method: TODO                 # how a unit is disabled during scoring. Proposal (D07 section 1,
+                                          # corrected 2026-11-08): {decoder_layer: exact, attention_head: exact,
+                                          # mlp_channel_group: first_order} (Molchanov et al., CVPR 2019); RC-G2's
+                                          # 30-group check is a report (below 0.7: stop and ask), no exact fallback
     batch_size: 4                         # D07 (2026-10-12)

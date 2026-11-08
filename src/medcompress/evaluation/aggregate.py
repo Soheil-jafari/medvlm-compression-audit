@@ -265,6 +265,8 @@ def seed_tier(experiment: str, n_seeds: int) -> str:
             return "descriptive"  # the flip analysis (secondary)
         if experiment.endswith(SEED0_SUFFIX) or experiment == H4_COMPARISON:
             return "exploratory"
+        if experiment == "E7_vs_A1":
+            return "secondary"  # pre-specified, no verdict (2026-11-08)
         return "confirmatory"
     base, _ = split_experiment(experiment)
     if base not in REGISTRY:

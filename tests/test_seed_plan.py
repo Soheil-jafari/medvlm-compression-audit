@@ -127,18 +127,22 @@ def test_seeds_1_and_2_wait_for_the_choice_and_stop_on_futility(
 ) -> None:
     monkeypatch.setattr(cards_mod, "seed_plan_choice", lambda: None)
     assert build_plan("RC-E7", 0).steps  # seed 0 never waits
-    for card in ("RC-E2", "RC-E5", "RC-E6", "RC-E7"):
+    for card in ("RC-E2", "RC-E5", "RC-E6", "RC-E7", "RC-A1"):  # A1: the secondary comparison
         with pytest.raises(CardError, match="wait for seed 0's comparator choice"):
             build_plan(card, 1)
     stop = {"comparator": "E6", "futility_stop": True}
     monkeypatch.setattr(cards_mod, "seed_plan_choice", lambda: stop)
-    for card in ("RC-E2", "RC-E6", "RC-E7"):
+    for card in ("RC-E2", "RC-E6", "RC-E7", "RC-A1"):
         with pytest.raises(CardError, match="futility rule stopped"):
             build_plan(card, 2)
     go = {"comparator": "E6", "futility_stop": False}
     monkeypatch.setattr(cards_mod, "seed_plan_choice", lambda: go)
     runs = [s.label for s in build_plan("RC-E6", 1).steps if s.label.startswith("run")]
     assert runs == ["run E6 B2 seed1"]
+    runs = [s.label for s in build_plan("RC-A1", 2).steps if s.label.startswith("run")]
+    assert runs == ["run A1 B2 seed2"]
+    with pytest.raises(CardError, match="not 1"):
+        build_plan("RC-A2", 1)  # the other ablations stay at seed 0
     with pytest.raises(CardError, match="the comparator is E6"):
         build_plan("RC-E5", 1)
     needs = [n.label for n in build_plan("RC-R1").needs]

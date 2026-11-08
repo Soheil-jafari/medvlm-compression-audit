@@ -28,6 +28,9 @@ all intervals share the resamples:
   a budget): Kendall's tau between the order of the arms by the headline accuracy and by
   small-finding recall, rare-group recall and ECE (negated, so that higher is better in both
   orders).
+* Secondary (pre-specified, not part of any verdict), ``E7_vs_A1`` at B2: E7 minus A1 (uniform
+  finding weights) on the two primary endpoints, ``diff:`` and unadjusted ``p:`` rows, and
+  McNemar per finding; on 3 seeds each, or ``E7_vs_A1_seed0`` when either has seed 0 only.
 
 H2 and H3 also get McNemar's test per finding on each probe's majority answer over the seeds,
 Holm-corrected across findings (``mcnemar_p:`` and ``mcnemar_p_holm:``). The rule-based
@@ -90,6 +93,8 @@ OURS = "E7"
 BOOTSTRAP_SEED = 0
 SEED0_SUFFIX = "_seed0"
 """Appended to the name of every exploratory comparison (a seed-0-only side)."""
+UNIFORM_WEIGHTS = "A1"
+"""The secondary comparison's arm: E7 with uniform finding weights (amendment of 2026-11-08)."""
 HEADLINES: tuple[str, ...] = ("overall_accuracy", "macro_balanced_accuracy")
 SMALL = "small_finding_recall"
 """Comparison rows keep this name; since 2026-11-06 it is the recall at the operating point."""
@@ -693,6 +698,7 @@ def run_comparisons(
     except SeedPlanError as exc:
         h3_choice = {"skipped": f"comparator not chosen: {exc}"}
     wanted = [Arm(REFERENCE)] + [arm for e in COMPRESSED for arm in arms_of(e)]
+    wanted.append(Arm(UNIFORM_WEIGHTS, PRIMARY_BUDGET))  # the secondary comparison only
     outcomes_file = UNFILTERED_OUTCOMES_FILE if unfiltered else OUTCOMES_FILE
     found, notes = load_arms(output_root, wanted, comparator, outcomes_file)
     if Arm(REFERENCE) not in found:
@@ -762,9 +768,8 @@ def run_comparisons(
 
     # H1: the 3-seed arms of the main tier against E2 (confirmatory); every other arm at seed 0
     # against E2 seed 0 (exploratory)
-    for arm in found:
-        if arm.label == REFERENCE:
-            continue
+    compressed = [a for a in found if a.label.partition(":")[0] in COMPRESSED]
+    for arm in compressed:
         if found[arm].main and found[reference].main:
             i, j, suffix = index[(arm, True)], index[(reference, True)], ""
         else:
@@ -826,12 +831,24 @@ def run_comparisons(
                 rows += paired_rows(observed, draws, i, j, name, budget, alpha)
                 rows += mcnemar_rows(table, outcomes[i], outcomes[j], name, budget)
 
+    # secondary (pre-specified 2026-11-08, no verdict): E7 against A1, the uniform weights
+    ours, uniform = Arm(OURS, PRIMARY_BUDGET), Arm(UNIFORM_WEIGHTS, PRIMARY_BUDGET)
+    both = pair(ours, uniform)
+    if both is None:
+        choices["secondary_e7_vs_a1"] = {"skipped": "test outcomes of E7 or A1 at B2 missing"}
+    else:
+        i, j, suffix = both
+        name = f"{OURS}_vs_{UNIFORM_WEIGHTS}{suffix}"
+        choices["secondary_e7_vs_a1"] = {"name": name, "seeds": list(found[uniform].seeds)}
+        rows += paired_rows(observed, draws, i, j, name, PRIMARY_BUDGET, alpha)
+        rows += compare_arms(name, PRIMARY_BUDGET, outcomes[i].audit_effect,
+                             outcomes[j].audit_effect, {MASK_EFFECT: np.mean},
+                             n_resamples=resamples, alpha=alpha, seed=BOOTSTRAP_SEED,
+                             clusters=table.audit_images)  # fmt: skip
+        rows += mcnemar_rows(table, outcomes[i], outcomes[j], name, PRIMARY_BUDGET)
+
     # H4 (exploratory): every compressed arm at seed 0, at B2 and without a budget
-    ranked = [
-        index[(a, False)]
-        for a in found
-        if a.label != REFERENCE and a.budget in ("", PRIMARY_BUDGET)
-    ]
+    ranked = [index[(a, False)] for a in compressed if a.budget in ("", PRIMARY_BUDGET)]
     choices["h4"] = "exploratory: seed 0 of every compressed arm at B2 and without a budget"
     if len(ranked) >= 2:
         rows += tau_rows(observed, draws, ranked, alpha)
@@ -841,7 +858,7 @@ def run_comparisons(
     if strict:
         choices["flips"] = {"skipped": "not computed on the strict subset"}
     else:
-        compared = [outcomes[index[(a, loaded.main)]] for a, loaded in found.items()]
+        compared = [outcomes[index[(a, found[a].main)]] for a in [reference, *compressed]]
         flips, why = flip_comparison(output_root, outcomes_file, table, compared, settings,
                                      n_resamples=resamples, alpha=alpha)  # fmt: skip
         rows += flips

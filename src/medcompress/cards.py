@@ -524,7 +524,10 @@ def build_plan(
             internet=True,
         )  # fmt: skip
     if card in {f"RC-A{n}" for n in range(1, 7)}:
-        s = _seed(card, seed, EXPLORATORY_ONLY)
+        # A1 at B2: 3 seeds for the secondary comparison E7 vs A1, seeds 1 and 2 under the
+        # futility rule (2026-11-08); the other ablations seed 0 only
+        s = _seed(card, seed, SEEDS if card == "RC-A1" else EXPLORATORY_ONLY)
+        _main_tier_go(card, s)
         exp = card[3:]
         choices = ABLATION_VARIANTS[exp]
         if variants:
@@ -585,6 +588,20 @@ def build_plan(
             internet=True, quantization=True,
             notes=("the script writes the hand-off E0_teacher_adapter itself",),
         )  # fmt: skip
+    if card == "RC-E10":
+        _no_seed(card, seed)
+        run = Run("E10")
+        check = Step(
+            "tokenizer check (E2 or E1 recipe)",
+            _script("check_tokenizer_match.py", "--config", "experiments/E10.yaml"),
+        )
+        return CardPlan(
+            card, "E10 native 2B student, seed 0 (exploratory)", 1, (check, *_training(run)),
+            handoffs=(Handoff("adapter", (run,), "E10_seed0_adapter"),),
+            needs=(Need("teacher_cache"),), internet=True,
+            notes=("the training stops with 'configuration incomplete' until training.mode is "
+                   "set from the tokenizer check (card section 3)",),
+        )  # fmt: skip
     if card == "RC-T1":
         raise CardError("RC-T1 runs on the rented GPU, not on Kaggle: follow its card")
     if card in ("RC-L1", "RC-S1", "RC-S2", "RC-S3"):
@@ -596,6 +613,7 @@ RUNNABLE_CARDS: tuple[str, ...] = (
     "RC-D1-calibrate", "RC-D1-embed", "RC-D1-label", "RC-D1", "RC-D1-counts", "RC-E0a",
     "RC-E0b", "RC-E1", "RC-E2", "RC-B0", "RC-E3", "RC-E4", "RC-E9", "RC-G2", "RC-E5", "RC-E6",
     "RC-E7", "RC-E8", "RC-A1", "RC-A2", "RC-A3", "RC-A4", "RC-A5", "RC-A6", "RC-R1", "RC-C1",
+    "RC-E10",
     "RC-X1", "RC-TT0", "RC-TT1",
 )  # fmt: skip
 
