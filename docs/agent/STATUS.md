@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-11-08, iteration 66 (interactive run mode)
+**Last updated:** 2026-11-08, iteration 67 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S06: E1 done (3 seeds, rule 3 passes); E2 seed 0 done (2026-11-08); E2 seeds 1 and 2 on the fix commit (after 8e0b3d7), seed 1's owner open; E1's operating-point rows (RC-E1 section 3c); E2 seed 0's skipped steps (RC-E2 section 6b, CPU); the freeze items
+**Current stage:** S06/S07: E1 done (3 seeds; seed 0's operating-point rows in, seeds 1 and 2 open); E2 seed 0 done (2026-11-08); seed plan amended (2026-11-08): E2 seeds 1 and 2 wait for seed 0's futility check (after RC-G2), seed 1 has no owner [team]; E2 seed 0's skipped steps (RC-E2 section 6b, CPU); the freeze items
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -101,6 +101,14 @@
    open); the commit hash from the `e2-seed0-adapter` manifest into RC-E2 section 6; the
    skipped-step report (RC-E2 section 6b, CPU); E1's `op_*` rows (RC-E1 section 3c), then the
    E2-minus-E1 comparison at the operating point.
+   2026-11-08 (iteration 67): E1 seed 0's `op_*` rows committed (RC-E1 section 3c; seeds 1 and
+   2 open). E2 seed 0 minus E1 seed 0 at the operating point in `docs/results/E2.md`
+   (validation, in-sample). **Seed plan amended** (Soheil and Amir, pre-registration section 11
+   item 12): 3 seeds only for E2, E7 at B2 and the comparator at B2; seed 0 for everything else
+   (exploratory); never 2 seeds; the comparator by a 4-step ordering on validation seed 0;
+   futility-only stopping. Code: `seed_plan.py`, `scripts/choose_comparator.py`, the comparison
+   step, verdicts, cards, configs. Open for the team: H2 is exploratory as written (E3 `w8` is
+   seed 0 only); owners of main-tier seed 1, RC-E9 and the E7 / E8 trend; the uneven loads.
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
    draft and freeze guard done (iteration 40). Pruning grid cards RC-E5 to RC-E8 done
    (iteration 41); ablation cards RC-A1 to RC-A6 done, A3 ranking and score reuse fixed
@@ -142,8 +150,8 @@ cards for the team (decision of 2026-10-12).
 | S04 | Model wrappers and unit surgery | done (RC-M1 passed 2026-10-15) | - |
 | S05 | Teacher: Gate 1, cache | done (RC-TT1 2026-10-31; RC-E0a and RC-E0b 2026-11-01) | - |
 | S05b | Student checks (D05 amendment: one student) | RC-S0 done 2026-10-16: both pass G1; training size decided; student revision pinned; RC-S0b run 2 ready (image side) | RC-S0b, team GPU hours, G2; then the selection freeze |
-| S06 | Students E1, E2, budget reference | RC-E1 done (3 seeds; `op_*` rows open); RC-E2 seed 0 done 2026-11-08, seeds 1 and 2 to run (seed 1's owner open) | team runs RC-E2 seeds 1 and 2, then RC-B0 |
-| S07 | Pre-registration freeze | evaluation settings frozen 2026-10-31 (amendment, section 11); weights, budgets and the co-primary combination open | team answers, RC-B0 |
+| S06 | Students E1, E2, budget reference | RC-E1 done (3 seeds; seed 0's `op_*` rows in, seeds 1 and 2 open); RC-E2 seed 0 done 2026-11-08; seeds 1 and 2 after seed 0's futility check (seed plan, 2026-11-08) | RC-B0, the freeze, RC-G2, `choose_comparator.py`; then E2 seeds 1 (owner [team]) and 2 (Amir) |
+| S07 | Pre-registration freeze | not frozen; amendments before the freeze: evaluation settings 2026-10-31, AUROC 2026-11-02, operating point and trend seeds 2026-11-06, seed plan 2026-11-08 (section 11 items 1-12); weights, budgets, the co-primary combination, H2 under the seed plan open | team answers, RC-B0 |
 | S08 | Quantization E3, E4, E9 | RC-Q0 done 2026-10-15 (TorchLinear, versions pinned); RC-E3, RC-E4, RC-E9 blocked | S07 freeze, E2, RC-D1 |
 | S09 | Pruning E5-E8, Gate 2 | code and run cards done (RC-G2, RC-E5 to RC-E8, all blocked) | D07 (scoring method, budgets), S07 freeze, E2 |
 | S10 | Ablations A1-A6 | run cards done (RC-A1 to RC-A6, blocked); team: A3 ranking, E7 reuse | S09, S07 freeze |
@@ -154,6 +162,6 @@ cards for the team (decision of 2026-10-12).
 
 | Gate | Status |
 |---|---|
-| Gate 1: teacher uses the image, damage visible | not run |
-| Gate 2: E7 vs best of E5/E6 at B2 (validation) | not run |
-| Pre-registration freeze | not frozen |
+| Gate 1: teacher uses the image, damage visible | **passed** (RC-E0a, 2026-11-01: `gate1_pass` = 1); rule 3's quality part passed 2026-11-06 (E0 0.803 >= E1 seed 0 0.592 + 0.02) |
+| Gate 2: E7 vs best of E5/E6 at B2 (validation) | not run (RC-G2, after the freeze; its rows also choose the comparator and apply the futility rule, seed plan of 2026-11-08) |
+| Pre-registration freeze | not frozen (amendments before the freeze: section 11 items 1-12) |

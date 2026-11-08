@@ -100,6 +100,17 @@ def fmt_ci(row: Mapping[str, float] | None, digits: int = 3) -> str:
     return f"[{fmt_value(row['ci_low'], digits)}, {fmt_value(row['ci_high'], digits)}]"
 
 
+def fmt_seeds(look: Mapping, arm: str, budget: str, metrics: Sequence[str]) -> str:
+    """The number of seeds behind an arm's row: ``3``, or ``1 (expl.)`` for a seed-0-only arm
+    (exploratory, seed plan of 2026-11-08), or ``--``."""
+    for metric in metrics:
+        row = look.get((arm, budget, metric))
+        if row is not None and _finite(row.get("n_seeds")):
+            n = int(row["n_seeds"])
+            return f"{n} (expl.)" if n == 1 else str(n)
+    return MISSING
+
+
 def latex_escape(text: str) -> str:
     """Escape LaTeX special characters in a cell."""
     return re.sub(r"([_%&#$])", r"\\\1", text)
@@ -123,20 +134,28 @@ def main_table(summary: pd.DataFrame) -> str:
     rows = []
 
     def cells(arm: str, budget: str) -> list[str]:
-        return [fmt_mean_sd(look.get((arm, budget, m))) for m in MAIN_METRICS]
+        values = [fmt_mean_sd(look.get((arm, budget, m))) for m in MAIN_METRICS]
+        return [fmt_seeds(look, arm, budget, MAIN_METRICS), *values]
 
     rows += [["ref", latex_escape(arm), *cells(arm, "")] for arm in arm_labels("E2")]
     rows += [["meas.", latex_escape(arm), *cells(arm, "")] for arm in arm_labels("E3")]
     for budget in BUDGET_IDS:
         for exp in ("E5", "E6", "E7", "E8"):
             rows += [[budget, latex_escape(arm), *cells(arm, budget)] for arm in arm_labels(exp)]
-    columns = ["Accuracy", "Balanced acc.", "Small-finding recall", "Lesion-mask effect"]
+    columns = ["Seeds", "Accuracy", "Balanced acc.", "Small-finding recall", "Lesion-mask effect"]
     return tabular(["Budget", "Arm", *columns], rows)
 
 
 def primary_table(summary: pd.DataFrame, name: str = PRIMARY_COMPARISON_NAME) -> str:
-    """T3: E7 minus the best of E5/E6 at B2, with CIs and Holm-adjusted p-values."""
+    """T3: E7 minus the comparator at B2, with CIs and Holm-adjusted p-values.
+
+    After a futility stop only the seed-0 rows (``E7_vs_best_seed0``) exist; they are shown,
+    labelled exploratory.
+    """
     look = lookup_summary(summary)
+    label = "E7 vs best of E5/E6"
+    if not any(k[0] == name for k in look) and any(k[0] == name + "_seed0" for k in look):
+        name, label = name + "_seed0", "E7 vs best of E5/E6 (seed 0, exploratory)"
     cells = []
     for metric in (SMALL_RECALL_ROWS, MASK_EFFECT):
         diff = look.get((name, PRIMARY_BUDGET, f"diff:{metric}"))
@@ -152,7 +171,7 @@ def primary_table(summary: pd.DataFrame, name: str = PRIMARY_COMPARISON_NAME) ->
             "$\\Delta$ lesion-mask effect [95\\% CI]",
             "$p_{\\mathrm{Holm}}$",
         ],
-        [["E7 vs best of E5/E6", *cells]],
+        [[label, *cells]],
     )
 
 
@@ -169,8 +188,10 @@ def ablation_table(summary: pd.DataFrame) -> str:
         own = any((arm, PRIMARY_BUDGET, m) in look for m in metrics)
         if arm in SAME_AS_E7 and not own:
             source, label = "E7", f"{latex_escape(arm)} (= E7)"
-        rows.append([label] + [fmt_mean_sd(look.get((source, PRIMARY_BUDGET, m))) for m in metrics])
-    return tabular(["Arm", "Small-finding recall", "Lesion-mask effect"], rows)
+        seeds = fmt_seeds(look, source, PRIMARY_BUDGET, metrics)
+        values = [fmt_mean_sd(look.get((source, PRIMARY_BUDGET, m))) for m in metrics]
+        rows.append([label, seeds, *values])
+    return tabular(["Arm", "Seeds", "Small-finding recall", "Lesion-mask effect"], rows)
 
 
 def efficiency_table(summary: pd.DataFrame) -> str:

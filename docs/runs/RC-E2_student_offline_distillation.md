@@ -2,14 +2,15 @@
 
 ## 1. What and why
 
+- **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** E2 is in the main-claim tier: seeds 0, 1 and 2. Seeds 1 and 2 run only after seed 0's futility check (`scripts/choose_comparator.py`, after RC-G2): if E7 at B2 ranks below the comparator on validation, seed 0, they do not run. The plan refuses a seed 1 or 2 session before `results/seed_plan/comparator_B2.json` is committed, or when it says stop.
 - Stage: S06
 - Experiments: E2, no budget, seeds 0, 1 and 2
 - Purpose: train the chosen student with the same recipe as E1 plus the teacher's cached
   top-20 token log-probabilities (KD weight 0.5, temperature 2), evaluate it on the validation
   split and measure its footprint. E2 is the starting point of every compression arm and the
   reference of the budgets.
-- Status: `in progress` (2026-11-08): seed 0 done (section 6); seeds 1 and 2 to run on the fix
-  commit (after 8e0b3d7). Rule 3 passes (E0 0.803 >= E1 seed 0 0.592 + 0.02).
+- Status: `in progress` (2026-11-08): seed 0 done (section 6); seeds 1 and 2 on the fix commit
+  (after 8e0b3d7), after seed 0's futility check (seed plan above). Rule 3 passes (E0 0.803 >= E1 seed 0 0.592 + 0.02).
 
 ## 2. Requirements
 
@@ -39,7 +40,7 @@ ground truth.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** seeds split across the accounts: seed 0 Soheil, seed 1 Farzan, seed 2 Amir (one session each, in the same week). Card owner: Soheil. 2026-11-08: seed 0 done; who runs seed 1 is open again.
+- **Who:** seed 0 Soheil (done 2026-11-08); seed 1 **[team]** (no owner yet), seed 2 Amir, both after the futility check (seed plan of 2026-11-08). Card owner: Soheil.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher cache.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
@@ -58,7 +59,7 @@ All**. Add Input: `medcompress-data` and `e0-teacher-cache`. One cell; edit only
 
 ```bash
 %%bash
-SEED=0   # Soheil 0, Farzan 1, Amir 2: the only line to edit
+SEED=0   # 0 (done); 1 [team] and 2 Amir only after the futility check: the only line to edit
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"

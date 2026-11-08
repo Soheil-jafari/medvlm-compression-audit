@@ -174,54 +174,87 @@ def test_the_drop_gap_is_positive_when_recall_falls_more_than_the_headline() -> 
 
 QUALITY = {"E2": 0.85, "E3:w8": 0.8, "E7": 0.82, "E5:magnitude": 0.7, "E5:activation": 0.72,
            "E5:taylor": 0.75, "E6": 0.65}  # fmt: skip
+MAIN = {"E2", "E7", "E5:taylor"}
+"""The main tier with the comparator E5:taylor (the highest validation recall below)."""
 
 
-def _write_tree(root: Path, config: dict, *, drop: tuple[str, int] | None = None) -> None:
+def _val_rows(label: str, budget: str, small: float, mask: float, margin: float) -> list:
+    return [
+        {"experiment": label, "budget": budget, "seed": 0, "metric": metric, "value": value}
+        for metric, value in (
+            ("op_small_finding_recall", small),
+            ("op_mask_positive_recall", mask),
+            ("op_small_margin_mean", margin),
+        )
+    ]
+
+
+def _write_tree(
+    root: Path,
+    config: dict,
+    *,
+    drop: tuple[str, int] | None = None,
+    seeds: dict[str, tuple[int, ...]] | None = None,
+    validation: dict[str, tuple[float, float, float]] | None = None,
+) -> None:
+    """Test outcomes by the seed plan (3 seeds for :data:`MAIN`, seed 0 otherwise, or
+    ``seeds``), seed 0's validation rows of the candidates and E7 at B2, the budget rows."""
     out, res = Path(config["paths"]["output_root"]), Path(config["paths"]["results_root"])
     budgets = {"E7": "B2", "E5": "B2", "E6": "B2"}
+    validation = validation or {}
     for number, (label, quality) in enumerate(QUALITY.items()):
         experiment, _, variant = label.partition(":")
-        for seed in (0, 1, 2):
+        planned = (seeds or {}).get(label, (0, 1, 2) if label in MAIN else (0,))
+        for seed in planned:
             run = RunContext(
                 experiment, seed=seed, budget=budgets.get(experiment), variant=variant or None
             )
             path = run.run_dir(out) / cs.OUTCOMES_FILE
             path.parent.mkdir(parents=True, exist_ok=True)
-            if drop != (label, seed):  # the test outcomes only; validation rows stay
+            if drop != (label, seed):
                 np.savez_compressed(
                     path, **_arrays(quality, seed=100 * number + seed, flip=quality)
                 )
-            if experiment in ("E5", "E6"):
-                rows = [
-                    {"experiment": label, "budget": "B2", "seed": seed,
-                     "metric": "op_small_finding_recall", "value": quality},
-                    {"experiment": label, "budget": "B2", "seed": seed,
-                     "metric": "budget_target", "value": 6.0e9},
-                ]  # fmt: skip
-                append_results(rows, run.run_dir(res) / "metrics.csv")
             if label == "E3:w8":
                 row = {"experiment": label, "budget": "", "seed": seed,
                        "metric": "peak_memory_bytes", "value": 6.2e9}  # fmt: skip
                 append_results([row], run.run_dir(res) / "efficiency.csv")
+        if experiment in ("E5", "E6", "E7"):  # seed 0's validation rows (RC-G2)
+            run = RunContext(experiment, seed=0, budget="B2", variant=variant or None)
+            small, mask, margin = validation.get(label, (quality, quality, quality))
+            rows = _val_rows(label, "B2", small, mask, margin)
+            rows.append({"experiment": label, "budget": "B2", "seed": 0,
+                         "metric": "budget_target", "value": 6.0e9})  # fmt: skip
+            append_results(rows, run.run_dir(res) / "metrics.csv")
     for budget, target in (("B1", 7.0e9), ("B3", 5.0e9)):
         row = {"experiment": "E6", "budget": budget, "seed": 0, "metric": "budget_target",
                "value": target}  # fmt: skip
         append_results([row], RunContext("E6", seed=0, budget=budget).run_dir(res) / "metrics.csv")
 
 
-def test_the_stage_writes_the_evidence_of_every_hypothesis(tmp_path: Path) -> None:
-    from medcompress.evaluation.aggregate import load_results, paper_rows, summarise_over_seeds
-    from medcompress.evaluation.verdicts import all_verdicts
-
+def _run(tmp_path: Path, **tree) -> tuple[dict, Path, list[Path]]:
     config = _config(tmp_path)
-    _write_tree(tmp_path, config)
+    _write_tree(tmp_path, config, **tree)
     written = cs.run_comparisons(config, n_resamples=100)
     results = Path(config["paths"]["results_root"])
     choices = json.loads((results / "comparisons" / cs.CHOICES_FILE).read_text())
+    return choices, results, written
+
+
+def test_the_stage_writes_the_evidence_of_every_hypothesis(tmp_path: Path) -> None:
+    from medcompress.evaluation.aggregate import load_results, paper_rows, summarise_over_seeds
+    from medcompress.evaluation.verdicts import EXPLORATORY, PENDING, all_verdicts
+
+    choices, results, written = _run(tmp_path)
     assert choices["h3"]["comparator"] == "E5:taylor"  # the highest validation recall
+    assert choices["h3"]["futility_stop"] is False  # E7 0.82 ranks above 0.75
     assert choices["h2"]["budget"] == "B2" and choices["h2"]["arm"] == "E5:taylor"
     assert choices["headline_accuracy"] == "macro_balanced_accuracy"
-    assert results / "comparisons" / "E5-taylor_vs_E2" / "B2" / "comparison.csv" in written
+    assert choices["tiers"]["E7@B2"] == {"tier": "main", "seeds": [0, 1, 2]}
+    assert choices["tiers"]["E5:magnitude@B2"] == {"tier": "exploratory", "seeds": [0]}
+    folder = results / "comparisons"
+    assert folder / "E5-taylor_vs_E2" / "B2" / "comparison.csv" in written  # confirmatory
+    assert folder / "E7_vs_E2" / "B2" / "comparison.csv" in written
     summary = summarise_over_seeds(paper_rows(load_results(results)))
     metrics = set(summary[summary["experiment"] == "E7_vs_best"]["metric"])
     assert {"diff:small_finding_recall", "p_holm:lesion_mask_effect", "mcnemar_p_holm:polyp"} <= (
@@ -229,20 +262,84 @@ def test_the_stage_writes_the_evidence_of_every_hypothesis(tmp_path: Path) -> No
     )
     taus = set(summary[summary["experiment"] == "accuracy_vs_clinical"]["metric"])
     assert taus == {"tau:small_finding_recall", "tau:rare_recall", "tau:ece"}
-    assert all(v.verdict != "pending" for v in all_verdicts(summary))
+    h1, h2, h3, h4 = all_verdicts(summary)
+    assert PENDING not in (h1.verdict, h3.verdict)
+    assert h2.verdict == EXPLORATORY  # E3 w8 is seed 0 only by the plan
+    assert h4.verdict == EXPLORATORY
+    assert set(summary[summary["experiment"] == "E7_vs_best"]["tier"]) == {"confirmatory"}
 
 
-def test_an_arm_with_a_missing_seed_is_left_out_and_listed(tmp_path: Path) -> None:
+def test_a_seed0_only_arm_is_reported_and_not_tested(tmp_path: Path) -> None:
+    from medcompress.evaluation.aggregate import load_results, paper_rows, summarise_over_seeds
+    from medcompress.evaluation.verdicts import verdict_h1
+
+    choices, results, written = _run(tmp_path)
+    folder = results / "comparisons"
+    for arm in ("E5-magnitude", "E5-activation", "E6", "E3-w8"):
+        budget = "nobudget" if arm == "E3-w8" else "B2"
+        assert folder / f"{arm}_vs_E2_seed0" / budget / "comparison.csv" in written  # reported
+        assert not (folder / f"{arm}_vs_E2").exists()  # never tested against the 3-seed E2
+    summary = summarise_over_seeds(paper_rows(load_results(results)))
+    seed0 = summary[summary["experiment"] == "E5:magnitude_vs_E2_seed0"]
+    assert not seed0.empty and set(seed0["tier"]) == {"exploratory"}
+    used = verdict_h1(summary).evidence
+    assert used and all(e.split()[0] in ("E7_vs_E2", "E5:taylor_vs_E2") for e in used)
+    assert (folder / "best_pruning_vs_E3-w8_seed0").exists()  # H2: exploratory
+
+
+def test_an_arm_with_two_seeds_is_refused(tmp_path: Path) -> None:
+    from medcompress.seed_plan import SeedPlanError
+
     config = _config(tmp_path)
-    _write_tree(tmp_path, config, drop=("E5:taylor", 2))
-    cs.run_comparisons(config, n_resamples=50)
-    results = Path(config["paths"]["results_root"])
-    choices = json.loads((results / "comparisons" / cs.CHOICES_FILE).read_text())
-    assert "E5:taylor@B2: 1 of 3 seeds missing" in choices["incomplete"]
-    assert "E5:taylor@B2" not in choices["arms"]
-    # the comparator is still chosen on validation; its test outcomes are incomplete
-    assert "incomplete" in choices["h3"]["skipped"]
+    _write_tree(tmp_path, config, seeds={"E6": (0, 1)})
+    with pytest.raises(SeedPlanError, match="E6@B2 has 2 seeds"):
+        cs.run_comparisons(config, n_resamples=20)
+    again = tmp_path / "again"
+    again.mkdir()
+    config = _config(again)
+    _write_tree(again, config, drop=("E5:taylor", 2))  # a main arm with 2 seeds left
+    with pytest.raises(SeedPlanError, match="2 seeds"):
+        cs.run_comparisons(config, n_resamples=20)
+
+
+def test_a_main_arm_with_seed0_only_is_exploratory_after_a_futility_stop(tmp_path: Path) -> None:
+    from medcompress.evaluation.aggregate import load_results, paper_rows, summarise_over_seeds
+    from medcompress.evaluation.verdicts import EXPLORATORY, all_verdicts
+
+    # E7 ranks below the comparator on validation: seeds 1 and 2 never ran
+    validation = {"E7": (0.70, 0.9, 1.0), "E5:taylor": (0.75, 0.8, 1.0)}
+    choices, results, _ = _run(
+        tmp_path, validation=validation, seeds={"E7": (0,), "E5:taylor": (0,), "E2": (0,)}
+    )
+    assert choices["h3"]["futility_stop"] is True
+    assert "E7@B2: 2 of 3 seeds missing: seed 0 only, exploratory" in choices["incomplete"]
+    assert (results / "comparisons" / "E7_vs_best_seed0").exists()
     assert not (results / "comparisons" / "E7_vs_best").exists()
+    summary = summarise_over_seeds(paper_rows(load_results(results)))
+    h1, _, h3, _ = all_verdicts(summary)
+    assert h3.verdict == EXPLORATORY and h3.evidence
+    assert h1.verdict == "pending"  # no 3-seed arm: no confirmatory H1
+
+
+def test_the_comparator_is_chosen_from_seed0_validation_with_the_tie_breaks(
+    tmp_path: Path,
+) -> None:
+    # all four at 13/13 (1.0): (ii) the mask-positive recall decides between E6 and taylor;
+    # their (ii) tie is broken by (iii), the margin
+    validation = {
+        "E5:magnitude": (1.0, 0.90, 5.0),
+        "E5:activation": (1.0, 0.95, 1.0),
+        "E5:taylor": (1.0, 0.95, 2.0),
+        "E6": (1.0, 0.95, 3.0),
+        "E7": (1.0, 0.99, 0.5),
+    }
+    choices, _, _ = _run(
+        tmp_path, validation=validation, seeds={"E5:taylor": (0,), "E6": (0, 1, 2)}
+    )
+    assert choices["h3"]["comparator"] == "E6"
+    assert choices["h3"]["ordering"] == ["E6", "E5:taylor", "E5:activation", "E5:magnitude"]
+    assert choices["tiers"]["E6@B2"]["seeds"] == [0, 1, 2]  # only the comparator has 3
+    assert choices["h3"]["futility_stop"] is False  # E7 wins at (ii)
 
 
 def test_the_stage_needs_the_freeze_and_a_known_headline(tmp_path: Path) -> None:

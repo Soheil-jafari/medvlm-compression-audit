@@ -86,11 +86,18 @@ incomplete or unfrozen table for a final run.
 2. **Lesion-mask effect:** flip rate with the lesion masked minus flip rate with an
    area-matched random region masked (mid-grey fill 128), on positive mask-finding probes.
 
-**Comparator ("best of E5 and E6") [team]:** proposal: among E5:magnitude, E5:activation,
-E5:taylor and E6, the arm with the highest **validation** small-finding recall at B2, averaged
-over its 3 seeds (ties broken by name). The same arm is the comparator for both endpoints.
-Reason: it is the strongest generic competitor on the primary endpoint, chosen without the test
-split, so H3 cannot win against a weak comparator.
+**Comparator ("best of E5 and E6")** (section 11 item 12, amendment of 2026-11-08, Soheil and
+Amir): chosen on **validation, seed 0, at B2**, among E5:magnitude, E5:activation, E5:taylor and
+E6, by this ordering: (i) `op_small_finding_recall`; (ii) ties: the recall at the operating
+point over all mask-positive polyps (86 on validation, `op_mask_positive_recall`); (iii) ties:
+the mean, over the small-polyp probes, of the probe margin minus that arm's own
+`op_threshold:polyp` (`op_small_margin_mean`); (iv) then the name (`seed_plan.rank_key`,
+`scripts/choose_comparator.py`). Only the chosen arm runs seeds 1 and 2. The same arm is the
+comparator for both endpoints. Reason: it is the strongest generic competitor on the primary
+endpoint, chosen without the test split, so H3 cannot win against a weak comparator; (ii) and
+(iii) exist because E1 and E2 both score 13 of 13 on the validation small-polyp recall, so (i)
+alone can tie at the ceiling and leave the choice to the name. (Replaces "averaged over its 3
+seeds".)
 
 **Headline accuracy for H1 and H4 [team]:** the overall probe accuracy is dominated by absent
 findings (most images lack most findings), so a model that drifts towards "no" keeps a high
@@ -120,45 +127,64 @@ has no rare group (section 2). The flip analysis of section 11 is a secondary an
 - **Bootstrap:** paired percentile bootstrap with 10,000 resamples (D06) that resamples
   **images**: all probes of one image are drawn together (`statistics.resample_indices` with
   `clusters`; iteration 35). Random seed of the bootstrap: 0. 95 % intervals.
-- **Seeds** (section 11 item 11): E1 and E2 have 3 seeds; every compressed arm has 3 seeds at
-  the primary budget **B2** (and without a budget: E3, E4); **B1 and B3 have seed 0 only** and
-  are reported as the trend. For each arm the per-image outcomes are averaged over its seeds,
-  then images are bootstrapped (`evaluation/comparisons.py`); seed means and SDs are reported
-  next to them.
+- **Seeds** (section 11 item 12, amendment of 2026-11-08; replaces item 11): the **main-claim
+  tier** has 3 seeds (0, 1, 2): E2, E7 at B2 and the comparator at B2. **Every other arm has
+  seed 0 only** and is reported as exploratory / descriptive: the other E5 / E6 arms, every E3
+  variant (`w8`, `w4`, `w8a8`), E4, E8, E9, every arm at B1 and B3, the ablations A1-A6 and the
+  training-length check. E1 keeps the 3 seeds it ran before the amendment. **No arm has 2
+  seeds** (the majority answer is "right in more than half of the seeds", so with 2 a 1-1
+  split counts as wrong; `seed_plan.check_seed_count`). For a 3-seed arm the per-image outcomes
+  are averaged over its seeds, then images are bootstrapped (`evaluation/compare_stage.py`);
+  seed means and SDs are reported next to them. A single-seed arm is read against a yardstick:
+  the spread of E7 at B2 over its 3 seeds; a single-seed difference smaller than that spread is
+  reported as within run-to-run noise. **Futility-only stopping rule:** after seed 0, seeds 1
+  and 2 of the main tier run unless E7 at B2 ranks **below** the comparator by the ordering of
+  section 5 (validation, seed 0); then the study stops there and reports seed 0 as exploratory,
+  with no confirmatory claim. Otherwise seeds 1 and 2 run, seed 0 stays in the final analysis
+  and the test is unchanged.
 - **Tests:** McNemar per finding (exact binomial below 25 discordant pairs, otherwise
   chi-square with continuity correction), Holm correction across findings; the two primary
   endpoints are Holm-corrected together.
 - **Verdicts** (`evaluation/verdicts.py`, written to `docs/results/VERDICTS.md`):
   H1 supported if every arm's CI of (relative drop in small-finding recall minus relative drop
   in the headline accuracy, both at the operating point) is above 0, not supported if any is
-  below 0, over the arms with 3 seeds (B2 and the arms without a budget; B1 and B3 are the
-  trend, not part of the verdict); H2 supported if the CI
+  below 0, over the 3-seed arms of the main tier (E7 and the comparator at B2; confirmatory);
+  the same rows of every seed-0 arm (`<arm>_vs_E2_seed0`, against E2 seed 0) are exploratory
+  and not part of the verdict. H2 supported if the CI
   of (best pruning arm minus E3 `w8`) small-finding recall is below 0, not supported if above 0;
+  **[team]**: E3 `w8` has seed 0 only under the seed plan, so H2 is computed on seed 0 and
+  reported as **exploratory** (`best_pruning_vs_E3:w8_seed0`) unless E3 `w8` and the matched
+  pruning arm get seeds 1 and 2 before the freeze.
   H3 supported if both primary differences are above 0 with Holm-adjusted p < 0.05, not
-  supported if either CI lies at or below 0; H4 supported if any Kendall tau between the
-  accuracy ranking and a clinical ranking (both at the operating point, over the 3-seed arms)
-  has a CI upper bound below 1. Otherwise inconclusive. The small-finding recall of H2 and H3
-  is at the operating point too.
+  supported if either CI lies at or below 0; after a futility stop H3 is exploratory
+  (`E7_vs_best_seed0`). **H4 is exploratory** (amendment of 2026-11-08): the Kendall taus
+  between the accuracy ranking and each clinical ranking (both at the operating point), over
+  seed 0 of every compressed arm at B2 and without a budget, are reported with their
+  image-bootstrap CIs and no confirmatory claim. Otherwise inconclusive. The small-finding
+  recall of H2 and H3 is at the operating point too.
   The verdicts are reported for each of the three tests (D02 amendment 7, with the strict
   subset dropped on 2026-10-29): the filtered test, the external test and the unfiltered
   test.
 - **Comparison step** (`scripts/09_compare_arms.py`, `evaluation/compare_stage.py`): one
-  sequence of image-level resamples (seed 0) is shared by every arm and every comparison. An
-  arm with a missing seed is left out and listed, never compared on fewer seeds.
+  sequence of image-level resamples (seed 0) is shared by every arm and every comparison. A
+  main-tier arm is compared on its 3 seeds; with a seed missing it is read at seed 0 and
+  reported as exploratory; an arm with 2 seeds is refused; every other arm is read at seed 0.
   - H1 for every arm of E3-E8 (each variant and budget): the relative drop against E2 of the
-    small-finding recall minus that of the headline accuracy, at the operating point. The
-    trend arms (B1, B3, seed 0) are compared with E2 seed 0 and reported apart. (The same with the rare-group
+    small-finding recall minus that of the headline accuracy, at the operating point. The 3-seed
+    arms of the main tier against the 3-seed E2 (confirmatory); every seed-0 arm against E2
+    seed 0, reported apart (`_seed0`, exploratory). (The same with the rare-group
     recall is not computed: no rare group, 2026-10-31.)
   - H2 **[team]** proposal: E3 `w8` is compared at the budget whose target is nearest to its
-    measured peak memory, against the generic pruning arm (E5 criteria, E6) with the highest
-    validation small-finding recall at that budget (at the operating point; mean of its
-    seeds: 3 at B2, seed 0 alone at B1 or B3).
-  - H4: the compressed students E3-E8 with 3 seeds (B2 and no budget), ranked by the headline
-    accuracy and by
+    measured peak memory, against the generic pruning arm (E5 criteria, E6) that comes first at
+    that budget by the comparator's ordering (section 5; validation, seed 0). Exploratory while
+    E3 `w8` has seed 0 only (above).
+  - H4 (exploratory): seed 0 of the compressed students E3-E8 at B2 and without a budget,
+    ranked by the headline accuracy and by
     small-finding recall and ECE (negated, so higher is better in both); the rare-group ranking
     is dropped with the rare group (2026-10-31).
   - McNemar per finding **[team]** proposal: on each probe's majority answer over the 3 seeds
-    (right in at least 2) at the operating point, for E7 against the comparator and for H2.
+    (right in at least 2) at the operating point, for E7 against the comparator and for H2; for
+    a seed-0 arm the answer of seed 0. Never on 2 seeds.
 - **Answer parsing:** probes are scored, never parsed, so they cannot be unparseable. Free-text
   answers count as "yes"/"no" only if they start with that word after leading punctuation
   (`clinical.parse_yes_no`); anything else is an error.
@@ -212,7 +238,7 @@ has no rare group (section 2). The flip analysis of section 11 is a secondary an
 | Pruning | units: decoder layers, KV groups, MLP channel groups of 128; score per parameter; first 2 and last 1 layers protected; 128 calibration images; one-shot removal; 1 negative per positive; signed effects; probe batch 4; how a unit is switched off while scored **[team]** (D07 section 1) | D07 |
 | Quantization | E3 `w4`, `w8`: GPTQ, groups of 128, 128 calibration images, decoder linear layers only; `w8a8`: LLM.int8; E8, E9: the `w4` recipe; kernel class and versions from RC-Q0 | D08 |
 | E4 | 4-bit learned step sizes (groups of 128), LoRA through the rounding, GRACE's confidence-gated decoupled distillation on the cached top-20 (alpha 1, beta 4, T 2) | D08 |
-| Ablations (B2, 3 seeds) | A1 weights 1; A2 rarity only; A3 random order over E7's units, ranked **without** the per-parameter division **[team]** confirm (with it, whole layers would go first: an estimate from the student's unit sizes gives about 98 % of the removed parameters at a 30 % cut, so A3 would be random layer removal; without it about half); A4 32 / 64 / 128 / 256 nested calibration images; A5 KL effect (scored exactly; if D07 section 1 uses the first-order estimate for some units, both A5 variants run on the exactly scored unit types only); A6 layers only / KV and channel groups only | S10, iteration 42 |
+| Ablations (B2, seed 0 only, exploratory; amendment of 2026-11-08) | A1 weights 1; A2 rarity only; A3 random order over E7's units, ranked **without** the per-parameter division **[team]** confirm (with it, whole layers would go first: an estimate from the student's unit sizes gives about 98 % of the removed parameters at a 30 % cut, so A3 would be random layer removal; without it about half); A4 32 / 64 / 128 / 256 nested calibration images; A5 KL effect (scored exactly; if D07 section 1 uses the first-order estimate for some units, both A5 variants run on the exactly scored unit types only); A6 layers only / KV and channel groups only | S10, iteration 42 |
 | Reuse of E7 **[team]** | proposal: `A4:n128` and `A5:logprob_drop` have exactly E7's settings (a test checks it), so E7's B2 runs are reported for them (6 runs fewer) | iteration 42 |
 
 ## 8. Deviations from the methods we follow (declared in advance)
@@ -292,7 +318,8 @@ waited on these settings, so no model has been scored. Every count comes from th
 7. **Secondary analysis: what compression forgets** (after Hooker, Courville, Clark, Dauphin
    and Frome, arXiv:1911.05248). For each method and budget, the test items (probes) whose
    answer flips between E0 and the compressed model:
-   - an item flips when the arm's majority answer over its 3 seeds differs from E0's answer;
+   - an item flips when the arm's answer differs from E0's answer: the majority over its 3
+     seeds for a main-tier arm, seed 0's answer for every other arm (amendment of 2026-11-08);
    - reported: the number and rate of flips, and how they are distributed over the findings
      and over the lesion-size strata of the positive polyps (rate, share and the ratio of each
      group's flip rate to the overall one), and the flip rate of small polyps minus that of
@@ -370,7 +397,70 @@ waited on these settings, so no model has been scored. Every count comes from th
     (0, 1, 2) at the primary budget B2 for every compressed arm (and E3, E4 without a budget);
     **seed 0 only at B1 and B3**, reported as the trend and stated so in the paper. E1 and E2
     keep 3 seeds. The trend arms are compared with E2 seed 0, and they are not part of the
-    verdicts (H1, H4).
+    verdicts (H1, H4). **Replaced by item 12** (2026-11-08).
+12. **Seed plan** (pre-freeze amendment, **approved by Soheil and Amir on 2026-11-08**; written
+    before any compression result, seed 0 included; `medcompress.seed_plan`).
+    1. Main-claim tier, 3 seeds (0, 1, 2): E2, E7 at B2 and the comparator at B2.
+    2. Everything else, seed 0 only, reported as exploratory / descriptive: the other E5 / E6
+       arms, all E3 variants (`w8`, `w4`, `w8a8`), E4, E8, E9, every arm at B1 and B3, the
+       ablations A1-A6 and the training-length check. Open **[team]** item, decided before the
+       freeze: E3 `w4` at seeds 1 and 2 (about +5.4 GPU h), only if 4-bit enters a headline
+       claim.
+    3. Never 2 seeds for any arm: the majority McNemar answer uses hits > 0.5, so a 1-1 split
+       counts as wrong.
+    4. Comparator: chosen on validation, seed 0, at B2, among E5:magnitude, E5:activation,
+       E5:taylor and E6, by (i) `op_small_finding_recall`; (ii) ties: the operating-point
+       recall over all mask-positive polyps (86 on validation); (iii) ties: the mean, over the
+       small-polyp probes, of (probe margin minus that arm's own `op_threshold:polyp`); (iv)
+       then the name. Reason: E1 and E2 both score 13 of 13 on the validation small-polyp
+       recall, so (i) alone can tie at the ceiling and leave the choice to the name. Only the
+       chosen arm runs seeds 1 and 2. Replaces "averaged over its 3 seeds" (section 5). The
+       evaluation writes (ii) and (iii) as `op_mask_positive_recall` and
+       `op_small_margin_mean` from the saved margins and the run's own thresholds;
+       `scripts/choose_comparator.py` applies the ordering to the committed rows and writes
+       `results/seed_plan/comparator_B2.json`.
+    5. Stopping rule (futility only, written before any seed-0 compression result): after seed
+       0, seeds 1 and 2 of the main tier run unless E7 at B2 ranks **below** the comparator by
+       the ordering of item 4 (validation, seed 0). If it ranks below: stop, report seed 0 as
+       exploratory, with no confirmatory claim. Otherwise seeds 1 and 2 run, seed 0 stays in
+       the final analysis and the test is unchanged. A rule that can only stop for futility
+       removes chances to claim an effect and never adds one, so it does not raise the
+       false-positive rate. (A full tie on (i)-(iii) goes to the name, where E7 comes after
+       every candidate, so it stops; written as the rule reads.)
+    6. Single-seed arms are read against a yardstick: the spread of E7 at B2 across its 3
+       seeds. A single-seed difference smaller than that spread is reported as within
+       run-to-run noise.
+    7. Hypotheses: H1-H3 (E7 against E2 and against the comparator, the primary endpoints)
+       stay confirmatory on the 3-seed tier. H4 (the ranking of E3-E8) becomes exploratory, on
+       seed 0, with image-bootstrap CIs and no confirmatory claim. **[team]**: H2 compares the
+       best generic pruning arm with E3 `w8`, which has seed 0 only under item 2; as written
+       it is therefore exploratory (section 6) unless E3 `w8` and the matched pruning arm get
+       seeds 1 and 2.
+
+    **Rationale** (Soheil's analysis and study doc, 2026-11-08):
+    - E1's 3 seeds at the **default** cutoff: the small-polyp recall spread (SD 0.118 on 13
+      polyps) is about what the 13 images alone produce (about 0.126). The AUROC spread is far
+      below the sampling SE (polyp 0.0004 against 0.0048; oesophagitis 0.007 against 0.030;
+      ulcerative colitis 0.049 against 0.039). The yes/no rate varies more (SD 0.104 against
+      0.055), which the per-model operating point re-fits. The operating-point seed spread is
+      pending E1 seeds 1 and 2's rescoring; seed 0 is at the ceiling (13 of 13).
+    - Power simulation: more small polyps (the external test) does more than more seeds. One
+      seed at 100 small polyps detects about 18-22 points; 3 seeds at 21 polyps about 22-23.
+    - Sources: the NeurIPS paper checklist (answering "no" to the statistical-significance item
+      with a compute justification is acceptable), Bouthillier et al. 2021, Jordan (ICLR 2024),
+      Varoquaux and Cheplygina 2022, Hooker et al. 2020.
+    - GPU cost (estimates; the recovery hours assume the distillation loop's measured 27.2 s
+      per update): the extra seeds of the main tier are about 38 h (per seed: E2 5.2 h
+      measured, E7 about 10.8 h, the comparator about 2.9 h). The whole plan is about 190 h,
+      against about 360 h or more for 3 seeds everywhere at B2.
+    - Agent's check against the committed E1 rows (2026-11-08): the SDs reproduce (small-polyp
+      recall 0.1175; AUROC polyp 0.0004, oesophagitis 0.0074, ulcerative colitis 0.0491). The
+      sampling SEs taken from the committed bootstrap intervals (width / 3.92) are 0.131-0.145
+      for the small-polyp recall, 0.0023-0.0029 (polyp), 0.021-0.024 (oesophagitis) and
+      0.037-0.038 (ulcerative colitis); the binomial SE at E1's mean recall (0.59, 13 polyps)
+      is 0.136. Which "yes/no rate" the 0.104 refers to is not stated (the `yes_rate:polyp` SD
+      is 0.048, `original_yes_rate` 0.115). The conclusion (the seed spread is within the
+      sampling noise, except the ulcerative colitis AUROC) is the same either way.
 
 Still open before `preregistration.frozen_on` is set: how the two co-primary tests combine in a
 verdict, the finding weights (cap, tiers), the budgets and the other **[team]** items above.

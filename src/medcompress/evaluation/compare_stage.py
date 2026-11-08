@@ -1,36 +1,45 @@
 """Stage 09: paired comparisons on the test split, the evidence rows of H1-H4.
 
 Stage 06 leaves the per-probe answers of every run in ``<output_root>/<run dir>/``
-``outcomes_test.npz`` (never committed). This stage reads them for every arm and seed and
-averages each probe's outcome over the arm's seeds (pre-registration section 6). It then draws
-one sequence of image-level bootstrap resamples (seed 0) and computes, for every arm and every
-resample, the headline accuracy, the small-finding recall, the rare-group recall and the ECE.
-Every comparison below is a function of that one table, so all intervals share the resamples:
+``outcomes_test.npz`` (never committed). This stage reads them for every arm and seed. The seed
+plan (``medcompress.seed_plan``, pre-registration section 11, amendment of 2026-11-08) decides
+how: the **main-claim tier** (E2, E7 at B2 and the comparator at B2) is averaged per probe over
+its 3 seeds; **every other arm is read at seed 0 only** and reported as exploratory; an arm with
+2 seeds is refused. It then draws one sequence of image-level bootstrap resamples (seed 0) and
+computes, for every arm and every resample, the headline accuracy, the small-finding recall,
+the rare-group recall and the ECE. Every comparison below is a function of that one table, so
+all intervals share the resamples:
 
-* H1, ``<arm>_vs_E2``: ``diff:drop_gap`` = relative drop of the small-finding recall minus
-  relative drop of the headline accuracy (both against E2); ``diff:drop_gap_rare`` uses the
-  rare-group recall instead;
+* H1, ``<arm>_vs_E2`` for the 3-seed arms of the main tier (confirmatory): ``diff:drop_gap`` =
+  relative drop of the small-finding recall minus relative drop of the headline accuracy (both
+  against E2); ``diff:drop_gap_rare`` uses the rare-group recall instead. Every other arm gets
+  the same rows against E2 seed 0, named ``<arm>_vs_E2_seed0`` (exploratory);
 * H2, ``best_pruning_vs_E3:w8`` at the budget whose target is nearest to the measured peak
-  memory of E3 ``w8``: ``diff:small_finding_recall`` of the best generic pruning arm (highest
-  validation small-finding recall at that budget) minus E3 ``w8``;
+  memory of E3 ``w8``: ``diff:small_finding_recall`` of the best generic pruning arm at that
+  budget (the ordering of the comparator, validation seed 0) minus E3 ``w8``. With a
+  single-seed side (E3 ``w8`` is seed 0 only by the plan) the rows are
+  ``best_pruning_vs_E3:w8_seed0`` (exploratory);
 * H3, ``E7_vs_best`` at B2: ``diff:``, ``p:`` and ``p_holm:`` rows of the two primary
-  endpoints against the comparator (highest validation small-finding recall among E5 and E6
-  at B2); the lesion-mask effect is bootstrapped over the audited probes, by image;
-* H4, ``accuracy_vs_clinical``: Kendall's tau between the order of the compressed arms by the
-  headline accuracy and by small-finding recall, rare-group recall and ECE (negated, so that
-  higher is better in both orders).
+  endpoints against the comparator (``seed_plan.choose_comparator`` on validation, seed 0);
+  the lesion-mask effect is bootstrapped over the audited probes, by image. If E7 or the
+  comparator has seed 0 only (the futility stop), the rows are ``E7_vs_best_seed0``
+  (exploratory);
+* H4, ``accuracy_vs_clinical`` (exploratory, seed 0 of every compressed arm at B2 and without
+  a budget): Kendall's tau between the order of the arms by the headline accuracy and by
+  small-finding recall, rare-group recall and ECE (negated, so that higher is better in both
+  orders).
 
 H2 and H3 also get McNemar's test per finding on each probe's majority answer over the seeds,
 Holm-corrected across findings (``mcnemar_p:`` and ``mcnemar_p_holm:``). The rule-based
-choices (comparator, matched budget) and the arms left out for missing seeds are written to
-``results/comparisons/choices.json``.
+choices (comparator, futility decision, matched budget), the tier and seeds of every arm and
+the arms left out are written to ``results/comparisons/choices.json``.
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +48,7 @@ import pandas as pd
 
 from medcompress.config import ConfigError, RunContext
 from medcompress.evaluation import flips as flips_mod
-from medcompress.evaluation.comparisons import add_holm_rows, compare_arms, pick_best_arm
+from medcompress.evaluation.comparisons import add_holm_rows, compare_arms
 from medcompress.evaluation.statistics import (
     bootstrap_p_value,
     holm_correction,
@@ -48,7 +57,19 @@ from medcompress.evaluation.statistics import (
     percentile_ci,
     resample_indices,
 )
-from medcompress.registry import BUDGET_IDS, PRIMARY_BUDGET, REGISTRY, TREND_BUDGETS, seeds_at
+from medcompress.registry import BUDGET_IDS, PRIMARY_BUDGET, REGISTRY
+from medcompress.seed_plan import (
+    COMPARATOR_CANDIDATES,
+    SEEDS,
+    SeedPlanError,
+    check_seed_count,
+    choose_comparator,
+    futility_stop,
+    planned_seeds,
+    rank,
+    scores_from_rows,
+    tier,
+)
 
 STRICT_FILE = "strict_test.json"
 """RC-D1 run 4's strict test subset (D02 amendment 3): img_ids, in the private folder."""
@@ -67,6 +88,8 @@ GENERIC_PRUNING: tuple[str, ...] = ("E5", "E6")
 QUANT_W8 = "E3:w8"
 OURS = "E7"
 BOOTSTRAP_SEED = 0
+SEED0_SUFFIX = "_seed0"
+"""Appended to the name of every exploratory comparison (a seed-0-only side)."""
 HEADLINES: tuple[str, ...] = ("overall_accuracy", "macro_balanced_accuracy")
 SMALL = "small_finding_recall"
 """Comparison rows keep this name; since 2026-11-06 it is the recall at the operating point."""
@@ -495,29 +518,6 @@ def flip_comparison(
 # ------------------------------------------------------------------- choices
 
 
-def validation_means(
-    rows: pd.DataFrame, labels: Sequence[str], budget: str, metric: str, seeds: Sequence[int]
-) -> tuple[dict[str, float] | None, str]:
-    """Mean over seeds of a validation metric for each label; None (with why) if incomplete."""
-    if rows.empty:
-        return None, "no validation rows"
-    data = rows[
-        (rows["split"] == "val")
-        & (rows["metric"] == metric)
-        & (rows["budget"].fillna("") == budget)
-    ]
-    out: dict[str, float] = {}
-    for label in labels:
-        hit = data[data["experiment"] == label]
-        if set(hit["seed"].astype(int)) != set(seeds):
-            return (
-                None,
-                f"{label}@{budget or '-'}: validation {metric} not there for seeds {list(seeds)}",
-            )
-        out[label] = float(hit["value"].mean())
-    return out, ""
-
-
 def matched_budget(rows: pd.DataFrame) -> tuple[dict[str, Any] | None, str]:
     """The budget whose target is nearest to E3 ``w8``'s measured peak memory (H2)."""
     if rows.empty:
@@ -569,38 +569,58 @@ def headline_metric(config: Mapping[str, Any]) -> str:
     return str(value)
 
 
-def _seeds(experiment_id: str) -> tuple[int, ...]:
-    from medcompress.config import load_experiment
+@dataclass(frozen=True)
+class LoadedArm:
+    """One arm's per-seed arrays: ``seeds`` used (3 for the main tier, seed 0 otherwise)."""
 
-    return tuple(load_experiment(experiment_id)[1].seeds)
+    arm: Arm
+    seeds: tuple[int, ...]
+    arrays: list[dict[str, np.ndarray]]
+
+    @property
+    def main(self) -> bool:
+        return len(self.seeds) == len(SEEDS)
 
 
 def load_arms(
     output_root: Path,
     arms: Sequence[Arm],
-    seeds_of: Mapping[str, Sequence[int]],
+    comparator: str | None,
     outcomes_file: str = OUTCOMES_FILE,
-) -> tuple[dict[Arm, list[dict[str, np.ndarray]]], list[str]]:
-    """Per-seed arrays of every arm with all its seeds; the others are listed as incomplete.
+) -> tuple[dict[Arm, LoadedArm], list[str]]:
+    """The arrays of every arm by the seed plan, and notes on what was left out or narrowed.
 
-    An arm with any seed missing is left out entirely (never compared on fewer seeds).
+    * An arm without seed 0 is left out.
+    * An arm with 2 seeds is refused (:class:`SeedPlanError`): the plan allows 1 or 3.
+    * A main-tier arm (``seed_plan.is_main``) with its 3 seeds is read with all of them; with
+      seed 0 only it is read at seed 0 and reported as exploratory.
+    * Every other arm is read at seed 0 only (extra seeds are listed and not used).
     """
-    found: dict[Arm, list[dict[str, np.ndarray]]] = {}
-    incomplete = []
+    found: dict[Arm, LoadedArm] = {}
+    notes = []
     for arm in arms:
-        seeds = arm_seeds(arm, seeds_of)
-        paths = [run.run_dir(output_root) / outcomes_file for run in arm.runs(seeds)]
-        missing = [p for p in paths if not p.is_file()]
-        if missing:
-            incomplete.append(f"{arm.name}: {len(missing)} of {len(paths)} seeds missing")
+        paths = {
+            s: r.run_dir(output_root) / outcomes_file
+            for s, r in zip(SEEDS, arm.runs(SEEDS), strict=True)
+        }
+        present = tuple(s for s, p in paths.items() if p.is_file())
+        check_seed_count(arm.name, present)
+        if 0 not in present:
+            if present:
+                notes.append(f"{arm.name}: seed 0 missing (seeds {list(present)} not used)")
             continue
-        found[arm] = [read_outcomes(p) for p in paths]
-    return found, incomplete
-
-
-def arm_seeds(arm: Arm, seeds_of: Mapping[str, Sequence[int]]) -> tuple[int, ...]:
-    """The seeds of an arm: all at B2 and without a budget, seed 0 at B1 and B3 (the trend)."""
-    return seeds_at(seeds_of[arm.label.partition(":")[0]], arm.budget or None)
+        planned = planned_seeds(arm.label, arm.budget, comparator)
+        if planned == SEEDS and present == SEEDS:
+            use = SEEDS
+        else:
+            use = (0,)
+            if planned == SEEDS:
+                notes.append(f"{arm.name}: {len(SEEDS) - len(present)} of 3 seeds missing: "
+                             "seed 0 only, exploratory")  # fmt: skip
+            elif present == SEEDS:
+                notes.append(f"{arm.name}: seeds 1 and 2 not used (seed 0 only by the plan)")
+        found[arm] = LoadedArm(arm, use, [read_outcomes(paths[s]) for s in use])
+    return found, notes
 
 
 def write_comparisons(
@@ -656,36 +676,54 @@ def run_comparisons(
     output_root = Path(output_root or config["paths"]["output_root"])
     resamples = int(n_resamples or settings.n_resamples)
     alpha = settings.alpha
-    seeds_of = {e: _seeds(e) for e in (REFERENCE, *COMPRESSED)}
+    results = load_results(results_root)
+    generic_b2 = list(COMPARATOR_CANDIDATES)
+    scores_b2 = scores_from_rows(results, [*generic_b2, OURS], budget=PRIMARY_BUDGET)
+    comparator, h3_choice = None, {}
+    try:
+        best_score = choose_comparator(scores_b2)
+        comparator = best_score.label
+        h3_choice = {
+            "comparator": comparator,
+            "ordering": [s.label for s in rank(scores_b2[c] for c in generic_b2)],
+            "validation_seed0": {c: asdict(scores_b2[c]) for c in generic_b2},
+        }
+        if OURS in scores_b2:
+            h3_choice["futility_stop"] = futility_stop(scores_b2[OURS], best_score)
+    except SeedPlanError as exc:
+        h3_choice = {"skipped": f"comparator not chosen: {exc}"}
     wanted = [Arm(REFERENCE)] + [arm for e in COMPRESSED for arm in arms_of(e)]
     outcomes_file = UNFILTERED_OUTCOMES_FILE if unfiltered else OUTCOMES_FILE
-    found, incomplete = load_arms(output_root, wanted, seeds_of, outcomes_file)
+    found, notes = load_arms(output_root, wanted, comparator, outcomes_file)
     if Arm(REFERENCE) not in found:
-        raise ConfigError(f"the outcomes of {REFERENCE} (all seeds, {outcomes_file}) are needed "
-                          f"under {output_root}")  # fmt: skip
+        raise ConfigError(f"the outcomes of {REFERENCE} (seed 0 at least, {outcomes_file}) are "
+                          f"needed under {output_root}")  # fmt: skip
     groups = dict(settings.groups or {})
     table = build_table(
-        found[Arm(REFERENCE)][0],
+        found[Arm(REFERENCE)].arrays[0],
         settings.findings,
         settings.thresholds,
         settings.mask_findings,
         groups,
     )
-    arms = list(found)
-    outcomes = [arm_outcomes(a, arm_seeds(a, seeds_of), found[a], table) for a in arms]
-    trend_ref = Arm(REFERENCE, "seed0")  # the trend arms (one seed) against E2 seed 0
-    arms.append(trend_ref)
-    outcomes.append(arm_outcomes(trend_ref, (0,), found[Arm(REFERENCE)][:1], table))
+    # every arm at seed 0 (exploratory reads); the 3-seed arms of the main tier also averaged
+    keys: list[tuple[Arm, bool]] = []
+    outcomes: list[ArmOutcomes] = []
+    for arm, loaded in found.items():
+        keys.append((arm, False))
+        outcomes.append(arm_outcomes(arm, (0,), loaded.arrays[:1], table))
+        if loaded.main:
+            keys.append((arm, True))
+            outcomes.append(arm_outcomes(arm, loaded.seeds, loaded.arrays, table))
     folder = UNFILTERED_DIR if unfiltered else "comparisons"
     if strict:
         keep = strict_images(Path(config["paths"]["private_root"]))
         table, outcomes = restrict(table, outcomes, keep)
         folder = STRICT_DIR
-    index = {a: i for i, a in enumerate(arms)}
+    index = {k: i for i, k in enumerate(keys)}
     scorer = Scorer(table, headline, int(settings.n_bins))
     observed, draws = metric_table(scorer, outcomes, n_resamples=resamples)
-    ref = index[Arm(REFERENCE)]
-    results = load_results(results_root)
+    reference = Arm(REFERENCE)
     rows: list[dict[str, Any]] = []
     choices: dict[str, Any] = {
         "headline_accuracy": headline,
@@ -695,8 +733,15 @@ def run_comparisons(
         "n_images": int(len(set(table.images.tolist()))),
         "n_small_positives": int(table.small.sum()),
         "n_rare_positives": int(table.rare.sum()),
-        "arms": [a.name for a in arms],
-        "incomplete": incomplete,
+        "arms": [a.name for a in found],
+        "tiers": {
+            a.name: {
+                "tier": tier(a.label, a.budget, comparator) if loaded.main else "exploratory",
+                "seeds": list(loaded.seeds),
+            }
+            for a, loaded in found.items()
+        },
+        "incomplete": notes,
         "subset": (
             "strict test (D02 amendment 3)"
             if strict
@@ -706,29 +751,41 @@ def run_comparisons(
         ),
     }
 
-    # H1: every compressed arm against E2 (the trend arms at B1 and B3, seed 0 only, against
-    # E2 seed 0; their rows are reported as the trend and left out of the verdicts)
-    for arm in arms:
-        if arm.label != REFERENCE:
-            name = f"{arm.label}_vs_{REFERENCE}"
-            against = index[trend_ref] if arm.budget in TREND_BUDGETS else ref
-            rows += drop_gap_rows(observed, draws, index[arm], against, name, arm.budget, alpha)
+    def pair(a: Arm, b: Arm) -> tuple[int, int, str] | None:
+        """Indices of ``a`` and ``b``: both 3-seed (confirmatory, suffix ""), else both at seed
+        0 (exploratory, suffix ``_seed0``); None if either is missing."""
+        if (a, True) in index and (b, True) in index:
+            return index[(a, True)], index[(b, True)], ""
+        if (a, False) in index and (b, False) in index:
+            return index[(a, False)], index[(b, False)], SEED0_SUFFIX
+        return None
 
-    # H3: E7 against the best of E5 / E6 at B2, chosen on validation
-    generic = [a.label for e in GENERIC_PRUNING for a in arms_of(e) if a.budget == PRIMARY_BUDGET]
-    scores, why = validation_means(results, generic, PRIMARY_BUDGET, OP_SMALL, seeds_of["E5"])
-    ours = Arm(OURS, PRIMARY_BUDGET)
-    if scores is None:
-        choices["h3"] = {"skipped": why}
-    else:
-        best = Arm(pick_best_arm(scores), PRIMARY_BUDGET)
-        choices["h3"] = {"comparator": best.label, "validation_small_finding_recall": scores}
-        if ours in index and best in index:
-            a, b = outcomes[index[ours]], outcomes[index[best]]
-            name = f"{OURS}_vs_best"
-            primary = paired_rows(
-                observed, draws, index[ours], index[best], name, PRIMARY_BUDGET, alpha
-            )
+    # H1: the 3-seed arms of the main tier against E2 (confirmatory); every other arm at seed 0
+    # against E2 seed 0 (exploratory)
+    for arm in found:
+        if arm.label == REFERENCE:
+            continue
+        if found[arm].main and found[reference].main:
+            i, j, suffix = index[(arm, True)], index[(reference, True)], ""
+        else:
+            i, j, suffix = index[(arm, False)], index[(reference, False)], SEED0_SUFFIX
+        name = f"{arm.label}_vs_{REFERENCE}{suffix}"
+        rows += drop_gap_rows(observed, draws, i, j, name, arm.budget, alpha)
+
+    # H3: E7 against the comparator at B2, chosen on validation seed 0 (seed_plan)
+    choices["h3"] = h3_choice
+    if comparator is not None:
+        ours, best = Arm(OURS, PRIMARY_BUDGET), Arm(comparator, PRIMARY_BUDGET)
+        both = pair(ours, best)
+        if both is None:
+            choices["h3"]["skipped"] = "test outcomes of E7 or the comparator at B2 are incomplete"
+        else:
+            i, j, suffix = both
+            name = f"{OURS}_vs_best{suffix}"
+            if suffix:
+                choices["h3"]["exploratory"] = "E7 or the comparator has seed 0 only"
+            a, b = outcomes[i], outcomes[j]
+            primary = paired_rows(observed, draws, i, j, name, PRIMARY_BUDGET, alpha)
             primary += compare_arms(
                 name,
                 PRIMARY_BUDGET,
@@ -742,8 +799,6 @@ def run_comparisons(
             )
             rows += add_holm_rows(primary, [SMALL, MASK_EFFECT])
             rows += mcnemar_rows(table, a, b, name, PRIMARY_BUDGET)
-        else:
-            choices["h3"]["skipped"] = "test outcomes of E7 or the comparator at B2 are incomplete"
 
     # H2: the best generic pruning arm against E3 w8 at the matched budget
     matched, why = matched_budget(results)
@@ -751,39 +806,42 @@ def run_comparisons(
         choices["h2"] = {"skipped": why}
     else:
         budget = matched["budget"]
-        labels = [a.label for e in GENERIC_PRUNING for a in arms_of(e) if a.budget == budget]
-        scores, why = validation_means(
-            results, labels, budget, OP_SMALL, seeds_at(seeds_of["E5"], budget)
-        )
-        if scores is None:
-            choices["h2"] = {**matched, "skipped": why}
+        scores = scores_from_rows(results, generic_b2, budget=budget)
+        missing = [c for c in generic_b2 if c not in scores]
+        if missing:
+            choices["h2"] = {**matched, "skipped": f"no validation rows at seed 0, {budget} "
+                                                   f"for {missing}"}  # fmt: skip
         else:
-            best = Arm(pick_best_arm(scores), budget)
-            choices["h2"] = {
-                **matched,
-                "arm": best.label,
-                "validation_small_finding_recall": scores,
-            }
-            w8 = Arm(QUANT_W8)
-            if best in index and w8 in index:
-                name = f"best_pruning_vs_{QUANT_W8}"
-                rows += paired_rows(observed, draws, index[best], index[w8], name, budget, alpha)
-                rows += mcnemar_rows(
-                    table, outcomes[index[best]], outcomes[index[w8]], name, budget
-                )
-            else:
+            best = Arm(rank(scores.values())[0].label, budget)
+            choices["h2"] = {**matched, "arm": best.label,
+                             "ordering": [s.label for s in rank(scores.values())]}  # fmt: skip
+            both = pair(best, Arm(QUANT_W8))
+            if both is None:
                 choices["h2"]["skipped"] = "test outcomes of the arm or of E3 w8 are incomplete"
+            else:
+                i, j, suffix = both
+                if suffix:
+                    choices["h2"]["exploratory"] = "a side has seed 0 only (E3 w8 by the plan)"
+                name = f"best_pruning_vs_{QUANT_W8}{suffix}"
+                rows += paired_rows(observed, draws, i, j, name, budget, alpha)
+                rows += mcnemar_rows(table, outcomes[i], outcomes[j], name, budget)
 
-    # H4: the compressed arms ranked by the headline and by the clinical metrics
-    ranked = [index[a] for a in arms if a.label != REFERENCE and a.budget not in TREND_BUDGETS]
+    # H4 (exploratory): every compressed arm at seed 0, at B2 and without a budget
+    ranked = [
+        index[(a, False)]
+        for a in found
+        if a.label != REFERENCE and a.budget in ("", PRIMARY_BUDGET)
+    ]
+    choices["h4"] = "exploratory: seed 0 of every compressed arm at B2 and without a budget"
     if len(ranked) >= 2:
         rows += tau_rows(observed, draws, ranked, alpha)
 
-    # secondary (pre-registered 2026-10-31): the items whose answer flips against E0
+    # secondary (pre-registered 2026-10-31): the items whose answer flips against E0, each arm
+    # as it is read (3 seeds for the main tier, seed 0 otherwise)
     if strict:
         choices["flips"] = {"skipped": "not computed on the strict subset"}
     else:
-        compared = [o for o in outcomes if o.arm != trend_ref]
+        compared = [outcomes[index[(a, loaded.main)]] for a, loaded in found.items()]
         flips, why = flip_comparison(output_root, outcomes_file, table, compared, settings,
                                      n_resamples=resamples, alpha=alpha)  # fmt: skip
         rows += flips
@@ -803,5 +861,5 @@ def run_comparisons(
     written = write_comparisons(rows, results_root, folder)
     choices_path = results_root / folder / CHOICES_FILE
     write_json(choices, choices_path)
-    print(f"compared {len(arms)} arms on {len(table.keys)} probes; wrote {len(written)} files")
+    print(f"compared {len(found)} arms on {len(table.keys)} probes; wrote {len(written)} files")
     return [*written, choices_path]

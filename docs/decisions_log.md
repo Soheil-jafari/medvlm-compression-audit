@@ -483,6 +483,58 @@ must be logged here.
   the class counts per finding, next to sensitivity and specificity, so a method that only
   shifts the yes/no bias can be told from one that loses discrimination. E0's from its saved
   validation outcomes on CPU (`scripts/rescore_probes.py`, RC-E0a section 3b).
+- **2026-11-08 (Soheil and Amir): the seed plan, a pre-freeze amendment** (pre-registration
+  section 11 item 12; replaces item 11; written before any compression result, seed 0
+  included; nothing is frozen by it). (1) Main-claim tier, 3 seeds: E2, E7 at B2, the
+  comparator at B2. (2) Every other arm seed 0 only, exploratory: the other E5 / E6 arms, all E3
+  variants, E4, E8, E9, every arm at B1 and B3, A1-A6, the training-length check; open [team]
+  item: E3 `w4` at seeds 1 and 2 (about +5.4 GPU h) only if 4-bit enters a headline claim. (3)
+  Never 2 seeds (the majority answer counts a 1-1 split as wrong). (4) The comparator on
+  validation, seed 0, at B2, among E5:magnitude, E5:activation, E5:taylor and E6: (i)
+  `op_small_finding_recall`, (ii) the operating-point recall over all mask-positive polyps,
+  (iii) the small polyps' mean margin above the arm's own `op_threshold:polyp`, (iv) the name;
+  only that arm runs seeds 1 and 2 (replaces "averaged over its 3 seeds"; E1 and E2 both score
+  13 of 13 on validation, so (i) alone can tie). (5) Futility-only stopping: seeds 1 and 2 of
+  the main tier run unless E7 at B2 ranks below the comparator by (4); a futility-only rule does
+  not raise the false-positive rate. (6) A single-seed difference smaller than E7's spread over
+  its 3 seeds at B2 is reported as within run-to-run noise. (7) H1-H3 confirmatory on the
+  3-seed tier, H4 exploratory on seed 0.
+  - Rationale (Soheil's analysis and study doc): E1's seed spread at the default cutoff is about
+    the sampling noise of 13 polyps (small-polyp recall SD 0.118 against about 0.126; AUROC SDs
+    polyp 0.0004, oesophagitis 0.007, ulcerative colitis 0.049 against SEs 0.0048, 0.030,
+    0.039); the yes/no rate varies more (SD 0.104 against 0.055) and the operating point re-fits
+    it; the power simulation favours more small polyps (the external test) over more seeds (1
+    seed at 100 small polyps detects about 18-22 points, 3 seeds at 21 polyps about 22-23).
+    Sources: the NeurIPS paper checklist, Bouthillier et al. 2021, Jordan (ICLR 2024), Varoquaux
+    and Cheplygina 2022, Hooker et al. 2020. GPU (estimates, recoveries at the measured 27.2 s
+    per update): the main tier's extra seeds about 38 h; the whole plan about 190 h (Soheil)
+    against about 360 h or more with 3 seeds everywhere at B2; the itemised schedule gives about
+    236-243 h, the difference being mainly the ablations' evaluation passes and RC-L1.
+  - Agent's check of the numbers against the committed E1 rows: the SDs reproduce; the SEs from
+    the committed bootstrap intervals are 0.131-0.145 (small-polyp recall), 0.0023-0.0029
+    (polyp AUROC), 0.021-0.024 (oesophagitis), 0.037-0.038 (ulcerative colitis); which yes/no
+    rate the SD 0.104 refers to is not stated (`yes_rate:polyp` 0.048, `original_yes_rate`
+    0.115). Recorded as given; the conclusion holds either way.
+  - Consequences found while implementing (for the team): H2 compares the best generic pruning
+    arm with E3 `w8`, which is seed 0 only, so H2 is exploratory as written unless `w8` and the
+    matched arm get seeds 1 and 2 ([team], before the freeze); H1 now covers the main tier's
+    pruning arms only (the other families are exploratory); under (5) E2 seeds 1 and 2 also wait
+    for seed 0's futility check (they are main-tier seeds), so they no longer run in week 3.
+  - Code: `src/medcompress/seed_plan.py` (tiers, the ordering, the futility rule, the 2-seed
+    refusal), `scripts/choose_comparator.py` (writes `results/seed_plan/comparator_B2.json`),
+    new evaluation rows `op_mask_positive_recall` and `op_small_margin_mean`
+    (`probe_suites.tie_break_metrics`), the comparison step (main tier on 3 seeds, every other
+    arm at seed 0 as `_seed0` rows, 2 seeds refused), the verdicts (`exploratory`), the run
+    cards (seeds 1 and 2 wait for the committed choice and stop on futility), the configs' seed
+    lists (E3, E4, E8, A1-A6: seed 0), `by_arm.csv` gains a `tier` column, the paper tables a
+    Seeds column. Farzan's assignments removed from the schedule; seed 1 of the main tier, RC-E9
+    and the E7 / E8 trend have no owner yet ([team]).
+- **2026-11-08 (Soheil): E1 seed 0's operating-point rows** (RC-E1 section 3c, CPU, Kaggle,
+  commit b5f6197, torch 2.11.0+cpu, transformers 5.20.2): `metrics.csv` committed unchanged;
+  the 7 committed check rows were identical to the saved outcomes. At the operating point
+  (validation, in-sample): macro balanced accuracy 0.758; sensitivity polyp 0.990, ulcerative
+  colitis 0.082, oesophagitis 0.622; small-polyp recall 13 of 13. Seeds 1 and 2 open (their
+  notebook outputs are Farzan's and Amir's).
 - **2026-11-08 (Soheil): E2 seed 0 done; the hour estimates use E2's measured step; no design
   change.** E2 seed 0 trained 625 updates in 16,975 s (27.2 s per update, 1.9 times E1's
   mean) on a commit after 8e0b3d7 (the hash is read from the `e2-seed0-adapter` manifest),
@@ -575,11 +627,13 @@ must be logged here.
 | Fixed training pool (agent proposal, iteration 36) | E1, E2, E4 and every recovery draw their examples from one pool fixed by `seeds.data_split` (20261012, the RC-D1 seed), not from the run seed. The teacher cache holds only that pool (`teacher_cache.pool_size` = `training.data_subset`) instead of all 143,594 training rows; the three seeds vary the order and the adapter's start. Alternative: a different pool per seed (the cache then needs the union of three pools) | Soheil | before RC-E0b |
 | EndoBench terms | set aside by D02 amendment 7 (the external test is from another centre: PolypGen and/or GastroVision); reopen only if the team brings EndoBench back | Farzan | — |
 | Finding weights | the finding list and groups are frozen (2026-10-31); still open: cap (proposal 20) and the three tiers with multipliers 2.0 / 1.5 / 1.0, assigned from the finding names; the prevalences are 17.9 %, 15.3 %, 12.1 % | team | before E7 |
-| Compression split (agent proposal, 2026-11-02) | by seed: every compression arm of seed k on the account that trained E2 seed k (0 Soheil, 1 Farzan, 2 Amir); RC-B0 and RC-G2 with seed 0 (Soheil), RC-E9 Farzan; only outcomes and the E1/E2 adapters cross accounts (`docs/schedule.md` section 7) | team | before the freeze |
-| Comparator "best of E5/E6" (draft proposal) | the generic arm with the highest validation small-finding recall at B2 (mean of 3 seeds), the same for both primary endpoints | team | before the freeze |
+| Compression split (agent proposal, 2026-11-02; revised 2026-11-08) | seed plan: seed 0 of every arm (Soheil: B2 and no budget, the E6 trend, ablations; Amir: the E5 trend); main tier seed 2 Amir; **seed 1 of the main tier, RC-E9 and the E7 / E8 trend have no owner** (Farzan's assignments removed); the loads are uneven (Soheil about 153-160 h, Amir about 49 h, unowned about 34 h; `docs/schedule.md` section 7) | team | before the freeze |
+| Comparator "best of E5/E6" | **decided 2026-11-08** (Soheil and Amir, seed plan): validation, seed 0, B2, ordered by (i) `op_small_finding_recall`, (ii) `op_mask_positive_recall`, (iii) `op_small_margin_mean`, (iv) name; only the chosen arm runs seeds 1 and 2 (pre-registration section 5 and section 11 item 12) | — | — |
 | Headline accuracy for H1 and H4 (draft proposal) | macro balanced accuracy instead of the overall probe accuracy, which mostly measures specificity; overall accuracy still reported | team | before the freeze |
 | A3 ranking (agent proposal, iteration 42) | A3 orders its random scores without dividing by the unit size (`score_normalisation: none`). Divided by size, a random score sends whole layers first (estimate: about 98 % of the removed parameters at a 30 % cut), so A3 would test random layer removal, not random choice of units. D07's per-parameter rule stays for every other arm | team | before the freeze |
 | Reuse of E7 for identical ablation arms (agent proposal) | `A4:n128` and `A5:logprob_drop` have exactly E7's settings (test), so E7's B2 runs are reported for them (27 ablation runs instead of 33). If D07 section 1 uses the first-order estimate for some units, A5 moves to the exactly scored units and `A5:logprob_drop` is run | team | before the freeze |
 | H2 matching and McNemar (agent proposal, iteration 43) | H2: E3 `w8` against the generic pruning arm with the highest validation small-finding recall at the budget whose target is nearest to `w8`'s measured peak memory. McNemar per finding on each probe's majority answer over the 3 seeds | team | before the freeze |
+| H2 under the seed plan (2026-11-08) | E3 `w8` is seed 0 only, so H2 (best pruning against `w8`) is exploratory as written; give `w8` and the matched pruning arm seeds 1 and 2, or keep H2 exploratory | team | before the freeze |
+| E3 `w4` at seeds 1 and 2 | about +5.4 GPU h, only if 4-bit enters a headline claim (seed plan item 2) | team | before the freeze |
 | Budgets and timing hardware | B1-B3 fractions (rule after RC-B0) and the rented GPU type; metric, tolerance and protocol are decided | Amir | TODO |
 | Venue | e.g. MICCAI (Springer LNCS template) | team | TODO |

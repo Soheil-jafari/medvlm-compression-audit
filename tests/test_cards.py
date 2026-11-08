@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from medcompress import card_runner as runner_mod
+from medcompress import cards as cards_mod
 from medcompress.cards import (
     RUNNABLE_CARDS,
     CardError,
@@ -36,12 +37,21 @@ EXTRA = {
 SPLIT = {"RC-E1", "RC-E2", "RC-E3", "RC-E4", "RC-E5", "RC-E6", "RC-E7", "RC-E8"} | {
     f"RC-A{n}" for n in range(1, 7)
 }
+THREE_SEEDS = {"RC-E1", "RC-E2", "RC-E5", "RC-E7"}
+"""With the comparator E5:taylor (the fixture below): the cards with seeds 1 and 2."""
+CHOICE = {"comparator": "E5:taylor", "futility_stop": False}
+
+
+@pytest.fixture(autouse=True)
+def _seed_plan_choice(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Seed 0's committed comparator choice (scripts/choose_comparator.py), E7 not stopped."""
+    monkeypatch.setattr(cards_mod, "seed_plan_choice", lambda: dict(CHOICE))
 
 
 def _plans() -> list:
     plans = []
     for card in RUNNABLE_CARDS:
-        seeds = (0, 1, 2) if card in SPLIT else (None,)
+        seeds = (0, 1, 2) if card in THREE_SEEDS else (0,) if card in SPLIT else (None,)
         plans += [build_plan(card, s, **EXTRA) for s in seeds]
     return plans
 
@@ -70,6 +80,9 @@ def test_seeds_are_split_one_per_session() -> None:
     for card in ("RC-E0a", "RC-G2", "RC-R1"):
         with pytest.raises(CardError, match="no seed"):
             build_plan(card, 1)
+    for card in SPLIT - THREE_SEEDS - {"RC-E6"}:  # seed 0 only by the seed plan
+        with pytest.raises(CardError, match="not 1"):
+            build_plan(card, 1)
     with pytest.raises(CardError, match="rented GPU"):
         build_plan("RC-T1")
     with pytest.raises(CardError, match="no runnable commands"):
@@ -80,11 +93,10 @@ def test_each_run_reads_the_e2_of_its_own_seed_and_the_hand_offs_it_needs() -> N
     labels = {p.tag: [n.label for n in p.needs] for p in _plans()}
     assert labels["RC-E2_seed1"] == ["teacher cache"]
     assert labels["RC-E1_seed2"] == []
-    assert labels["RC-E3_seed2"] == ["E2 seed2 adapter"]
-    assert labels["RC-E4_seed1"] == ["teacher cache"]  # E4 starts from the pretrained student
+    assert labels["RC-E3_seed0"] == ["E2 seed0 adapter"]
+    assert labels["RC-E4_seed0"] == ["teacher cache"]  # E4 starts from the pretrained student
     assert labels["RC-B0"] == ["E2 seed0 adapter"]
-    # seeds 1 and 2 run B2 only; B1 and B3 are seed 0's trend (2026-11-06)
-    assert labels["RC-E8_seed1"] == ["E2 seed1 adapter", "E7 B2 seed1 pruned"]
+    # seeds 1 and 2: E7 and the comparator at B2 only (seed plan, 2026-11-08)
     assert labels["RC-E8_seed0"] == [
         "E2 seed0 adapter", "E7 B1 seed0 pruned", "E7 B2 seed0 pruned", "E7 B3 seed0 pruned",
     ]  # fmt: skip
@@ -100,6 +112,10 @@ def test_each_run_reads_the_e2_of_its_own_seed_and_the_hand_offs_it_needs() -> N
     assert names["E0_teacher_cache"] == "teacher_cache"
     assert names["E2_seed2_adapter"] == "adapter" and names["E1_seed0_adapter"] == "adapter"
     assert names["E7_seed1_pruned"] == "pruned" and names["E8_seed0_outcomes"] == "outcomes"
+    seed1 = build_plan("RC-E5", 1)
+    assert [s.label for s in seed1.steps if s.label.startswith("run")] == ["run E5 taylor B2 seed1"]
+    assert {s.label.split()[-2] for s in build_plan("RC-E7", 2).steps
+            if s.label.startswith("run")} == {"B2"}  # fmt: skip
     a4 = build_plan("RC-A4", 0)
     assert [
         s.argv for s in a4.steps if "--variant" in s.argv and "run_experiment" in s.argv[0]

@@ -11,14 +11,14 @@ experiment:
   variant_of: null
   requires: [E0]
   budgets: []
-  seeds: [0, 1, 2]
+  seeds: [0]                              # seed 0 only: exploratory (seed plan, 2026-11-08)
   variants: []
   scripts:
     - scripts/02_train_student.py
     - scripts/06_evaluate.py
     - scripts/07_benchmark_efficiency.py
   outputs:
-    - results/E4/nobudget/seed{0,1,2}/metrics.csv
+    - results/E4/nobudget/seed0/metrics.csv
     - checkpoints/E4/ (never committed)
   status: planned
 

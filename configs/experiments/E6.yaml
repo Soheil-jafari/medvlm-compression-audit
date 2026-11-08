@@ -11,7 +11,7 @@ experiment:
   variant_of: null
   requires: [E0]
   budgets: [B1, B2, B3]
-  seeds: [0, 1, 2]
+  seeds: [0, 1, 2]                        # seeds 1, 2: only if E6 is the comparator (2026-11-08)
   variants: []
   scripts:
     - scripts/04_score_pruning_units.py

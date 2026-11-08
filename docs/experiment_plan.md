@@ -11,12 +11,12 @@ The registry (`src/medcompress/registry.py`) is the source of truth;
 | E0 | Teacher, full precision | pretrained | - | - | 1 | 00, 01, 06, 07 | teacher cache, metrics |
 | E1 | Student fine-tuned on correct answers only | pretrained | - | - | 3 | 02 (sft), 06, 07 | adapters, metrics |
 | E2 | Student + offline distillation | pretrained | E0 cache | - | 3 | 02 (offline_kd), 06, 07 | adapters, metrics, **budget reference** |
-| E3 | E2 + PTQ: `w8`, `w4` (GPTQ/AWQ), `w8a8` where supported | E2 | - | measured | 3 (per E2 seed) | 03, 06, 07 | quantized models, metrics |
-| E4 | Quantization-aware distillation (GRACE-style) | pretrained | E0 cache | measured | 3 | 02 (qakd), 06, 07 | adapters, metrics |
-| E5 | Generic structured pruning: `magnitude`, `activation`, `taylor` + recovery | E2 | E0 cache | B1-B3 | 3 | 04, 05, 06, 07 | unit scores, metrics |
-| E6 | Output-similarity layer pruning (Khan et al. style) + recovery | E2 | E0 cache | B1-B3 | 3 | 04, 05, 06, 07 | unit scores, metrics |
-| E7 | **Clinical pruning criterion (ours)** + recovery | E2 | E0 cache | B1-B3 | 3 | 04, 05, 06, 07 | unit scores, metrics, mask audit |
-| E8 | E7 + 4-bit PTQ | E7 | - | B1-B3 | 3 (per E7 seed) | 03, 06, 07 | metrics |
+| E3 | E2 + PTQ: `w8`, `w4` (GPTQ/AWQ), `w8a8` where supported | E2 | - | measured | 1 (seed 0; [team]: `w4` seeds 1, 2 only if 4-bit enters a headline claim) | 03, 06, 07 | quantized models, metrics |
+| E4 | Quantization-aware distillation (GRACE-style) | pretrained | E0 cache | measured | 1 (seed 0) | 02 (qakd), 06, 07 | adapters, metrics |
+| E5 | Generic structured pruning: `magnitude`, `activation`, `taylor` + recovery | E2 | E0 cache | B1-B3 | 1 (seed 0); 3 for the comparator at B2 | 04, 05, 06, 07 | unit scores, metrics |
+| E6 | Output-similarity layer pruning (Khan et al. style) + recovery | E2 | E0 cache | B1-B3 | 1 (seed 0); 3 if it is the comparator (B2) | 04, 05, 06, 07 | unit scores, metrics |
+| E7 | **Clinical pruning criterion (ours)** + recovery | E2 | E0 cache | B1-B3 | 3 at B2; 1 (seed 0) at B1, B3 | 04, 05, 06, 07 | unit scores, metrics, mask audit |
+| E8 | E7 + 4-bit PTQ | E7 | - | B1-B3 | 1 (seed 0) | 03, 06, 07 | metrics |
 | E9 | Teacher at 4-bit (supplementary, matched memory) | E0 | - | measured | 1 | 03, 06, 07 | metrics |
 
 Scripts: `00_check_teacher_image_reliance`, `01_cache_teacher_outputs`,
@@ -73,18 +73,25 @@ compression run. E5-E8 run at every budget; ablations at B2.
 ## Primary endpoints (pre-registered)
 
 Small-finding recall and lesion-mask effect at **B2**, comparing **E7** against the
-**best of E5 and E6**, chosen by a pre-registered rule on the validation split (draft proposal:
-the generic arm with the highest validation small-finding recall at B2; see
-`docs/preregistration.md` section 5).
+**best of E5 and E6**, chosen by a pre-registered rule on the validation split, seed 0 (the
+ordering of `docs/preregistration.md` section 5: the operating-point small-polyp recall, then
+the recall over all mask-positive polyps, then the small polyps' mean margin above the arm's
+own threshold, then the name; `scripts/choose_comparator.py`).
+
+Seeds (pre-registration section 11 item 12, amendment of 2026-11-08): the **main-claim tier**
+(E2, E7 at B2, the comparator at B2) has 3 seeds; every other arm has seed 0 only and is
+exploratory; no arm has 2 seeds. Seeds 1 and 2 of the main tier run only if E7 at B2 does not
+rank below the comparator on validation, seed 0 (the futility rule).
 
 ## Run count (for compute planning)
 
 | Block | Runs |
 |---|---|
-| Student training (E1, E2, E4) | 3 x 3 = 9 |
-| PTQ (E3: 3 variants x 3 seeds; E8: 3 budgets x 3 seeds; E9: 1) | 9 + 9 + 1 = 19 |
-| Pruning + recovery (E5: 3 x 3 x 3; E6, E7: 3 x 3 each) | 27 + 9 + 9 = 45 |
-| Ablations (A1-A3: 3 each; A4: 12; A5: 6; A6: 6; 6 fewer if `A4:n128` and `A5:logprob_drop` reuse E7) | 33 (27) |
+| Student training (E1: 3, done; E2: 3; E4: seed 0) | 3 + 3 + 1 = 7 |
+| PTQ (E3: 3 variants x seed 0; E8: 3 budgets x seed 0; E9: 1) | 3 + 3 + 1 = 7 |
+| Pruning + recovery, seed 0 (E5: 3 criteria x 3 budgets; E6, E7: 3 budgets each) | 9 + 3 + 3 = 15 |
+| Pruning + recovery, seeds 1 and 2 of the main tier (E7 and the comparator at B2; not run after a futility stop) | 2 + 2 = 4 |
+| Ablations, seed 0 (A1-A3: 1 each; A4: 4; A5: 2; A6: 2; 2 fewer if `A4:n128` and `A5:logprob_drop` reuse E7) | 11 (9) |
 | Training-length check (E2 and E7 at B2 with 30,000 examples, seed 0; pre-registration section 6) | 2 |
 
 Every run is followed by evaluation (06) and benchmarking (07).

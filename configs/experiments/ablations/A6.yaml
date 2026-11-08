@@ -8,9 +8,10 @@ experiment:
   kind: ablation
   variant_of: E7
   budgets: [B2]
+  seeds: [0]                              # seed 0 only: exploratory (seed plan, 2026-11-08)
   variants: [layers_only, heads_channels]
   outputs:
-    - results/A6/<variant>/B2/seed{0,1,2}/metrics.csv
+    - results/A6/<variant>/B2/seed0/metrics.csv
 
 pruning:
   units:

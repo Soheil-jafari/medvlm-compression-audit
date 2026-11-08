@@ -233,7 +233,7 @@ def summarise_over_seeds(rows: pd.DataFrame) -> pd.DataFrame:
     keys = list(SUMMARY_KEYS)
     columns = [*keys, "n_seeds", "mean", "sd", "min", "max"]
     if rows.empty:
-        return pd.DataFrame(columns=[*columns, "ci_low", "ci_high"])
+        return pd.DataFrame(columns=[*columns, "ci_low", "ci_high", "tier"])
     rows = rows.assign(split=rows["split"].fillna("") if "split" in rows else "")
     grouped = rows.groupby(keys, sort=True)
     summary = grouped["value"].agg(
@@ -244,7 +244,32 @@ def summarise_over_seeds(rows: pd.DataFrame) -> pd.DataFrame:
     summary = summary.merge(single, on=keys)
     multi = summary["n_seeds"] > 1
     summary.loc[multi, ["ci_low", "ci_high"]] = math.nan
+    summary["tier"] = [
+        seed_tier(e, n) for e, n in zip(summary["experiment"], summary["n_seeds"], strict=True)
+    ]
     return summary
+
+
+H4_COMPARISON = "accuracy_vs_clinical"
+SEED0_SUFFIX = "_seed0"
+
+
+def seed_tier(experiment: str, n_seeds: int) -> str:
+    """The label of a summary row by the seed plan of 2026-11-08: a comparison is
+    ``confirmatory`` (3-seed sides), ``exploratory`` (``*_seed0`` rows and H4) or
+    ``descriptive`` (the flips against E0); a run row of a registry arm says how many seeds it
+    has (``3 seeds``, ``1 seed``: outside the main tier a single seed is exploratory, inside it
+    the run is still incomplete); other rows are blank."""
+    if "_vs_" in experiment:
+        if experiment.endswith("_vs_E0"):
+            return "descriptive"  # the flip analysis (secondary)
+        if experiment.endswith(SEED0_SUFFIX) or experiment == H4_COMPARISON:
+            return "exploratory"
+        return "confirmatory"
+    base, _ = split_experiment(experiment)
+    if base not in REGISTRY:
+        return ""  # data summaries, selection rounds, smoke tests: no seeds to speak of
+    return "1 seed" if int(n_seeds) == 1 else f"{int(n_seeds)} seeds"
 
 
 def write_summary(rows: pd.DataFrame, out_dir: Path) -> list[Path]:

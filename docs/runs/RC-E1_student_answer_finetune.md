@@ -8,8 +8,8 @@
   then score it on the validation split with the full evaluation suite, so that E2 (the same
   recipe plus distillation) has its control.
 - Status: `done` (2026-11-06): seeds 0, 1 and 2 trained and scored on validation; rule 3
-  passes. Open: seed 0's adapter check (section 3b) and the operating-point rows of all three
-  (section 3c), before E2.
+  passes. Section 3c: seed 0 rescored (2026-11-08); seeds 1 and 2 still open (seed 1's notebook
+  output is Farzan's, seed 2's is Amir's). Open too: seed 0's adapter check (section 3b).
 
 ## 2. Requirements
 
@@ -226,3 +226,21 @@ accept: it was removed from the file and is recorded here.
   conservative ("yes" rates: polyp 0.13-0.22, UC 0-0.04, oesophagitis 0-0.01) while their
   scores rank polyp and oesophagitis well, which led to the operating point (pre-registration
   section 11 item 10).
+
+Section 3c (the operating-point rows, CPU):
+
+| | seed 0 | seed 1 | seed 2 |
+|---|---|---|---|
+| Run by / date / commit | Soheil, Kaggle CPU notebook, 2026-11-08, commit b5f6197 | open (Farzan's notebook output) | open (Amir's notebook output) |
+| Environment | torch 2.11.0+cpu, transformers 5.20.2 (CPU only; the GPU runs used torch 2.11.0+cu130, transformers 5.19.0) | | |
+| Check against the committed rows | 7 rows (681 probes, the three sensitivities and specificities) identical to the saved outcomes; `tests/test_results.py` 6 passed | | |
+| Rows written | 31 (the 12 AUROC / "yes" rate / class-count rows, already committed and unchanged, and 19 new `op_*` rows) | | |
+| `op_threshold:polyp` / `ulcerative_colitis` / `oesophagitis` | -9.241 / -0.083 / -1.705 | | |
+| `op_macro_balanced_accuracy` | 0.758 (0.728-0.787) | | |
+| `op_sensitivity:polyp` / `ulcerative_colitis` / `oesophagitis` | 0.990 / 0.082 / 0.622 | | |
+| `op_specificity` (all findings) | 0.951-0.953 | | |
+| `op_small_finding_recall` | 1.00 (13 of 13; interval 1.00-1.00, degenerate) | | |
+
+The operating point is fitted on these same validation probes, so these numbers are in-sample
+(optimistic); the test split reads the thresholds unchanged. `metrics.csv` committed as
+uploaded (rows in the rescoring's order).

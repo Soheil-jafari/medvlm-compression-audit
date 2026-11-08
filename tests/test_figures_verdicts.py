@@ -119,14 +119,20 @@ def test_h3_rule(small: tuple, mask: tuple, p_small: float, p_mask: float, expec
 
 
 def test_h1_h2_h4_rules() -> None:
+    from medcompress.evaluation.verdicts import EXPLORATORY
+
     rows = [
-        _row("E3:w4_vs_E2", "", "diff:drop_gap", 0.1, 0.05, 0.15),
+        _row("E7_vs_E2", "B2", "diff:drop_gap", 0.1, 0.05, 0.15),
         _row("E5:taylor_vs_E2", "B2", "diff:drop_gap", 0.2, 0.1, 0.3),
+        _row("E3:w4_vs_E2_seed0", "", "diff:drop_gap", -0.2, -0.3, -0.1),  # not read by H1
         _row("best_pruning_vs_E3:w8", "", "diff:small_finding_recall", -0.1, -0.15, -0.05),
         _row("accuracy_vs_clinical", "", "tau:small_finding_recall", 0.4, 0.1, 0.7),
     ]
     h1, h2, _, h4 = all_verdicts(pd.DataFrame(rows))
-    assert (h1.verdict, h2.verdict, h4.verdict) == (SUPPORTED, SUPPORTED, SUPPORTED)
+    assert (h1.verdict, h2.verdict) == (SUPPORTED, SUPPORTED)
+    assert h4.verdict == EXPLORATORY and h4.evidence  # H4 is exploratory since 2026-11-08
+    seed0 = [_row("best_pruning_vs_E3:w8_seed0", "", "diff:small_finding_recall", -0.1, -0.2, 0)]
+    assert all_verdicts(pd.DataFrame(seed0))[1].verdict == EXPLORATORY
 
 
 def _written_metric_names() -> set[str]:

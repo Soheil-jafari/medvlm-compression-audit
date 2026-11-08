@@ -38,7 +38,7 @@ inputs:
                                           # (Soheil) from RC-S0b run 2 by the D05 rule (results/smoke/RC-S0b/)
 
 seeds:
-  training: [0, 1, 2]                     # 3 seeds for every training arm
+  training: [0, 1, 2]                     # the main-claim tier (E2, E7 and the comparator at B2); other arms seed 0 (seed plan, 2026-11-08)
   data_split: 20261012                    # the seed RC-D1 uses for the val/test halves; it also
                                           # fixes the training pool (offline_kd.training_pool)
   deterministic: false

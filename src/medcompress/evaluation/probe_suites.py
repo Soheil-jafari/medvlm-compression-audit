@@ -450,4 +450,39 @@ def operating_point_metrics(
                 for m in small
                 if m.name.startswith(wanted)
             ]
+            metrics += tie_break_metrics(at, thresholds, size_thresholds, mask_findings)
     return metrics
+
+
+OP_MASK_RECALL = "op_mask_positive_recall"
+OP_SMALL_MARGIN = "op_small_margin_mean"
+"""The tie-breaks of the comparator choice (pre-registration section 11, amendment of
+2026-11-08, item 4 (ii) and (iii)), from the saved margins and the model's own thresholds."""
+
+
+def tie_break_metrics(
+    at: ProbeOutcomes,
+    thresholds: Mapping[str, float],
+    size_thresholds: Sequence[float],
+    mask_findings: Sequence[str],
+) -> list[Metric]:
+    """``op_mask_positive_recall``: the recall at the operating point over every positive,
+    mask-annotated probe of the mask findings (all size strata; 86 on validation);
+    ``op_small_margin_mean``: the mean over the small ones (stratum 0) of the probe margin
+    minus the model's own ``op_threshold`` of that probe's finding (polyp).
+
+    ``at`` holds the answers at the operating point. Rows without a fitted threshold are left
+    out of the margin mean (NaN if none is left).
+    """
+    keep, strata = small_positive_strata(at, size_thresholds, mask_findings)
+    if not keep.any():
+        return []
+    rows = np.flatnonzero(keep)
+    small = rows[strata == 0]
+    limits = np.array([thresholds.get(at.findings[i], math.nan) for i in small], dtype=float)
+    gaps = at.margin[small] - limits
+    gaps = gaps[np.isfinite(gaps)]
+    return [
+        Metric(OP_MASK_RECALL, float(at.yes[rows].mean())),
+        Metric(OP_SMALL_MARGIN, float(gaps.mean()) if gaps.size else math.nan),
+    ]

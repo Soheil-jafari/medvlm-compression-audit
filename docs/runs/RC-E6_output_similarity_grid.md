@@ -1,7 +1,8 @@
-# Run card RC-E6: output-similarity layer pruning (E6), B2 x 3 seeds, B1 and B3 seed 0 (trend)
+# Run card RC-E6: output-similarity layer pruning (E6), B1-B3, seed 0; seeds 1, 2 at B2 if it is the comparator
 
 ## 1. What and why
 
+- **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** every run is seed 0 (exploratory), except if E6 is the **comparator** (validation, seed 0, B2; pre-registration section 5, `scripts/choose_comparator.py`): then E6 at B2 also runs seeds 1 and 2 (main tier), only if the futility rule does not stop the study. The plan refuses a seed 1 or 2 session otherwise. This replaces the seed counts written below.
 - Stage: S09
 - Experiments: E6 (layers only, scored once and removed in one shot; D07 deviation), budget B2 with seeds 0, 1, 2, and B1 and B3 with seed 0 only (the trend, pre-registration section 11 item 11; decided 2026-11-06). The cell of a seed 1 or 2 session runs B2 only
 - Runs: 9. Each run is scored on the **validation** split and on the **test** split
@@ -35,7 +36,7 @@ members freely.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** card owner Amir; seeds: seed 0 Amir (after RC-G2), seed 1 Farzan, seed 2 Amir.
+- **Who:** card owner Amir; seed 0 Amir (after RC-G2; the B2 run is RC-G2's, Soheil); seeds 1 and 2 only if E6 is the comparator: seed 1 **[team]** (no owner yet), seed 2 Amir.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter; teacher cache.
   Seed 0 also attaches the pruned models of RC-G2 (`G2_B2_seed0_pruned`): its B2 runs are then not run again, only their test evaluation.

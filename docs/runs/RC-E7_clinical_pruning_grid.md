@@ -1,7 +1,8 @@
-# Run card RC-E7: clinical pruning criterion (E7), B2 x 3 seeds, B1 and B3 seed 0 (trend)
+# Run card RC-E7: clinical pruning criterion (E7), B2 x 3 seeds (main tier), B1 and B3 seed 0
 
 ## 1. What and why
 
+- **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** E7 at B2 is in the main-claim tier: seeds 0, 1 and 2. B1 and B3: seed 0 only (exploratory). Seeds 1 and 2 run only after seed 0's futility check (`scripts/choose_comparator.py`, after RC-G2): if E7 at B2 ranks below the comparator on validation, seed 0, the study stops and seed 0 is reported as exploratory. The plan refuses a seed 1 or 2 session before `results/seed_plan/comparator_B2.json` is committed, or when it says stop.
 - Stage: S09
 - Experiments: E7 (ours), budget B2 with seeds 0, 1, 2, and B1 and B3 with seed 0 only (the trend, pre-registration section 11 item 11; decided 2026-11-06). The cell of a seed 1 or 2 session runs B2 only; the evaluation includes the mask audit
 - Runs: 9. Each run is scored on the **validation** split and on the **test** split
@@ -37,7 +38,7 @@ Keep the E7 pruned models: RC-E8 quantizes them.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** card owner Amir; seeds: seed 0 Amir (after RC-G2), seed 1 Farzan, seed 2 Amir.
+- **Who:** card owner Amir; seed 0 Amir (after RC-G2; the B2 run is RC-G2's, Soheil); seed 1 **[team]** (no owner yet), seed 2 Amir, both after the futility check.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter; teacher cache.
   Seed 0 also attaches the pruned models of RC-G2 (`G2_B2_seed0_pruned`): its B2 runs are then not run again, only their test evaluation.

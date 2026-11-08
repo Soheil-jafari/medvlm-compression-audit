@@ -1168,3 +1168,18 @@ Append-only, newest at the bottom. One entry per iteration:
 - Hours recomputed with E2's 27.2 s per update (schedule sections 1, 2, 4 and 7; RC-E1 note,
   RC-E2, RC-E4, RC-L1, the card index). The design is unchanged.
 
+## Iteration 67: 2026-11-08 (interactive)
+- Stage / item: S06 (RC-E1 section 3c) and S07 (the seed plan, a pre-freeze amendment).
+- Job A: `results/E1/nobudget/seed0/metrics.csv` committed as uploaded (31 rows written by the
+  rescoring: 12 already committed and unchanged, 19 new `op_*`); RC-E1 section 6 for 3c (torch
+  2.11.0+cpu, transformers 5.20.2, commit b5f6197); `docs/results/E2.md`: E2 seed 0 minus E1
+  seed 0 at the operating point (validation, in-sample).
+- Job B: the seed plan of Soheil and Amir (pre-registration section 11 item 12) in the
+  pre-registration (sections 5, 6, the ablation row, item 12), README, the experiment plan,
+  the schedule (section 7 recomputed: about 236-243 h; Farzan's assignments removed), the run
+  cards, the configs and the code (`seed_plan.py`, `choose_comparator.py`, `compare_stage`,
+  `verdicts`, `cards`, `aggregate`, `report`, `probe_suites`). Tests: `tests/test_seed_plan.py`,
+  `tests/test_compare_stage.py` and others updated.
+- Found while implementing: H2 is exploratory as written (E3 `w8` seed 0 only); E2 seeds 1 and
+  2 now wait for the futility check (they are main-tier seeds). Both are with the team.
+

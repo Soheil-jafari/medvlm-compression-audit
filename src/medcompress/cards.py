@@ -213,11 +213,34 @@ def _pick(values: Sequence[str], wanted: Sequence[str] | None) -> tuple[str, ...
     return tuple(v for v in values if v in wanted)
 
 
-def _seed_budgets(seed: int, budgets: Sequence[str]) -> list[str]:
-    """B2 for every seed; B1 and B3 for seed 0 only, the trend (decided 2026-11-06)."""
-    from medcompress.registry import TREND_BUDGETS, TREND_SEEDS
+EXPLORATORY_ONLY: tuple[int, ...] = (0,)
+"""Seed 0 only: every arm outside the main-claim tier (seed plan of 2026-11-08)."""
 
-    return [b for b in budgets if b not in TREND_BUDGETS or seed in TREND_SEEDS]
+
+def seed_plan_choice() -> dict | None:
+    """The committed comparator choice and futility decision (``scripts/choose_comparator.py``),
+    or None before it exists. A function, so tests can replace it."""
+    from medcompress.config import repo_root
+    from medcompress.seed_plan import load_choice
+
+    return load_choice(repo_root() / "results")
+
+
+def _main_tier_go(card: str, seed: int) -> dict | None:
+    """Seed 0 always runs; seeds 1 and 2 of the main tier only after seed 0's comparator choice
+    and only if the futility rule does not stop (pre-registration section 11, 2026-11-08)."""
+    if seed == 0:
+        return None
+    choice = seed_plan_choice()
+    if choice is None or "futility_stop" not in choice:
+        raise CardError(f"{card} seed {seed}: seeds 1 and 2 of the main tier wait for seed 0's "
+                        "comparator choice and futility check (scripts/choose_comparator.py, "
+                        "committed results/seed_plan/comparator_B2.json)")  # fmt: skip
+    if choice["futility_stop"]:
+        raise CardError(f"{card} seed {seed}: the futility rule stopped the study after seed 0 "
+                        f"(E7 ranks below the comparator {choice['comparator']}); seeds 1 and 2 "
+                        "do not run")  # fmt: skip
+    return choice
 
 
 def _seed(card: str, seed: int | None, allowed: Sequence[int]) -> int:
@@ -401,6 +424,8 @@ def build_plan(
     if card in ("RC-E1", "RC-E2"):
         exp = card[-2:]
         run = Run(exp, _seed(card, seed, SEEDS))
+        if exp == "E2":
+            _main_tier_go(card, run.seed)
         return CardPlan(
             card, f"{exp} training, seed {run.seed}", 1, tuple(_training(run)),
             handoffs=(Handoff("adapter", (run,), f"{exp}_seed{run.seed}_adapter"),),
@@ -423,7 +448,7 @@ def build_plan(
             needs=(Need("adapter", Run("E2")),), internet=True,
         )  # fmt: skip
     if card == "RC-E3":
-        s = _seed(card, seed, SEEDS)
+        s = _seed(card, seed, EXPLORATORY_ONLY)
         runs = [Run("E3", s, variant=v) for v in _pick(E3_VARIANTS, variants)]
         steps = [step for run in runs for step in (_experiment(run), *_test_evals(run))]
         return CardPlan(
@@ -433,7 +458,7 @@ def build_plan(
             needs=(Need("adapter", Run("E2", s)),), seed=s, quantization=True, internet=True,
         )  # fmt: skip
     if card == "RC-E4":
-        run = Run("E4", _seed(card, seed, SEEDS))
+        run = Run("E4", _seed(card, seed, EXPLORATORY_ONLY))
         return CardPlan(
             card, f"E4 quantization-aware distillation, seed {run.seed}", 1,
             (_experiment(run), *_test_evals(run)),
@@ -462,7 +487,17 @@ def build_plan(
         s = _seed(card, seed, SEEDS)
         exp = card[-2:]
         criteria = _pick(E5_CRITERIA, variants) if exp == "E5" else (None,)
-        runs = [Run(exp, s, b, v) for v in criteria for b in _seed_budgets(s, picked_budgets)]
+        run_budgets = picked_budgets
+        choice = _main_tier_go(card, s)
+        if choice is not None:  # seeds 1 and 2: B2 only, and only E7 and the comparator
+            run_budgets = ("B2",)
+            if exp != "E7":
+                label, _, variant = str(choice["comparator"]).partition(":")
+                if label != exp:
+                    raise CardError(f"{card} seed {s}: the comparator is {choice['comparator']}; "
+                                    f"{exp} has no seed {s} run (seed 0 only)")  # fmt: skip
+                criteria = (variant or None,)
+        runs = [Run(exp, s, b, v) for v in criteria for b in run_budgets]
         kept = runs if exp == "E7" else [r for r in runs if r.budget == "B2"]  # E8 / RC-T1
         handoffs = [Handoff("outcomes", tuple(runs), f"{exp}_seed{s}_outcomes")]
         if kept:
@@ -475,8 +510,8 @@ def build_plan(
             seed=s, internet=True,
         )  # fmt: skip
     if card == "RC-E8":
-        s = _seed(card, seed, SEEDS)
-        runs = [Run("E8", s, b) for b in _seed_budgets(s, picked_budgets)]
+        s = _seed(card, seed, EXPLORATORY_ONLY)
+        runs = [Run("E8", s, b) for b in picked_budgets]
         steps = [step for run in runs for step in (_experiment(run), *_test_evals(run))]
         b2 = tuple(r for r in runs if r.budget == "B2")  # RC-T1 times B2
         return CardPlan(
@@ -489,7 +524,7 @@ def build_plan(
             internet=True,
         )  # fmt: skip
     if card in {f"RC-A{n}" for n in range(1, 7)}:
-        s = _seed(card, seed, SEEDS)
+        s = _seed(card, seed, EXPLORATORY_ONLY)
         exp = card[3:]
         choices = ABLATION_VARIANTS[exp]
         if variants:
@@ -501,7 +536,9 @@ def build_plan(
         )  # fmt: skip
     if card == "RC-R1":
         _no_seed(card, seed)
-        runs = [Run("E0")] + [Run(e, s) for e in ("E1", "E2") for s in SEEDS]
+        choice = seed_plan_choice()  # E2 seeds 1 and 2 exist only if the futility rule let them
+        e2_seeds = SEEDS if choice is not None and choice.get("futility_stop") is False else (0,)
+        runs = [Run("E0")] + [Run("E1", s) for s in SEEDS] + [Run("E2", s) for s in e2_seeds]
         e2 = tuple(r for r in runs if r.exp == "E2")  # RC-C1 compares E2 with every arm
         return CardPlan(
             card, "E0, E1, E2 on the test split", 2,
@@ -509,7 +546,7 @@ def build_plan(
             handoffs=(Handoff("outcomes", e2, "E2_test_outcomes"),
                       Handoff("outcomes", (Run("E0"),), "E0_test_outcomes")),  # flips vs E0
             needs=(Need("teacher_adapter"),)
-            + tuple(Need("adapter", Run(e, s)) for e in ("E1", "E2") for s in SEEDS),
+            + tuple(Need("adapter", r) for r in runs if r.exp in ("E1", "E2")),
             internet=True,
         )  # fmt: skip
     if card == "RC-C1":

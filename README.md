@@ -33,7 +33,7 @@ by capped inverse prevalence and clinical importance.
 | Shared recovery for all pruning arms (LoRA + offline KD) | Decided | `configs/recovery.yaml` |
 | Evaluation axes and statistics plan | Decided | `docs/experiment_plan.md`, `docs/preregistration.md` |
 | Primary endpoints: small-finding recall and lesion-mask effect at B2, E7 vs best of E5/E6 | Decided | `docs/preregistration.md` |
-| 3 seeds per training arm | Decided | `configs/base.yaml` |
+| Seed plan: 3 seeds for the main-claim tier (E2, E7 and the comparator at B2), seed 0 for every other arm; futility-only stopping rule (amendment of 2026-11-08, Soheil and Amir) | Decided | `docs/preregistration.md` section 11 item 12, `src/medcompress/seed_plan.py` |
 | Medical domain (lead: GI endoscopy; alternative: retinal fundus) | **Open** | `configs/domain/` |
 | Teacher and student (must share a tokenizer) | **Open** | `configs/models/` |
 | Datasets | **Open** | `configs/data/` |
@@ -76,22 +76,46 @@ tests/                   import, config, registry, script and utility tests
 | E0 | Teacher, full precision | pretrained | - | 1 |
 | E1 | Student fine-tuned on correct answers only, full precision | pretrained | - | 3 |
 | E2 | Student + offline distillation, full precision (start of all compression arms) | pretrained (+E0 cache) | - | 3 |
-| E3 | E2 + post-training quantization (W8 / W4 via GPTQ/AWQ; W8A8 where supported) | E2 | measured | 3 |
-| E4 | Student trained with quantization-aware distillation (GRACE-style) | pretrained (+E0 cache) | measured | 3 |
-| E5 | E2 + generic structured pruning (magnitude, activation/Wanda-style, Taylor) + recovery | E2 | B1-B3 | 3 |
-| E6 | E2 + output-similarity layer pruning (Khan et al. style) + recovery | E2 | B1-B3 | 3 |
-| E7 | E2 + clinical pruning criterion (ours) + recovery | E2 | B1-B3 | 3 |
-| E8 | E7 + 4-bit post-training quantization | E7 | B1-B3 | 3 |
+| E3 | E2 + post-training quantization (W8 / W4 via GPTQ/AWQ; W8A8 where supported) | E2 | measured | 1 (seed 0) |
+| E4 | Student trained with quantization-aware distillation (GRACE-style) | pretrained (+E0 cache) | measured | 1 (seed 0) |
+| E5 | E2 + generic structured pruning (magnitude, activation/Wanda-style, Taylor) + recovery | E2 | B1-B3 | 1; 3 for the comparator at B2 |
+| E6 | E2 + output-similarity layer pruning (Khan et al. style) + recovery | E2 | B1-B3 | 1; 3 if it is the comparator (B2) |
+| E7 | E2 + clinical pruning criterion (ours) + recovery | E2 | B1-B3 | 3 at B2; 1 at B1, B3 |
+| E8 | E7 + 4-bit post-training quantization | E7 | B1-B3 | 1 (seed 0) |
 | E9 | Teacher quantized to 4-bit (supplementary, matched memory) | E0 | measured | 1 |
-| A1 | Unweighted criterion (w_c = 1) | E2 | B2 | 3 |
-| A2 | Rarity-only weights | E2 | B2 | 3 |
-| A3 | Random removal | E2 | B2 | 3 |
-| A4 | Calibration set size 32 / 64 / 128 / 256 | E2 | B2 | 3 |
-| A5 | Delta = correct-answer drop vs prediction change (KL) | E2 | B2 | 3 |
-| A6 | Layers only vs heads + channel groups | E2 | B2 | 3 |
+| A1 | Unweighted criterion (w_c = 1) | E2 | B2 | 1 (seed 0) |
+| A2 | Rarity-only weights | E2 | B2 | 1 (seed 0) |
+| A3 | Random removal | E2 | B2 | 1 (seed 0) |
+| A4 | Calibration set size 32 / 64 / 128 / 256 | E2 | B2 | 1 (seed 0) |
+| A5 | Delta = correct-answer drop vs prediction change (KL) | E2 | B2 | 1 (seed 0) |
+| A6 | Layers only vs heads + channel groups | E2 | B2 | 1 (seed 0) |
 
 "measured" = not budget-matched; the footprint is measured and placed relative to B1-B3.
 Run `python scripts/run_experiment.py --list` for the live registry.
+
+### Seeds (pre-registration section 11 item 12, 2026-11-08)
+
+- **Three seeds (0, 1, 2) only where the main claim is made:** E2, E7 at B2, and the comparator
+  at B2. H1-H3 (E7 against E2 and against the comparator, the primary endpoints) are
+  confirmatory on these runs only. E1 keeps the 3 seeds it already ran.
+- **Seed 0 only for everything else**, reported as exploratory: the other E5 / E6 arms, all E3
+  variants, E4, E8, E9, every arm at B1 and B3, the ablations and the training-length check.
+  H4 (the ranking of E3-E8) is exploratory too. A single-seed difference smaller than E7's
+  spread over its 3 seeds at B2 is reported as within run-to-run noise.
+- **Why:** on E1's 3 seeds the seed-to-seed spread of the small-polyp recall and of the AUROC
+  is about what the 13 validation polyps alone produce, so more seeds buy little; more small
+  polyps (the external test) buy more. **Never 2 seeds:** the majority answer of the McNemar
+  tests counts a 1-1 split as wrong.
+- **The comparator** is picked on validation, seed 0, at B2, among E5:magnitude,
+  E5:activation, E5:taylor and E6: highest `op_small_finding_recall`; ties by the recall over
+  all mask-positive polyps; then by the small polyps' mean margin above the arm's own polyp
+  threshold; then by name (`scripts/choose_comparator.py`). Only that arm runs seeds 1 and 2.
+- **Stopping rule (futility only):** after seed 0, seeds 1 and 2 of the main tier run unless
+  E7 at B2 ranks below the comparator by the same ordering. Then the study stops and reports
+  seed 0 as exploratory. Stopping only for futility does not raise the false-positive rate.
+- **GPU hours** (estimates, with E2's measured 27.2 s per distillation update): about 236-243 h
+  for the whole remaining plan, of which about 38 h are seeds 1 and 2 of the main tier
+  (`docs/schedule.md` section 7), against about 360 h or more with 3 seeds for every arm at B2.
 
 ## Quickstart
 
