@@ -44,7 +44,7 @@ Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unf
 | [RC-S2](RC-S2_round2_recipe.md) | S05b | Round 2, top 5 rebuilt with the full recipe | all three | not used (D05 amendment) |
 | [RC-S3](RC-S3_round3_e2_recipe.md) | S05b | Round 3, top 3 with the E2 recipe, 2 seeds | all three | not used (D05 amendment) |
 | [RC-E1](RC-E1_student_answer_finetune.md) | S06 | Student on ground-truth answers, 3 seeds | Farzan (card); seeds 0 Soheil, 1 Farzan, 2 Amir | done (2026-11-06: 3 seeds; rule 3 passes; seed 0 adapter check and the operating-point rows open) |
-| [RC-E2](RC-E2_student_offline_distillation.md) | S06 | Student with offline distillation, 3 seeds | Soheil (card); seeds 0 Soheil, 1 Farzan, 2 Amir | ready (2026-11-06; rule 3 passed; about 3 h per seed, an estimate) |
+| [RC-E2](RC-E2_student_offline_distillation.md) | S06 | Student with offline distillation, 3 seeds | Soheil (card); seeds 0 Soheil, 1 Farzan, 2 Amir | in progress (2026-11-08: seed 0 done; seeds 1 and 2 on the fix commit; about 5.2 h per seed with the validation, measured on seed 0) |
 | [RC-L1](RC-L1_training_length_check.md) | S06/S09 | Training-length check: E2 and E7 at B2 with 30,000 examples, seed 0 (pre-registration section 6) | Amir and Soheil (E2@30k Soheil, E7@30k Amir) | blocked (RC-E2, RC-E7 B2 seed 0, RC-B0, freeze; agent code first) |
 | [RC-B0](RC-B0_e2_reference_footprint.md) | S06 | E2 reference footprint and byte split for the budgets | Amir | blocked (RC-E2 seed 0) |
 | [RC-Q0](RC-Q0_quantization_smoke_test.md) | S08 | Quantization toolchain smoke test: kernel classes, GPTQ and LLM.int8 on the student, versions | Soheil | done 2026-10-15 |

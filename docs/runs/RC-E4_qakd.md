@@ -34,8 +34,9 @@ Platform: Kaggle notebook, one T4, Internet on. Dataset access: your own copy of
 and the private RC-D1 outputs; the teacher cache attached as a private dataset.
 
 Runtime per seed: **estimate** 1.5 to 3 times an E2 run of the same length (every step rounds
-the weights, and the layers are recomputed in the backward pass to save memory). RC-E2 reports
-the E2 time; this card then gets a number.
+the weights, and the layers are recomputed in the backward pass to save memory). E2 seed 0's
+training took 4.72 h (RC-E2 section 6, 27.2 s per update), so **about 7.1 to 14.1 h** of
+training per seed (an estimate), plus the validation pass (about 0.5 h).
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 

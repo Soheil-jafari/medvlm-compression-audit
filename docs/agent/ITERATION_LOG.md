@@ -1155,3 +1155,16 @@ Append-only, newest at the bottom. One entry per iteration:
 - Recovery (`compression/recovery.py` -> `train_offline_kd` -> `train_lora`) and QAKD (`train_lora`)
   go through the same step and need no further change.
 
+## Iteration 66: 2026-11-08 (interactive)
+- Stage / item: S06, RC-E2 seed 0's results.
+- Committed unchanged: `results/E2/nobudget/seed0/metrics.csv` and `environment.json` (the
+  upload `environment.txt` renamed, content the same).
+- RC-E2 section 6 filled (the commit hash stays TODO: it is read from the `e2-seed0-adapter`
+  manifest); section 6b: the skipped steps, with `scripts/skipped_steps.py` (CPU, writes
+  nothing; not run yet) and the loss scale derived from the GradScaler defaults (65,536 x
+  0.5^16 = 1.0, not measured).
+- `docs/results/E2.md`: E2 seed 0 against the E1 seeds, validation only; no E2-minus-E1 claim at
+  the operating point until E1's `op_*` rows exist.
+- Hours recomputed with E2's 27.2 s per update (schedule sections 1, 2, 4 and 7; RC-E1 note,
+  RC-E2, RC-E4, RC-L1, the card index). The design is unchanged.
+

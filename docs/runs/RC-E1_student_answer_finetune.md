@@ -33,6 +33,8 @@ projection), plus the validation pass, **about 0.5 h** (E0's measured pass took 
 student scores probes in 0.414 s instead of 0.584 s and generates about 1.9 times faster), plus
 the setup (install, the 7.5 GB student download, loading; not measured). So **about 3 h per
 seed** on T4 x2, which counts once against the quota; the student uses one T4.
+Measured (2026-11-06): 13.5-14.7 s per update, training 2.34-2.55 h, validation 0.47-0.53 h,
+so the estimate held for E1. E2 is slower (27.2 s per update, RC-E2 section 2).
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 

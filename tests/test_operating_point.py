@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -145,3 +146,19 @@ def test_the_inspector_reads_a_loss_history() -> None:
     spec.loader.exec_module(module)
     line = module.loss_history([0.9, None, 0.7, float("nan"), 0.5])
     assert "5 steps; 2 non-finite at steps [2, 4]" in line and "last 0.5000" in line
+
+
+def test_the_skipped_step_report_maps_a_step_to_its_examples(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = importlib.util.spec_from_file_location("skipped", REPO / "scripts" / "skipped_steps.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "skipped", module)  # its dataclass needs the module
+    spec.loader.exec_module(module)
+    order = list(range(100, 140))
+    assert module.step_indices(order, 1, 1, 16) == order[:16]
+    assert module.step_indices(order, 3, 1, 16) == order[32:] + order[:8]  # wraps like the loop
+    row = module.features(3, [(True, 12, 4), (False, 30, 9), (True, 5, 2)])
+    assert (row.differs, row.teacher_tokens_max, row.gt_words_max) == (2, 30, 9)
+    assert module.mid_rank(2, [1, 2, 2, 3]) == 0.5

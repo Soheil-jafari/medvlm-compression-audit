@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-11-06, iteration 64 (interactive run mode)
+**Last updated:** 2026-11-08, iteration 66 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S06: E1 done (3 seeds, rule 3 passes); seed 0's adapter check, the operating-point rows (E0 validation again, E1 from saved outcomes), then RC-E2 on three accounts; the freeze items
+**Current stage:** S06: E1 done (3 seeds, rule 3 passes); E2 seed 0 done (2026-11-08); E2 seeds 1 and 2 on the fix commit (after 8e0b3d7), seed 1's owner open; E1's operating-point rows (RC-E1 section 3c); E2 seed 0's skipped steps (RC-E2 section 6b, CPU); the freeze items
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -93,6 +93,14 @@
    2026-11-02: per-finding AUROC and "yes" rate added as a pre-registered secondary metric for
    every model (section 11 item 9); E0's come with its next evaluation (outcomes lost with the
    clone, 2026-11-04). Every cell now sets the path roots under /kaggle/working/.
+   2026-11-08 (iteration 66): **E2 seed 0 done** (`results/E2/nobudget/seed0/`, RC-E2 section
+   6, `docs/results/E2.md`): 27.2 s per update (4.72 h; 1.9 times E1), validation 0.53 h, peak
+   12.66 GB; 16 skipped updates, adapter finite; plain macro balanced accuracy 0.553, at the
+   operating point 0.836 (in-sample: fitted on validation). The hour estimates now use 27.2 s
+   (schedule, RC-E2, RC-E4, RC-L1). Next: E2 seeds 1 and 2 on the fix commit (seed 1's owner
+   open); the commit hash from the `e2-seed0-adapter` manifest into RC-E2 section 6; the
+   skipped-step report (RC-E2 section 6b, CPU); E1's `op_*` rows (RC-E1 section 3c), then the
+   E2-minus-E1 comparison at the operating point.
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
    draft and freeze guard done (iteration 40). Pruning grid cards RC-E5 to RC-E8 done
    (iteration 41); ablation cards RC-A1 to RC-A6 done, A3 ranking and score reuse fixed
@@ -134,7 +142,7 @@ cards for the team (decision of 2026-10-12).
 | S04 | Model wrappers and unit surgery | done (RC-M1 passed 2026-10-15) | - |
 | S05 | Teacher: Gate 1, cache | done (RC-TT1 2026-10-31; RC-E0a and RC-E0b 2026-11-01) | - |
 | S05b | Student checks (D05 amendment: one student) | RC-S0 done 2026-10-16: both pass G1; training size decided; student revision pinned; RC-S0b run 2 ready (image side) | RC-S0b, team GPU hours, G2; then the selection freeze |
-| S06 | Students E1, E2, budget reference | RC-E1 ready (seed 0 first), RC-E2 ready after it (rule 3) | team runs RC-E1, RC-E2, then RC-B0 |
+| S06 | Students E1, E2, budget reference | RC-E1 done (3 seeds; `op_*` rows open); RC-E2 seed 0 done 2026-11-08, seeds 1 and 2 to run (seed 1's owner open) | team runs RC-E2 seeds 1 and 2, then RC-B0 |
 | S07 | Pre-registration freeze | evaluation settings frozen 2026-10-31 (amendment, section 11); weights, budgets and the co-primary combination open | team answers, RC-B0 |
 | S08 | Quantization E3, E4, E9 | RC-Q0 done 2026-10-15 (TorchLinear, versions pinned); RC-E3, RC-E4, RC-E9 blocked | S07 freeze, E2, RC-D1 |
 | S09 | Pruning E5-E8, Gate 2 | code and run cards done (RC-G2, RC-E5 to RC-E8, all blocked) | D07 (scoring method, budgets), S07 freeze, E2 |

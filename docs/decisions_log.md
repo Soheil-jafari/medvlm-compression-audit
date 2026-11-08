@@ -483,6 +483,18 @@ must be logged here.
   the class counts per finding, next to sensitivity and specificity, so a method that only
   shifts the yes/no bias can be told from one that loses discrimination. E0's from its saved
   validation outcomes on CPU (`scripts/rescore_probes.py`, RC-E0a section 3b).
+- **2026-11-08 (Soheil): E2 seed 0 done; the hour estimates use E2's measured step; no design
+  change.** E2 seed 0 trained 625 updates in 16,975 s (27.2 s per update, 1.9 times E1's
+  mean) on a commit after 8e0b3d7 (the hash is read from the `e2-seed0-adapter` manifest),
+  peak 12,656,672,768 bytes; 16 of 625 updates skipped on a non-finite micro-batch loss, the
+  adapter finite. Validation: plain macro balanced accuracy 0.553, at the operating point 0.836
+  (thresholds fitted on these validation probes). The 13.6 s per update of RC-S0b held for E1
+  but not for E2's split step, so every estimate of a distillation step was recomputed with
+  27.2 s: E2 about 5.2 h per seed with the validation, a recovery 1.2 h (was 0.6), E4 7.1-14.1 h
+  (was 3.5-7.1), RC-L1 14.2 / 3.5 h (was 7.1 / 1.8), section 7 of the schedule 173-194 h in all
+  (was 148-159). Cards changed: RC-E1 (measured note), RC-E2, RC-E4, RC-L1, the card index;
+  the pruning, Gate 2 and ablation cards hold no hour number and are unchanged. Seeds 1 and 2
+  run on the fix commit; seed 1's owner is open.
 - **2026-11-07 (Soheil): E2 seed 0's out-of-memory fixed: an implementation change, not a design
   change.** E2 seed 0 ran out of memory on one T4 (14.56 GiB) in the KD step: when the
   teacher's cached answer differs from the ground truth, the step made two forward passes and
