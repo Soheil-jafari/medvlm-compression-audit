@@ -1,14 +1,14 @@
 # PRE-REGISTERED finding weights for the clinical pruning criterion (E7, E8, A2, A4-A6).
 # Values decided by Soheil and Amir on 2026-11-08 (the choices delegated to the research lead;
-# docs/preregistration.md section 3, decisions log). Set frozen_on / frozen_by / commit only at
-# the freeze; until then every compression run is refused.
-# After freezing, changes require a dated entry in docs/decisions_log.md.
+# docs/preregistration.md section 3, decisions log). FROZEN on 2026-11-08 (section 9): every
+# change from now on needs a dated amendment (docs/preregistration.md section 10) and an entry
+# in docs/decisions_log.md.
 # A1 (uniform weights) and A2 (rarity only) are the pre-registered check of this choice.
 preregistration:
   document: docs/preregistration.md
-  frozen_on: TODO
-  frozen_by: TODO
-  commit: TODO
+  frozen_on: "2026-11-08"
+  frozen_by: "Soheil and Amir (Amir's written approval received)"
+  commit: 18f1b47658eb188975dbbf3caa4b76e2e4d611fb   # the approved commit; the freeze entry follows it
   domain: endoscopy                       # D02
 
 weighting:

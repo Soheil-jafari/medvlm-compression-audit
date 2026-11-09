@@ -1,7 +1,7 @@
 # Pre-registration
 
-**Status: DRAFT, every decision taken** (agent, 2026-10-12; decisions of 2026-11-08 by Soheil
-and Amir, section 11 item 14). Not frozen. Nothing in it may be changed after the
+**Status: FROZEN on 2026-11-08** by Soheil and Amir (section 9), at commit `18f1b47` (drafted
+by the agent from 2026-10-12; last decisions on 2026-11-08, section 11 item 14). Nothing in it may be changed after the
 freeze without approval from both authors (Soheil and Amir) and a dated entry in
 `docs/decisions_log.md`.
 
@@ -17,7 +17,7 @@ How to read this draft:
   committed numbers, by the agent, before the team review;
 - **[team]** = a decision for the team; the draft gives a proposal and the reason.
 
-**Frozen on:** ____ &nbsp;&nbsp; **Commit:** ____ &nbsp;&nbsp; **Approved by:** ____
+**Frozen on:** 2026-11-08 &nbsp;&nbsp; **Commit:** `18f1b47658eb188975dbbf3caa4b76e2e4d611fb` &nbsp;&nbsp; **Approved by:** Soheil and Amir (Amir's written approval received)
 
 ## 1. Domain, models and data
 
@@ -297,10 +297,18 @@ forgets, which every compressed arm inherits.
    author); the agent writes the date, the commit hash and the approvers above and into
    `configs/preregistration/finding_weights.yaml` (`frozen_on`, `frozen_by`, `commit`), and
    logs the freeze in `docs/decisions_log.md`.
+4. **Done on 2026-11-08** at commit `18f1b47`, approved by Soheil and Amir (Amir's written
+   approval received). Accepted at the freeze, the three items the agent had decided: the C4
+   sensitivity analysis (section 11 item 14.10), the estimate of about 239-246 GPU h
+   (`docs/schedule.md`), and Soheil starting account 3's sessions (`docs/team.md`).
 
 ## 10. Deviations after the freeze
 
-List any deviation from this document after the freeze, with date and reason.
+The document was frozen on 2026-11-08 at commit `18f1b47`. From now on **every change needs a
+dated amendment here** (date, what changes, why, approved by both authors) and an entry in
+`docs/decisions_log.md`; the freeze record itself is the only edit made at the freeze.
+
+*No amendments yet.*
 
 ## 11. Amendments before the freeze
 
@@ -572,8 +580,9 @@ waited on these settings, so no model has been scored. Every count comes from th
         overlap check against our Kvasir images (centre C4 is Oslo) are written before any
         download is used (`data/polypgen.py`, `scripts/polypgen.py`); the bootstrap clusters by
         video / sequence, not by frame; the small-polyp threshold is our training q1, unchanged.
-        Agent's addition, recorded before any result: C4 is reported apart, and the external
-        test without C4 is a sensitivity analysis.
+        Agent's addition, recorded before any result and accepted by Soheil and Amir at the
+        freeze: C4 is reported apart, and the external test without C4 is a sensitivity
+        analysis.
     11. **E1 seed 1** (final): its outputs were lost; it has no operating-point rows; E1's test
         evaluation (RC-R1) uses seed 0 only. E1 is a control outside the 3-seed tier; seed 1
         keeps its committed default-cutoff validation rows. Not waiting on anyone.
@@ -605,7 +614,7 @@ Documented 2026-11-08 (section 11 item 14.14); no code, config, registry entry o
   future work.
 - **Background:** HAQ and HAWQ (mixed-precision quantization, 2019).
 
-Nothing is left open in this document before `preregistration.frozen_on` is set, apart from the
-freeze itself (section 9). Open outside the document: the timing GPU (RC-T1, does not block),
-and code the plan needs before its runs (the external-test evaluation split, E10's 4-bit run
-and comparisons). The test split stays locked until the freeze.
+**Frozen on 2026-11-08** (section 9). Open outside the document, none of it part of the
+pre-registration: the timing GPU (RC-T1), and code the plan needs before its runs (the
+external-test evaluation split, E10's 4-bit run and comparisons). The test split is open from
+the freeze on; it is read only by the steps this document names.

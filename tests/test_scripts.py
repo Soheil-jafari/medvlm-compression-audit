@@ -104,9 +104,12 @@ def test_implemented_stages_stop_cleanly_while_settings_are_open(
     ],
 )
 def test_compression_runs_wait_for_the_freeze(script: str, args: list[str], tmp_path: Path) -> None:
+    """The guard still refuses an unfrozen table (the real one is frozen since 2026-11-08)."""
     from medcompress.cli import CONFIG_INCOMPLETE_EXIT_CODE
 
-    result = _run(script, *args, cwd=tmp_path)
+    unfrozen = tmp_path / "unfrozen_weights.yaml"
+    unfrozen.write_text("preregistration:\n  frozen_on: TODO\n")
+    result = _run(script, *args, "-o", f"components.finding_weights={unfrozen}", cwd=tmp_path)
     assert result.returncode == CONFIG_INCOMPLETE_EXIT_CODE, result.stderr
     assert "preregistration.frozen_on" in result.stdout
     assert "Traceback" not in result.stderr

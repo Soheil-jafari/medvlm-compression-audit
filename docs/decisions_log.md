@@ -529,6 +529,16 @@ must be logged here.
     lists (E3, E4, E8, A1-A6: seed 0), `by_arm.csv` gains a `tier` column, the paper tables a
     Seeds column. Farzan's assignments removed from the schedule; seed 1 of the main tier, RC-E9
     and the E7 / E8 trend have no owner yet ([team]).
+- **2026-11-08 (Soheil and Amir): THE PRE-REGISTRATION IS FROZEN** (section 9), at commit
+  `18f1b47658eb188975dbbf3caa4b76e2e4d611fb`; Amir's written approval received; recorded on
+  2026-11-09. `frozen_on` 2026-11-08, `frozen_by` Soheil and Amir and `commit` are set in
+  `configs/preregistration/finding_weights.yaml` (the only pre-registered config with a freeze
+  record) and in `docs/preregistration.md`. Accepted at the freeze: the three items the agent
+  had decided (the C4 sensitivity analysis of the external test; the estimate of about 239-246
+  GPU h; Soheil starting account 3's sessions). From now on every change to the document or to
+  a pre-registered setting needs a dated amendment (pre-registration section 10) approved by
+  both authors and an entry here. The compression stages and the test split are open from the
+  freeze on (the guard reads `frozen_on`). RC-B0 is `ready` (attach `e2-seed0-adapter`).
 - **2026-11-08 (Soheil and Amir; Soheil delegated the choices to the research lead; Farzan is
   not an author): the pre-freeze decisions** (pre-registration section 11 item 14; nothing
   frozen; `frozen_on` stays TODO). Each with its reason:

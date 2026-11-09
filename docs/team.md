@@ -9,7 +9,7 @@ he lends one Kaggle account (GPU quota only); he ran RC-E1 seed 1. Decisions of 
 | Amir | Pruning, clinical criterion, efficiency measurements; the PolypGen download | `compression/pruning/`, `budgets.py`, `evaluation/efficiency.py`; E5-E8, A1-A6; RC-X2's download |
 
 **GPU quota:** three Kaggle accounts x 30 h = **90 h per week**: Soheil's, Amir's, and one lent
-by Farzan (account 3, its sessions started by Soheil). **Every hand-off dataset is shared to
+by Farzan (account 3, its sessions started by Soheil; accepted at the freeze, 2026-11-08). **Every hand-off dataset is shared to
 Soheil's account**, so any session can attach it.
 
 ## Review rules

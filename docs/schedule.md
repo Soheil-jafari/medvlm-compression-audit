@@ -211,7 +211,7 @@ training + 0.53 h validation, measured on seed 0).
 | Account 3 (Soheil) | 17.0 (E6, E7, E8 trend) + 3.5 (RC-E9) + 33.2 (A1, A2, A3, A5, A6 seed 0) + 24.5 (seed 1, as seed 2) = **about 78.2 h** |
 
 In all about **234-241 GPU h** (the estimate of this file before E3 `w8` joined the 3-seed tier)
-**plus 5.4 h for E3 `w8`'s seeds 1 and 2: about 239-246 h**, plus the budget searches S and 2 C
+**plus 5.4 h for E3 `w8`'s seeds 1 and 2: about 239-246 h** (accepted at the freeze, 2026-11-08), plus the budget searches S and 2 C
 (not measured). At **90 h per week** (three accounts x 30 h) that is about **2.7 weeks** of GPU
 time (2.6 weeks for 234-241 h). The phases are partly sequential (seeds 1 and 2 wait for seed
 0's futility check), so the calendar is longer than the GPU time: phase A about a week, B and C

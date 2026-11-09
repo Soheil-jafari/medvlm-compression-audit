@@ -1212,3 +1212,10 @@ Append-only, newest at the bottom. One entry per iteration:
 - Docs: pre-registration (every [team] item resolved, items 14 and section 12), README, inbox,
   schedule (three accounts, owners), team docs, run cards, related work, decisions log.
 
+## Iteration 71: 2026-11-09 (interactive)
+- Stage / item: S07, the freeze (approved 2026-11-08 by Soheil and Amir at commit 18f1b47).
+- `frozen_on` / `frozen_by` / `commit` in `finding_weights.yaml` and the document; section 9
+  marked done, section 10 opened for dated amendments; the three agent decisions accepted.
+- RC-B0 set `ready` (attach `e2-seed0-adapter`); the tests that assumed an unfrozen table now
+  check the frozen one and test the guard on an unfrozen copy.
+

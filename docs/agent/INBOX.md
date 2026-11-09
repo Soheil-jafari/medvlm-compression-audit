@@ -19,6 +19,10 @@ Example: `- 2026-10-20 (Soheil): D01 decided: endoscopy, Qwen2.5-VL-7B -> 3B. Lo
 ## Handled
 
 <!-- - YYYY-MM-DD (name): note -> iteration N, what was done -->
+- 2026-11-09 (Soheil): freeze the pre-registration, approved by Soheil and Amir on 2026-11-08
+  at commit 18f1b47; accept the C4 sensitivity analysis, the 239-246 h estimate and Soheil
+  starting account 3's sessions -> iteration 71: `frozen_on` / `frozen_by` / `commit` set,
+  decisions log, STATUS, RC-B0 `ready`; every later change needs a dated amendment.
 - 2026-11-08 (Soheil and Amir; choices delegated to the research lead): **the freeze list of
   2026-10-17, decided** -> iteration 70, pre-registration section 11 item 14, configs, decisions
   log. Item by item, with where it was decided:

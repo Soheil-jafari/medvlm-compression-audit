@@ -8,16 +8,19 @@
   1, three warm-up and five timed passes, 32 fixed validation images) and how its bytes split
   into decoder layers, vision encoder and the rest. Budgets B1 to B3 are fractions of this
   measured peak, and the split shows how much of it pruning can reach.
-- Status: `blocked` (see section 2)
+- Status: `ready` (2026-11-08, after the freeze): every requirement below is met; attach
+  `e2-seed0-adapter` (the hand-off of RC-E2 seed 0); the runner refuses the card without it
 
 ## 2. Requirements
 
-Blocked until all of these are true; the agent changes the status to `ready` when they are:
+All met on 2026-11-08:
 
-- RC-E2 done for seed 0, with the adapter `checkpoints/E2/seed0/adapter` on team storage.
-- `budgets.measurement.hardware` names the development GPU and `max_new_tokens` is set
-  (the agent sets both; the label must match the GPU you use).
-- `inputs.image_longest_side` is set; RC-D1 done (the 32 images come from the validation split).
+- RC-E2 done for seed 0 (2026-11-08): its adapter is the private dataset `e2-seed0-adapter`;
+  **attach it**.
+- `budgets.measurement.hardware` = "Kaggle Tesla T4" (frozen) and `max_new_tokens` is 46 (the
+  D04 rule); run on a Kaggle T4.
+- `inputs.image_longest_side` is 672; RC-D1 done (the 32 images come from the validation split).
+- The pre-registration is frozen (2026-11-08), so the budget rule is fixed.
 
 Platform: Kaggle notebook with **one T4** (`CUDA_VISIBLE_DEVICES=0`) and nothing else running on
 the GPU. Peak memory is the budget metric because it should be the same every time it is
@@ -75,10 +78,10 @@ echo "run_card exit code: ${PIPESTATUS[0]}"
 
 ## 5. How the result is read
 
-The agent computes the share of the decoder in the peak (`decoder_layers_bytes` relative to the
-state bytes and to the peak) and proposes B1 to B3 by the rule of D07 section 4 (remove about
-15, 30 and 45 % of the decoder's bytes, written as fractions of the measured peak). The team
-confirms the numbers before they go into the pre-registration. If the two peak readings differ
+B1 to B3 are frozen (2026-11-08) as 15, 30 and 45 % of E2's decoder-layer bytes removed; this
+card only converts them into GB: target = `peak_memory_bytes` minus that share of
+`decoder_layers_bytes`, both from the committed `efficiency.csv` (`budgets.target_value`).
+Nothing is chosen from its numbers. If the two peak readings differ
 by more than the tolerance of the budgets (3 %), the metric is not repeatable enough for the
 matched-budget search and the agent asks the team to change it.
 
