@@ -30,7 +30,7 @@ from pathlib import Path
 import pandas as pd
 
 from medcompress.registry import BUDGET_IDS, REGISTRY
-from medcompress.utils.io import RESULTS_COLUMNS
+from medcompress.utils.io import RESULTS_COLUMNS, parse_float, write_frame
 
 RUN_FILES: tuple[str, ...] = (
     "metrics.csv",
@@ -152,7 +152,9 @@ def read_result_file(result: ResultFile) -> tuple[pd.DataFrame, list[str]]:
     problems: list[str] = []
     name = str(result.path)
     try:
-        frame = pd.read_csv(result.path, dtype={"experiment": str, "budget": str, "metric": str})
+        # every cell as text, numbers through Python's correctly rounded float(): the pandas C
+        # parser is not exact in every version (54602.917348027004 read as ...27010 in 3.0.5)
+        frame = pd.read_csv(result.path, dtype=str, keep_default_na=False)
     except Exception as exc:  # noqa: BLE001 - report any parse failure as a problem
         return _empty(), [f"{name}: unreadable ({exc})"]
     if tuple(frame.columns) != RESULTS_COLUMNS:
@@ -160,7 +162,7 @@ def read_result_file(result: ResultFile) -> tuple[pd.DataFrame, list[str]]:
         return _empty(), problems
     frame["budget"] = frame["budget"].fillna("")
     for column in ("value", "ci_low", "ci_high"):
-        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        frame[column] = frame[column].map(parse_float).astype(float)
     for i, row in frame.iterrows():
         where = f"{name} row {i + 2}"
         if not _known_experiment(str(row["experiment"]), result.kind):
@@ -282,8 +284,8 @@ def write_summary(rows: pd.DataFrame, out_dir: Path) -> list[Path]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = [out_dir / "all_rows.csv", out_dir / "by_arm.csv"]
-    rows.to_csv(paths[0], index=False)
-    summarise_over_seeds(rows).to_csv(paths[1], index=False)
+    write_frame(rows, paths[0])  # one float format for every pandas version (utils/io.py)
+    write_frame(summarise_over_seeds(rows), paths[1])
     return paths
 
 

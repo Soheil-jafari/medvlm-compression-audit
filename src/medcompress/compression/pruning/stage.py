@@ -178,17 +178,15 @@ def effects_fingerprint(fingerprint: Mapping[str, Any]) -> dict[str, Any]:
 def write_effects(target: Path, effects: Mapping[str, Mapping[str, float]],
                   fingerprint: Mapping[str, Any]) -> Path:  # fmt: skip
     """Write ``unit_effects.csv`` (unit_id, finding, effect) and its settings file."""
-    import csv
-
-    from medcompress.utils.io import write_json
+    from medcompress.utils.io import write_csv, write_json
 
     path = target.with_name(EFFECTS_FILE)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(("unit_id", "finding", "effect"))
-        for unit_id in sorted(effects):
-            for finding in sorted(effects[unit_id]):
-                writer.writerow((unit_id, finding, repr(float(effects[unit_id][finding]))))
+    rows = [
+        (unit_id, finding, float(effects[unit_id][finding]))
+        for unit_id in sorted(effects)
+        for finding in sorted(effects[unit_id])
+    ]
+    write_csv(path, ("unit_id", "finding", "effect"), rows)
     write_json(effects_fingerprint(fingerprint), path.with_name(EFFECTS_SETTINGS_FILE))
     return path
 
@@ -238,7 +236,7 @@ def reweight_from_source(
         finding_weights_for,
         weighted_sum,
     )
-    from medcompress.utils.io import upsert_results, write_json
+    from medcompress.utils.io import upsert_results, write_csv, write_json
 
     source = reweight_source(config, run, settings)
     if source is None:
@@ -257,11 +255,9 @@ def reweight_from_source(
         rows = list(csv.DictReader(handle))
     if {r["unit_id"] for r in rows} != set(effects):
         raise ValueError(f"{effects_path} and {scores_source} hold different units")
-    with target.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({**row, "score": repr(weighted_sum(effects[row["unit_id"]], weights))})
+    columns = list(rows[0])
+    scored = ({**row, "score": weighted_sum(effects[row["unit_id"]], weights)} for row in rows)
+    write_csv(target, columns, ([row[c] for c in columns] for row in scored))
     write_json(fingerprint, target.with_name(SETTINGS_FILE))
     upsert_results(
         [

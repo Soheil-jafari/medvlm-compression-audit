@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import csv
 import json
-from collections.abc import Iterable, Mapping
+import math
+import numbers
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,78 @@ RESULTS_COLUMNS: tuple[str, ...] = (
     "ci_high",
 )
 """Long-format results schema; see results/README.md."""
+
+
+def format_cell(value: Any) -> str:
+    """The text of one CSV cell, the same with every pandas and numpy version.
+
+    Floats are written with Python's shortest round-trip ``repr`` (reading the text back gives
+    exactly the same float); a numpy float32 keeps numpy's shortest text for its own type, as
+    the ``csv`` module always wrote it. Integers as integers, booleans as ``True`` / ``False``,
+    ``None`` and NaN as an empty cell, everything else ``str``. This is the one float format of
+    every results file and every generated CSV (``write_csv``, ``write_frame``,
+    ``append_results``).
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool | str):
+        return str(value)
+    try:
+        import numpy as np
+    except ImportError:  # pragma: no cover - numpy is a hard requirement
+        np = None  # type: ignore[assignment]
+    if np is not None and isinstance(value, np.bool_):
+        return str(bool(value))
+    if isinstance(value, numbers.Integral):
+        return str(int(value))
+    if np is not None and isinstance(value, np.floating) and value.dtype != np.float64:
+        return "" if np.isnan(value) else str(value)
+    if isinstance(value, numbers.Real):
+        number = float(value)
+        return "" if math.isnan(number) else repr(number)
+    return str(value)
+
+
+def parse_float(text: Any) -> float:
+    """A results cell as a float, correctly rounded (Python's ``float``); NaN when empty or not
+    a number. Used instead of the pandas C parser, whose default is not exact in every version."""
+    if text is None:
+        return math.nan
+    if isinstance(text, numbers.Real):
+        return float(text)
+    try:
+        return float(str(text).strip()) if str(text).strip() else math.nan
+    except ValueError:
+        return math.nan
+
+
+def write_csv(
+    path: str | Path,
+    header: Sequence[str],
+    rows: Iterable[Sequence[Any]],
+    *,
+    lineterminator: str = "\r\n",
+) -> Path:
+    """Write a CSV (replaced) with :func:`format_cell` for every cell; returns the path.
+
+    The line ending defaults to the ``csv`` module's (as every run file was written);
+    :func:`write_frame` passes ``"\n"``, as ``DataFrame.to_csv`` wrote the summaries."""
+    path = Path(path)
+    ensure_dir(path.parent)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, lineterminator=lineterminator)
+        writer.writerow(list(header))
+        for row in rows:
+            writer.writerow([format_cell(v) for v in row])
+    return path
+
+
+def write_frame(frame: Any, path: str | Path) -> Path:
+    """Write a pandas DataFrame like ``to_csv(index=False)``, but with :func:`format_cell`, so
+    the bytes do not depend on the pandas version."""
+    columns = [str(c) for c in frame.columns]
+    rows = (list(r) for r in frame.itertuples(index=False, name=None))
+    return write_csv(path, columns, rows, lineterminator="\n")
 
 
 def ensure_dir(path: str | Path) -> Path:
@@ -86,7 +160,7 @@ def append_results(rows: Iterable[Mapping[str, Any]], path: str | Path) -> int:
             missing = required - set(row)
             if missing:
                 raise ValueError(f"Missing results columns: {sorted(missing)}")
-            writer.writerow({col: row.get(col, "") for col in RESULTS_COLUMNS})
+            writer.writerow({col: format_cell(row.get(col, "")) for col in RESULTS_COLUMNS})
             count += 1
     return count
 

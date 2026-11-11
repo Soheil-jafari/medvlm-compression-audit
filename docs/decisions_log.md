@@ -529,6 +529,15 @@ must be logged here.
     lists (E3, E4, E8, A1-A6: seed 0), `by_arm.csv` gains a `tier` column, the paper tables a
     Seeds column. Farzan's assignments removed from the schedule; seed 1 of the main tier, RC-E9
     and the E7 / E8 trend have no owner yet ([team]).
+- **2026-11-11 (agent, Soheil's request): one float format for the CSVs; no committed number
+  changed.** Every results and generated CSV is written with Python's shortest round-trip
+  `repr` (`utils/io.format_cell`) and read with the correctly rounded `float()`, so pandas 2.3.3
+  (Kaggle) and 3.x write byte-identical files; pandas stays unpinned (`pandas>=2.0`). The two
+  derived summaries (`results/summary/all_rows.csv`, `by_arm.csv`) were regenerated: the old ones
+  had been read through the pandas C parser, which put 1,415 cells one ulp away from the
+  committed run files (at most 1.7e-14 relative); the new ones equal the run files exactly. The
+  run files themselves, the paper tables and the verdicts are unchanged. An implementation fix,
+  not an amendment of the pre-registration.
 - **2026-11-08 (Soheil and Amir): THE PRE-REGISTRATION IS FROZEN** (section 9), at commit
   `18f1b47658eb188975dbbf3caa4b76e2e4d611fb`; Amir's written approval received; recorded on
   2026-11-09. `frozen_on` 2026-11-08, `frozen_by` Soheil and Amir and `commit` are set in

@@ -359,7 +359,6 @@ def _write_outputs(
     recovery: Mapping[str, Any],
 ) -> None:
     """Write ``removal.json``, ``budget_search.csv`` and the metrics rows of the run."""
-    import csv
 
     from medcompress.compression.pruning.units import UnitType
     from medcompress.utils.io import upsert_results, write_json
@@ -379,10 +378,10 @@ def _write_outputs(
         },
         run_dir / "removal.json",
     )
-    with (run_dir / "budget_search.csv").open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(["accepted_units_removed", "measured_footprint"])
-        writer.writerows(search.trace)
+    from medcompress.utils.io import write_csv
+
+    write_csv(run_dir / "budget_search.csv", ["accepted_units_removed", "measured_footprint"],
+              search.trace)  # fmt: skip
     kinds = {t: sum(1 for u in search.removal if u.unit_type is t) for t in UnitType}
     numbers: list[tuple[str, float]] = [
         ("budget_target", search.target),

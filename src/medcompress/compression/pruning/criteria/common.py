@@ -199,23 +199,14 @@ def write_unit_scores(
     scores: Mapping[str, float],
 ) -> Path:
     """Write ``unit_scores.csv`` (one row per unit, the raw score of the criterion)."""
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(SCORE_COLUMNS)
-        for u in units:
-            writer.writerow(
-                [
-                    u.unit_id,
-                    u.unit_type.value,
-                    u.layer_index,
-                    "" if u.index is None else u.index,
-                    u.num_params,
-                    repr(float(scores[u.unit_id])),
-                ]
-            )
-    return target
+    from medcompress.utils.io import write_csv
+
+    rows = (
+        [u.unit_id, u.unit_type.value, u.layer_index, u.index, u.num_params,
+         float(scores[u.unit_id])]
+        for u in units
+    )  # fmt: skip
+    return write_csv(path, SCORE_COLUMNS, rows)
 
 
 def read_unit_scores(path: Path | str) -> dict[str, float]:

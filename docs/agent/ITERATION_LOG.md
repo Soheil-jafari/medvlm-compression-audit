@@ -1232,3 +1232,16 @@ Append-only, newest at the bottom. One entry per iteration:
 - Tests: a shared dataset with a `near_duplicates` sub-bundle, an extra unneeded hand-off, input
   and environment failures reported as failed.
 
+## Iteration 73: 2026-11-11 (interactive)
+- Stage / item: S11, the pandas float drift of the generated CSVs.
+- One float format for every results and generated CSV (`utils/io.format_cell`: Python's
+  shortest round-trip repr; `write_csv`, `write_frame`, `append_results`); the summaries no longer
+  use `DataFrame.to_csv`; the pruning scores, effects and budget search use the shared writer.
+- Reading: results cells are parsed with Python's correctly rounded `float()`, not the pandas C
+  parser, which read some committed values one ulp off (pandas 3.0.5: 54602.917348027004 as
+  54602.91734802701).
+- `results/summary/all_rows.csv` and `by_arm.csv` regenerated: byte-identical under pandas 2.3.3
+  and 3.1.1; their values now equal the committed run files exactly (9,642 of 9,642 cells; the
+  old summaries differed in 1,415 cells by at most 1.7e-14 relative). No run file, paper table
+  or verdict changed. Tests pass on both pandas versions.
+
