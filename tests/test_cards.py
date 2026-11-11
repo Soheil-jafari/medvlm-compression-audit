@@ -364,3 +364,43 @@ def test_every_runnable_card_says_what_to_attach_and_what_it_hands_off() -> None
     schedule = (REPO / "docs" / "schedule.md").read_text()
     assert "seeds 0 Soheil, 1 Farzan, 2 Amir" in (RUNS / "README.md").read_text()
     assert "estimate" in schedule and "unknown until RC-E0b times its first 100 answers" in schedule
+
+
+def test_rc_g2_runs_in_sessions_with_only_and_one_handoff_per_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    full = build_plan("RC-G2")
+    assert [h.name for h in full.handoffs] == [
+        "G2_B2_seed0_pruned_E5_magnitude", "G2_B2_seed0_pruned_E5_activation",
+        "G2_B2_seed0_pruned_E5_taylor", "G2_B2_seed0_pruned_E6", "G2_B2_seed0_pruned_E7",
+    ]  # fmt: skip
+    one = build_plan("RC-G2", only=["E5:activation", "E5:magnitude"])  # the card's order
+    assert [s.label for s in one.steps] == [
+        "run E5 magnitude B2 seed0",
+        "run E5 activation B2 seed0",
+    ]
+    assert [n.label for n in one.needs] == ["E2 seed0 adapter", "teacher cache"]
+    scores = build_plan("RC-G2", only=["E7:scores"])
+    assert [s.argv for s in scores.steps] == [
+        ("scripts/04_score_pruning_units.py", "--exp", "E7", "--seed", "0")
+    ]
+    assert not scores.handoffs and [n.label for n in scores.needs] == ["E2 seed0 adapter"]
+    monkeypatch.setattr(cards_mod, "_g2_scores_committed", lambda: False)
+    with pytest.raises(CardError, match="run --only E7:scores first"):
+        build_plan("RC-G2", only=["E7", "E7:check"])
+    monkeypatch.setattr(cards_mod, "_g2_scores_committed", lambda: True)
+    last = build_plan("RC-G2", only=["E7:check", "E7"])
+    assert [s.label for s in last.steps] == ["run E7 B2 seed0", "first-order check E7 seed0"]
+    assert [h.name for h in last.handoffs] == ["G2_B2_seed0_pruned_E7"]
+    with pytest.raises(CardError, match="unknown choice"):
+        build_plan("RC-G2", only=["E8"])
+    with pytest.raises(CardError, match="--only is for RC-G2"):
+        build_plan("RC-E3", 0, only=["E6"])
+    done = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "run_card.py"), "--card", "RC-G2", "--only",
+         "E5:taylor", "--only", "E6", "--dry-run", "--allow-blocked", "--out", str(tmp_path),
+         "--data-root", "/kaggle/input/data", "--from", "/kaggle/input/cache"],
+        capture_output=True, text=True, cwd=REPO, check=False, timeout=120,
+    )  # fmt: skip
+    assert "run E5 taylor B2 seed0" in done.stdout and "G2_B2_seed0_pruned_E6" in done.stdout
+    assert "run E7" not in done.stdout

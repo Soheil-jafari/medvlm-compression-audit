@@ -210,6 +210,57 @@ FIRST_ORDER_CHECK = Step(
 """After E7's scoring: 30 random channel groups scored exactly (D07; a report, not a gate). The
 script's experiment is E7 by default: it is not a registered stage of every E7 run."""
 
+G2_PARTS: tuple[str, ...] = (
+    "E5:magnitude", "E5:activation", "E5:taylor", "E6", "E7:scores", "E7", "E7:check",
+)  # fmt: skip
+"""The parts of RC-G2 that ``--only`` picks (2026-11-11): one run each, or E7's scoring alone
+(``E7:scores``) and the 30-group check alone (``E7:check``), so that no session comes near
+Kaggle's session limit. Without ``--only`` every part but ``E7:scores`` runs (the E7 run scores
+its units itself)."""
+G2_DEFAULT: tuple[str, ...] = tuple(p for p in G2_PARTS if p != "E7:scores")
+
+
+def _g2_scores_committed() -> bool:
+    """True when E7 seed 0's ``unit_scores.csv`` and its settings file are in the clone."""
+    from medcompress.config import repo_root
+
+    folder = repo_root() / "results" / "E7" / "nobudget" / "seed0"
+    return (folder / "unit_scores.csv").is_file() and (
+        folder / "unit_scores.settings.json"
+    ).is_file()
+
+
+def g2_plan_parts(only: Sequence[str] | None) -> tuple[tuple[str, ...], tuple[Step, ...],
+                                                         tuple[Handoff, ...]]:  # fmt: skip
+    """The parts, steps and hand-offs of an RC-G2 session (``--only``; see :data:`G2_PARTS`).
+
+    Each pruned run hands off its own dataset (``G2_B2_seed0_pruned_<run>``), so the sessions
+    never write two datasets of the same name; later cards find them by their files. With
+    ``--only``, ``E7`` and ``E7:check`` need E7's committed scores (the ``E7:scores`` session
+    first, its results committed), or the E7 run would score again for hours."""
+    parts = _pick(G2_PARTS, only) if only else G2_DEFAULT
+    if only and ("E7" in parts or "E7:check" in parts) and "E7:scores" not in parts:
+        if not _g2_scores_committed():
+            raise CardError(
+                "RC-G2 --only E7 / E7:check: E7 seed 0's unit_scores.csv is not committed; "
+                "run --only E7:scores first and commit its results"
+            )
+    steps: list[Step] = []
+    handoffs: list[Handoff] = []
+    for part in parts:
+        if part == "E7:scores":
+            score = _script("04_score_pruning_units.py", "--exp", "E7", "--seed", "0")
+            steps.append(Step("score units E7 seed0", score))
+            continue
+        if part == "E7:check":
+            steps.append(FIRST_ORDER_CHECK)
+            continue
+        exp, _, variant = part.partition(":")
+        run = Run(exp, 0, "B2", variant or None)
+        steps.append(_experiment(run))
+        handoffs.append(Handoff("pruned", (run,), f"G2_B2_seed0_pruned_{part.replace(':', '_')}"))
+    return parts, tuple(steps), tuple(handoffs)
+
 
 def _pick(values: Sequence[str], wanted: Sequence[str] | None) -> tuple[str, ...]:
     if not wanted:
@@ -276,9 +327,13 @@ def build_plan(
     embed_dir: Path | None = None,
     labels: Sequence[Path] = (),
     topup_dir: Path | None = None,
+    only: Sequence[str] | None = None,
 ) -> CardPlan:
-    """The plan of ``card`` (for ``seed`` where the card is split by seed)."""
+    """The plan of ``card`` (for ``seed`` where the card is split by seed). ``only``: the parts
+    of RC-G2 to run in this session (:data:`G2_PARTS`)."""
     card = card.upper()
+    if only and card != "RC-G2":
+        raise CardError("--only is for RC-G2 (use --variant / --budget for the other cards)")
     picked_budgets = _pick(BUDGETS, budgets)
     if card == "RC-D1":
         _no_seed(card, seed)
@@ -490,13 +545,15 @@ def build_plan(
         )  # fmt: skip
     if card == "RC-G2":
         _no_seed(card, seed)
-        runs = list(g2_runs())
+        parts, steps, handoffs = g2_plan_parts(only)
+        title = "Gate 2 pilot at B2, seed 0 (validation)"
+        if only:
+            title += ": " + ", ".join(parts)
         return CardPlan(
-            card, "Gate 2 pilot at B2, seed 0 (validation)", 1,
-            (*(_experiment(r) for r in runs), FIRST_ORDER_CHECK),
-            handoffs=(Handoff("pruned", tuple(runs), "G2_B2_seed0_pruned"),),
-            needs=(Need("adapter", Run("E2")), Need("teacher_cache")), internet=True,
-            notes=("the grid sessions of seed 0 attach this hand-off and skip these five runs",),
+            card, title, 1, steps, handoffs=handoffs,  # the cache: only for the recoveries
+            needs=(Need("adapter", Run("E2")),) + ((Need("teacher_cache"),) if handoffs else ()),
+            internet=True,
+            notes=("the grid sessions of seed 0 attach these hand-offs and skip RC-G2's runs",),
         )  # fmt: skip
     if card in ("RC-E5", "RC-E6", "RC-E7"):
         s = _seed(card, seed, SEEDS)

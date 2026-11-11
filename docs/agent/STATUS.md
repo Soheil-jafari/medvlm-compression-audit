@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-11-11, iteration 74 (interactive run mode)
+**Last updated:** 2026-11-11, iteration 75 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S07 done: **the pre-registration is frozen** (2026-11-08, Soheil and Amir, commit `18f1b47`); every change now needs a dated amendment. RC-B0 done 2026-11-11 (B1 / B2 / B3 = 6,786,040,422.4 / 5,953,608,908.8 / 5,121,177,395.2 bytes). Next: RC-G2 (with the 30-group check) and `choose_comparator.py`; ready in parallel: RC-E3 seed 0, RC-E4 seed 0, RC-E9, RC-E10 step 1; agent code still to come: the `external_test` split and E10's 4-bit run and comparisons.
+**Current stage:** S07 done: **the pre-registration is frozen** (2026-11-08, Soheil and Amir, commit `18f1b47`); every change now needs a dated amendment. RC-B0 done 2026-11-11 (B1 / B2 / B3 = 6,786,040,422.4 / 5,953,608,908.8 / 5,121,177,395.2 bytes). Next: RC-G2 in four sessions (`--only`, RC-G2 section 3; Soheil) and `choose_comparator.py`; ready in parallel: RC-E10 step 1 (Soheil), RC-E3 seed 0 (Amir), RC-E9 then RC-E4 seed 0 (account 3); agent code still to come: the `external_test` split and E10's 4-bit run and comparisons.
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action

@@ -1264,3 +1264,19 @@ Append-only, newest at the bottom. One entry per iteration:
   updated for the check (about 2.2 h; plan about 241-248 h). Ready: RC-G2, RC-E3 seed 0,
   RC-E4 seed 0, RC-E9, RC-E10 step 1.
 
+## Iteration 75: 2026-11-11 (interactive)
+- Stage / item: S08-S09 scheduling; RC-G2 in sessions.
+- Reassigned (Soheil): RC-E3 seed 0 to Amir; RC-E9, then RC-E4 seed 0, to account 3; Soheil
+  runs RC-E10 step 1 and RC-G2. `docs/schedule.md` (phases, accounts, loads: Soheil about
+  65.8 h, Amir about 88.7 h, account 3 about 87.0-94.0 h, estimates) and the cards updated.
+- RC-G2 in four sessions: `run_card.py --card RC-G2 --only <part>` (parts E5:magnitude,
+  E5:activation, E5:taylor, E6, E7:scores, E7, E7:check); one hand-off per pruned run
+  (`G2_B2_seed0_pruned_<run>`); `--only E7` / `E7:check` refused until E7's scores are
+  committed; the teacher cache is needed only by sessions with a recovery. No full resume: a
+  stopped run repeats its budget search (the recovery's resume state is not handed off).
+  Kaggle session limit: 12 h per GPU session (secondary sources quoting Kaggle's docs;
+  kaggle.com is not reachable from the agent's session). RC-G2 section 3 has the four cells,
+  attachments, datasets to save and estimates (about 25 GPU h with the searches, about 1.4 h
+  per search for E5 / E7 and 0.8 h for E6, from RC-B0's reading times).
+- Datasets each account needs shared: `docs/schedule.md` section 7, "Datasets". Tests.
+

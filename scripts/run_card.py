@@ -55,6 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", type=Path, default=None, help="default /kaggle/working")
     parser.add_argument("--variant", action="append", default=None, help="only these variants")
     parser.add_argument("--budget", action="append", default=None, help="only these budgets")
+    parser.add_argument(
+        "--only", action="append", default=None,
+        help="RC-G2: only these parts (E5:magnitude, E5:activation, E5:taylor, E6, E7:scores, "
+        "E7, E7:check), one session each",
+    )  # fmt: skip
     parser.add_argument("--kvasir-seg", type=Path, default=None, help="RC-D1: Kvasir-SEG input")
     parser.add_argument("--external-images", type=Path, default=None, help="RC-X1: EndoBench")
     parser.add_argument(
@@ -154,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
             out=out or Path("/kaggle/working"), kvasir_seg=args.kvasir_seg,
             data_root=args.data_root, external_images=args.external_images,
             embed_dir=args.embed_dir, labels=args.labels, topup_dir=args.topup_dir,
+            only=args.only,
         )  # fmt: skip
         status = card_status(card_file(plan.card, REPO / "docs" / "runs"))
     except CardError as exc:

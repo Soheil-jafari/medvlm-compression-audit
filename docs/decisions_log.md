@@ -529,6 +529,11 @@ must be logged here.
     lists (E3, E4, E8, A1-A6: seed 0), `by_arm.csv` gains a `tier` column, the paper tables a
     Seeds column. Farzan's assignments removed from the schedule; seed 1 of the main tier, RC-E9
     and the E7 / E8 trend have no owner yet ([team]).
+- **2026-11-11 (Soheil): cards reassigned; RC-G2 in four sessions.** RC-E3 seed 0 runs on
+  Amir's account; RC-E9, then RC-E4 seed 0, on account 3; Soheil runs RC-E10 step 1 and RC-G2.
+  RC-G2 (about 25 GPU h, estimate) is split into four sessions under Kaggle's 12-hour session
+  limit with `run_card.py --only` (RC-G2 section 3); each pruned run is its own hand-off. No
+  frozen setting changed: the runs, settings and order of operations are the same.
 - **2026-11-11 (agent, Soheil's request): RC-B0 done; budget targets in bytes; RC-G2's
   30-group check coded.** No frozen setting changed. RC-B0 measured E2 seed 0 twice on the T4:
   7,618,471,936 bytes both times, decoder layers 5,549,543,424. The frozen fractions give B1
