@@ -235,7 +235,7 @@ def test_a_failed_step_stops_the_card_and_missing_inputs_are_named(tmp_path: Pat
         runner=lambda c, e, log: next(codes),
     )  # fmt: skip
     assert [s.status for s in session.steps] == ["ok", "failed"] and not session.ok
-    assert "stopped early" in runner_mod.report_text(session)
+    assert "FAILED: validation E2 seed0: failed" in runner_mod.report_text(session)
     open_setting = runner_mod.Session(plan, tmp_path / "work", "now")
     runner_mod.run_steps(
         open_setting, config, {}, repo=tmp_path, data_root=None, handoffs=[],

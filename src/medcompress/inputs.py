@@ -13,15 +13,22 @@ deeper). So the cells and the card runner look for manifests instead:
 
 Exactly one folder must match; none or several stop with a message that says what to attach.
 The root is ``/kaggle/input`` (``$MEDCOMPRESS_INPUT_ROOT`` overrides it, for tests).
+
+Not every manifest folder is a hand-off: the shared dataset also carries RC-D1's own bundles
+(``rc_d1_embed``, kind ``near_duplicates``), which no card reads as a hand-off. A folder is a
+hand-off only if its manifest's kind is a hand-off kind and it does not lie inside the shared
+dataset (:func:`find_handoffs`); the others are skipped with a note. Which hand-offs a card then
+attaches is the runner's choice (``card_runner.select_handoffs``).
 """
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from medcompress.utils.bundles import MANIFEST_NAME, BundleError
+from medcompress.utils.bundles import HANDOFF_KINDS, MANIFEST_NAME, BundleError
 
 INPUT_ROOT_ENV = "MEDCOMPRESS_INPUT_ROOT"
 DEFAULT_INPUT_ROOT = Path("/kaggle/input")
@@ -86,6 +93,42 @@ def find_handoff(name: str, root: str | Path | None = None) -> Path:
     return _one(found, f"the hand-off {name}", f"the private dataset made from {name}", base)
 
 
+def manifest_kind(folder: Path) -> str | None:
+    """The ``kind`` a manifest declares (None if it cannot be read); the files are not checked."""
+    try:
+        document = json.loads((Path(folder) / MANIFEST_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    kind = document.get("kind") if isinstance(document, dict) else None
+    return str(kind) if kind is not None else None
+
+
+def _inside(folder: Path, parents: Sequence[Path]) -> bool:
+    return any(folder != p and folder.is_relative_to(p) for p in parents)
+
+
+def classify_bundles(root: str | Path | None = None) -> tuple[list[Path], list[str]]:
+    """``(hand-offs, notes)``: every manifest folder that is a hand-off, and why each other one
+    is not (the shared data itself, a bundle inside the shared dataset, or a kind no card reads
+    as a hand-off, such as RC-D1-embed's ``near_duplicates``). An unreadable manifest is kept
+    as a hand-off, so its check reports the problem."""
+    folders = bundle_folders(root)
+    shared = [f for f in folders if is_shared_data(f)]
+    shared_datasets = [f.parent for f in shared]  # RC-D1 puts its bundles next to the data
+    handoffs, notes = [], []
+    for folder in folders:
+        if folder in shared:
+            continue
+        kind = manifest_kind(folder)
+        if kind is not None and kind not in HANDOFF_KINDS:
+            notes.append(f"{folder}: kind {kind!r} is not a hand-off; skipped")
+        elif _inside(folder, shared) or (kind is None and _inside(folder, shared_datasets)):
+            notes.append(f"{folder}: part of the shared dataset, not a hand-off; skipped")
+        else:
+            handoffs.append(folder)
+    return handoffs, notes
+
+
 def find_handoffs(root: str | Path | None = None) -> list[Path]:
-    """Every attached hand-off (every manifest folder that is not the shared data)."""
-    return [f for f in bundle_folders(root) if not is_shared_data(f)]
+    """Every attached hand-off (see :func:`classify_bundles`)."""
+    return classify_bundles(root)[0]

@@ -1219,3 +1219,16 @@ Append-only, newest at the bottom. One entry per iteration:
 - RC-B0 set `ready` (attach `e2-seed0-adapter`); the tests that assumed an unfrozen table now
   check the frozen one and test the guard on an unfrozen copy.
 
+## Iteration 72: 2026-11-11 (interactive)
+- Stage / item: S06, RC-B0's first Kaggle attempt (commit 1f914d1) ran no step and still
+  reported "all steps ok". Two runner bugs fixed; no frozen setting or result changed.
+- Inputs: a manifest folder is a hand-off only if its kind is a hand-off kind and it is not part
+  of the shared dataset (`inputs.classify_bundles`; RC-D1's `rc_d1_embed`, kind
+  `near_duplicates`, is skipped with a note); the runner then attaches only the hand-offs the
+  plan reads (`card_runner.select_handoffs`) and prints every other one as "ignored", so an
+  extra hand-off (another seed's adapter) never stops a run.
+- Outcome: `Session.ok` is false when no step ran or the run stopped at the input or
+  environment check; the report prints "Outcome: FAILED: <reason>" and the exit code is not 0.
+- Tests: a shared dataset with a `near_duplicates` sub-bundle, an extra unneeded hand-off, input
+  and environment failures reported as failed.
+
