@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-11-09, iteration 71 (interactive run mode)
+**Last updated:** 2026-11-11, iteration 74 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S07 done: **the pre-registration is frozen** (2026-11-08, Soheil and Amir, commit `18f1b47`); every change now needs a dated amendment. Next: RC-B0 (`ready`, attach `e2-seed0-adapter`), then RC-G2 and `choose_comparator.py`, then the seed-0 runs; agent code still to come: the `external_test` split and E10's 4-bit run and comparisons.
+**Current stage:** S07 done: **the pre-registration is frozen** (2026-11-08, Soheil and Amir, commit `18f1b47`); every change now needs a dated amendment. RC-B0 done 2026-11-11 (B1 / B2 / B3 = 6,786,040,422.4 / 5,953,608,908.8 / 5,121,177,395.2 bytes). Next: RC-G2 (with the 30-group check) and `choose_comparator.py`; ready in parallel: RC-E3 seed 0, RC-E4 seed 0, RC-E9, RC-E10 step 1; agent code still to come: the `external_test` split and E10's 4-bit run and comparisons.
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -101,6 +101,13 @@
    open); the commit hash from the `e2-seed0-adapter` manifest into RC-E2 section 6; the
    skipped-step report (RC-E2 section 6b, CPU); E1's `op_*` rows (RC-E1 section 3c), then the
    E2-minus-E1 comparison at the operating point.
+   2026-11-11 (iteration 74): **RC-B0 done** (Kaggle T4, commit 1320894): both peak readings
+   7,618,471,936 bytes; decoder layers 5,549,543,424; targets B1 6,786,040,422.4, B2
+   5,953,608,908.8, B3 5,121,177,395.2 bytes (RC-B0 section 6). RC-G2 ready with the 30-group
+   check (`scripts/check_first_order.py`, a report; below 0.7 stop and ask); RC-E3 seed 0,
+   RC-E4 seed 0, RC-E9 ready; RC-E10 step 1 ready. H2 flag: RC-Q0's `w8` peak (5.20 GB, an
+   estimate) is nearest B3; once E3 `w8` seed 0's peak is committed, a B3 match needs the B3
+   arm's seeds 1 and 2 (about 6 GPU h, conditional; the cards do not plan it yet).
    2026-11-09 (iteration 71): **the pre-registration is frozen** (2026-11-08, Soheil and Amir,
    commit `18f1b47`); the three agent decisions accepted; RC-B0 `ready`.
    2026-11-08 (iteration 70): **pre-freeze decisions** (pre-registration section 11 item 14):

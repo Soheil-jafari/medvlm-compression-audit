@@ -79,7 +79,7 @@ RC-D1 pass 1 (shared data) ──> label values (agent, team) ──> RC-D1 pass
                           RC-E2 seed 0 (done 2026-11-08) <───────────────────┤
                                │ (hand-off: e2-seed0-adapter)                └──> RC-E4 seed 0 (cache only)
                           FREEZE (Soheil and Amir approve; B1-B3 frozen as decoder-byte fractions)
-                          RC-B0 (E2 seed 0) converts B1-B3 to GB
+                          RC-B0 (E2 seed 0; done 2026-11-11) converts B1-B3 to GB
                                                                │
          ┌───────────────┬───────────────────┬────────────────┼─────────────────┐
        RC-E3 seed 0    RC-E9            RC-G2 (B2, seed 0)   RC-A1..A6 seed 0 (after E7 B2)
@@ -192,11 +192,12 @@ training + 0.53 h validation, measured on seed 0).
 
 | Block | Runs | Known part | Evaluation | In all |
 |---|---|---|---|---|
-| Seed 0 at B2 and without a budget: E3 (3), E4 (1), E5 (3), E6 (1), E7 (1), E8 (1); RC-G2's five runs are these B2 runs | 10 | E3 3 x under 1 h; E4 7.1-14.1 h; recoveries 5 x 1.2 h; E7 scoring 7.9 h; E8 under 1 h | 10 x 1.7 h | **41.9-49.0 h** + 5 S |
+| Seed 0 at B2 and without a budget: E3 (3), E4 (1), E5 (3), E6 (1), E7 (1), E8 (1); RC-G2's five runs are these B2 runs | 10 | E3 3 x under 1 h; E4 7.1-14.1 h; recoveries 5 x 1.2 h; E7 scoring 7.9 h; RC-G2's 30-group check about 2.2 h (30 exact passes x 640 probes x 0.414 s; added 2026-11-11); E8 under 1 h | 10 x 1.7 h | **44.1-51.2 h** + 5 S |
 | Seed 0's trend at B1 and B3: E5 (6), E6 (2), E7 (2), E8 (2) | 12 | 10 x 1.2 h recovery; E8 2 x under 1 h | 12 x 1.7 h | **34.2 h** + 10 S (E5 17.3, E6 5.8, E7 5.8, E8 5.4) |
 | Main tier, seeds 1 and 2 (not run after a futility stop) | 2 x 3 | per seed: E2 5.2 h; E7 7.9 h scoring + 1.2 h recovery; the comparator 1.2 h recovery (E5 / E6 scoring: minutes) | per seed 2 x 1.7 h | **37.8 h** (18.9 per seed: E2 5.2, E7 10.8, comparator 2.9) + 4 S |
 | A1 at B2, seeds 1 and 2 (secondary; under the futility rule) | 2 | per seed 1.2 h recovery (E7's effects re-weighted, no scoring) | 2 x 1.7 h | **5.8 h** + 2 S |
 | E3 `w8`, seeds 1 and 2 (H2; under the futility rule; added 2026-11-08) | 2 | per seed GPTQ under 1 h (deterministic) | 2 x 1.7 h | **5.4 h** |
+| **Conditional** (2026-11-11): H2's matched pruning arm at B3, seeds 1 and 2 (under the futility rule) | 2 | per seed 1.2 h recovery (E5 / E6 scoring minutes) | 2 x 1.7 h | **about 5.8 h (~6 h)** + 2 S, only if the rule below applies |
 | Ablations, seed 0 (A1, A2, A3, A4 x 3, A5, A6 x 2; `A4:n128` and `A5:logprob_drop` are E7) | 9 | 48.3 h (37.7 h scoring: A1 and A2 re-weight E7's effects; + 9 x 1.2 h recovery) | 9 x 1.7 h | **63.7 h** + 9 S (was 79.5 h with A1 and A2 scoring) |
 | RC-E10 (seed 0) | 1 (+ its 4-bit run) | about 4 h (the card: training on the 2B, not measured, and its validation); GPTQ `w4` under 1 h | 4-bit validation 1.7 h; the tests about 1.2 h | about **7.9 h** |
 | RC-L1 (seed 0) | 2 | E2@30k 14.2 h; E7@30k recovery 3.5 h and scoring 7.9 h | 2 x 1.7 h | **29.0 h** + 2 C + S |
@@ -206,7 +207,7 @@ training + 0.53 h validation, measured on seed 0).
 
 | Account | Load (known part, estimates; rebalanced 2026-11-08) |
 |---|---|
-| Soheil (1) | 41.9-49.0 (seed 0 at B2 and no budget, with RC-G2) + 7.9 (RC-E10) + 4.9 (A4 `n32`) + 9 (RC-R1) + 0.8 (E0) + 15.9 (RC-L1 E2@30k) = **about 80.4-87.5 h** (plus 2 C) |
+| Soheil (1) | 44.1-51.2 (seed 0 at B2 and no budget, with RC-G2 and its 30-group check) + 7.9 (RC-E10) + 4.9 (A4 `n32`) + 9 (RC-R1) + 0.8 (E0) + 15.9 (RC-L1 E2@30k) = **about 82.6-89.7 h** (plus 2 C) |
 | Amir (2) | 17.3 (E5 trend) + 25.7 (A4 `n64`, `n256`) + 24.5 (seed 2: E2 5.2, E7 10.8, comparator 2.9, A1 2.9, E3 `w8` 2.7) + 13.1 (RC-L1 E7@30k) = **about 80.6 h** |
 | Account 3 (Soheil) | 17.0 (E6, E7, E8 trend) + 3.5 (RC-E9) + 33.2 (A1, A2, A3, A5, A6 seed 0) + 24.5 (seed 1, as seed 2) = **about 78.2 h** |
 
@@ -220,4 +221,16 @@ the 3-seed tier: E2, E7, the comparator, A1, E3 `w8`) are saved by a futility st
 summary figure for the whole plan was about 190 h; the itemised total is higher mainly by the
 ablations' evaluation passes (15.3 h), RC-L1 (29.0 h) and E10 (7.9 h). If H2's matched budget
 is not B2, its pruning arm needs seeds 1 and 2 too (about 5.8 h more; flagged by the comparison
-step).
+step). RC-G2's 30-group check adds about 2.2 h (2026-11-11), so the plan is about **241-248 h**.
+
+**H2's matched budget (flag, 2026-11-11).** RC-B0 fixed the targets: B1 6,786,040,422.4, B2
+5,953,608,908.8, B3 5,121,177,395.2 bytes (RC-B0 section 6). RC-Q0 measured the student at
+`w8` at 5,197,114,880 bytes (smoke test on synthetic images, not the budget protocol, so an
+estimate only): nearest B3 (1.5 % above it; 12.7 % below B2). The frozen rule decides on E3
+`w8` seed 0's measured peak under the budget protocol (RC-E3; `compare_stage.matched_budget`).
+Once it is committed: **if the matched budget is B3**, the generic pruning arm that comes first
+at B3 by the comparator's ordering (validation, seed 0) needs seeds 1 and 2, behind the same
+futility check, for H2 to stay confirmatory (pre-registration section 4; the conditional row
+above, about 6 GPU h, Amir's seed 2 and account 3's seed 1); without them H2 is reported as
+exploratory. The run cards plan seeds 1 and 2 at B2 only today; the agent adds the B3 arm to
+them when the flag is raised.

@@ -14,7 +14,10 @@
   - at **matched peak memory** with the pruned 3B arm whose measured footprint is nearest its
     own (after RC-B0, which fixes the budgets);
   - **at 4 bit** against E8 (the clinically pruned 3B at 4 bit).
-- Status: `blocked` (see section 2)
+- Status: `ready` for **step 1 only** (the tokenizer check, 2026-11-11). The training stops
+  with "configuration incomplete" until the agent sets `training.mode` from the committed
+  check; the card is not `ready` as a whole until its 4-bit run and comparisons are coded
+  (section 2)
 
 ## 2. Requirements
 

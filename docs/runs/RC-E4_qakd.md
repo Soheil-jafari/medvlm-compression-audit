@@ -11,7 +11,9 @@
   The result is exported in the same 4-bit format as E3 `w4` and evaluated and timed the same
   way.
 - Purpose: the "quantize during training" family of the audit.
-- Status: `blocked` (see section 2)
+- Status: `ready` for seed 0 (2026-11-11): every requirement of section 2 is met (frozen,
+  RC-E0b done, the E2 training values set); its peak at 1 x 16 is not measured, so the
+  out-of-memory rule of section 2 applies
 
 ## 2. Requirements
 

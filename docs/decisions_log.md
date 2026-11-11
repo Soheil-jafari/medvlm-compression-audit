@@ -529,6 +529,16 @@ must be logged here.
     lists (E3, E4, E8, A1-A6: seed 0), `by_arm.csv` gains a `tier` column, the paper tables a
     Seeds column. Farzan's assignments removed from the schedule; seed 1 of the main tier, RC-E9
     and the E7 / E8 trend have no owner yet ([team]).
+- **2026-11-11 (agent, Soheil's request): RC-B0 done; budget targets in bytes; RC-G2's
+  30-group check coded.** No frozen setting changed. RC-B0 measured E2 seed 0 twice on the T4:
+  7,618,471,936 bytes both times, decoder layers 5,549,543,424. The frozen fractions give B1
+  6,786,040,422.4, B2 5,953,608,908.8 and B3 5,121,177,395.2 bytes (`budgets.target_value`,
+  from the committed `efficiency.csv`; nothing chosen). The 30-group check that D07 and
+  correction 1 of item 13 require is now code and RC-G2's last step (30 seeded random channel
+  groups scored exactly; Spearman; below 0.7 the agent stops and asks). H2: RC-Q0's `w8` peak
+  (5,197,114,880 bytes, smoke test, an estimate) is nearest B3; the frozen rule is applied to
+  E3 `w8` seed 0's measured peak once committed; if B3, that arm's seeds 1 and 2 are needed
+  (conditional, about 6 GPU h, `docs/schedule.md` section 7).
 - **2026-11-11 (agent, Soheil's request): one float format for the CSVs; no committed number
   changed.** Every results and generated CSV is written with Python's shortest round-trip
   `repr` (`utils/io.format_cell`) and read with the correctly rounded `float()`, so pandas 2.3.3

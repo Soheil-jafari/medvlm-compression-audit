@@ -1245,3 +1245,22 @@ Append-only, newest at the bottom. One entry per iteration:
   old summaries differed in 1,415 cells by at most 1.7e-14 relative). No run file, paper table
   or verdict changed. Tests pass on both pandas versions.
 
+## Iteration 74: 2026-11-11 (interactive)
+- Stage / item: S06 RC-B0 done; S09 RC-G2 ready.
+- Committed RC-B0's three results files unchanged (SHA-256 equal to the uploads):
+  `results/E2/nobudget/seed0/efficiency.csv`, `efficiency_setup.json`, `environment.json`.
+  RC-B0 section 6 filled: both peak readings 7,618,471,936 bytes (identical, within 3 %);
+  state 7,509,246,624; decoder layers 5,549,543,424; vision 1,337,368,736; other 622,334,464;
+  warm latency 0.9872 s; cold 6.70 s then 1.91 s (not a budget metric); the extra
+  `E1_seed2_adapter` input ignored correctly.
+- Budget targets by `budgets.target_value`: B1 6,786,040,422.4, B2 5,953,608,908.8, B3
+  5,121,177,395.2 bytes (3 % bands in RC-B0 section 6).
+- RC-G2's 30-group check implemented (D07 required it before `ready`): `ClinicalCriterion.
+  exact_scores` (same probes and weights; the exact branch of `score` shares the helper),
+  `stage.run_first_order_check` (30 seeded random channel groups, Spearman against the
+  committed first-order scores, `first_order_check.csv` and `first_order_check:*` rows),
+  `scripts/check_first_order.py`, RC-G2's last step. A report, not a gate. Tests.
+- H2 flag in `docs/schedule.md` (conditional B3 arm seeds 1 and 2, about 6 GPU h); hours
+  updated for the check (about 2.2 h; plan about 241-248 h). Ready: RC-G2, RC-E3 seed 0,
+  RC-E4 seed 0, RC-E9, RC-E10 step 1.
+

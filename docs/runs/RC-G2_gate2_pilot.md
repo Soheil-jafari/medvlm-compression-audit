@@ -9,7 +9,9 @@
   small findings than the best of the generic criteria (E5) and the output-similarity criterion
   (E6) at the primary budget. The answer says which paper shape applies (see
   `docs/FINAL_GOAL.md`). Gate 2 does not stop any run.
-- Status: `blocked` (see section 2)
+- Status: `ready` (2026-11-11): every requirement of section 2 is met (RC-B0 done, B2 =
+  5,953,608,908.8 bytes; the mixed scoring method is set, so the 30-group check of the
+  first-order estimate is added as the card's last step, section 2c)
 
 ## 2. Requirements
 
@@ -33,11 +35,29 @@ your own copy of Kvasir-VQA-x1 and Kvasir-SEG and the private RC-D1 outputs. The
 the teacher cache are attached as private datasets. Nothing from those goes into the repository.
 
 Runtime: five runs; each is scoring of the units, a search for the units that reach B2, a
-recovery training and a validation pass. The scoring of E7 is the long part and depends on the
-method chosen in D07 section 1. The agent fills in the estimate when it sets the card to `ready`
-(it follows from the speeds that RC-M1 and RC-S0 report; until then any number is a guess). Each
-run is independent: use one session per run if needed. The scores of a run are reused when the
-settings are the same, so a repeated command does not score again.
+recovery training and a validation pass. **Estimate (2026-11-11), about 19 GPU h plus the five
+budget searches (not measured):** five recoveries of 157 updates x 27.2 s = 1.2 h each (E2's
+measured update) and five validation passes of about 0.53 h (E2's measured pass): 8.7 h; E7's
+scoring 7.9 h (108 layers and KV groups scored exactly, 640 probes x 0.414 s each; the channel
+groups by the first-order estimate in minutes; the probe count is the schedule's assumption);
+the 30-group check about 2.2 h (30 exact passes over the same probes); E5 and E6 scoring
+minutes. Each run is independent: use one session per run if needed (the session time limit
+is unknown, section 2b). The scores of a run are reused when the settings are the same, so a repeated command does not score
+again.
+
+## 2c. The 30-group check of the first-order estimate (added 2026-11-11)
+
+D07 section 1 (2026-11-08) scores E7's layers and KV groups exactly and its MLP channel groups
+by the first-order estimate (Molchanov et al., CVPR 2019). The check: 30 channel groups drawn at
+random (seeded by the run seed, `stage.check_sample`) are also scored exactly, on the same
+probes and weights, and Spearman's rank correlation between the two scores is reported
+(`scripts/check_first_order.py --seed 0`, E7 by default, after E7's run; it reads the run's
+`unit_scores.csv`). It writes `results/E7/nobudget/seed0/first_order_check.csv` (unit id,
+first-order score, exact score; no images) and the rows `first_order_check:spearman`,
+`:groups`, `:passed`, `:min_rank_correlation` and `:seconds` to that folder's `metrics.csv`.
+It is a report, not a gate (pre-registration section 11 item 13, correction 1): the step does
+not stop the card. **Below 0.7 the agent stops and asks the team** before any other E7 run
+(the trend at B1 and B3, seeds 1 and 2, the ablations that use E7's scores).
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
@@ -51,6 +71,7 @@ settings are the same, so a repeated command does not score again.
   - run E5 taylor B2 seed0
   - run E6 B2 seed0
   - run E7 B2 seed0
+  - first-order check E7 seed0 (section 2c)
 - **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `G2_B2_seed0_pruned`.
 - **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
 - **Session limits:** a T4 x2 session counts **once** against the weekly quota (measured 2026-10-19: a 17-minute T4 x2 session used 16 minutes). The session time limit is unknown here (TODO: the team checks on Kaggle). A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
@@ -98,6 +119,8 @@ For each of the five runs (`<run>` is `E5/<variant>`, `E6` or `E7`):
 - `results/<run>/nobudget/seed0/unit_scores.csv`, `unit_scores.settings.json` and
   `metrics.csv` (numbers per unit and the scoring settings, no images; a later run reuses the
   scores only when the settings file matches)
+- `results/E7/nobudget/seed0/first_order_check.csv` and the `first_order_check:*` rows of
+  that folder's `metrics.csv` (section 2c)
 - This card with section 6 filled.
 
 Check before committing: `git status` shows no images, adapters, caches or `outcomes.npz`.
@@ -119,4 +142,5 @@ settings are fixed before the run.
 - Per run: wall time of scoring / search / recovery / evaluation, peak GPU memory:
 - Units removed and measured peak memory against the B2 target (from `budget_search.csv`):
 - Name of the private datasets with the pruned models and `outcomes.npz` files:
+- The 30-group check: `first_order_check:spearman` and the step's wall time:
 - Anything unusual (errors, retries, changed settings):

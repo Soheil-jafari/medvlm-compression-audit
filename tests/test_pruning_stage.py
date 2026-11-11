@@ -317,3 +317,47 @@ def test_a1_and_a2_reweight_e7s_per_finding_effects_without_a_model(tmp_path: Pa
             {**config("uniform"), "inputs": {"image_longest_side": "TODO"}},
             RunContext("A1", seed=2), train=train,
         )  # fmt: skip
+
+
+def test_the_first_order_check_scores_random_channel_groups_exactly(tmp_path: Path) -> None:
+    import csv
+    import math
+
+    train = write_dataset(tmp_path)
+
+    def config(method: Any) -> dict[str, Any]:
+        return _config(
+            tmp_path,
+            criterion="clinical",
+            clinical={"delta": "logprob_drop", "weighting": "uniform",
+                      "negatives_per_positive": None, "negative_delta": "keep",
+                      "ablation_method": method, "batch_size": 4},
+        )  # fmt: skip
+
+    mixed = config({"decoder_layer": "exact", "attention_head": "exact",
+                    "mlp_channel_group": "first_order"})  # fmt: skip
+    run = RunContext("E7", seed=0)
+    with pytest.raises(FileNotFoundError, match="score the units first"):
+        stage.run_first_order_check(mixed, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    path = stage.run_scoring(mixed, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    estimates = common.read_unit_scores(path)
+    values = stage.run_first_order_check(mixed, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    with path.with_name(stage.CHECK_FILE).open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    groups = sorted(u for u in estimates if u.startswith("mlp"))
+    assert [r["unit_id"] for r in rows] == stage.check_sample(groups, 30, 0)
+    assert len(rows) == min(30, len(groups)) and len(rows) >= 2
+    for row in rows:  # the first-order column is the committed estimate
+        assert float(row["first_order"]) == estimates[row["unit_id"]]
+    rho = values["first_order_check:spearman"]
+    assert math.isnan(rho) or -1.0 <= rho <= 1.0
+    assert values["first_order_check:passed"] == float(rho >= stage.CHECK_MIN_RANK_CORRELATION)
+    metrics = (path.with_name("metrics.csv")).read_text()
+    assert "first_order_check:spearman" in metrics and "scoring_units" in metrics
+    # the exact column equals scoring the same groups with exact ablation
+    exact = stage.run_scoring(config("exact"), run, tiny_vlm.tiny_wrapper(seed=0), train)
+    truth = common.read_unit_scores(exact)
+    for row in rows:
+        assert float(row["exact"]) == pytest.approx(truth[row["unit_id"]], rel=1e-9, abs=1e-12)
+    with pytest.raises(ConfigError, match="no first_order unit type"):
+        stage.run_first_order_check(config("exact"), run, tiny_vlm.tiny_wrapper(seed=0), train)

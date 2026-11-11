@@ -204,6 +204,13 @@ def g2_runs() -> tuple[Run, ...]:
     return e5 + (Run("E6", 0, "B2"), Run("E7", 0, "B2"))
 
 
+FIRST_ORDER_CHECK = Step(
+    "first-order check E7 seed0", _script("check_first_order.py", "--seed", "0")
+)
+"""After E7's scoring: 30 random channel groups scored exactly (D07; a report, not a gate). The
+script's experiment is E7 by default: it is not a registered stage of every E7 run."""
+
+
 def _pick(values: Sequence[str], wanted: Sequence[str] | None) -> tuple[str, ...]:
     if not wanted:
         return tuple(values)
@@ -485,7 +492,8 @@ def build_plan(
         _no_seed(card, seed)
         runs = list(g2_runs())
         return CardPlan(
-            card, "Gate 2 pilot at B2, seed 0 (validation)", 1, tuple(_experiment(r) for r in runs),
+            card, "Gate 2 pilot at B2, seed 0 (validation)", 1,
+            (*(_experiment(r) for r in runs), FIRST_ORDER_CHECK),
             handoffs=(Handoff("pruned", tuple(runs), "G2_B2_seed0_pruned"),),
             needs=(Need("adapter", Run("E2")), Need("teacher_cache")), internet=True,
             notes=("the grid sessions of seed 0 attach this hand-off and skip these five runs",),

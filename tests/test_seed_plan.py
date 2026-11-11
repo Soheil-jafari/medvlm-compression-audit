@@ -178,3 +178,19 @@ def test_the_choice_script_writes_the_record_the_cards_read(tmp_path: Path) -> N
     assert record["comparator"] == "E5:taylor" and record["futility_stop"] is False
     assert [r["label"] for r in record["ranking"]][:2] == ["E5:taylor", "E5:activation"]
     assert sp.load_choice(tmp_path) == record
+
+
+def test_the_first_order_check_draws_a_fixed_sample_and_runs_after_e7_in_rc_g2() -> None:
+    from medcompress.compression.pruning import stage
+
+    ids = [f"mlp:{k}" for k in range(200)]
+    sample = stage.check_sample(ids, stage.CHECK_GROUPS, 0)
+    assert len(sample) == 30 and sample == stage.check_sample(list(reversed(ids)), 30, 0)
+    assert sample != stage.check_sample(ids, 30, 1)
+    assert stage.check_sample(ids[:5], 30, 0) == sorted(ids[:5])
+    assert math.isnan(stage.rank_correlation([1.0, 2.0, 3.0], [5.0, 5.0, 5.0]))
+    assert stage.rank_correlation([1.0, 2.0, 3.0], [10.0, 30.0, 20.0]) == pytest.approx(0.5)
+    labels = [s.label for s in build_plan("RC-G2").steps]
+    assert labels[-2:] == ["run E7 B2 seed0", "first-order check E7 seed0"]
+    step = build_plan("RC-G2").steps[-1]
+    assert step.argv == ("scripts/check_first_order.py", "--seed", "0")  # E7 by default

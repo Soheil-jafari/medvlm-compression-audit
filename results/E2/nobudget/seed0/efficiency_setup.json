@@ -1,0 +1,27 @@
+{
+  "hardware": {
+    "cpu_count": 4,
+    "cuda_version": "13.0",
+    "gpus": [
+      {
+        "capability": "7.5",
+        "index": 0,
+        "name": "Tesla T4",
+        "total_memory_bytes": 15636037632
+      }
+    ],
+    "platform": "Linux-6.18.55+-x86_64-with-glibc2.39",
+    "python": "3.13.16",
+    "torch_version": "2.11.0+cu130"
+  },
+  "protocol": {
+    "batch_size": 1,
+    "hardware": "Kaggle Tesla T4",
+    "max_new_tokens": 46,
+    "n_samples": 32,
+    "repeats": 5,
+    "samples": 32,
+    "warmup_runs": 3
+  },
+  "timing_role": "development"
+}

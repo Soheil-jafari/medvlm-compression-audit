@@ -438,6 +438,17 @@ E1,,2,op_recall_stratum:2,1.0,,,E1/nobudget/seed2/metrics.csv,val
 E1,,2,op_recall_stratum:3,0.9761904761904762,,,E1/nobudget/seed2/metrics.csv,val
 E1,,2,op_mask_positive_recall,0.9883720930232558,,,E1/nobudget/seed2/metrics.csv,val
 E1,,2,op_small_margin_mean,10.275292838995274,,,E1/nobudget/seed2/metrics.csv,val
+E2,,0,num_parameters,3754622976.0,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,state_bytes,7509246624.0,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,peak_memory_bytes,7618471936.0,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,cold_latency_s,1.9131799249998949,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,warm_latency_s,0.9872067415000174,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,throughput_samples_per_s,0.9640229777771704,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,energy_joules_per_sample,68.91486515895708,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,benchmark_seconds,298.8399810110002,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,decoder_layers_bytes,5549543424.0,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,vision_bytes,1337368736.0,,,E2/nobudget/seed0/efficiency.csv,
+E2,,0,other_bytes,622334464.0,,,E2/nobudget/seed0/efficiency.csv,
 E2,,0,train_steps,625.0,,,E2/nobudget/seed0/metrics.csv,val
 E2,,0,train_examples_seen,10000.0,,,E2/nobudget/seed0/metrics.csv,val
 E2,,0,train_loss_final_finite,0.3244175950414501,,,E2/nobudget/seed0/metrics.csv,val

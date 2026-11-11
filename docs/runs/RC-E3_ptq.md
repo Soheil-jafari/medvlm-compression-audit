@@ -9,7 +9,10 @@
   **validation** split now and on the **test** split after the pre-registration freeze, and
   timed with the budget protocol.
 - Purpose: the "quantize after training" family of the audit (D08).
-- Status: `blocked` (see section 2)
+- Status: `ready` for seed 0 (2026-11-11): every requirement of section 2 is met (frozen,
+  RC-E2 seed 0 done). Seeds 1 and 2 (`w8` only) wait for seed 0's futility check. Seed 0's
+  measured `w8` peak decides H2's matched budget (RC-Q0 measured about 5.20 GB, nearest B3;
+  docs/schedule.md section 7)
 
 ## 2. Requirements
 

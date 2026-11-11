@@ -8,7 +8,7 @@
   test after the freeze, and timed with the budget protocol.
 - Purpose: a supplementary comparison at matched memory: a quantized big model against the
   compressed small ones (D08).
-- Status: `blocked` (see section 2)
+- Status: `ready` (2026-11-11): every requirement of section 2 is met (RC-TT1 done, frozen)
 
 ## 2. Requirements
 

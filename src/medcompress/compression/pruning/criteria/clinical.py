@@ -452,21 +452,15 @@ class ClinicalCriterion(PruningCriterion):
             out["weights"] = load_config(components["finding_weights"])
         return out
 
-    def score(
-        self,
-        model: VLMWrapper,
-        units: Sequence[PrunableUnit],
-        calibration: Sequence[VQASample],
-    ) -> dict[str, float]:
-        """Run steps 1-3 of the procedure and return ``{unit_id: I_j}``."""
+    def _probe_set(
+        self, settings: ClinicalSettings, calibration: Sequence[VQASample]
+    ) -> tuple[list[Any], list[str], dict[str, float]]:
+        """The balanced probes of the calibration images, the findings that have probes and
+        their weights (the same for the scoring and for the first-order check)."""
         from medcompress.compression.pruning import scoring
         from medcompress.config import ConfigError, find_todos, load_config
         from medcompress.evaluation.image_reliance import unique_image_probes
 
-        settings = ClinicalSettings.from_config(self.config)
-        missing = sorted({u.unit_type.value for u in units} - set(settings.methods))
-        if missing:
-            raise ConfigError(f"pruning.clinical.ablation_method has no entry for {missing}")
         domain = load_config(self.config["components"]["domain"])["domain"]
         findings = domain.get("findings")
         template = (domain.get("probe") or {}).get("template")
@@ -485,21 +479,63 @@ class ClinicalCriterion(PruningCriterion):
         weights = finding_weights_for(
             self.config, present, settings.weighting, allow_unfrozen=settings.debug_unfrozen_weights
         )
-        finding_probes = scoring.to_finding_probes(probes)
-        out: dict[str, float] = {}
-        effects: dict[str, dict[str, float]] = {}  # unit -> finding -> its per-finding effect
+        return scoring.to_finding_probes(probes), present, weights
+
+    def _exact_effects(
+        self,
+        model: VLMWrapper,
+        units: Sequence[PrunableUnit],
+        finding_probes: Sequence[Any],
+        settings: ClinicalSettings,
+    ) -> dict[str, dict[str, float]]:
+        """``{unit_id: {finding: mean Delta}}``: each unit switched off and scored again."""
+        from medcompress.compression.pruning import scoring
+
+        effects: dict[str, dict[str, float]] = {}
+        if not units:
+            return effects
+        baseline = scoring.score_probe_images(model, finding_probes, self.data_root)
+        for number, unit in enumerate(units, 1):
+            with scoring.ablate(model, unit):
+                ablated = scoring.score_probe_images(model, finding_probes, self.data_root)
+            deltas = delta(baseline, ablated, finding_probes, settings.delta)
+            effects[unit.unit_id] = finding_means(deltas, clip_negative=settings.clip_negative)
+            if number % 25 == 0 or number == len(units):
+                print(f"[clinical] exact ablation: {number}/{len(units)} units", flush=True)
+        return effects
+
+    def exact_scores(
+        self,
+        model: VLMWrapper,
+        units: Sequence[PrunableUnit],
+        calibration: Sequence[VQASample],
+    ) -> dict[str, float]:
+        """``{unit_id: I_j}`` by exact ablation whatever ``ablation_method`` says, on the same
+        probes and weights as :meth:`score` (RC-G2's check of the first-order estimate)."""
+        settings = ClinicalSettings.from_config(self.config)
+        finding_probes, _present, weights = self._probe_set(settings, calibration)
+        effects = self._exact_effects(model, units, finding_probes, settings)
+        return {unit_id: weighted_sum(e, weights) for unit_id, e in effects.items()}
+
+    def score(
+        self,
+        model: VLMWrapper,
+        units: Sequence[PrunableUnit],
+        calibration: Sequence[VQASample],
+    ) -> dict[str, float]:
+        """Run steps 1-3 of the procedure and return ``{unit_id: I_j}``."""
+        from medcompress.compression.pruning import scoring
+        from medcompress.config import ConfigError
+
+        settings = ClinicalSettings.from_config(self.config)
+        missing = sorted({u.unit_type.value for u in units} - set(settings.methods))
+        if missing:
+            raise ConfigError(f"pruning.clinical.ablation_method has no entry for {missing}")
+        finding_probes, present, weights = self._probe_set(settings, calibration)
         exact = [u for u in units if settings.methods[u.unit_type.value] == "exact"]
         first_order = [u for u in units if settings.methods[u.unit_type.value] == "first_order"]
-        if exact:
-            baseline = scoring.score_probe_images(model, finding_probes, self.data_root)
-            for number, unit in enumerate(exact, 1):
-                with scoring.ablate(model, unit):
-                    ablated = scoring.score_probe_images(model, finding_probes, self.data_root)
-                deltas = delta(baseline, ablated, finding_probes, settings.delta)
-                effects[unit.unit_id] = finding_means(deltas, clip_negative=settings.clip_negative)
-                out[unit.unit_id] = weighted_sum(effects[unit.unit_id], weights)
-                if number % 25 == 0 or number == len(exact):
-                    print(f"[clinical] exact ablation: {number}/{len(exact)} units", flush=True)
+        effects = self._exact_effects(model, exact, finding_probes, settings)
+        out = {unit_id: weighted_sum(e, weights) for unit_id, e in effects.items()}
         if first_order:
             # one backward pass per finding (each probe is still forwarded once): the gate
             # gradient of sum_c w_c * mean_x log p is linear in w, so the per-finding gradients

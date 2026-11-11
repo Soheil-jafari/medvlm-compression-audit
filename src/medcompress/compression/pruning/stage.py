@@ -43,6 +43,12 @@ EFFECTS_SETTINGS_FILE = "unit_effects.settings.json"
 EFFECTS_SOURCE = "E7"
 """The run whose per-finding effects A1 and A2 re-weight (same seed)."""
 REWEIGHTED_SCHEMES: tuple[str, ...] = ("uniform", "rarity_only")
+CHECK_FILE = "first_order_check.csv"
+CHECK_GROUPS = 30
+"""RC-G2's check of the first-order estimate: this many random channel groups (D07)."""
+CHECK_MIN_RANK_CORRELATION = 0.7
+"""Below this Spearman correlation the agent stops and asks the team (a report, not a gate;
+pre-registration section 11 item 13, correction 1, 2026-11-08)."""
 
 
 def _open(value: Any) -> bool:
@@ -462,3 +468,117 @@ def score_units_for_experiment(
     if train is None:
         train = [] if settings.calibration_size is None else load_train_samples(config)
     run_scoring(config, run, model, train, criterion=criterion, force=force)
+
+
+# ------------------------------------------------------------ the first-order check (RC-G2)
+
+
+def check_sample(unit_ids: Sequence[str], n: int, seed: int) -> list[str]:
+    """``n`` unit ids drawn at random (seeded, independent of the input order)."""
+    import random
+
+    ordered = sorted(unit_ids)
+    return sorted(random.Random(f"first_order_check:{seed}").sample(ordered, min(n, len(ordered))))
+
+
+def rank_correlation(x: Sequence[float], y: Sequence[float]) -> float:
+    """Spearman's rank correlation (NaN when either side is constant or too short)."""
+    import math
+
+    from scipy import stats
+
+    if len(x) < 2 or len(set(x)) < 2 or len(set(y)) < 2:
+        return math.nan
+    return float(stats.spearmanr(x, y)[0])
+
+
+def run_first_order_check(
+    config: Mapping[str, Any],
+    run: RunContext,
+    model: VLMWrapper,
+    train: Sequence[VQASample],
+    *,
+    criterion: PruningCriterion | None = None,
+    n_groups: int = CHECK_GROUPS,
+) -> dict[str, float]:
+    """Score ``n_groups`` random first-order units exactly and compare with their estimates.
+
+    The estimates are the run's committed ``unit_scores.csv`` (stage 04 first). The exact
+    scores use the same probes and weights (:meth:`ClinicalCriterion.exact_scores`). Writes
+    ``first_order_check.csv`` (unit id, first-order score, exact score) next to the scores and
+    the ``first_order_check:*`` rows to the run's ``metrics.csv``.
+    """
+    from medcompress.compression.pruning.criteria import get_criterion
+    from medcompress.compression.pruning.criteria.clinical import ClinicalSettings
+    from medcompress.compression.pruning.criteria.common import read_unit_scores
+    from medcompress.compression.pruning.units import enumerate_units
+    from medcompress.data.splits import make_calibration_subset
+    from medcompress.utils.io import upsert_results, write_csv
+
+    effective = apply_variant(config, run.variant)
+    settings = ScoringSettings.from_config(config, run.variant)
+    if settings.criterion != "clinical":
+        raise ConfigError(f"the first-order check is for the clinical criterion, not "
+                          f"{settings.criterion!r}")  # fmt: skip
+    methods = ClinicalSettings.from_config(effective).methods
+    target = scores_path(config, run)
+    if not target.is_file():
+        raise FileNotFoundError(f"no {target}: score the units first (stage 04)")
+    estimates = read_unit_scores(target)
+    units = enumerate_units(
+        model,
+        [UnitType(t) for t in settings.unit_types],
+        mlp_channel_group_size=settings.mlp_channel_group_size,
+    )
+    candidates = {u.unit_id: u for u in units if methods.get(u.unit_type.value) == "first_order"}
+    if not candidates:
+        raise ConfigError("pruning.clinical.ablation_method has no first_order unit type")
+    chosen = check_sample(list(candidates), n_groups, run.seed)
+    instance = criterion or get_criterion("clinical")(effective, seed=run.seed)
+    calibration: list[VQASample] = []
+    if settings.calibration_size is not None:
+        calibration = make_calibration_subset(train, settings.calibration_size, seed=run.seed)
+    started = time.perf_counter()
+    exact = instance.exact_scores(model, [candidates[c] for c in chosen], calibration)
+    seconds = time.perf_counter() - started
+    pairs = [(c, float(estimates[c]), float(exact[c])) for c in chosen]
+    write_csv(target.with_name(CHECK_FILE), ("unit_id", "first_order", "exact"), pairs)
+    rho = rank_correlation([p[1] for p in pairs], [p[2] for p in pairs])
+    values = {
+        "first_order_check:groups": float(len(pairs)),
+        "first_order_check:spearman": rho,
+        "first_order_check:min_rank_correlation": CHECK_MIN_RANK_CORRELATION,
+        "first_order_check:passed": float(rho >= CHECK_MIN_RANK_CORRELATION),
+        "first_order_check:seconds": seconds,
+    }
+    rows = [{"experiment": run.experiment_tag, "budget": "", "seed": run.seed, "metric": m,
+             "value": v} for m, v in values.items()]  # fmt: skip
+    upsert_results(rows, target.with_name("metrics.csv"))
+    verdict = "at or above" if rho >= CHECK_MIN_RANK_CORRELATION else "BELOW (or undefined)"
+    print(f"first-order check: Spearman {rho:.3f} over {len(pairs)} groups, {verdict} "
+          f"{CHECK_MIN_RANK_CORRELATION}; wrote {target.with_name(CHECK_FILE)}")  # fmt: skip
+    if not rho >= CHECK_MIN_RANK_CORRELATION:
+        print("first-order check: below the rule of D07: the agent stops and asks the team "
+              "before E7's other runs")  # fmt: skip
+    return values
+
+
+def first_order_check_for_experiment(
+    config: Mapping[str, Any],
+    run: RunContext | None,
+    *,
+    model: VLMWrapper | None = None,
+    train: Sequence[VQASample] | None = None,
+    criterion: PruningCriterion | None = None,
+) -> None:
+    """Stage entry point for ``scripts/check_first_order.py`` (RC-G2, E7 seed 0)."""
+    if run is None:
+        raise ConfigError("--exp is required")
+    settings = ScoringSettings.from_config(config, run.variant)
+    _check_criterion(config, run)
+    _check_side(config, model)
+    if model is None:
+        model = load_scoring_model(config, run)
+    if train is None:
+        train = [] if settings.calibration_size is None else load_train_samples(config)
+    run_first_order_check(config, run, model, train, criterion=criterion)
