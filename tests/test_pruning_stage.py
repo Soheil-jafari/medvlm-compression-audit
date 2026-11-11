@@ -344,7 +344,7 @@ def test_the_first_order_check_scores_random_channel_groups_exactly(tmp_path: Pa
     values = stage.run_first_order_check(mixed, run, tiny_vlm.tiny_wrapper(seed=0), train)
     with path.with_name(stage.CHECK_FILE).open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    groups = sorted(u for u in estimates if u.startswith("mlp"))
+    groups = sorted(u for u in estimates if ".mlp_group" in u)
     assert [r["unit_id"] for r in rows] == stage.check_sample(groups, 30, 0)
     assert len(rows) == min(30, len(groups)) and len(rows) >= 2
     for row in rows:  # the first-order column is the committed estimate
