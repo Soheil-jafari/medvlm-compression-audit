@@ -1280,3 +1280,15 @@ Append-only, newest at the bottom. One entry per iteration:
   per search for E5 / E7 and 0.8 h for E6, from RC-B0's reading times).
 - Datasets each account needs shared: `docs/schedule.md` section 7, "Datasets". Tests.
 
+## Iteration 76: 2026-11-12 (interactive)
+- Stage / item: S11 E10, RC-E10 step 1 done.
+- Committed `results/smoke/RC-E10/tokenizer_check.csv` as reported (the bytes equal what the
+  check's writer gives for those values): 5,238 cache ids, 0 differ; 9,991 of 10,000 answers
+  re-encoded exactly (0.9991 >= 0.99); passed.
+- `training.mode: offline_kd` in `configs/experiments/E10.yaml` (section 11 item 13 rule).
+- Qwen/Qwen3-VL-2B-Instruct pinned at revision 89644892e4d85e24eaac8bacfd4f463576704203 (the
+  hash Soheil gave; equal to the 2026-10-12 `sha_seen`) in its model config; the tokenizer
+  check now reads `resolved_revision` like the model loader (it printed "@ None" before).
+- RC-E10 ready for training, validation and benchmark (Soheil, account 1; `medcompress-data`,
+  `e0-teacher-cache`; about 4-5.3 GPU h, estimate). Tests.
+

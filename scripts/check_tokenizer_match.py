@@ -97,8 +97,9 @@ def _tokenizer(model_config: str) -> tuple[Any, str, str | None]:
     from medcompress.models.loading import ModelSpec
 
     spec = ModelSpec.from_config(load_config(model_config))
-    kwargs = {"revision": spec.revision} if spec.revision else {}
-    return AutoTokenizer.from_pretrained(spec.source, **kwargs), spec.source, spec.revision
+    revision = spec.resolved_revision  # the same revision the model loader uses
+    kwargs = {"revision": revision} if revision else {}
+    return AutoTokenizer.from_pretrained(spec.source, **kwargs), spec.source, revision
 
 
 def rows(check: TokenizerCheck, exp: str) -> Sequence[dict[str, Any]]:

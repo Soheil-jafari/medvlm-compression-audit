@@ -1,0 +1,6 @@
+experiment,budget,seed,metric,value,ci_low,ci_high
+E10,,0,tokenizer_ids_checked,5238.0,,
+E10,,0,tokenizer_ids_differing,0.0,,
+E10,,0,tokenizer_answers_checked,10000.0,,
+E10,,0,tokenizer_answer_match_share,0.9991,,
+E10,,0,tokenizer_check_passed,1.0,,

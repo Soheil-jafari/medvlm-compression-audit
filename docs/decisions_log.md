@@ -529,6 +529,11 @@ must be logged here.
     lists (E3, E4, E8, A1-A6: seed 0), `by_arm.csv` gains a `tier` column, the paper tables a
     Seeds column. Farzan's assignments removed from the schedule; seed 1 of the main tier, RC-E9
     and the E7 / E8 trend have no owner yet ([team]).
+- **2026-11-12 (Soheil; the rule of pre-registration section 11 item 13): E10 uses the E2
+  recipe.** RC-E10 step 1 passed (0 of 5,238 cache ids differ; 99.9 % of the answers
+  re-encoded exactly, 99 % needed), so `training.mode: offline_kd`. The 2B is pinned at
+  revision 89644892e4d85e24eaac8bacfd4f463576704203 (the 2026-10-12 `sha_seen`). Applying the
+  pre-registered rule, not an amendment.
 - **2026-11-11 (Soheil): cards reassigned; RC-G2 in four sessions.** RC-E3 seed 0 runs on
   Amir's account; RC-E9, then RC-E4 seed 0, on account 3; Soheil runs RC-E10 step 1 and RC-G2.
   RC-G2 (about 25 GPU h, estimate) is split into four sessions under Kaggle's 12-hour session

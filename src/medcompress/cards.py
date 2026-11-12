@@ -673,8 +673,8 @@ def build_plan(
             card, "E10 native 2B student, seed 0 (exploratory)", 1, (check, *_training(run)),
             handoffs=(Handoff("adapter", (run,), "E10_seed0_adapter"),),
             needs=(Need("teacher_cache"),), internet=True,
-            notes=("the training stops with 'configuration incomplete' until training.mode is "
-                   "set from the tokenizer check (card section 3)",),
+            notes=("training.mode was set from the tokenizer check on 2026-11-12 (offline_kd); "
+                   "the 2B is pinned at revision 89644892",),
         )  # fmt: skip
     if card == "RC-T1":
         raise CardError("RC-T1 runs on the rented GPU, not on Kaggle: follow its card")

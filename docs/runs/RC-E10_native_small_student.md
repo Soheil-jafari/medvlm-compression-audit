@@ -14,10 +14,10 @@
   - at **matched peak memory** with the pruned 3B arm whose measured footprint is nearest its
     own (after RC-B0, which fixes the budgets);
   - **at 4 bit** against E8 (the clinically pruned 3B at 4 bit).
-- Status: `ready` for **step 1 only** (the tokenizer check, 2026-11-11). The training stops
-  with "configuration incomplete" until the agent sets `training.mode` from the committed
-  check; the card is not `ready` as a whole until its 4-bit run and comparisons are coded
-  (section 2)
+- Status: `ready` (2026-11-12) for the training, the validation and the benchmark (steps
+  2-4). Step 1 passed on Kaggle (commit 262a4f1): `training.mode: offline_kd`, the 2B pinned at
+  revision 89644892e4d85e24eaac8bacfd4f463576704203 (section 6). The 4-bit E10 and the two
+  comparisons are a later card step (agent code still to come); they do not block the training
 
 ## 2. Requirements
 
@@ -35,11 +35,14 @@
   - **Either fails:** the E1 recipe (`sft`, `kd_weight: 0`, `kd_temperature: null`,
     `teacher_cache_from: null`, as `E1.yaml`), and the report and the paper say so.
   The agent sets the value from the committed `results/smoke/RC-E10/tokenizer_check.csv`; until
-  then the training stops with "configuration incomplete".
+  then the training stops with "configuration incomplete". **Met 2026-11-12:** both pass,
+  `training.mode: offline_kd`.
 - The 2B's revision pinned in its model config (`sha_seen` 89644892..., recorded 2026-10-12;
-  pinned from what step 1 prints, never typed from memory).
+  pinned from what step 1 prints, never typed from memory). **Met 2026-11-12:** `revision:
+  89644892e4d85e24eaac8bacfd4f463576704203` in `configs/models/qwen3_vl_2b_student.yaml`, read
+  by the model loader and, since then, by the tokenizer check too.
 - The freeze, for the test split (as every arm).
-- **Code still to come (agent), before this card is `ready`:** the 4-bit E10 (GPTQ `w4` of the
+- **Code still to come (agent), before the 4-bit step (not before the training):** the 4-bit E10 (GPTQ `w4` of the
   merged E10 student, like E3 `w4`) and the two exploratory comparisons in the comparison step
   (E10 against the pruned 3B arm nearest its peak memory; E10 at 4 bit against E8). Not
   tested on the real 2B here: its LoRA targets, image processing (patch 16) and memory on one
@@ -48,7 +51,9 @@
 GPU hours (estimate, about **4 h** on T4 x2, counted once): the training of 625 updates on the
 smaller model (E2's measured 3B update is 27.2 s; the 2B's is not measured) and one validation
 pass (about 0.5 h), plus the setup. The 4-bit run and the test evaluations come on top (GPTQ
-under 1 h, about 1.7 h of evaluation per model, the schedule's figures).
+under 1 h, about 1.7 h of evaluation per model, the schedule's figures). If the 2B's update is as slow as
+the 3B's 27.2 s, the training is 4.72 h and the session about 5.3 h (2026-11-12); either way it
+fits one session under the 12-hour limit, and the training saves its state every 50 updates.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-11-08)
 
@@ -60,7 +65,7 @@ under 1 h, about 1.7 h of evaluation per model, the schedule's figures).
   `SEED = None`; it runs `python scripts/run_card.py --card RC-E10`, which finds the shared data
   and the cache by their manifests. Steps:
   - tokenizer check (E2 or E1 recipe)
-  - train E10 seed0 (stops until `training.mode` is set from the check)
+  - train E10 seed0 (`training.mode: offline_kd`, set 2026-11-12)
   - validation E10 seed0
   - benchmark E10 seed0 (waits if a setting is open)
 - **Hand-offs it writes:** `E10_seed0_adapter` (ONE private dataset, `e10-seed0-adapter`).
@@ -104,10 +109,23 @@ without distillation in mind, and the text says so.
 
 ## 6. Run report (filled by the person who ran it)
 
+**Step 1 (the tokenizer check), reported by Soheil on 2026-11-12:**
+
+- Commit actually used: 262a4f1.
+- Tokenizer check (`results/smoke/RC-E10/tokenizer_check.csv`, committed as reported): 5,238
+  cache token ids checked, 0 differ; 9,991 of 10,000 cached answers re-encoded exactly (0.9991,
+  the rule needs 0.99); `tokenizer_check_passed` = 1. Recipe: the E2 recipe
+  (`training.mode: offline_kd`).
+- Revisions printed: the student tokenizer "@ None" (unpinned at that commit: the check read
+  only `revision`, while the model loader falls back to `sha_seen`). Pinned since then at
+  89644892e4d85e24eaac8bacfd4f463576704203 (the hash Soheil gave, equal to the `sha_seen` of
+  2026-10-12); the tokenizer check now reads the same revision as the loader. The teacher's
+  printed revision was not reported.
+
+**Steps 2-4 (training, validation, benchmark):**
+
 - Run by / date:
 - Commit actually used:
-- Tokenizer check: ids checked / differing, answers matching, the recipe chosen:
-- Revisions printed (teacher, 2B):
 - Wall time, peak GPU memory, final training loss:
 - Name of the private dataset with the adapter:
 - Anything unusual:

@@ -276,9 +276,15 @@ def test_the_settings_printout_quotes_lines_or_says_not_stated(tmp_path: Path) -
     def offline(source: str) -> Any:
         raise OSError("offline")
 
-    fallback = REPO / "configs" / "models" / "qwen3_vl_2b_student.yaml"
+    pinned = REPO / "configs" / "models" / "qwen3_vl_2b_student.yaml"  # pinned 2026-11-12
+    (tmp_path / "_model_base.yaml").write_text((pinned.parent / "_model_base.yaml").read_text())
+    fallback = tmp_path / "unpinned.yaml"  # the same config without its pin
+    fallback.write_text("".join(
+        line for line in pinned.read_text().splitlines(keepends=True)
+        if not line.lstrip().startswith("revision:")
+    ))  # fmt: skip
     spec, lines = script._revision_lines(fallback, offline)
-    assert spec.revision is None  # the fallback stays unpinned
+    assert spec.revision is None
     assert "config revision: revision not pinned" in lines
     assert "config sha_seen: 89644892e4d85e24eaac8bacfd4f463576704203" in lines
     assert lines[-1] == "hub main now: could not read (OSError: offline)"

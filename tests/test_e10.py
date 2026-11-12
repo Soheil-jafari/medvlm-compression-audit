@@ -56,7 +56,7 @@ def test_the_registry_and_the_config_name_the_2b_student() -> None:
     config, experiment = load_experiment("E10")
     assert experiment.seeds == (0,)
     assert student_config_path(config) == "models/qwen3_vl_2b_student.yaml"
-    assert str(config["training"]["mode"]).startswith("TODO")  # set from the tokenizer check
+    assert config["training"]["mode"] == "offline_kd"  # set from the tokenizer check, 2026-11-12
 
 
 def test_the_card_checks_the_tokenizer_before_training() -> None:

@@ -28,9 +28,10 @@ experiment:
   status: planned
 
 model:
-  config: models/qwen3_vl_2b_student.yaml   # the D05 fallback; its revision is pinned from RC-E10 step 1
+  config: models/qwen3_vl_2b_student.yaml   # the D05 fallback; revision pinned 2026-11-12 (RC-E10 step 1)
 
 training:
-  mode: TODO                              # offline_kd (the E2 recipe) if RC-E10 step 1 passes;
-                                          # else sft with kd_weight 0, kd_temperature null and
-                                          # teacher_cache_from null (the E1 recipe, as E1.yaml)
+  mode: offline_kd                        # 2026-11-12: RC-E10 step 1 passed (0 of 5,238 cache ids
+                                          # differ; 9,991 of 10,000 answers re-encoded exactly,
+                                          # 99.9 % >= 99 %), so the E2 recipe (pre-registration
+                                          # section 11 item 13); results/smoke/RC-E10/tokenizer_check.csv
