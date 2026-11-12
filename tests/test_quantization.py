@@ -303,3 +303,20 @@ def test_the_committed_rc_q0_rows_give_the_configured_class() -> None:
     classes = [TORCH_KERNEL_CLASS if s == "TorchLinear" else f"gptqmodel.x.{s}" for s in shorts]
     assert choose_kernel_class(rows, classes) == TORCH_KERNEL_CLASS
     assert kernel_class_from_config(_ptq_config()) == TORCH_KERNEL_CLASS
+
+
+def test_the_gptq_memory_caps_leave_room_on_each_gpu_for_the_teachers_down_proj() -> None:
+    from medcompress.compression.quantization.gptq import gptq_peak_bytes
+    from medcompress.compression.quantization.ptq import GPTQ_MARGIN_BYTES, gptq_max_memory
+    from medcompress.config import ConfigError
+
+    # the teacher's down_proj: in 18,944 (intermediate), out 3,584 (hidden); T4 capacity as
+    # measured in RC-B0's efficiency_setup.json; weights 2 x 8,292,166,656 parameters (fp16)
+    peak = gptq_peak_bytes(18944, 3584)
+    assert peak == 3 * 4 * 18944**2 + 5 * 3584 * 18944 == 4_645_978_112
+    t4, weights = 15_636_037_632, 2 * 8_292_166_656
+    caps = gptq_max_memory([t4, t4], weights, 18944, 3584)
+    assert caps == {0: t4 - peak - GPTQ_MARGIN_BYTES, 1: t4 - peak - GPTQ_MARGIN_BYTES}
+    assert sum(caps.values()) >= weights  # both T4s hold the weights with the room kept
+    with pytest.raises(ConfigError, match="cannot hold"):
+        gptq_max_memory([t4], weights, 18944, 3584)  # one T4: the weights would go to the CPU

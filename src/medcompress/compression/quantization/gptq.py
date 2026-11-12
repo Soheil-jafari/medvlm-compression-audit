@@ -158,9 +158,18 @@ def gptq_torch(
     dead = torch.diag(h) == 0
     h[dead, dead] = 1.0
     w[:, dead] = 0.0
-    h += damping * torch.mean(torch.diag(h)) * torch.eye(h.shape[0], device=h.device)
+    # The dampening in place, on the diagonal only (2026-11-12): the same numbers as adding
+    # ``damping * mean(diag) * I`` (off the diagonal that added zeros), without the two extra
+    # (in x in) matrices of the identity and its scaled copy. Each (in x in) matrix is freed as
+    # soon as the next one is made, so at most two of them (three with the caller's Hessian)
+    # are alive at once: 3 x 1.34 GiB for the teacher's down_proj (in 18,944), not 5.
+    h.diagonal().add_(damping * torch.mean(torch.diag(h)))
     lower = torch.linalg.cholesky(h)
-    h_inv = torch.linalg.cholesky(torch.cholesky_inverse(lower), upper=True)
+    del h
+    inverse = torch.cholesky_inverse(lower)
+    del lower
+    h_inv = torch.linalg.cholesky(inverse, upper=True)
+    del inverse
     rows, columns = w.shape
     groups = grid.check_shape(columns, bits, group_size)
     zero, top = grid.zero_point(bits), grid.max_code(bits)
@@ -190,8 +199,20 @@ def gptq_torch(
             block[:, i:] -= err[:, None] * h_block[i, i:][None, :]
             errors[:, i] = err
         w[:, stop:] -= errors @ h_inv[start:stop, stop:]
+    del h_inv, w
     return GPTQResult(
         codes.cpu().numpy(), scales.double().cpu().numpy(), bits, group_size, float(loss)
+    )
+
+
+def gptq_peak_bytes(in_features: int, out_features: int) -> int:
+    """The GPU memory :func:`gptq_torch` needs for one matrix beyond the model (bytes): three
+    float32 (in x in) matrices (the caller's Hessian, and at most two of the copy, the Cholesky
+    factor, the inverse and its factor), the float32 copy of the weights and the uint8 codes."""
+    return (
+        3 * 4 * in_features * in_features
+        + 4 * out_features * in_features
+        + out_features * in_features
     )
 
 

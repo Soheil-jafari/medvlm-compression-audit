@@ -287,7 +287,9 @@ def calibration_batches(
     """One model input per calibration example: image, question and ground-truth answer.
 
     Built with the training batch code (chat template, answer tokens and the stop token
-    appended), one example per batch, so no padding enters the Hessians.
+    appended), one example per batch, so no padding enters the Hessians. The inputs stay on
+    the CPU and go to the model's device one at a time (:func:`collect_hessians`): kept on the
+    GPU, 128 images' float32 pixel values are about a gigabyte (2026-11-12, E9).
     """
     from medcompress.compression.distillation.batching import (
         assemble,
@@ -297,11 +299,10 @@ def calibration_batches(
 
     out = []
     pad = model.tokenizer.pad_token_id  # type: ignore[attr-defined]
-    device = model.module.device  # type: ignore[attr-defined]
     for sample in samples:
         prompt = prompt_inputs(model, Path(data_root) / sample.image_path, sample.question)  # type: ignore[arg-type]
         batch = assemble([prompt], [ground_truth_ids(model, sample.answer)], pad)  # type: ignore[arg-type]
-        out.append({k: v.to(device) for k, v in batch.inputs.items()})
+        out.append({k: v.to("cpu") for k, v in batch.inputs.items()})
     return out
 
 
@@ -356,11 +357,12 @@ def collect_hessians(
         raise _StopForward
 
     handles.append(layer.register_forward_hook(stop))
+    device = module.device  # where the inputs go (the first GPU of a split model)
     try:
         with torch.inference_mode():
             for batch in batches:
                 try:
-                    module(**batch, use_cache=False)
+                    module(**{k: v.to(device) for k, v in batch.items()}, use_cache=False)
                 except _StopForward:
                     pass
     finally:
@@ -397,9 +399,11 @@ def gptq_quantize_decoder(
         hessians = collect_hessians(model, i, batches, recipe.targets)
         for name in recipe.targets:
             linear = getattr(getattr(layer, PARENT_OF[name]), name)
+            # each Hessian is freed after its last user (q/k/v and gate/up share one; 2026-11-12)
+            hessian = hessians.pop(name)
             result = gptq_torch(
                 linear.weight,
-                hessians[name],
+                hessian,
                 bits=recipe.weight_bits,
                 group_size=recipe.group_size,
                 damping=recipe.damping,
@@ -412,6 +416,7 @@ def gptq_quantize_decoder(
             records[key] = QuantizedMatrix(
                 key, result.codes, result.scales, recipe.weight_bits, recipe.group_size
             )
+            del hessian, result, rounded
         del hessians
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -478,6 +483,58 @@ def load_quantized(model: VLMWrapper | Any, directory: Path | str, *, kernel_cla
 # ---------------------------------------------------------------------- the stage
 
 
+GPTQ_MARGIN_BYTES = 3 * 2**29
+"""Room per GPU beyond the GPTQ buffers (1.5 GiB): the CUDA context, the layer's other
+Hessians, one example's activations and its inputs."""
+
+
+def gptq_max_memory(
+    capacities: Sequence[int], weights_bytes: int, in_features: int, out_features: int
+) -> dict[int, int]:
+    """``{gpu: cap}`` for the weights of a model split over ``capacities`` (bytes per GPU), so
+    every GPU keeps room for the GPTQ buffers of the largest matrix
+    (:func:`~medcompress.compression.quantization.gptq.gptq_peak_bytes`) plus
+    :data:`GPTQ_MARGIN_BYTES`. ``from_pretrained`` balances the layers under these caps.
+
+    Raises:
+        ConfigError: the caps cannot hold the weights (the model would go to the CPU).
+    """
+    from medcompress.compression.quantization.gptq import gptq_peak_bytes
+
+    room = gptq_peak_bytes(in_features, out_features) + GPTQ_MARGIN_BYTES
+    caps = {i: int(c) - room for i, c in enumerate(capacities)}
+    if sum(max(c, 0) for c in caps.values()) < weights_bytes:
+        raise ConfigError(
+            f"the GPUs ({len(capacities)}) cannot hold {weights_bytes / 2**30:.1f} GiB of weights "
+            f"and keep {room / 2**30:.1f} GiB each for GPTQ"
+        )
+    return caps
+
+
+def _teacher_max_memory(spec: Any, model_config: Mapping[str, Any]) -> dict[int, int] | None:
+    """E9: caps that leave each T4 room for the teacher's largest GPTQ matrix (down_proj, in
+    = the intermediate size). None without torch or CUDA (the tests; the loader then stops
+    with its own message)."""
+    try:
+        import torch
+    except ImportError:
+        return None
+    if not torch.cuda.is_available():
+        return None
+    from transformers import AutoConfig
+
+    capacities = [
+        torch.cuda.get_device_properties(i).total_memory for i in range(torch.cuda.device_count())
+    ]
+    hub = AutoConfig.from_pretrained(spec.source, revision=spec.resolved_revision)
+    text = getattr(hub, "text_config", hub)
+    hidden, intermediate = int(text.hidden_size), int(text.intermediate_size)
+    stored = (model_config.get("model") or {}).get("parameters_stored")
+    if not isinstance(stored, int):
+        raise ConfigError("the teacher's model config has no parameters_stored")
+    return gptq_max_memory(capacities, 2 * stored, max(hidden, intermediate), hidden)
+
+
 def parent_of(run: RunContext) -> dict[str, Any]:
     """The model a quantized run starts from: E3 <- E2, E8 <- E7 (same budget), E9 <- E0,
     E4 <- the pretrained student (its codes come from quantization-aware training)."""
@@ -513,8 +570,10 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
     if parent["experiment"] == "E0":
         from medcompress.models.loading import ModelSpec, load_model
 
-        spec = ModelSpec.from_config(load_config(config["components"]["teacher"]))
-        return load_model(spec, image_longest_side=side)
+        teacher = load_config(config["components"]["teacher"])
+        spec = ModelSpec.from_config(teacher)
+        memory = _teacher_max_memory(spec, teacher)  # room for GPTQ on both T4s (2026-11-12)
+        return load_model(spec, image_longest_side=side, max_memory=memory)
     student = load_trained_student(config, "E2", run.seed, side)
     if parent["experiment"] == "E2":
         return student

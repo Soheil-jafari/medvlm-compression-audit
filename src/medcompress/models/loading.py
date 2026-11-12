@@ -182,6 +182,7 @@ def load_model(
     max_pixels: int | None = None,
     batch_size: int = 8,
     mlp_channel_group_size: int = 128,
+    max_memory: Mapping[Any, Any] | None = None,
 ) -> VLMWrapper:
     """Load a teacher or student as a :class:`VLMWrapper`.
 
@@ -197,6 +198,8 @@ def load_model(
         allow_remote_code: run model code from the repository (needed by some families).
         image_longest_side: resize images so their longest side is at most this.
         max_pixels: forwarded to the image processor of families that support it.
+        max_memory: ``{gpu: bytes}`` caps for the weights of a split model (passed to
+            ``from_pretrained``); E9 keeps room on each GPU for GPTQ (2026-11-12).
 
     Used by: every experiment.
     """
@@ -219,6 +222,8 @@ def load_model(
     if revision is not None and not Path(spec.source).expanduser().exists():
         common["revision"] = revision
     model_kwargs: dict[str, Any] = {"dtype": dtype, "device_map": device_map, **common}
+    if max_memory is not None:
+        model_kwargs["max_memory"] = dict(max_memory)
     if quantization:
         model_kwargs["quantization_config"] = _quantization_config(quantization, torch)
     processor_kwargs = dict(common)

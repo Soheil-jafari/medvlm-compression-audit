@@ -8,7 +8,8 @@
   test after the freeze, and timed with the budget protocol.
 - Purpose: a supplementary comparison at matched memory: a quantized big model against the
   compressed small ones (D08).
-- Status: `ready` (2026-11-11): every requirement of section 2 is met (RC-TT1 done, frozen)
+- Status: `ready` (2026-11-12, again): the first attempt (commit 262a4f1) ran out of GPU memory in
+  GPTQ (section 6); fixed without changing the result. Run it again on the fix commit
 
 ## 2. Requirements
 
@@ -85,6 +86,33 @@ comparisons (RC-C1) need the test-split ones. Write its name in section 6.
 | Calibration as planned | `quantization_calibration_images` | equals 128 |
 
 ## 6. Run report (filled by the person who ran it)
+
+**Attempt 1 (reported by Soheil, 2026-11-12; commit 262a4f1, T4 x2): failed.**
+`torch.OutOfMemoryError` in `compression/quantization/gptq.py` line 161 (the dampening, `h +=
+damping * mean(diag(h)) * eye(n)`): tried to allocate 1.34 GiB on GPU 0 with 13.34 GiB in use.
+The teacher's `down_proj` Hessian is 18,944 x 18,944 in float32 (1.34 GiB); the code held the
+caller's Hessian, its copy, the identity and its scaled copy at once (4 x 1.34 GiB on top of
+about 7.7 GiB of weights), and would have held five such matrices at its Cholesky step.
+
+**The fix (2026-11-12; the results are unchanged):**
+- the dampening adds to the diagonal in place (no identity matrix), and each (in x in) matrix is
+  freed as soon as the next one is made: at most three of them are alive (the caller's Hessian
+  and two), 4.33 GiB for `down_proj` with the weight copy and the codes
+  (`gptq.gptq_peak_bytes`); each Hessian is freed after its last user;
+- the 128 calibration inputs stay on the CPU and go to the GPU one at a time (about a gigabyte
+  of float32 pixel values had been kept on GPU 0, an estimate);
+- the teacher is split over the two T4s under per-GPU caps that keep the GPTQ room plus 1.5 GiB
+  free on each (`ptq.gptq_max_memory`): caps 9,379,446,784 bytes (8.74 GiB) per T4, which the
+  balanced split of the 15.45 GiB of weights stays under (about 7.7 GiB each).
+- Tests: the codes and scales are identical to the old code's, bit for bit, for single matrices
+  (4 and 8 bit, with a dead input) and for the whole decoder of the tiny model (the E3 / E8
+  path).
+- **Expected peak per GPU (estimate):** about 7.7 GiB of weights + 4.33 GiB of GPTQ buffers
+  (only while that GPU's `down_proj` is rounded) + up to about 0.5 GiB (the layer's other
+  Hessians, one example's activations, its inputs): **about 12.0-12.6 GiB of the T4's 14.56
+  GiB**. By construction even a GPU filled to its cap keeps 4.33 + 1.5 GiB free.
+
+**Attempt 2:**
 
 - Run by / date:
 - Commit actually used:

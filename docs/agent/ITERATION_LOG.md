@@ -1292,3 +1292,16 @@ Append-only, newest at the bottom. One entry per iteration:
 - RC-E10 ready for training, validation and benchmark (Soheil, account 1; `medcompress-data`,
   `e0-teacher-cache`; about 4-5.3 GPU h, estimate). Tests.
 
+## Iteration 77: 2026-11-12 (interactive)
+- Stage / item: S08 E9, RC-E9 out of memory in GPTQ (commit 262a4f1, T4 x2).
+- `gptq_torch`: the dampening in place on the diagonal (no identity matrix), each (in x in)
+  matrix freed as soon as the next exists (at most 3 alive instead of 5); `gptq_peak_bytes`.
+  `gptq_quantize_decoder` frees each Hessian after its last user. The calibration inputs stay on
+  the CPU and move to the GPU per forward pass. E9's teacher is loaded under per-GPU caps
+  (`gptq_max_memory`, `load_model(max_memory=...)`) that keep room for the largest GPTQ matrix
+  plus 1.5 GiB on each T4.
+- Results unchanged: tests compare the new code with a verbatim copy of the old one (codes,
+  scales and output error equal for single matrices at 4 and 8 bit, and every matrix of the
+  tiny model's decoder: the E3 / E8 path). Expected E9 peak about 12.0-12.6 GiB per T4
+  (estimate; RC-E9 section 6).
+

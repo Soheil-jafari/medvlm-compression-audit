@@ -172,3 +172,85 @@ def test_llm_int8_stays_close_to_the_16_bit_layer() -> None:
         ref = linear(x).float()
         out = build_int8_linear(linear)(x).float()
     assert float((out - ref).abs().max() / ref.abs().max()) < 0.05
+
+
+def _gptq_torch_before_2026_11_12(weight, hessian, *, bits, group_size, damping=0.01,
+                                  block_size=128):  # fmt: skip
+    """The torch GPTQ as it was before the in-place dampening (verbatim), for the check below."""
+    w = weight.detach().to(torch.float32).clone()
+    h = hessian.detach().to(device=w.device, dtype=torch.float32).clone()
+    dead = torch.diag(h) == 0
+    h[dead, dead] = 1.0
+    w[:, dead] = 0.0
+    h += damping * torch.mean(torch.diag(h)) * torch.eye(h.shape[0], device=h.device)
+    lower = torch.linalg.cholesky(h)
+    h_inv = torch.linalg.cholesky(torch.cholesky_inverse(lower), upper=True)
+    rows, columns = w.shape
+    groups = grid.check_shape(columns, bits, group_size)
+    zero, top = grid.zero_point(bits), grid.max_code(bits)
+    codes = torch.zeros((rows, columns), dtype=torch.uint8, device=w.device)
+    scales = torch.ones((rows, groups), dtype=torch.float32, device=w.device)
+    loss = torch.zeros((), dtype=torch.float32, device=w.device)
+    for start in range(0, columns, block_size):
+        stop = min(start + block_size, columns)
+        block = w[:, start:stop].clone()
+        errors = torch.zeros_like(block)
+        h_block = h_inv[start:stop, start:stop]
+        for i in range(stop - start):
+            column = start + i
+            if column % group_size == 0:
+                absmax = w[:, column : column + group_size].abs().amax(dim=1)
+                scale = 2.0 * absmax / top
+                scales[:, column // group_size] = torch.where(
+                    scale == 0, torch.ones_like(scale), scale
+                )
+            s = scales[:, column // group_size]
+            q = torch.clamp(torch.round(block[:, i] / s) + zero, 0, top)
+            codes[:, column] = q.to(torch.uint8)
+            rounded = (q - zero) * s
+            d = h_block[i, i]
+            err = (block[:, i] - rounded) / d
+            loss += torch.sum((block[:, i] - rounded) ** 2) / d**2 / 2
+            block[:, i:] -= err[:, None] * h_block[i, i:][None, :]
+            errors[:, i] = err
+        w[:, stop:] -= errors @ h_inv[start:stop, stop:]
+    return codes.cpu().numpy(), scales.double().cpu().numpy(), float(loss)
+
+
+@pytest.mark.parametrize("bits", [4, 8])
+def test_the_in_place_dampening_gives_the_same_codes_as_before(bits: int) -> None:
+    generator = torch.Generator().manual_seed(bits)
+    for out, inp, group in ((24, 64, 16), (40, 256, 32), (8, 384, 128)):
+        weight = torch.randn(out, inp, generator=generator, dtype=torch.float16)
+        x = torch.randn(200, inp, generator=generator)
+        x[:, 3] = 0.0  # a dead input: unit diagonal, zero weights
+        hessian = 2.0 * x.T @ x / x.shape[0]
+        before = _gptq_torch_before_2026_11_12(weight, hessian, bits=bits, group_size=group)
+        kept = hessian.clone()
+        now = gptq_torch(weight, hessian, bits=bits, group_size=group)
+        assert np.array_equal(now.codes, before[0]) and np.array_equal(now.scales, before[1])
+        assert now.output_error == before[2]
+        assert torch.equal(hessian, kept)  # the caller's Hessian is not changed
+
+
+def test_the_decoder_codes_are_the_same_as_before_the_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from medcompress.compression.quantization import gptq as gptq_mod
+
+    batches = calibration_batches(tiny_vlm.tiny_wrapper(seed=0), _samples(tmp_path), tmp_path)
+    assert all(v.device.type == "cpu" for b in batches for v in b.values())  # kept off the GPU
+    now = gptq_quantize_decoder(tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lambda _m: None)
+
+    def old(weight, hessian, **kwargs):  # type: ignore[no-untyped-def]
+        codes, scales, loss = _gptq_torch_before_2026_11_12(weight, hessian, **kwargs)
+        return gptq_mod.GPTQResult(codes, scales, kwargs["bits"], kwargs["group_size"], loss)
+
+    monkeypatch.setattr(gptq_mod, "gptq_torch", old)
+    before = gptq_quantize_decoder(
+        tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lambda _m: None
+    )
+    assert set(now) == set(before)
+    for key, record in now.items():
+        assert np.array_equal(record.codes, before[key].codes), key
+        assert np.array_equal(record.scales, before[key].scales), key
