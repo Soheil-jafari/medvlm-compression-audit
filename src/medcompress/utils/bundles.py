@@ -104,6 +104,21 @@ COMPAT_KEYS_BY_KIND: Mapping[str, tuple[str, ...]] = {
     "teacher_adapter": TEACHER_COMPAT_KEYS,
 }
 """The compared settings per hand-off kind; any other kind compares :data:`COMPAT_KEYS`."""
+TEACHER_EXPERIMENTS: tuple[str, ...] = ("E0", "E9")
+"""Runs whose model is the teacher: their hand-offs of any kind (E9's quantized decoder, the
+outcomes of E0 and E9) compare :data:`TEACHER_COMPAT_KEYS` (2026-11-13: E9's validation was
+refused because its quantized hand-off recorded the student fields)."""
+
+
+def compat_keys(bundle: Bundle) -> tuple[str, ...]:
+    """The settings compared for ``bundle``: by its kind, then by the run that wrote it."""
+    if bundle.kind in COMPAT_KEYS_BY_KIND:
+        return COMPAT_KEYS_BY_KIND[bundle.kind]
+    if bundle.meta.get("experiment") in TEACHER_EXPERIMENTS:
+        return TEACHER_COMPAT_KEYS
+    return COMPAT_KEYS
+
+
 _CHUNK = 1 << 20
 
 
@@ -370,7 +385,7 @@ def check_compat(bundle: Bundle, config: Mapping[str, Any]) -> None:
 
     theirs = bundle.meta.get("compat") or {}
     ours = compat_values(config)
-    keys = COMPAT_KEYS_BY_KIND.get(bundle.kind, COMPAT_KEYS)
+    keys = compat_keys(bundle)
     clashes = [
         f"{key}: {theirs.get(key)!r} there, {ours.get(key)!r} here"
         for key in keys

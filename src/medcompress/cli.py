@@ -301,6 +301,18 @@ def require_frozen_preregistration(config: Mapping[str, Any]) -> None:
         )
 
 
+def require_smoke_outside_results(config: Mapping[str, Any]) -> None:
+    """RC-SMOKE's tiny settings (the ``smoke`` section) never write into the repository's
+    ``results/``: its runs use a temporary results root (``scripts/smoke_cards.py``)."""
+    from medcompress.config import repo_root
+
+    root = Path(str(config["paths"]["results_root"]))
+    root = root if root.is_absolute() else Path.cwd() / root
+    if root.resolve() == (repo_root() / "results").resolve():
+        raise ConfigError("smoke settings with the repository's results/ as results root: "
+                          "RC-SMOKE writes to a temporary root only")  # fmt: skip
+
+
 def run_stage(stage: str, func: Callable[..., Any], /, **kwargs: Any) -> int:
     """Call a stage function and turn expected stops into clean messages.
 
@@ -311,6 +323,8 @@ def run_stage(stage: str, func: Callable[..., Any], /, **kwargs: Any) -> int:
     """
     try:
         run, config = kwargs.get("run"), kwargs.get("config")
+        if config is not None and config.get("smoke"):
+            require_smoke_outside_results(config)
         if config is not None and getattr(run, "experiment_id", None) in COMPRESSION_ARMS:
             require_frozen_preregistration(config)
         if config is not None and run is not None:
@@ -329,6 +343,10 @@ def run_stage(stage: str, func: Callable[..., Any], /, **kwargs: Any) -> int:
             raise
         print(f"[{stage}] GPU placement refused: {exc}")
         return GPU_PLACEMENT_EXIT_CODE
+    finally:
+        from medcompress.models.loading import print_stage_peak
+
+        print_stage_peak(stage)
     return 0
 
 

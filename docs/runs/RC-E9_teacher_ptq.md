@@ -8,8 +8,10 @@
   test after the freeze, and timed with the budget protocol.
 - Purpose: a supplementary comparison at matched memory: a quantized big model against the
   compressed small ones (D08).
-- Status: `ready` to resume evaluation (2026-11-13). Attempt 3 saved the quantized hand-off
-  before evaluation ran out of memory (section 6). Attach that hand-off for the rerun.
+- Status: `ready` to resume evaluation (2026-11-13), **after RC-SMOKE passed for RC-E9**.
+  Attempt 3 saved the quantized hand-off before evaluation ran out of memory; the first resume
+  (427c3ce) was refused by a hand-off check that compared the student (section 6, fixed). Attach
+  `e9-seed0-quantized`; its files are verified against the teacher before evaluation
 
 ## 2. Requirements
 
@@ -183,8 +185,30 @@ and packing. Actual allocator peaks and generation memory still need a Kaggle re
 Keep the original stage-03 metrics from attempt 3, if available. The resumed card cannot
 reconstruct its original timing from the two checkpoint files.
 
-**Resumed evaluation:**
+**Resume attempt 1 (reported by Soheil, 2026-11-13; commit 427c3ce):** "quantize E9 seed0:
+skipped" worked; the validation was refused (exit 5): "E9 seed 0 quantized was made with other
+settings: student 'models/qwen2_5_vl_3b_student.yaml' there, 'models/qwen2_5_vl_7b_teacher.yaml'
+here; student_revision '66285546...' there, 'cc594898...' here". **Cause:** the runner wrote
+every hand-off's settings from the session's base config, which names the 3B student; E9's own
+config names the teacher. The weights are the teacher's (GPTQ ran 28 layers; the 3B has 36).
 
+**Fix (2026-11-13):** (a) each hand-off records the settings of the run that made it
+(`card_runner.run_config`: E9 records the teacher, E10 the 2B); (b) a hand-off of a run whose
+model is the teacher (E0, E9: quantized decoder, outcomes) is compared on the teacher's
+settings only (`bundles.compat_keys`; another teacher or revision is still refused), as the
+teacher cache and adapter since 99c7a3c. **The existing `e9-seed0-quantized` is accepted only
+by its files:** before evaluation, `ptq.load_run_quantized` checks that the checkpoint was made
+from E0 (`start_from`) and holds exactly the loaded teacher's decoder matrices, 28 layers x 7,
+each with the teacher's shape (q_proj and o_proj 3,584 x 3,584, k_proj and v_proj 512 x 3,584,
+gate_proj and up_proj 18,944 x 3,584, down_proj 3,584 x 18,944); a missing, extra or
+differently shaped matrix stops the run before any result. **Not verified yet:** the agent
+cannot open the Kaggle dataset; the check runs on Kaggle and prints `E9: quantized checkpoint
+matches the parent: 196 matrices in 28 decoder layers, shapes ... (made from E0)`. Paste that
+line below. If the check fails, the hand-off is not the teacher's decoder: re-quantize.
+
+**Resumed evaluation (after RC-SMOKE passed for RC-E9):**
+
+- The verification line (`quantized checkpoint matches the parent: ...`):
 - Run by / date:
 - Commit actually used:
 - Hardware and library versions:

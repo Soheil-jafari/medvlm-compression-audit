@@ -316,3 +316,76 @@ def test_every_arm_gets_the_same_recovery_fingerprint() -> None:
     assert recovery.recovery_fingerprint(RECOVERY) != recovery.recovery_fingerprint(
         {**RECOVERY, "steps": 3}
     )
+
+
+# ------------------------------------------------- one student copy at a time (2026-11-13)
+
+
+def _alive(model: Any) -> bool:
+    return any(p.device.type != "meta" for p in model.module.parameters())
+
+
+def test_release_model_frees_the_tensors_even_with_a_stray_reference() -> None:
+    import gc
+    import weakref
+
+    from medcompress.models.loading import release_model
+
+    model = _factory()
+    stray = model.module  # a reference that survives, as on Kaggle in RC-G2 session 1
+    weight = weakref.ref(next(model.module.parameters()))
+    release_model(model)
+    gc.collect()
+    assert weight() is None and not _alive(model)
+    assert all(t.device.type == "meta" for t in [*stray.parameters(), *stray.buffers()])
+
+
+def test_the_stage_never_holds_two_student_copies(tmp_path: Path) -> None:
+    config, train, total = _prepare(tmp_path)
+    made: list[Any] = []
+
+    def factory() -> Any:  # every earlier copy must be released before the next load
+        assert not any(_alive(m) for m in made), "two student copies at once"
+        model = _factory()
+        made.append(model)
+        return model
+
+    def footprint(removal: Any) -> float:  # measured on a fresh copy, then released
+        model = factory()
+        remove_units(model, list(removal))
+        value = float(count_parameters(model))
+        from medcompress.models.loading import release_model
+
+        release_model(model)
+        return value
+
+    recovery.run_prune_and_recover(
+        config, RunContext("E5", seed=0, budget="B2", variant=None), student_factory=factory,
+        train=train, records=teacher_records(train, tmp_path), measure=footprint,
+        reference_value=total,
+    )  # fmt: skip
+    assert len(made) >= 3  # the base copy, the search's copies, the final model
+    assert _alive(made[-1]) and not any(_alive(m) for m in made[:-1])
+
+
+def test_each_footprint_measurement_loads_a_fresh_copy_and_frees_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from medcompress import budgets
+    from medcompress.compression.pruning import apply
+    from medcompress.evaluation import efficiency
+
+    made: list[Any] = []
+
+    def fresh() -> Any:
+        assert not any(_alive(m) for m in made), "two copies at once"
+        made.append(_factory())
+        return made[-1]
+
+    removed: list[int] = []
+    monkeypatch.setattr(apply, "remove_units", lambda model, units: removed.append(len(units)))
+    monkeypatch.setattr(efficiency, "measure_footprint", lambda model, *a, **k:
+                        efficiency.EfficiencyReport(peak_memory_bytes=100 + len(made)))  # fmt: skip
+    measure = budgets.make_removal_measurer(fresh, [], object(), Path("."), "peak_memory")
+    assert [measure([]), measure([1]), measure([1, 2])] == [101.0, 102.0, 103.0]
+    assert removed == [0, 1, 2] and len(made) == 3 and not any(_alive(m) for m in made)

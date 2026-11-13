@@ -15,7 +15,12 @@
   Session 1 at commit 5a25147 failed after 1.5 min (2026-11-13): the scoring stage's student
   stayed on GPU 0 and the recovery stage's second load was offloaded to the CPU. Fixed: every
   stage of a run now runs in its own process, every load checks the GPU is clean and uses an
-  explicit device map, and an offloaded model is refused. Run session 1 again on the fix commit
+  explicit device map, and an offloaded model is refused. The rerun at 427c3ce stopped (exit 6)
+  in stage 05: the stage still held its first student copy (7.2 GiB) when the budget search
+  loaded the next one; the guard refused the load. Fixed: a copy's tensors are freed
+  (`loading.release_model`) before any further load, so a stage never holds two copies; each
+  footprint is still measured on a freshly loaded and pruned copy. Run session 1 again **after
+  RC-SMOKE passed for RC-G2**
 
 ## 2. Requirements
 

@@ -212,6 +212,8 @@ def smallest_prefix_meeting_target(
     measure_prefix: Callable[[int], float],
     target: float,
     tolerance: float,
+    *,
+    max_steps: int | None = None,
 ) -> tuple[int, float]:
     """Return (k, footprint) for the smallest k whose footprint is <= target * (1 + tolerance).
 
@@ -238,7 +240,9 @@ def smallest_prefix_meeting_target(
     if measured(n_units) > ceiling:
         raise ValueError("Removing every candidate unit does not reach the budget.")
     low, high = 0, n_units  # measured(low) > ceiling >= measured(high)
-    while high - low > 1:
+    steps = 0
+    while high - low > 1 and (max_steps is None or steps < max_steps):
+        steps += 1  # max_steps: RC-SMOKE only; a real search runs to the end
         mid = (low + high) // 2
         if measured(mid) <= ceiling:
             high = mid
@@ -274,6 +278,7 @@ def search_matched_budget(
     measure_removal: Callable[[Sequence[PrunableUnit]], float],
     *,
     protected_layers: Sequence[int] = (),
+    max_steps: int | None = None,
 ) -> BudgetSearch:
     """Find the smallest removal set (lowest-ranked first) that meets the budget.
 
@@ -301,7 +306,7 @@ def search_matched_budget(
         return value
 
     count, footprint = smallest_prefix_meeting_target(
-        len(accepted), measure_prefix, target, spec.tolerance
+        len(accepted), measure_prefix, target, spec.tolerance, max_steps=max_steps
     )
     return BudgetSearch(
         budget=spec.id,
@@ -372,10 +377,13 @@ def make_removal_measurer(
     """A function that returns the measured budget metric of the model after removing a set.
 
     Each call loads a fresh copy of the unpruned model (``fresh_model``), removes the units
-    physically, measures the footprint under ``protocol`` and frees the copy.
+    physically, measures the footprint under ``protocol`` and frees the copy
+    (:func:`~medcompress.models.loading.release_model`) before the next call can load one:
+    never two copies on the GPU.
     """
     from medcompress.compression.pruning.apply import remove_units
     from medcompress.evaluation.efficiency import measure_footprint
+    from medcompress.models.loading import release_model
 
     def measure(removal: Sequence[PrunableUnit]) -> float:
         model = fresh_model()
@@ -383,6 +391,7 @@ def make_removal_measurer(
             remove_units(model, list(removal))
             report = measure_footprint(model, samples, protocol, data_root, **options)
         finally:
+            release_model(model)
             del model
             release_memory()
         return metric_value(report, metric)

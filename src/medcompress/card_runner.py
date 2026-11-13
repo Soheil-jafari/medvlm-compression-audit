@@ -269,6 +269,20 @@ def run_steps(
         break
 
 
+def run_config(run: Any, fallback: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The resolved config of the run that made a hand-off, for its manifest's settings
+    (2026-11-13): E9's quantized decoder records the teacher, E10's adapter the 2B; the
+    session's base config named the 3B student for every hand-off. ``fallback`` when the run's
+    config cannot be read."""
+    from medcompress.config import load_experiment
+
+    try:
+        config, _experiment = load_experiment(run.exp)
+    except Exception:  # noqa: BLE001 - the base config still records the shared settings
+        return fallback
+    return config
+
+
 def export_handoffs(session: Session, config: Mapping[str, Any]) -> None:
     """Write each hand-off of the card whose items exist; items that came from a dataset stay."""
     target_root = session.out / "handoff"
@@ -292,7 +306,7 @@ def export_handoffs(session: Session, config: Mapping[str, Any]) -> None:
             continue
         first = handoff.runs[0]
         meta = bundles.handoff_meta(
-            config,
+            run_config(first, config),
             experiment=first.exp,
             seed=None if handoff.kind == "teacher_cache" else first.seed,
             budget=first.budget if len(handoff.runs) == 1 else None,

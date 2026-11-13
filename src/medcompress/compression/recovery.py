@@ -252,6 +252,9 @@ def run_prune_and_recover(
         mlp_channel_group_size=scoring.mlp_channel_group_size,
     )
     parameters_before = count_parameters(base)
+    from medcompress.models.loading import release_model
+
+    release_model(base)  # its GPU memory is freed before the search loads its own copies
     del base
     unknown = sorted({u.unit_id for u in units} - set(scores))
     if unknown:
@@ -272,9 +275,11 @@ def run_prune_and_recover(
     target = target_value(spec, reference, decoder_bytes=decoder_bytes)
     if measure is None:
         measure = _default_measure(config, factory, settings, data_root)
+    smoke_steps = (config.get("smoke") or {}).get("budget_search_steps")  # RC-SMOKE only
     search = search_matched_budget(
-        units, ordered, spec, target, measure, protected_layers=protected
-    )
+        units, ordered, spec, target, measure, protected_layers=protected,
+        max_steps=None if smoke_steps is None else int(smoke_steps),
+    )  # fmt: skip
     if search.count == 0:
         raise ValueError(f"{run.budget} asks for no compression: E2 already meets the target")
 

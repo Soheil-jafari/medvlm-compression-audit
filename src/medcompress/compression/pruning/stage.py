@@ -323,6 +323,9 @@ def run_scoring(
     )
     if not units:
         raise ConfigError("the unit types give no prunable units")
+    cap = (config.get("smoke") or {}).get("max_scored_units")  # RC-SMOKE only
+    if cap is not None:
+        units = units[: int(cap)]
     instance = criterion or get_criterion(settings.criterion)(effective, seed=run.seed)
     calibration: list[VQASample] = []
     if settings.calibration_size is not None:

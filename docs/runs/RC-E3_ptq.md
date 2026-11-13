@@ -9,10 +9,9 @@
   **validation** split now and on the **test** split after the pre-registration freeze, and
   timed with the budget protocol.
 - Purpose: the "quantize after training" family of the audit (D08).
-- Status: `ready` for seed 0 (2026-11-11): every requirement of section 2 is met (frozen,
-  RC-E2 seed 0 done). Seeds 1 and 2 (`w8` only) wait for seed 0's futility check. Seed 0's
-  measured `w8` peak decides H2's matched budget (RC-Q0 measured about 5.20 GB, nearest B3;
-  docs/schedule.md section 7)
+- Status: `blocked` for seed 0 (2026-11-13): stage 03 at 427c3ce stopped on a NaN Hessian at
+  layer 0 (section 5c). Next: the diagnostic of section 5c, then a team decision on the
+  non-finite calibration example(s), then RC-SMOKE for RC-E3, then seed 0 again
 
 ## 2. Requirements
 
@@ -127,6 +126,38 @@ unfiltered test evaluations are separate steps (their own process) and are not a
   `peak_memory_bytes` should be near RC-Q0's (w4 3,797,138,944; w8 5,197,114,880; w8a8
   5,073,484,288 bytes, synthetic images) and `warm_latency_s` not far above E2's 0.987 s; an
   offloaded run shows a much lower peak and a much higher latency.
+
+## 5c. Seed 0 at 427c3ce: NaN Hessian at layer 0 (2026-11-13)
+
+Stage 03 stopped 2 min in: "GPTQ layer 0 q_proj, k_proj, v_proj: Hessian has 4194304
+non-finite entries; input min=nan, max=nan". **What the message does and does not show:** the
+min and max are running bounds over all 128 calibration examples, and 4,194,304 = 2,048 x
+2,048 is every entry of that Hessian; a single token with non-finite values in a single example
+makes every entry NaN (each entry sums over all tokens). So it shows that at least one of the
+128 examples gave a non-finite layer-0 input, not that every input was NaN. The earlier
+diagnostic looked at examples 1-4 only, which were finite through the same capture code. The
+likely source is one training image on which the fp16 student overflows (E2's training skipped
+16 of 625 updates because a micro-batch's loss was not finite, section 6 of RC-E2); which step
+overflows is not known yet. The capture itself was checked on the tiny model: what it records
+equals, bit for bit, what the model's own full forward feeds layer 0 and every target.
+
+**Next (Amir, one T4, `medcompress-data` and `e2-seed0-adapter` attached), after the clone and
+install lines of section 3:**
+
+```bash
+export CUDA_VISIBLE_DEVICES=0
+python scripts/check_gptq_inputs.py --exp E3 --variant w4 --seed 0 --layers 0 --gptq \
+  2>&1 | tee /kaggle/working/check_gptq_inputs.txt
+```
+
+It runs stage 03's own capture over all 128 calibration batches, prints every batch's
+finiteness and absmax at each step (pixel values, vision tower output, inputs_embeds,
+position ids, layer-0 input, each captured input), compares the first batch and the first
+non-finite batch with the model's own forward, and names the non-finite examples (sample ids;
+stage 03's error now names them too). Send the output. What to do with such an example (leave
+it out, run the vision tower in float32 for calibration, or something else) is a team decision:
+it changes the calibration set or the numerics, so nothing is changed before it. RC-E3 runs
+again only after that decision and after RC-SMOKE passed for RC-E3.
 
 ## 6. Run report (filled by the person who ran it)
 

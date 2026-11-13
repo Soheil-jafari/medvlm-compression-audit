@@ -210,6 +210,38 @@ def resolve_settings(config: Mapping[str, Any]) -> EvalSettings:
 # ------------------------------------------------------------------- the model
 
 
+def smoke_setting(config: Mapping[str, Any], key: str) -> Any:
+    """A setting of the ``smoke`` section (RC-SMOKE's tiny runs; absent in every real run)."""
+    return (config.get("smoke") or {}).get(key)
+
+
+def smoke_subset(
+    samples: Sequence[VQASample], findings: Sequence[str], per_label: int
+) -> list[VQASample]:
+    """RC-SMOKE: every row of the first images (in split order) that give each finding
+    ``per_label`` positive and ``per_label`` negative images, plus one image with a mask, so
+    the operating point of every finding can be fitted on a few probes."""
+    need = {(f, label): per_label for f in findings for label in (True, False)}
+    need_mask = 1
+    chosen: list[str] = []
+    for sample in samples:
+        if sample.image_path in chosen:
+            continue
+        helps = [k for k in need if need[k] > 0 and k[0] in sample.findings
+                 and bool(sample.findings[k[0]]) == k[1]]  # fmt: skip
+        masked = need_mask > 0 and getattr(sample, "mask_path", None)
+        if helps or masked:
+            chosen.append(sample.image_path)
+            for key in helps:
+                need[key] -= 1
+            if masked:
+                need_mask -= 1
+        if not any(need.values()) and need_mask <= 0:
+            break
+    keep = set(chosen)
+    return [s for s in samples if s.image_path in keep]
+
+
 def load_trained_student(
     config: Mapping[str, Any], tag: str, seed: int, side: int, *, device_map: Any = None
 ) -> VLMWrapper:
@@ -616,6 +648,9 @@ def run_evaluation(
             data_root, dataset, Path(paths["private_root"]),
             unfiltered_test=settings.split == "test_unfiltered",
         )[settings.split]  # fmt: skip
+        per_label = smoke_setting(config, "eval_images_per_label")
+        if per_label is not None:  # RC-SMOKE only: a few images, every finding both ways
+            samples = smoke_subset(samples, settings.findings, int(per_label))
     thresholds = None
     if settings.split in TEST_SPLITS and "clinical" in settings.suites:
         thresholds = validation_thresholds(Path(paths["results_root"]), run, settings.findings)

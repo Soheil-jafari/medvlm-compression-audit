@@ -1,0 +1,4 @@
+# Cards for which RC-SMOKE passed (2026-11-13). The agent adds a card here from the
+# smoke_report.md that RC-SMOKE prints, with the commit it ran on; scripts/run_card.py refuses
+# a gated card (medcompress.smoke.GATED_CARDS) that is not listed.
+passed: {}

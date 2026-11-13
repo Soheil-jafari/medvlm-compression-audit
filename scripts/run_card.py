@@ -169,6 +169,12 @@ def main(argv: list[str] | None = None) -> int:
     if status not in allowed and not args.allow_blocked:  # pass 2 follows a finished RC-D1
         print(f"{plan.card} is `{status}`, not `ready`: see its card, section 2", file=sys.stderr)
         return 2
+    from medcompress.smoke import passed_cards, smoke_gate
+
+    gate = smoke_gate(plan.card, passed_cards())
+    if gate is not None and not (args.allow_blocked or args.dry_run):
+        print(gate, file=sys.stderr)
+        return 2
     print(f"{plan.card}: {plan.title} ({plan.gpus} GPU(s); card status `{status}`)")
     if no_data is not None and any(step.inputs for step in plan.steps):
         print(f"STOP: {no_data}", file=sys.stderr)

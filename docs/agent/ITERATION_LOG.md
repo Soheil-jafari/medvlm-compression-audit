@@ -1349,3 +1349,33 @@ Append-only, newest at the bottom. One entry per iteration:
 - RC-E9 attempt 3 finished quantization at 54b5b6d before evaluation ran out of memory.
   Reuse the verified hand-off and start validation, benchmarking and test evaluation in
   separate processes using the explicit teacher placement.
+
+## Iteration 80: 2026-11-13 (interactive)
+- Read 427c3ce first (Soheil's GPTQ work: float32 Hessian accumulation with a finiteness check,
+  Cholesky retries with damping up to 0.1 logged as deviations, RC-E9 resume steps, the GPTQ
+  input diagnostic). E3 diagnostic confirmed by Soheil: float32 accumulation kept.
+- RC-G2 session 1 (exit 6 in stage 05): the stage held its first student while the search
+  loaded another. `loading.release_model` moves a copy's tensors to the meta device (frees the
+  GPU memory even if a stray reference survives), used for the base copy and after every
+  footprint measurement; tests check that no two copies are alive at any load. Audit: the other
+  stages load one model each (04 scoring incl. E6 and E7, 03 quantize incl. E8 and E9, 02
+  training incl. E4 and E10, 06, 07, the 30-group check); the teacher-cache reader reads NumPy
+  files on the CPU.
+- RC-E9 resume (exit 5): hand-offs record their own run's settings (`card_runner.run_config`);
+  hand-offs of E0 and E9 compare the teacher's settings (`bundles.compat_keys`); a quantized
+  checkpoint is checked against its parent before use (`ptq.verify_against_parent`,
+  `start_from`), printed. The existing `e9-seed0-quantized` is verified on Kaggle by that check.
+- New RC-SMOKE card: `scripts/smoke_cards.py` and `medcompress/smoke.py` run the real stages of
+  every card still to run with tiny settings (smoke-only keys under `smoke.`, refused with the
+  repository's results root), two lanes on the two T4s, PASS / WAIT / FAIL table with per-load
+  and per-stage peaks. `run_card.py` refuses a gated card until it is in
+  `docs/runs/smoke_passed.yaml`. Tests.
+- RC-E3 seed 0 at 427c3ce: NaN Hessian at layer 0. Reading: the error's min / max are running
+  bounds over all 128 examples and one non-finite token makes all 4,194,304 entries NaN; the
+  diagnostic had covered examples 1-4 only. `collect_hessians` now names the calibration
+  examples with non-finite inputs (no number changes); `scripts/check_gptq_inputs.py` runs stage
+  03's capture over all batches with a step-by-step trace and a comparison with the model's own
+  forward; tiny-model tests show the capture equals the own forward exactly and a NaN example is
+  named. RC-SMOKE runs E3 layer 0 (w4, w8) with all 128 examples. The handling of a non-finite
+  example is a team decision (RC-E3 section 5c).
+

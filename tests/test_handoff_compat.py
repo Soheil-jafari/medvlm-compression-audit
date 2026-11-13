@@ -25,8 +25,9 @@ E0_CACHE = {
 }
 
 
-def _bundle(kind: str, compat: dict) -> Bundle:
-    return Bundle(root=Path("/in/x"), kind=kind, meta={"experiment": "E0", "compat": compat},
+def _bundle(kind: str, compat: dict, experiment: str | None = None) -> Bundle:
+    experiment = experiment or ("E0" if kind.startswith("teacher") else "E2")
+    return Bundle(root=Path("/in/x"), kind=kind, meta={"experiment": experiment, "compat": compat},
                   files={})  # fmt: skip
 
 
@@ -63,3 +64,39 @@ def test_a_todo_is_never_compared_as_a_value() -> None:
     check_compat(_bundle("adapter", open_student), e2)
     e0, _ = load_experiment("E0")
     assert compat_values(e0)["student"] != "TODO"  # E0's placeholder is no longer recorded
+
+
+# ---------------------------------------------- E9's quantized decoder (2026-11-13)
+
+# what the e9-seed0-quantized manifest recorded (exported with the base config at 54b5b6d)
+E9_AT_54B5B6D = {
+    **E0_CACHE,
+    "student": "models/qwen2_5_vl_3b_student.yaml",
+    "student_revision": "66285546d2b821cf421d4f5eb2576359d3770cd3",
+}
+
+
+def test_e9s_quantized_handoff_is_compared_as_the_teachers() -> None:
+    e9, _ = load_experiment("E9")
+    check_compat(_bundle("quantized", E9_AT_54B5B6D, "E9"), e9)  # the false stop is gone
+    check_compat(_bundle("outcomes", E9_AT_54B5B6D, "E9"), e9)
+    with pytest.raises(BundleError, match="teacher_revision"):  # another teacher still stops
+        check_compat(_bundle("quantized", {**E9_AT_54B5B6D, "teacher_revision": "0" * 40},
+                             "E9"), e9)  # fmt: skip
+    e3, _ = load_experiment("E3")  # a student's quantized decoder still compares the student
+    other = {**compat_values(e3), "student": "models/qwen3_vl_2b_student.yaml"}
+    with pytest.raises(BundleError, match="student"):
+        check_compat(_bundle("quantized", other, "E3"), e3)
+
+
+def test_each_handoff_records_its_own_runs_settings() -> None:
+    from medcompress.card_runner import run_config
+    from medcompress.cards import Run
+
+    base = {"model": {"config": "models/qwen2_5_vl_3b_student.yaml"}}
+    e9 = compat_values(run_config(Run("E9"), base))
+    assert e9["student"] == "models/qwen2_5_vl_7b_teacher.yaml"  # E9's model is the teacher
+    assert e9["student_revision"] == "cc594898137f460bfe9f0759e9844b3ce807cfb5"
+    e10 = compat_values(run_config(Run("E10"), base))
+    assert e10["student"] == "models/qwen3_vl_2b_student.yaml"  # not the 3B of base.yaml
+    assert run_config(Run("E99"), base) is base  # unknown: the session's config

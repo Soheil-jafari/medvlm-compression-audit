@@ -725,6 +725,13 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-13 (Soheil's request; implementation, no frozen setting changed): RC-SMOKE before
+  every remaining run.** A tiny end-to-end run of each card's real stages (one T4 x2 session)
+  must pass before the card runs (`docs/runs/smoke_passed.yaml`, `run_card.py` refuses
+  otherwise). The smoke-only settings (`smoke.*`) are never in a real run and never write to
+  `results/`. Also fixed: a stage frees each student copy before loading the next (RC-G2); the
+  hand-offs of E0 and E9 are compared on the teacher's settings and E9's quantized decoder is
+  verified against the teacher before use (RC-E9).
 - **2026-11-13 (Soheil):** rerun RC-E3 seed 0 in full after validating FP32 GPTQ Hessians.
   For a finite Hessian that fails its first Cholesky factorization, log retries in 0.0025
   increments up to 0.1 as a run deviation and keep the configured base damping.
