@@ -325,6 +325,14 @@ def export_handoffs(session: Session, config: Mapping[str, Any]) -> None:
             f"{handoff.name}: {made.root} ({len(made.files)} files, {size / 1e9:.2f} GB); "
             "make it a private dataset"
         )
+        # the hand-off folder holds the files now (hard links): drop the checkpoint-side names,
+        # so the session's output holds each model once (Kaggle's /kaggle/working: 2026-11-13)
+        for root, rel in items:
+            source = Path(str(config["paths"][root])) / rel
+            if source.is_dir() and not source.is_symlink():
+                shutil.rmtree(source, ignore_errors=True)
+            elif source.is_file() and not source.is_symlink():
+                source.unlink(missing_ok=True)
 
 
 def report_step_handoffs(session: Session) -> None:

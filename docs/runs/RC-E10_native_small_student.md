@@ -94,6 +94,38 @@ cat results/smoke/RC-E10/tokenizer_check.csv
 It prints both revisions, the ids that differ, the share of answers re-encoded exactly and
 `PASS` / `FAIL` with the training mode the rule gives. Commit the CSV and paste the lines.
 
+**Steps 2-4 (training, validation, benchmark; RC-SMOKE passed for RC-E10 at 9113632).** Kaggle
+GPU T4 x2 (the training uses one T4), Internet on (the 2B download); attach `medcompress-data`
+and `e0-teacher-cache`. Save Version -> Save & Run All:
+
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
+python - <<'PY' || pip uninstall -y -q torchao
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null
+python scripts/find_inputs.py handoffs
+python scripts/run_card.py --card RC-E10 2>&1 | tee /kaggle/working/run_card_RC-E10.txt
+```
+
+Afterwards: make `/kaggle/working/handoff/E10_seed0_adapter` the private dataset
+`e10-seed0-adapter`; send `results_to_commit/` and the run report. About 4-5.3 GPU h
+(estimate); the disk holds the adapter only (tens of MB).
+
 ## 4. What to commit back
 
 - `results/smoke/RC-E10/tokenizer_check.csv`

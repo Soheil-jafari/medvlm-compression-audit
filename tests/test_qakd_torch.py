@@ -149,3 +149,61 @@ def test_install_freezes_everything_but_the_adapter_and_steps() -> None:
     trainable = [p for p in wrapper.module.parameters() if p.requires_grad]
     assert len(params) == 3 * 21 and {id(p) for p in trainable} == {id(p) for p in params}
     assert len(export_qat(wrapper, DECODER_TARGETS)) == 21
+
+
+# ------------------------------------------- the QAT layer keeps no weight-sized state (2026-11-13)
+
+
+def _old_qat_forward(layer, x):  # type: ignore[no-untyped-def]
+    """The QAT layer's forward before 2026-11-13 (autograd kept the ratio and the weight)."""
+    from medcompress.compression.quantization import qakd
+
+    weight = qakd.lsq_quantize(
+        layer.merged(), layer.step.abs().clamp_min(1e-8), layer.bits, layer.group_size
+    )
+    return torch.nn.functional.linear(x, weight.to(x.dtype), layer.bias)
+
+
+def _saved_bytes(fn, own: set[int]) -> int:  # type: ignore[no-untyped-def]
+    """Bytes of the tensors autograd saves for the backward pass, the layer's own excluded."""
+    total = [0]
+
+    def pack(tensor):  # type: ignore[no-untyped-def]
+        if tensor.data_ptr() not in own:
+            total[0] += tensor.numel() * tensor.element_size()
+        return tensor
+
+    with torch.autograd.graph.saved_tensors_hooks(pack, lambda t: t):
+        fn()
+    return total[0]
+
+
+def test_the_qat_layer_gives_the_same_output_and_gradients_without_weight_sized_state() -> None:
+    from medcompress.compression.quantization import qakd
+
+    torch.manual_seed(0)
+    layer = qakd._qat_linear_class()(torch.nn.Linear(256, 96), bits=4, group_size=64, rank=8,
+                                     alpha=16)  # fmt: skip
+    with torch.no_grad():
+        layer.lora_B.normal_(0, 0.05)
+    x = torch.randn(2, 7, 256, requires_grad=True)
+    grad = torch.randn(2, 7, 96)
+    before = _old_qat_forward(layer, x)
+    before.backward(grad)
+    old = [x.grad.clone(), layer.lora_A.grad.clone(), layer.lora_B.grad.clone(),
+           layer.step.grad.clone()]  # fmt: skip
+    x.grad = None
+    layer.zero_grad()
+    after = layer(x)
+    after.backward(grad)
+    assert torch.equal(before, after)
+    for a, b in zip(
+        old, [x.grad, layer.lora_A.grad, layer.lora_B.grad, layer.step.grad], strict=True
+    ):
+        assert torch.equal(a, b)  # bit for bit
+    own = {t.data_ptr() for t in [*layer.parameters(), *layer.buffers()]}
+    weight_bytes = 96 * 256 * 4
+    old_saved = _saved_bytes(lambda: _old_qat_forward(layer, x), own)
+    new_saved = _saved_bytes(lambda: layer(x), own)
+    assert old_saved >= weight_bytes  # the ratio and the weight, per layer
+    assert new_saved == x.numel() * x.element_size()  # only the layer's input

@@ -79,6 +79,20 @@ The table is also saved as `/kaggle/working/smoke/smoke_report.md`, and each sta
 under `/kaggle/working/smoke/logs/`. One card or more only: `python scripts/smoke_cards.py
 --card RC-E9 --card RC-G2`.
 
+**Reduced RC-SMOKE (2026-11-13), after RC-CAL0's calibration file is committed:** the same cell
+with its last line replaced by
+
+```bash
+python scripts/smoke_cards.py --card RC-E3 --card RC-E4 --card RC-A1 --card RC-A4 --card RC-A5 \
+  --card RC-A6 2>&1 | tee /kaggle/working/smoke_cards_reduced.txt
+```
+
+`--card` also runs what those jobs read: the calibration check first, and E7 (A1 re-weights E7's
+effects). Each job's checkpoints are deleted once no later job reads them, and the table shows the
+disk used and free after every stage. The unit cap of A2, A4, A5 and A6 now keeps whole layers
+(the cut through layer 3's channel groups failed A4 and A6 at 9113632); A5 `kl` scores its 108
+layers and KV groups. Estimate: about 1 h.
+
 ## 4. What to send back
 
 `/kaggle/working/smoke/smoke_report.md` (the table: card, job, stage, PASS / WAIT / FAIL,

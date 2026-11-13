@@ -474,6 +474,10 @@ def train_lora(
         named = {n: p for n, p in module.named_parameters() if p.requires_grad}
 
         def save_state(folder: Path) -> None:
+            from medcompress.utils.disk import require_free_disk
+
+            state_bytes = sum(p.numel() * p.element_size() for p in named.values())
+            require_free_disk(folder, 3 * state_bytes, "the resume state")  # with Adam's moments
             torch.save({n: p.detach().cpu() for n, p in named.items()}, folder / "trainable.pt")
             torch.save(optimizer.state_dict(), folder / "optimizer.pt")
             torch.save(scaler.state_dict(), folder / "scaler.pt")

@@ -13,6 +13,13 @@
 - Purpose: does the criterion need the right answer, or does any change of the prediction do?
 - Status: `blocked` (see section 2)
 
+- **A5 `kl` scores layers and KV groups only (2026-11-13; D07 and pre-registration section 7,
+  no new decision):** the KL effect is scored exactly, and D07 section 1 scores channel groups by
+  the first-order estimate, which has no KL form; so A5 `kl` runs on the exactly scored unit types
+  (`pruning.units.types_by_variant` in `configs/experiments/ablations/A5.yaml`), its removal is
+  exact, and it is reported as such. (RC-SMOKE at 9113632 refused it: "the first-order estimate
+  does not support delta: kl".)
+
 ## 2. Requirements
 
 Blocked until all of these are true; the agent sets the status to `ready` when they are:

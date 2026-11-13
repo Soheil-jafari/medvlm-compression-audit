@@ -106,6 +106,22 @@ Check before committing: `git status` shows no images, checkpoints, caches or `o
 | Real low-precision kernels | `low_precision_kernels_ok` in `efficiency.csv` | equals 1 |
 | Training did not diverge | `train_loss_final` | finite (report the value) |
 
+## 5b. RC-SMOKE out of memory (9113632) and the fix (2026-11-13)
+
+The smoke's training stage ran out of memory (14.24 GiB on one T4) in `qakd.lsq_quantize`: for
+every target layer autograd kept, until the backward pass, the float32 ratio `w / s` and the
+16-bit quantized weight, about 6 bytes per decoder weight (2.78 billion of them, about 16.7 GB).
+The settings stay (micro-batch 1 x 16, no gradient checkpointing). Fix in code only
+(`qakd._qat_linear_function`): one autograd function per QAT layer that keeps the layer's input
+(as the linear layer does anyway) and references to its LoRA matrices, step sizes and frozen
+base; the quantized weight is built under `no_grad` in the forward and built again, with the
+same operations, in the backward, layer by layer, and freed. Output and gradients are identical
+bit for bit to the old code (test), and the graph keeps no weight-sized tensor per layer (test).
+**Expected peak (estimate): about 13-14 GB of the T4's 15.6 GB** (E2's measured training peak
+12.66 GB, plus about 0.35 GB of step sizes with their Adam state and gradients, plus at most
+about 0.8 GB built and freed per layer for the largest MLP matrix). RC-E4 runs after RC-SMOKE
+passed for it.
+
 ## 6. Run report (filled by the person who ran it)
 
 - Run by / date / seeds:

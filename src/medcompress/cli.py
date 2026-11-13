@@ -31,6 +31,9 @@ GPU_PLACEMENT_EXIT_CODE = 6
 """Exit code used when a model load is refused: a GPU still held memory, or the model would be
 offloaded from the GPU (2026-11-13)."""
 
+DISK_SPACE_EXIT_CODE = 7
+"""Exit code used when a save would not fit on the disk (nothing written; 2026-11-13)."""
+
 
 def build_parser(description: str, *, experiment_args: bool = True) -> argparse.ArgumentParser:
     """Create an argument parser with the options shared by all scripts."""
@@ -338,7 +341,11 @@ def run_stage(stage: str, func: Callable[..., Any], /, **kwargs: Any) -> int:
         return CONFIG_INCOMPLETE_EXIT_CODE
     except RuntimeError as exc:
         from medcompress.models.loading import GPUPlacementError
+        from medcompress.utils.disk import DiskSpaceError
 
+        if isinstance(exc, DiskSpaceError):
+            print(f"[{stage}] not enough disk space: {exc}")
+            return DISK_SPACE_EXIT_CODE
         if not isinstance(exc, GPUPlacementError):
             raise
         print(f"[{stage}] GPU placement refused: {exc}")

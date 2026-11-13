@@ -47,8 +47,17 @@ def save_pruned(
     """
     from safetensors.torch import save_model
 
+    from medcompress.utils.disk import require_free_disk
+
     module = _module(model)
     out = Path(directory)
+    seen: set[int] = set()
+    need = 0
+    for tensor in [*module.parameters(), *module.buffers()]:
+        if tensor.data_ptr() not in seen:
+            seen.add(tensor.data_ptr())
+            need += tensor.numel() * tensor.element_size()
+    require_free_disk(out, need, "the pruned model")  # before anything is written
     out.mkdir(parents=True, exist_ok=True)
     save_model(module, str(out / WEIGHTS_NAME))
     manifest = {

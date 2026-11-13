@@ -238,6 +238,9 @@ def save_quantized(
         arrays[f"{key}.scales"] = rec.scales.astype(np.float32)
         arrays[f"{key}.in_features"] = np.array(rec.codes.shape[1], dtype=np.int64)
     if arrays:
+        from medcompress.utils.disk import require_free_disk
+
+        require_free_disk(out, sum(a.nbytes for a in arrays.values()), "the quantized model")
         np.savez(out / TENSORS_NAME, **arrays)
     manifest = {
         "format_version": FORMAT_VERSION,

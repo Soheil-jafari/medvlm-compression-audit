@@ -1,4 +1,28 @@
 # Cards for which RC-SMOKE passed (2026-11-13). The agent adds a card here from the
 # smoke_report.md that RC-SMOKE prints, with the commit it ran on; scripts/run_card.py refuses
 # a gated card (medcompress.smoke.GATED_CARDS) that is not listed.
-passed: {}
+passed:
+  RC-G2:
+    commit: 9113632
+    date: 2026-11-13
+    note: "also gates RC-E5 / RC-E6 / RC-E7; the stages still wait for RC-CAL0's committed calibration file (amendment of 2026-11-13)"
+  RC-E8:
+    commit: 9113632
+    date: 2026-11-13
+    note: "waits for RC-CAL0's committed calibration file"
+  RC-E9:
+    commit: 9113632
+    date: 2026-11-13
+  RC-E10:
+    commit: 9113632
+    date: 2026-11-13
+  RC-R1:
+    commit: 9113632
+    date: 2026-11-13
+    note: "the test evaluations also wait for the committed list of non-finite test images (second amendment of 2026-11-13)"
+  RC-A2:
+    commit: 9113632
+    date: 2026-11-13
+  RC-A3:
+    commit: 9113632
+    date: 2026-11-13

@@ -375,7 +375,9 @@ class ClinicalSettings:
                 f"pruning.clinical.ablation_method: unknown entries {bad}; "
                 f"unit types {types}, methods {list(ABLATION_METHODS)}"
             )
-        if "first_order" in methods.values():
+        scored = (config.get("pruning") or {}).get("units", {}).get("types")
+        used = {k: v for k, v in methods.items() if scored is None or k in scored}
+        if "first_order" in used.values():  # only the unit types this run scores (A5:kl)
             if delta_variant == "kl":
                 raise ConfigError("the first-order estimate does not support delta: kl")
             if negative == "clip0":

@@ -183,6 +183,27 @@ Seeds 1 and 2 also need the committed comparator choice and their own E2 adapter
 Make every folder under `/kaggle/working/handoff/` ONE private dataset named like the folder
 (`e7-seed1-pruned`), shared with the team.
 
+**Disk per card session (2026-11-13; estimates).** `/kaggle/working` holds the session's output,
+20 GB by Kaggle's documentation as commonly quoted (not confirmed here; RC-SMOKE's table now shows
+the free space after every stage). Since 2026-11-13 a hand-off hard-links its files and the
+checkpoint-side names are removed after the export, so each model is on disk once (before, a
+pruned model was there twice: RC-G2 session 1 would have needed about 23 GB). Every large save
+checks the free space first and stops with exit code 7. Sizes: a pruned student about 6.7 / 5.9
+/ 5.0 GB at B1 / B2 / B3 (E2's 7.51 GB minus the decoder bytes the budget removes); E3 `w4` codes
+about 1.4 GB, `w8` about 2.8 GB, `w8a8` none (applied at load); E9's quantized hand-off 3.47 GB
+(measured); an adapter or a resume state well under 1 GB.
+
+| Session | Worst case on disk | Fits 20 GB |
+|---|---|---|
+| RC-G2 session 1 or 2 (two pruned runs at B2) | about 12 GB | yes |
+| RC-G2 session 4 (E7 at B2), RC-A1, RC-A2, RC-A3, RC-A5 | about 6 GB | yes |
+| RC-E3 seed 0 (three variants) | about 4.5 GB | yes |
+| RC-E8 at one budget, RC-E9 (resume), RC-E4, RC-E10, RC-R1 | under 4 GB | yes |
+| RC-A6 (two variants at B2) | about 12 GB | yes |
+| RC-A4 (three variants at B2) | about 18 GB | tight: run `n32` and `n64` in one session, `n256` in another |
+| E5 trend at B1 and B3 (six runs) | about 35 GB | **no**: at most two runs at B1 or three at B3 per session (`--variant`, `--budget`) |
+| E6 or E7 trend (B1 and B3) | about 12 GB | yes |
+
 **Datasets: what each account needs shared (2026-11-11).** Kaggle shares a private dataset
 from its owner's account (dataset settings, Sharing). Made on Soheil's account: `medcompress-data`
 (RC-D1), `e0-teacher-adapter` (RC-TT1), `e0-teacher-cache` (RC-E0b), `e2-seed0-adapter`

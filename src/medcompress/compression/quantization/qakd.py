@@ -256,6 +256,57 @@ def _lsq_function(bits: int, group_size: int) -> Any:
     return _LSQ
 
 
+@functools.cache
+def _qat_linear_function(bits: int, group_size: int) -> Any:
+    """The QAT linear layer as one autograd function that keeps only small state (2026-11-13).
+
+    RC-E4's smoke ran out of memory (14.24 GiB on one T4): autograd kept, for every target
+    layer until the backward pass, the float32 ratio ``w / s`` of the quantizer and the 16-bit
+    quantized weight, about 6 bytes per decoder weight (2.8 billion of them). This function
+    saves only what the layer needs anyway (its input) and references to the LoRA matrices, the
+    step sizes and the frozen base weight; the quantized weight is built under ``no_grad`` in the
+    forward and built again, with the same operations, in the backward, one layer at a time, and
+    freed there. The weight gradient is the same product the linear layer's backward computes.
+    """
+    import torch
+
+    def quantized(base: Any, lora_a: Any, lora_b: Any, step: Any, scaling: float) -> Any:
+        merged = base.float() + scaling * (lora_b @ lora_a)  # QATLinear.merged
+        return lsq_quantize(merged, step.abs().clamp_min(1e-8), bits, group_size)
+
+    class _QATLinearFn(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx: Any, x: Any, lora_a: Any, lora_b: Any, step: Any, base: Any,
+                    bias: Any, scaling: float) -> Any:  # fmt: skip
+            ctx.save_for_backward(x, lora_a, lora_b, step, base)
+            ctx.scaling = scaling
+            with torch.no_grad():
+                weight = quantized(base, lora_a, lora_b, step, scaling).to(x.dtype)
+                return torch.nn.functional.linear(x, weight, bias)
+
+        @staticmethod
+        def backward(ctx: Any, grad_out: Any) -> tuple[Any, ...]:
+            x, lora_a, lora_b, step, base = ctx.saved_tensors
+            with torch.enable_grad():
+                a = lora_a.detach().requires_grad_(lora_a.requires_grad)
+                b = lora_b.detach().requires_grad_(lora_b.requires_grad)
+                s = step.detach().requires_grad_(step.requires_grad)
+                weight = quantized(base, a, b, s, ctx.scaling).to(x.dtype)
+            grad_x = grad_out.matmul(weight.detach()) if ctx.needs_input_grad[0] else None
+            leaves = [t for t in (a, b, s) if t.requires_grad]
+            if leaves:
+                grad_w = (
+                    grad_out.reshape(-1, grad_out.shape[-1]).t().matmul(x.reshape(-1, x.shape[-1]))
+                )
+                torch.autograd.backward(weight, grad_w, inputs=leaves)
+            del weight
+            return (grad_x, a.grad if a.requires_grad else None,
+                    b.grad if b.requires_grad else None, s.grad if s.requires_grad else None,
+                    None, None, None)  # fmt: skip
+
+    return _QATLinearFn
+
+
 def _qat_linear_class() -> type:
     import torch
 
@@ -286,10 +337,11 @@ def _qat_linear_class() -> type:
             return self.base.float() + self.scaling * (self.lora_B @ self.lora_A)
 
         def forward(self, x: Any) -> Any:
-            weight = lsq_quantize(
-                self.merged(), self.step.abs().clamp_min(1e-8), self.bits, self.group_size
-            )
-            return torch.nn.functional.linear(x, weight.to(x.dtype), self.bias)
+            # the same quantized weight and product as before, without keeping a weight-sized
+            # tensor per layer for the backward pass (_qat_linear_function)
+            fn = _qat_linear_function(self.bits, self.group_size)
+            return fn.apply(x, self.lora_A, self.lora_B, self.step, self.base, self.bias,
+                            self.scaling)  # fmt: skip
 
     return QATLinear
 

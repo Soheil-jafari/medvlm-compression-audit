@@ -287,6 +287,22 @@ def _reusable(target: Path, fingerprint: Mapping[str, Any]) -> bool:
     return target.exists() and sidecar.exists() and read_json(sidecar) == dict(fingerprint)
 
 
+def whole_layers_within(units: Sequence[PrunableUnit], cap: int) -> list[PrunableUnit]:
+    """RC-SMOKE: the units of the first decoder layers, whole layers only, at most ``cap`` units
+    (at least one layer). A cut through a layer's channel groups would leave the MLP width
+    partly covered, which the first-order gates refuse (2026-11-13: A4, A6 in RC-SMOKE)."""
+    by_layer: dict[int, list[PrunableUnit]] = {}
+    for unit in units:
+        by_layer.setdefault(unit.layer_index, []).append(unit)
+    kept: list[PrunableUnit] = []
+    for index in sorted(by_layer):
+        if kept and len(kept) + len(by_layer[index]) > cap:
+            break
+        kept += by_layer[index]
+    order = {id(u): i for i, u in enumerate(units)}
+    return sorted(kept, key=lambda u: order[id(u)])
+
+
 def run_scoring(
     config: Mapping[str, Any],
     run: RunContext,
@@ -325,7 +341,7 @@ def run_scoring(
         raise ConfigError("the unit types give no prunable units")
     cap = (config.get("smoke") or {}).get("max_scored_units")  # RC-SMOKE only
     if cap is not None:
-        units = units[: int(cap)]
+        units = whole_layers_within(units, int(cap))
     instance = criterion or get_criterion(settings.criterion)(effective, seed=run.seed)
     calibration: list[VQASample] = []
     if settings.calibration_size is not None:  # without the images the fp16 check replaced

@@ -1402,3 +1402,20 @@ Append-only, newest at the bottom. One entry per iteration:
   Pre-registration section 10, decisions log, README, RC-CAL0, RC-R1, RC-X2. Still to come
   (agent): the code that leaves the listed images out of the test splits, before RC-R1.
 
+## Iteration 83: 2026-11-13 (interactive)
+- RC-SMOKE at 9113632 (125 min): passed RC-G2, RC-E8, RC-E9, RC-E10, RC-R1, A2, A3 (recorded in
+  `docs/runs/smoke_passed.yaml`; RC-G2 and RC-E8 also wait for RC-CAL0's calibration file).
+- E4: the QAT layer as one autograd function that keeps only its input and references to small
+  state; the quantized weight is rebuilt in the backward (bit-identical output and gradients;
+  no weight-sized tensor per layer kept). Expected peak about 13-14 GB.
+- Disk: `utils/disk.py` (free-space check before every large save, exit code 7; hand-offs
+  hard-link their files; the runner drops the checkpoint-side names after the export); the
+  smoke deletes each job's checkpoints once nothing reads them and logs disk per stage; the
+  worst case per card session is in `docs/schedule.md`.
+- The smoke's unit cap keeps whole layers (`stage.whole_layers_within`); the real 3B grid (built
+  without weights, 3,754,622,976 parameters) covers every MLP channel in the gates (test).
+- A5 `kl`: layers and KV groups only, scored exactly (D07); the KL check reads only the scored
+  unit types.
+- `smoke_cards.py --card` pulls in the calibration check and the jobs a job reads. RC-E10's
+  production cell is in its card.
+

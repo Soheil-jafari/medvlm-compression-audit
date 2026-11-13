@@ -47,11 +47,15 @@ def main(argv: list[str] | None = None) -> int:
         SMOKE_OVERRIDES,
         StageResult,
         card_verdicts,
+        job_experiments,
         parse_peaks,
+        ready_for_cleanup,
         report_table,
         smoke_budgets,
         smoke_jobs,
+        with_dependencies,
     )
+    from medcompress.utils.disk import free_bytes, tree_bytes
 
     args = build_parser().parse_args(argv)
     out = (args.out or Path("/kaggle/working/smoke")).resolve()
@@ -89,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         os.environ[f"MEDCOMPRESS_{key}_ROOT"] = env[f"MEDCOMPRESS_{key}_ROOT"]
     config = load_config("base.yaml")
 
-    jobs = [j for j in smoke_jobs() if args.card is None or j.card in args.card]
+    jobs = with_dependencies(smoke_jobs(), args.card)  # --card keeps what its jobs read
     results: list[StageResult] = []
     failed: set[str] = set()
     lock = threading.Lock()
@@ -124,8 +128,18 @@ def main(argv: list[str] | None = None) -> int:
             text = done.stdout + "\n" + done.stderr
             log.write_text(text, encoding="utf-8")
             loads, peak = parse_peaks(done.stdout)
-            result = StageResult(job.card, job.name, stage.label, done.returncode, seconds,
-                                 loads, peak, job.note)  # fmt: skip
+            disk = (tree_bytes(out), free_bytes(out))
+            result = StageResult(
+                job.card,
+                job.name,
+                stage.label,
+                done.returncode,
+                seconds,
+                loads,
+                peak,
+                job.note,
+                *disk,
+            )
             with lock:
                 results.append(result)
                 minutes = seconds / 60
@@ -138,10 +152,27 @@ def main(argv: list[str] | None = None) -> int:
                     failed.add(job.name)
                 blocked = True  # the job's later stages read this stage's output
 
+    finished: set[str] = set()
+    cleaned: set[str] = set()
+
+    def cleanup(job) -> None:  # type: ignore[no-untyped-def]
+        """Delete a finished job's own checkpoints once no later job reads them (disk)."""
+        with lock:
+            finished.add(job.name)
+            ready = [j for j in ready_for_cleanup(jobs, finished) if j.name not in cleaned]
+            cleaned.update(j.name for j in ready)
+        for done_job in ready:
+            for exp, variant in job_experiments(done_job):
+                folder = roots["checkpoints"] / exp / (variant or "")
+                if folder.is_dir() and not folder.is_symlink():
+                    shutil.rmtree(folder, ignore_errors=True)
+
     def lane(name: str, devices: str) -> None:
         for job in jobs:
             if job.lane == name:
                 run_job(job, devices)
+                if not args.dry_run:
+                    cleanup(job)
 
     started = time.perf_counter()
     lane("pre", "0")  # the calibration check that the lanes' calibration sets read

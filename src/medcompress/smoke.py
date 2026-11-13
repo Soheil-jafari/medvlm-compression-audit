@@ -302,6 +302,22 @@ def smoke_jobs() -> list[SmokeJob]:
     return jobs
 
 
+def with_dependencies(jobs: Sequence[SmokeJob], cards: Sequence[str] | None) -> list[SmokeJob]:
+    """The jobs of ``cards`` (all without), the jobs they read (``after``, recursively) and the
+    first phase (the calibration check every calibration set reads), in the list's order."""
+    if not cards:
+        return list(jobs)
+    by_name = {j.name: j for j in jobs}
+    keep = {j.name for j in jobs if j.card in cards or j.lane == "pre"}
+    frontier = list(keep)
+    while frontier:
+        after = by_name[frontier.pop()].after
+        if after is not None and after not in keep:
+            keep.add(after)
+            frontier.append(after)
+    return [j for j in jobs if j.name in keep]
+
+
 def stage_status(code: int | None) -> str:
     """PASS (0), WAIT (4: a setting or an input is still open), FAIL (anything else)."""
     if code is None:
@@ -347,19 +363,49 @@ class StageResult:
     loads: list[tuple[str, dict[str, int]]] = field(default_factory=list)
     peak: dict[str, int] = field(default_factory=dict)
     note: str = ""
+    disk_used: int | None = None  # bytes under the smoke's folder after the stage
+    disk_free: int | None = None  # free bytes on its filesystem after the stage
+
+
+KEPT_EXPERIMENTS: tuple[str, ...] = ("E0", "E1", "E2", "E9")
+"""Their checkpoint folders hold the attached hand-offs (links), never the smoke's own output."""
+
+
+def job_experiments(job: SmokeJob) -> set[tuple[str, str | None]]:
+    """``{(experiment, variant)}`` whose checkpoints a job writes (cleaned up after it)."""
+    out: set[tuple[str, str | None]] = set()
+    for stage in job.stages:
+        args = list(stage.args)
+        if "--exp" not in args:
+            continue
+        exp = args[args.index("--exp") + 1]
+        variant = args[args.index("--variant") + 1] if "--variant" in args else None
+        if exp not in KEPT_EXPERIMENTS:
+            out.add((exp, variant))
+    return out
+
+
+def ready_for_cleanup(jobs: Sequence[SmokeJob], finished: set[str]) -> list[SmokeJob]:
+    """The finished jobs whose checkpoints no unfinished job reads (``after``)."""
+    waiting = {j.after for j in jobs if j.after is not None and j.name not in finished}
+    return [j for j in jobs if j.name in finished and j.name not in waiting]
 
 
 def report_table(results: Sequence[StageResult]) -> str:
     """The PASS / WAIT / FAIL table per card and stage, with the peaks (GiB)."""
     lines = [
-        "| Card | Job | Stage | Status | Minutes | Peak per load (GiB) | Stage peak (GiB) | Note |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Card | Job | Stage | Status | Minutes | Peak per load (GiB) | Stage peak (GiB) "
+        "| Disk used / free (GiB) | Note |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         loads = "; ".join(f"{name}: {_gib(s)}" for name, s in r.loads) or "-"
+        disk = (
+            "-" if r.disk_used is None else f"{r.disk_used / 2**30:.1f} / {r.disk_free / 2**30:.1f}"
+        )  # type: ignore[operator]
         lines.append(
             f"| {r.card} | {r.job} | {r.stage} | {stage_status(r.code)} | {r.seconds / 60:.1f} "
-            f"| {loads} | {_gib(r.peak)} | {r.note} |"
+            f"| {loads} | {_gib(r.peak)} | {disk} | {r.note} |"
         )
     return "\n".join(lines)
 

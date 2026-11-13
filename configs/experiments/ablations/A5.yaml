@@ -14,6 +14,13 @@ experiment:
     - results/A5/<variant>/B2/seed0/metrics.csv
 
 pruning:
+  units:
+    # D07 / pre-registration section 7 (A5): the KL effect is scored exactly, so with the
+    # first-order estimate for the channel groups (D07 section 1) A5 runs on the exactly scored
+    # unit types only: layers and KV groups (exact removal); reported as such (2026-11-13)
+    types_by_variant:
+      logprob_drop: [decoder_layer, attention_head, mlp_channel_group]   # E7 itself
+      kl: [decoder_layer, attention_head]
   clinical:
     delta_by_variant:
       logprob_drop: logprob_drop
