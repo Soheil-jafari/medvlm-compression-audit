@@ -1379,3 +1379,18 @@ Append-only, newest at the bottom. One entry per iteration:
   named. RC-SMOKE runs E3 layer 0 (w4, w8) with all 128 examples. The handling of a non-finite
   example is a team decision (RC-E3 section 5c).
 
+## Iteration 81: 2026-11-13 (interactive)
+- RC-E3 root cause (Amir, `check_gptq_inputs.py` at 9113632): 2 of 128 calibration images give a
+  non-finite fp16 vision tower output (pixel values finite). Amendment of 2026-11-13 (Soheil and
+  Amir; pre-registration section 10, decisions log, D07, D08, README): such calibration images
+  are replaced by the next eligible image of the same seeded order (nested, stratified).
+- Code: `make_calibration_subset(exclude=...)` (unchanged without exclusions);
+  `data/calibration.py` (the rule `find_replacements`, `forward_is_finite`, the committed file
+  `results/calibration/seed<k>_replaced.csv`, `calibration_set`, `require_check`); stages 04, the
+  30-group check, 03 (student or teacher) and `check_gptq_inputs.py` read the cleaned set and
+  stop without the check (`calibration_check.required` in `configs/base.yaml`);
+  `scripts/check_calibration.py`; `models/vision_only.py` and `scripts/scan_vision_finite.py`
+  (the fp16 vision tower alone on every split, student and teacher, one T4). RC-CAL0 card; the
+  test-image proposal is in it. RC-SMOKE runs the seed-0 check first. Tests (tiny model, injected
+  non-finite example; the vision tower alone equals the full model's).
+

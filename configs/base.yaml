@@ -18,6 +18,13 @@ paths:
   results_root: ${env:MEDCOMPRESS_RESULTS_ROOT,results}
   private_root: ${env:MEDCOMPRESS_PRIVATE_ROOT,private}   # splits and mask links from RC-D1; never in git
 
+# Pre-registration section 10, amendment of 2026-11-13 (Soheil and Amir): calibration images whose
+# fp16 forward gives a non-finite value are replaced by the next eligible image of the seeded
+# order (results/calibration/seed<k>_replaced.csv, scripts/check_calibration.py). Every stage
+# that draws calibration images reads the cleaned set and refuses to run without the check.
+calibration_check:
+  required: true
+
 # Which candidate configs are active. Nothing here is decided yet.
 components:
   status: "PARTLY DECIDED: domain, teacher, datasets, student (2026-10-12)"

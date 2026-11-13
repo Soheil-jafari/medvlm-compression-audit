@@ -23,6 +23,9 @@
   `e9-seed0-quantized` (shared to Soheil's account from account 3).
 - **Target: under 1.5 h** (estimate: two lanes of about 40-50 min each, one per T4, then about
   12 min of teacher jobs on both T4s, plus about 5 min of installation; the loads dominate).
+- First of all, on T4 0, the smoke runs the fp16 calibration check of seed 0 (student, 128
+  images; `scripts/check_calibration.py`) into its own temporary results, which every later
+  calibration set reads (amendment of 2026-11-13).
 - What is tiny (`src/medcompress/smoke.py`): 2 calibration images; the budget search's two
   end points and at most 2 bisection steps; 2 recovery and 2 training updates; for evaluation
   the first validation images that give every finding 2 positive and 2 negative images plus one

@@ -56,6 +56,7 @@ methods.
 | Scoring method, recovery (157 updates on 2,500 examples, identical for every pruning arm: the fairness rule), A3 ranking, reuse of E7 | Decided (2026-11-08) | pre-registration section 7 |
 | How the two co-primary tests combine: supported only if supported on both (intersection-union), partly supported on one | Decided (2026-11-08) | pre-registration section 6 |
 | Quantization backends (GPTQ w4 / w8, LLM.int8) | Decided (D08) | `configs/quantization.yaml` |
+| Calibration images not finite in fp16 are replaced by the next eligible image of the same seeded order (nested, stratified; committed list) | Decided (amendment of 2026-11-13, Soheil and Amir) | pre-registration section 10, `results/calibration/` |
 | Timing GPU for the final numbers (RC-T1) | **Open** (does not block the freeze) | `configs/base.yaml` |
 | Venue | **Open** | `docs/decisions_log.md` |
 

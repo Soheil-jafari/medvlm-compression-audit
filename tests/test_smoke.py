@@ -22,7 +22,7 @@ def test_every_gated_card_has_smoke_jobs_with_valid_runs_and_plans() -> None:
     assert set(smoke.GATED_CARDS.values()) <= {j.card for j in jobs}
     names = {j.name for j in jobs}
     for job in jobs:
-        assert job.lane in ("A", "B", "both") and job.stages
+        assert job.lane in ("pre", "A", "B", "both") and job.stages
         assert job.after is None or job.after in names
         card, seed, variants, budgets = job.plan
         build_plan(card, seed, variants=list(variants) or None, budgets=list(budgets) or None)
@@ -31,7 +31,7 @@ def test_every_gated_card_has_smoke_jobs_with_valid_runs_and_plans() -> None:
             if "--exp" in stage.args:
                 exp = stage.args[stage.args.index("--exp") + 1]
                 registered = get_experiment(exp).scripts
-                checks = ("check_first_order.py", "check_gptq_inputs.py")  # diagnostics
+                checks = ("check_first_order.py", "check_gptq_inputs.py", "check_calibration.py")
                 assert stage.script in registered or stage.script.endswith(checks)
     assert {j.lane for j in jobs if j.card in ("RC-E9",)} == {"both"}  # the teacher: both T4s
     e7 = [j.name for j in jobs if j.lane == "B"]

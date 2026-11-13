@@ -144,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
                 run_job(job, devices)
 
     started = time.perf_counter()
+    lane("pre", "0")  # the calibration check that the lanes' calibration sets read
     lanes = [threading.Thread(target=lane, args=(n, d)) for n, d in (("A", "0"), ("B", "1"))]
     for thread in lanes:
         thread.start()

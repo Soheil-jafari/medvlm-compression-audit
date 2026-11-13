@@ -144,6 +144,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--layers", type=layer_range, default=range(1))
     parser.add_argument("--examples", type=int, default=None, help="default: all of them")
     parser.add_argument("--gptq", action="store_true", help="round the layers' matrices too")
+    parser.add_argument(
+        "--uncleaned",
+        action="store_true",
+        help="the calibration set before the fp16 check (as before 2026-11-13)",
+    )
     args = parser.parse_args(argv)
     if args.exp != "E3" or args.variant not in {"w4", "w8"}:
         parser.error("use --exp E3 with --variant w4 or w8")
@@ -160,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         collect_hessians,
         load_parent,
     )
+    from medcompress.data.calibration import calibration_set
     from medcompress.data.splits import make_calibration_subset
 
     if torch.cuda.device_count() != 1:
@@ -173,7 +179,10 @@ def main(argv: list[str] | None = None) -> int:
     if not 1 <= count <= recipe.calibration_size:
         parser.error(f"--examples must be between 1 and {recipe.calibration_size}")
     train = load_train_samples(config)
-    samples = make_calibration_subset(train, recipe.calibration_size, seed=run.seed)[:count]
+    if args.uncleaned:
+        samples = make_calibration_subset(train, recipe.calibration_size, seed=run.seed)[:count]
+    else:  # stage 03's set: without the images the fp16 check replaced
+        samples = calibration_set(config, train, recipe.calibration_size, run.seed)[:count]
     model = load_parent(config, run, int(config["inputs"]["image_longest_side"]))
     module = model.module
     layers = find_decoder_stack(module).layers

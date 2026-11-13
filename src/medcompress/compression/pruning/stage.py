@@ -305,7 +305,7 @@ def run_scoring(
     from medcompress.compression.pruning.criteria import get_criterion
     from medcompress.compression.pruning.criteria.common import write_unit_scores
     from medcompress.compression.pruning.units import enumerate_units
-    from medcompress.data.splits import make_calibration_subset
+    from medcompress.data.calibration import calibration_set
     from medcompress.utils.io import upsert_results, write_json
 
     effective = apply_variant(config, run.variant)
@@ -328,8 +328,8 @@ def run_scoring(
         units = units[: int(cap)]
     instance = criterion or get_criterion(settings.criterion)(effective, seed=run.seed)
     calibration: list[VQASample] = []
-    if settings.calibration_size is not None:
-        calibration = make_calibration_subset(train, settings.calibration_size, seed=run.seed)
+    if settings.calibration_size is not None:  # without the images the fp16 check replaced
+        calibration = calibration_set(config, train, settings.calibration_size, run.seed)
 
     peak = _reset_peak_memory()
     started = time.perf_counter()
@@ -466,6 +466,10 @@ def score_units_for_experiment(
         return  # nothing to load: the scores of these settings exist already
     if reweighted() and reweight_from_source(config, run, settings) is not None:
         return  # A1 / A2: E7's per-finding effects re-weighted, no model loaded
+    if settings.calibration_size is not None and model is None:
+        from medcompress.data.calibration import require_check
+
+        require_check(config, run.seed, settings.calibration_size)  # before the model loads
     if model is None:
         model = load_scoring_model(config, run)
     if train is None:
@@ -515,7 +519,7 @@ def run_first_order_check(
     from medcompress.compression.pruning.criteria.clinical import ClinicalSettings
     from medcompress.compression.pruning.criteria.common import read_unit_scores
     from medcompress.compression.pruning.units import enumerate_units
-    from medcompress.data.splits import make_calibration_subset
+    from medcompress.data.calibration import calibration_set
     from medcompress.utils.io import upsert_results, write_csv
 
     effective = apply_variant(config, run.variant)
@@ -540,7 +544,7 @@ def run_first_order_check(
     instance = criterion or get_criterion("clinical")(effective, seed=run.seed)
     calibration: list[VQASample] = []
     if settings.calibration_size is not None:
-        calibration = make_calibration_subset(train, settings.calibration_size, seed=run.seed)
+        calibration = calibration_set(config, train, settings.calibration_size, run.seed)
     started = time.perf_counter()
     exact = instance.exact_scores(model, [candidates[c] for c in chosen], calibration)
     seconds = time.perf_counter() - started
@@ -580,6 +584,10 @@ def first_order_check_for_experiment(
     settings = ScoringSettings.from_config(config, run.variant)
     _check_criterion(config, run)
     _check_side(config, model)
+    if settings.calibration_size is not None and model is None:
+        from medcompress.data.calibration import require_check
+
+        require_check(config, run.seed, settings.calibration_size)
     if model is None:
         model = load_scoring_model(config, run)
     if train is None:

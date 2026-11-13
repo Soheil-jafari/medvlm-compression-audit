@@ -129,7 +129,10 @@ leave the vision tower and the output head out.
 
 Calibration (`w4`, `w8`): **the same 128 calibration images as the pruning criteria** (D07,
 nested set from the training pool), each with one of its training questions and the
-ground-truth answer in the chat template. Reason: both families then see the same data. The
+ground-truth answer in the chat template. **Amendment of 2026-11-13:** images whose fp16
+forward through the model being quantized gives a non-finite value are replaced by the next
+eligible image of the same seeded order (the student's check for E3 and E8, the teacher's for
+E9; `results/calibration/seed<k>_replaced.csv`). Reason: both families then see the same data. The
 alternatives are 512 (the size of public Qwen2.5-VL recipes) or 1,024 (the GPTQModel example);
 more calibration data can help GPTQ, but would give quantization more data than pruning.
 

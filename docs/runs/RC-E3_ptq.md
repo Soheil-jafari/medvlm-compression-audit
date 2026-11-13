@@ -9,9 +9,10 @@
   **validation** split now and on the **test** split after the pre-registration freeze, and
   timed with the budget protocol.
 - Purpose: the "quantize after training" family of the audit (D08).
-- Status: `blocked` for seed 0 (2026-11-13): stage 03 at 427c3ce stopped on a NaN Hessian at
-  layer 0 (section 5c). Next: the diagnostic of section 5c, then a team decision on the
-  non-finite calibration example(s), then RC-SMOKE for RC-E3, then seed 0 again
+- Status: `blocked` for seed 0 (2026-11-13): root cause found (2 of 128 calibration images give
+  a non-finite fp16 vision output; section 5c). Amendment of 2026-11-13: such images are
+  replaced. Next: RC-CAL0 (the check of seed 0, committed), RC-SMOKE for RC-E3, then seed 0
+  again (it reads the cleaned set)
 
 ## 2. Requirements
 

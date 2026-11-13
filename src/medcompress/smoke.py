@@ -15,6 +15,9 @@ its own process with the real stage script, as in production; only these setting
 * RC-E3 also runs ``scripts/check_gptq_inputs.py`` on layer 0 for ``w4`` and ``w8`` with all 128
   real calibration examples (stage 03's own capture, then GPTQ on that layer): the tiny
   calibration of the other jobs could miss the example that made RC-E3 seed 0's Hessian NaN;
+* first of all, the fp16 calibration check of seed 0 (``scripts/check_calibration.py``, 128
+  images, the student) writes the smoke's own copy of ``results/calibration/seed0_replaced.csv``,
+  which every later calibration set reads (amendment of 2026-11-13);
 * the ablations whose scoring would take hours even on 2 images (A2, A4, A5, A6) score their
   first 300 units only (``smoke.max_scored_units``) and run stage 04 alone: their stages 05-07
   are E7's code, which the E7 job runs in full.
@@ -75,7 +78,7 @@ class SmokeJob:
 
     card: str
     name: str
-    lane: str  # "A" (T4 0), "B" (T4 1) or "both"
+    lane: str  # "pre" (T4 0, before the lanes), "A" (T4 0), "B" (T4 1) or "both"
     stages: tuple[SmokeStage, ...]
     plan: tuple[str, int | None, tuple[str, ...], tuple[str, ...]]  # card, seed, variants, budgets
     after: str | None = None  # a job whose outputs this one reads
@@ -108,6 +111,7 @@ def _quantized(exp: str, variant: str | None, budget: str | None) -> tuple[Smoke
 
 
 GPTQ_CHECK = S + "check_gptq_inputs.py"
+CAL_CHECK = S + "check_calibration.py"
 
 
 def _gptq_check(variant: str) -> SmokeStage:
@@ -128,6 +132,16 @@ def smoke_jobs() -> list[SmokeJob]:
     g2 = ("RC-G2", None, (), ())
     cap = (f"smoke.max_scored_units={CAPPED_UNITS}",)
     jobs = [
+        # first, on T4 0: the fp16 calibration check of seed 0 (amendment of 2026-11-13), which
+        # every later job's calibration set reads (128: the GPTQ checks below use all of them)
+        SmokeJob(
+            "RC-CAL0",
+            "calibration check seed 0 (student)",
+            "pre",
+            (SmokeStage("check", CAL_CHECK, ("--exp", "E3", "--seed", "0", "--size", "128")),),
+            ("RC-E3", 0, ("w4",), ()),
+            note="writes the smoke's own copy of the check",
+        ),
         # lane A (T4 0)
         SmokeJob("RC-G2", "E5 magnitude", "A", _pruning("E5", "magnitude"), g2),
         SmokeJob(

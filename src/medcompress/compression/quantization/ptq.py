@@ -760,10 +760,14 @@ def run_quantization(
             from medcompress.compression.pruning.stage import load_train_samples
 
             train = load_train_samples(config)
-        from medcompress.data.splits import make_calibration_subset
+        from medcompress.data.calibration import calibration_set
 
         assert recipe.calibration_size is not None
-        calibration = make_calibration_subset(train, recipe.calibration_size, seed=run.seed)
+        # the images the fp16 check replaced are left out (amendment of 2026-11-13); the
+        # teacher's own check for E9, the student's for E3 and E8; refused without the check
+        model_name = "teacher" if parent_of(run)["experiment"] == "E0" else "student"
+        calibration = calibration_set(config, train, recipe.calibration_size, run.seed,
+                                      model_name)  # fmt: skip
         if model is None:
             model = load_parent(config, run, int(side))
         started = time.perf_counter()

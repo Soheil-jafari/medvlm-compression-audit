@@ -725,6 +725,19 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-13 (Soheil and Amir; pre-registration section 10, amendment of 2026-11-13; before any
+  compression result): calibration images that are not finite in fp16 are replaced.** Calibration
+  images whose fp16 forward through the model gives any non-finite value are replaced by the next
+  eligible image in the same seeded order, keeping the nested subsets (A4) and the finding
+  stratification; applied once per seed, before any criterion or quantization, identically for
+  every arm that uses the calibration set (pruning criteria, GPTQ, E4, E8, E11/E12); the replaced
+  ids are committed (`results/calibration/seed<k>_replaced.csv`). Reason: RC-E3 seed 0's NaN
+  Hessian; 2 of 128 calibration images (their ids go into the committed check file) give a
+  non-finite vision tower output in fp16 (Amir,
+  `check_gptq_inputs.py`, 9113632). The vision tower stays fp16; nothing else changes. Code:
+  `data/calibration.py`, `scripts/check_calibration.py`, `make_calibration_subset(exclude=...)`
+  (unchanged without exclusions), `calibration_check.required` in `configs/base.yaml`; the fp16
+  scan of every split: `scripts/scan_vision_finite.py` (RC-CAL0).
 - **2026-11-13 (Soheil's request; implementation, no frozen setting changed): RC-SMOKE before
   every remaining run.** A tiny end-to-end run of each card's real stages (one T4 x2 session)
   must pass before the card runs (`docs/runs/smoke_passed.yaml`, `run_card.py` refuses
