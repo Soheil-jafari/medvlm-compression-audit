@@ -8,12 +8,13 @@ experiment:
   kind: ablation
   variant_of: E7
   budgets: [B2]
+  seeds: [0]                              # seed 0 only: exploratory (seed plan, 2026-11-08)
   variants: [layers_only, heads_channels]
   outputs:
-    - results/A6/<variant>/B2/seed{0,1,2}/metrics.csv
+    - results/A6/<variant>/B2/seed0/metrics.csv
 
 pruning:
   units:
     types_by_variant:
       layers_only: [decoder_layer]
-      heads_channels: [attention_head, mlp_channel_group]  # TODO: confirm whether layers are also included
+      heads_channels: [attention_head, mlp_channel_group]  # confirmed 2026-11-08 (item 19): no whole layers

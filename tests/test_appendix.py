@@ -107,7 +107,7 @@ def test_the_hyperparameter_table_reads_the_configs() -> None:
     text = appendix.hyperparameter_table()
     assert "LoRA rank / alpha / dropout & 16 / 32 / 0.05" in text
     assert "Ranking of A3 (random scores) & none" in text
-    assert "Scoring method & --" in text  # still open (D07 section 1)
+    assert "Scoring method & decoder\\_layer: exact" in text  # decided 2026-11-08 (D07 section 1)
 
 
 def test_the_appendix_is_written_with_placeholders_and_with_data(tmp_path: Path) -> None:

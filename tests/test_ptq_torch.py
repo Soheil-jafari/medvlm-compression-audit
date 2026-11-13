@@ -172,3 +172,256 @@ def test_llm_int8_stays_close_to_the_16_bit_layer() -> None:
         ref = linear(x).float()
         out = build_int8_linear(linear)(x).float()
     assert float((out - ref).abs().max() / ref.abs().max()) < 0.05
+
+
+def _gptq_torch_before_2026_11_12(weight, hessian, *, bits, group_size, damping=0.01,
+                                  block_size=128):  # fmt: skip
+    """The torch GPTQ as it was before the in-place dampening (verbatim), for the check below."""
+    w = weight.detach().to(torch.float32).clone()
+    h = hessian.detach().to(device=w.device, dtype=torch.float32).clone()
+    dead = torch.diag(h) == 0
+    h[dead, dead] = 1.0
+    w[:, dead] = 0.0
+    h += damping * torch.mean(torch.diag(h)) * torch.eye(h.shape[0], device=h.device)
+    lower = torch.linalg.cholesky(h)
+    h_inv = torch.linalg.cholesky(torch.cholesky_inverse(lower), upper=True)
+    rows, columns = w.shape
+    groups = grid.check_shape(columns, bits, group_size)
+    zero, top = grid.zero_point(bits), grid.max_code(bits)
+    codes = torch.zeros((rows, columns), dtype=torch.uint8, device=w.device)
+    scales = torch.ones((rows, groups), dtype=torch.float32, device=w.device)
+    loss = torch.zeros((), dtype=torch.float32, device=w.device)
+    for start in range(0, columns, block_size):
+        stop = min(start + block_size, columns)
+        block = w[:, start:stop].clone()
+        errors = torch.zeros_like(block)
+        h_block = h_inv[start:stop, start:stop]
+        for i in range(stop - start):
+            column = start + i
+            if column % group_size == 0:
+                absmax = w[:, column : column + group_size].abs().amax(dim=1)
+                scale = 2.0 * absmax / top
+                scales[:, column // group_size] = torch.where(
+                    scale == 0, torch.ones_like(scale), scale
+                )
+            s = scales[:, column // group_size]
+            q = torch.clamp(torch.round(block[:, i] / s) + zero, 0, top)
+            codes[:, column] = q.to(torch.uint8)
+            rounded = (q - zero) * s
+            d = h_block[i, i]
+            err = (block[:, i] - rounded) / d
+            loss += torch.sum((block[:, i] - rounded) ** 2) / d**2 / 2
+            block[:, i:] -= err[:, None] * h_block[i, i:][None, :]
+            errors[:, i] = err
+        w[:, stop:] -= errors @ h_inv[start:stop, stop:]
+    return codes.cpu().numpy(), scales.double().cpu().numpy(), float(loss)
+
+
+@pytest.mark.parametrize("bits", [4, 8])
+def test_the_in_place_dampening_gives_the_same_codes_as_before(bits: int) -> None:
+    generator = torch.Generator().manual_seed(bits)
+    for out, inp, group in ((24, 64, 16), (40, 256, 32), (8, 384, 128)):
+        weight = torch.randn(out, inp, generator=generator, dtype=torch.float16)
+        x = torch.randn(200, inp, generator=generator)
+        x[:, 3] = 0.0  # a dead input: unit diagonal, zero weights
+        hessian = 2.0 * x.T @ x / x.shape[0]
+        before = _gptq_torch_before_2026_11_12(weight, hessian, bits=bits, group_size=group)
+        kept = hessian.clone()
+        now = gptq_torch(weight, hessian, bits=bits, group_size=group)
+        assert np.array_equal(now.codes, before[0]) and np.array_equal(now.scales, before[1])
+        assert now.output_error == before[2]
+        assert torch.equal(hessian, kept)  # the caller's Hessian is not changed
+
+
+def test_the_decoder_codes_are_the_same_as_before_the_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from medcompress.compression.quantization import gptq as gptq_mod
+
+    batches = calibration_batches(tiny_vlm.tiny_wrapper(seed=0), _samples(tmp_path), tmp_path)
+    assert all(v.device.type == "cpu" for b in batches for v in b.values())  # kept off the GPU
+    now = gptq_quantize_decoder(tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lambda _m: None)
+
+    def old(
+        weight, hessian, *, device=None, consume_hessian=False, matrix=None, log=None, **kwargs
+    ):  # noqa: E501
+        assert device is None or torch.device(device) == weight.device  # the CPU here
+        codes, scales, loss = _gptq_torch_before_2026_11_12(weight, hessian.clone(), **kwargs)
+        return gptq_mod.GPTQResult(codes, scales, kwargs["bits"], kwargs["group_size"], loss)
+
+    monkeypatch.setattr(gptq_mod, "gptq_torch", old)
+    before = gptq_quantize_decoder(
+        tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lambda _m: None
+    )
+    assert set(now) == set(before)
+    for key, record in now.items():
+        assert np.array_equal(record.codes, before[key].codes), key
+        assert np.array_equal(record.scales, before[key].scales), key
+
+
+# ------------------------------------------------- placement and the GPTQ device (2026-11-13)
+
+
+def test_the_plan_places_every_tensor_once_balanced_and_under_the_caps() -> None:
+    from medcompress.compression.quantization.placement import (
+        device_map_lines,
+        placement_units,
+        plan_device_map,
+    )
+
+    model = tiny_vlm.tiny_wrapper(seed=0).module
+    units = placement_units(model)
+    names = [n for n, _ in model.named_parameters()] + [n for n, _ in model.named_buffers()]
+    for name in names:  # every tensor under exactly one unit
+        hits = [u for u, _ in units if name == u or name.startswith(u + ".")]
+        assert len(hits) == 1, (name, hits)
+    total = sum(s for _, s in units)
+    assert total == sum(
+        t.numel() * t.element_size() for t in [*model.parameters(), *model.buffers()]
+    )
+    device_map, used = plan_device_map(units, {0: total, 1: total})
+    order = [device_map[u] for u, _ in units]
+    assert order == sorted(order) and set(order) == {0, 1}  # in model order, both GPUs used
+    biggest = max(s for _, s in units)
+    assert abs(used[0] - used[1]) <= biggest  # balanced within one unit
+    assert len(device_map_lines(units, device_map)) == 2
+    with pytest.raises(ValueError, match="exceeds the caps"):
+        plan_device_map(units, {0: total // 4, 1: total // 4})
+
+
+def test_the_teachers_plan_on_two_t4s() -> None:
+    """The teacher's architecture (Qwen2.5-VL-7B: the dimensions of its model config and of
+    RC-E9's log) built without weights: its plan, the one RC-E9 prints."""
+    import transformers
+    from accelerate import init_empty_weights
+
+    from medcompress.compression.quantization.placement import placement_units, plan_device_map
+    from medcompress.compression.quantization.ptq import gptq_max_memory
+
+    config = transformers.Qwen2_5_VLConfig(
+        text_config=dict(vocab_size=152064, hidden_size=3584, intermediate_size=18944,
+                         num_hidden_layers=28, num_attention_heads=28, num_key_value_heads=4,
+                         tie_word_embeddings=False),
+        vision_config=dict(depth=32, hidden_size=1280, intermediate_size=3420, num_heads=16,
+                           out_hidden_size=3584),
+        tie_word_embeddings=False,
+    )  # fmt: skip
+    with init_empty_weights():
+        model = transformers.AutoModelForImageTextToText.from_config(config, dtype=torch.float16)
+    assert sum(p.numel() for p in model.parameters()) == 8_292_166_656  # parameters_stored
+    units = placement_units(model)
+    t4 = 15_636_037_632  # RC-B0's efficiency_setup.json
+    caps = gptq_max_memory([t4, t4], sum(s for _, s in units), 18944, 3584)
+    device_map, used = plan_device_map(units, caps)
+    assert device_map["model.visual.patch_embed.proj"] == 0 and device_map["lm_head"] == 1
+    assert device_map["model.language_model.layers.12"] == 0
+    assert device_map["model.language_model.layers.13"] == 1
+    assert used == {0: 8_502_597_792, 1: 8_081_736_192}  # 7.92 / 7.53 GiB
+    assert all(used[g] <= caps[g] for g in used)
+
+
+def test_the_gptq_device_is_the_layers_gpu_then_the_roomiest_then_the_cpu() -> None:
+    from medcompress.compression.quantization.placement import (
+        GPTQ_DEVICE_MARGIN,
+        gptq_work_bytes,
+        memory_report,
+        pick_gptq_device,
+    )
+
+    need = gptq_work_bytes(18944, 3584) + GPTQ_DEVICE_MARGIN
+    layer = torch.device("cuda", 1)
+
+    def pick(rooms: dict[int, int]) -> object:
+        return pick_gptq_device(layer, 18944, 3584, room=rooms.__getitem__, gpus=rooms)
+
+    assert pick({0: need * 2, 1: need}) == torch.device("cuda", 1)  # its own GPU first
+    assert pick({0: need, 1: need - 1}) == torch.device("cuda", 0)  # then the other one
+    assert pick({0: need - 1, 1: need - 1}) == torch.device("cpu")  # neither: the CPU
+    assert pick_gptq_device(torch.device("cpu"), 8, 8) == torch.device("cpu")
+    if not torch.cuda.is_available():
+        assert memory_report() == ""
+
+
+def test_the_cpu_fallback_and_the_handed_over_hessian_give_the_same_codes(tmp_path: Path) -> None:
+    """On this machine the tiny model is on the CPU, so this checks the plumbing (the device
+    choice, the copies, the handed-over Hessians), not GPU-versus-CPU rounding."""
+    batches = calibration_batches(tiny_vlm.tiny_wrapper(seed=0), _samples(tmp_path), tmp_path)
+    plain = gptq_quantize_decoder(
+        tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lambda _m: None
+    )
+    choices: list[object] = []
+
+    def to_cpu(layer_device: object, in_features: int, out_features: int) -> object:
+        choices.append(layer_device)
+        return torch.device("cpu")
+
+    lines: list[str] = []
+    fallback = gptq_quantize_decoder(
+        tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lines.append, pick_device=to_cpu
+    )
+    assert len(choices) == len(plain)
+    assert any("start" in line for line in lines) and any("done" in line for line in lines)
+    for key, record in plain.items():
+        assert np.array_equal(record.codes, fallback[key].codes), key
+        assert np.array_equal(record.scales, fallback[key].scales), key
+    generator = torch.Generator().manual_seed(3)
+    weight = torch.randn(24, 64, generator=generator)
+    x = torch.randn(100, 64, generator=generator)
+    hessian = 2.0 * x.T @ x / 100
+    kept = gptq_torch(weight, hessian.clone(), bits=4, group_size=16)
+    taken = gptq_torch(weight, hessian.clone(), bits=4, group_size=16, consume_hessian=True)
+    moved = gptq_torch(weight, hessian, bits=4, group_size=16, device="cpu")
+    for other in (taken, moved):
+        assert np.array_equal(kept.codes, other.codes)
+        assert np.array_equal(kept.scales, other.scales)
+
+
+@pytest.mark.parametrize("nan_input", [False, True])
+def test_half_calibration_hessian(nan_input: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+    from medcompress.compression.pruning.surgery import find_decoder_stack
+    from medcompress.compression.quantization.ptq import collect_hessians
+
+    model = tiny_vlm.tiny_wrapper(seed=0)
+    layer = find_decoder_stack(model.module).layers[0]
+    linear = layer.self_attn.q_proj.half()
+    x = torch.eye(linear.in_features, dtype=torch.float16) * 2048
+    x[:, 0] = 0
+
+    # Drive the tiny model's real projection and the calibration hook with synthetic FP16 inputs.
+    def forward(**_kwargs):
+        linear(x)
+
+    monkeypatch.setattr(model.module, "forward", forward)
+    if nan_input:
+        x[0, 0] = float("nan")
+        with pytest.raises(
+            ValueError,
+            match=r"layer 0 q_proj: Hessian has \d+ non-finite entries; input min=.*max=",
+        ):
+            collect_hessians(model, 0, [{}], ("q_proj",))
+        return
+
+    assert not torch.isfinite(x.T @ x).all()
+    h = collect_hessians(model, 0, [{}, {}], ("q_proj",))["q_proj"]
+    assert h.dtype == torch.float32 and torch.isfinite(h).all()
+    acc = HessianAccumulator(linear.in_features)
+    acc.add(x.numpy())
+    acc.add(x.numpy())
+    # Positive weights avoid the negative half-step at the symmetric grid's endpoint.
+    weight = torch.rand(linear.weight.shape, generator=torch.Generator().manual_seed(4))
+    ref = gptq_numpy(weight.numpy(), acc.hessian, bits=4, group_size=16)
+    got = gptq_torch(weight, h, bits=4, group_size=16)
+    np.testing.assert_array_equal(got.codes, ref.codes)
+    assert np.all(got.dequantized()[:, 0] == 0)
+
+
+def test_cholesky_retries_use_absolute_damping_increments() -> None:
+    hessian = torch.tensor([[1.0, 1.012], [1.012, 1.0]])
+    log = []
+    result = gptq_torch(
+        torch.ones(1, 2), hessian, bits=4, group_size=2, matrix="layer0.q_proj", log=log.append
+    )
+    assert result.damping_retries == 1
+    assert result.effective_damping == 0.0125
+    assert torch.equal(hessian, torch.tensor([[1.0, 1.012], [1.012, 1.0]]))
+    assert "layer0.q_proj" in log[0] and "final damping 0.0125" in log[-1]

@@ -27,6 +27,10 @@ CONFIG_INCOMPLETE_EXIT_CODE = 4
 INPUT_CHECK_EXIT_CODE = 5
 """Exit code used when an attached dataset (``--data-root``, ``--from``) fails its check."""
 
+GPU_PLACEMENT_EXIT_CODE = 6
+"""Exit code used when a model load is refused: a GPU still held memory, or the model would be
+offloaded from the GPU (2026-11-13)."""
+
 
 def build_parser(description: str, *, experiment_args: bool = True) -> argparse.ArgumentParser:
     """Create an argument parser with the options shared by all scripts."""
@@ -318,6 +322,13 @@ def run_stage(stage: str, func: Callable[..., Any], /, **kwargs: Any) -> int:
     except ConfigError as exc:
         print(f"[{stage}] configuration incomplete: {exc}")
         return CONFIG_INCOMPLETE_EXIT_CODE
+    except RuntimeError as exc:
+        from medcompress.models.loading import GPUPlacementError
+
+        if not isinstance(exc, GPUPlacementError):
+            raise
+        print(f"[{stage}] GPU placement refused: {exc}")
+        return GPU_PLACEMENT_EXIT_CODE
     return 0
 
 

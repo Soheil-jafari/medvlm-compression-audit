@@ -5,10 +5,10 @@ Rules: `src/medcompress/evaluation/verdicts.py` (to be frozen in the pre-registr
 
 | Hypothesis | Statement | Verdict | Rule |
 |---|---|---|---|
-| H1 | Damage to small findings exceeds damage to accuracy, for every family. | **pending** | supported if every arm's CI is above 0; not supported if any CI is below 0 |
-| H2 | Structured pruning harms small-finding recall more than 8-bit quantization. | **pending** | supported if the CI of (pruning - W8) is below 0; not supported if above 0 |
-| H3 | At B2, the clinical criterion gives higher small-finding recall and a larger lesion-mask effect than the best generic criterion. | **pending** | supported if both differences are > 0 with Holm-adjusted p < 0.05; not supported if either CI is entirely <= 0; otherwise inconclusive |
-| H4 | Ranking compressed arms by accuracy gives a different order than by clinical metrics. | **pending** | supported if any tau has CI upper bound < 1; not supported if every tau = 1 |
+| H1 | Damage to small findings exceeds damage to accuracy, for the pruning arms of the main tier (E7 and the comparator at B2). | **pending** | supported if every 3-seed arm's CI is above 0; not supported if any CI is below 0 (seed-0 arms: exploratory, not read) |
+| H2 | Structured pruning harms small-finding recall more than 8-bit quantization. | **pending** | supported if the CI of (pruning - W8) is below 0; not supported if above 0; exploratory if a side has seed 0 only |
+| H3 | At B2, the clinical criterion gives higher small-finding recall and a larger lesion-mask effect than the best generic criterion. | **pending** | supported if both differences are > 0 with Holm-adjusted p < 0.05; not supported if either CI is entirely <= 0; otherwise inconclusive; exploratory after a futility stop (seed 0 only) |
+| H4 | Ranking compressed arms by accuracy gives a different order than by clinical metrics. | **pending** | exploratory since 2026-11-08 (seed 0 of every compressed arm): the taus and their image-bootstrap CIs are reported, with no confirmatory claim |
 
 ## H1: pending
 

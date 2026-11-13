@@ -204,6 +204,64 @@ def g2_runs() -> tuple[Run, ...]:
     return e5 + (Run("E6", 0, "B2"), Run("E7", 0, "B2"))
 
 
+FIRST_ORDER_CHECK = Step(
+    "first-order check E7 seed0", _script("check_first_order.py", "--seed", "0")
+)
+"""After E7's scoring: 30 random channel groups scored exactly (D07; a report, not a gate). The
+script's experiment is E7 by default: it is not a registered stage of every E7 run."""
+
+G2_PARTS: tuple[str, ...] = (
+    "E5:magnitude", "E5:activation", "E5:taylor", "E6", "E7:scores", "E7", "E7:check",
+)  # fmt: skip
+"""The parts of RC-G2 that ``--only`` picks (2026-11-11): one run each, or E7's scoring alone
+(``E7:scores``) and the 30-group check alone (``E7:check``), so that no session comes near
+Kaggle's session limit. Without ``--only`` every part but ``E7:scores`` runs (the E7 run scores
+its units itself)."""
+G2_DEFAULT: tuple[str, ...] = tuple(p for p in G2_PARTS if p != "E7:scores")
+
+
+def _g2_scores_committed() -> bool:
+    """True when E7 seed 0's ``unit_scores.csv`` and its settings file are in the clone."""
+    from medcompress.config import repo_root
+
+    folder = repo_root() / "results" / "E7" / "nobudget" / "seed0"
+    return (folder / "unit_scores.csv").is_file() and (
+        folder / "unit_scores.settings.json"
+    ).is_file()
+
+
+def g2_plan_parts(only: Sequence[str] | None) -> tuple[tuple[str, ...], tuple[Step, ...],
+                                                         tuple[Handoff, ...]]:  # fmt: skip
+    """The parts, steps and hand-offs of an RC-G2 session (``--only``; see :data:`G2_PARTS`).
+
+    Each pruned run hands off its own dataset (``G2_B2_seed0_pruned_<run>``), so the sessions
+    never write two datasets of the same name; later cards find them by their files. With
+    ``--only``, ``E7`` and ``E7:check`` need E7's committed scores (the ``E7:scores`` session
+    first, its results committed), or the E7 run would score again for hours."""
+    parts = _pick(G2_PARTS, only) if only else G2_DEFAULT
+    if only and ("E7" in parts or "E7:check" in parts) and "E7:scores" not in parts:
+        if not _g2_scores_committed():
+            raise CardError(
+                "RC-G2 --only E7 / E7:check: E7 seed 0's unit_scores.csv is not committed; "
+                "run --only E7:scores first and commit its results"
+            )
+    steps: list[Step] = []
+    handoffs: list[Handoff] = []
+    for part in parts:
+        if part == "E7:scores":
+            score = _script("04_score_pruning_units.py", "--exp", "E7", "--seed", "0")
+            steps.append(Step("score units E7 seed0", score))
+            continue
+        if part == "E7:check":
+            steps.append(FIRST_ORDER_CHECK)
+            continue
+        exp, _, variant = part.partition(":")
+        run = Run(exp, 0, "B2", variant or None)
+        steps.append(_experiment(run))
+        handoffs.append(Handoff("pruned", (run,), f"G2_B2_seed0_pruned_{part.replace(':', '_')}"))
+    return parts, tuple(steps), tuple(handoffs)
+
+
 def _pick(values: Sequence[str], wanted: Sequence[str] | None) -> tuple[str, ...]:
     if not wanted:
         return tuple(values)
@@ -213,11 +271,34 @@ def _pick(values: Sequence[str], wanted: Sequence[str] | None) -> tuple[str, ...
     return tuple(v for v in values if v in wanted)
 
 
-def _seed_budgets(seed: int, budgets: Sequence[str]) -> list[str]:
-    """B2 for every seed; B1 and B3 for seed 0 only, the trend (decided 2026-11-06)."""
-    from medcompress.registry import TREND_BUDGETS, TREND_SEEDS
+EXPLORATORY_ONLY: tuple[int, ...] = (0,)
+"""Seed 0 only: every arm outside the main-claim tier (seed plan of 2026-11-08)."""
 
-    return [b for b in budgets if b not in TREND_BUDGETS or seed in TREND_SEEDS]
+
+def seed_plan_choice() -> dict | None:
+    """The committed comparator choice and futility decision (``scripts/choose_comparator.py``),
+    or None before it exists. A function, so tests can replace it."""
+    from medcompress.config import repo_root
+    from medcompress.seed_plan import load_choice
+
+    return load_choice(repo_root() / "results")
+
+
+def _main_tier_go(card: str, seed: int) -> dict | None:
+    """Seed 0 always runs; seeds 1 and 2 of the main tier only after seed 0's comparator choice
+    and only if the futility rule does not stop (pre-registration section 11, 2026-11-08)."""
+    if seed == 0:
+        return None
+    choice = seed_plan_choice()
+    if choice is None or "futility_stop" not in choice:
+        raise CardError(f"{card} seed {seed}: seeds 1 and 2 of the main tier wait for seed 0's "
+                        "comparator choice and futility check (scripts/choose_comparator.py, "
+                        "committed results/seed_plan/comparator_B2.json)")  # fmt: skip
+    if choice["futility_stop"]:
+        raise CardError(f"{card} seed {seed}: the futility rule stopped the study after seed 0 "
+                        f"(E7 ranks below the comparator {choice['comparator']}); seeds 1 and 2 "
+                        "do not run")  # fmt: skip
+    return choice
 
 
 def _seed(card: str, seed: int | None, allowed: Sequence[int]) -> int:
@@ -246,9 +327,13 @@ def build_plan(
     embed_dir: Path | None = None,
     labels: Sequence[Path] = (),
     topup_dir: Path | None = None,
+    only: Sequence[str] | None = None,
 ) -> CardPlan:
-    """The plan of ``card`` (for ``seed`` where the card is split by seed)."""
+    """The plan of ``card`` (for ``seed`` where the card is split by seed). ``only``: the parts
+    of RC-G2 to run in this session (:data:`G2_PARTS`)."""
     card = card.upper()
+    if only and card != "RC-G2":
+        raise CardError("--only is for RC-G2 (use --variant / --budget for the other cards)")
     picked_budgets = _pick(BUDGETS, budgets)
     if card == "RC-D1":
         _no_seed(card, seed)
@@ -401,6 +486,8 @@ def build_plan(
     if card in ("RC-E1", "RC-E2"):
         exp = card[-2:]
         run = Run(exp, _seed(card, seed, SEEDS))
+        if exp == "E2":
+            _main_tier_go(card, run.seed)
         return CardPlan(
             card, f"{exp} training, seed {run.seed}", 1, tuple(_training(run)),
             handoffs=(Handoff("adapter", (run,), f"{exp}_seed{run.seed}_adapter"),),
@@ -423,8 +510,15 @@ def build_plan(
             needs=(Need("adapter", Run("E2")),), internet=True,
         )  # fmt: skip
     if card == "RC-E3":
+        # w8 is in the 3-seed tier for H2 (2026-11-08): seeds 1 and 2 quantize w8 only, behind
+        # the futility gate; w4 and w8a8 stay seed 0
         s = _seed(card, seed, SEEDS)
-        runs = [Run("E3", s, variant=v) for v in _pick(E3_VARIANTS, variants)]
+        chosen = _pick(E3_VARIANTS, variants) if s == 0 else ("w8",)
+        if s != 0:
+            _main_tier_go(card, s)
+            if variants and set(variants) != {"w8"}:
+                raise CardError(f"{card} seed {s} runs w8 only (w4 and w8a8 are seed 0 only)")
+        runs = [Run("E3", s, variant=v) for v in chosen]
         steps = [step for run in runs for step in (_experiment(run), *_test_evals(run))]
         return CardPlan(
             card, f"E3 post-training quantization, seed {s}", 1, tuple(steps),
@@ -433,7 +527,7 @@ def build_plan(
             needs=(Need("adapter", Run("E2", s)),), seed=s, quantization=True, internet=True,
         )  # fmt: skip
     if card == "RC-E4":
-        run = Run("E4", _seed(card, seed, SEEDS))
+        run = Run("E4", _seed(card, seed, EXPLORATORY_ONLY))
         return CardPlan(
             card, f"E4 quantization-aware distillation, seed {run.seed}", 1,
             (_experiment(run), *_test_evals(run)),
@@ -444,25 +538,48 @@ def build_plan(
     if card == "RC-E9":
         _no_seed(card, seed)
         run = Run("E9")
+        steps = (
+            Step(
+                f"quantize {run.label}",
+                _script("03_quantize.py", *run.args()),
+                skip_if_present=Need("quantized", run),
+            ),
+            Step(f"validation {run.label}", _script("06_evaluate.py", *run.args())),
+            Step(f"benchmark {run.label}", _script("07_benchmark_efficiency.py", *run.args())),
+            *_test_evals(run),
+        )
         return CardPlan(
-            card, "E9 the teacher at 4 bit", 2, (_experiment(run), *_test_evals(run)),
+            card, "E9 the teacher at 4 bit", 2, steps,
             handoffs=(Handoff("quantized", (run,), "E9_seed0_quantized"),),
             needs=(Need("teacher_adapter"),), quantization=True, internet=True,
         )  # fmt: skip
     if card == "RC-G2":
         _no_seed(card, seed)
-        runs = list(g2_runs())
+        parts, steps, handoffs = g2_plan_parts(only)
+        title = "Gate 2 pilot at B2, seed 0 (validation)"
+        if only:
+            title += ": " + ", ".join(parts)
         return CardPlan(
-            card, "Gate 2 pilot at B2, seed 0 (validation)", 1, tuple(_experiment(r) for r in runs),
-            handoffs=(Handoff("pruned", tuple(runs), "G2_B2_seed0_pruned"),),
-            needs=(Need("adapter", Run("E2")), Need("teacher_cache")), internet=True,
-            notes=("the grid sessions of seed 0 attach this hand-off and skip these five runs",),
+            card, title, 1, steps, handoffs=handoffs,  # the cache: only for the recoveries
+            needs=(Need("adapter", Run("E2")),) + ((Need("teacher_cache"),) if handoffs else ()),
+            internet=True,
+            notes=("the grid sessions of seed 0 attach these hand-offs and skip RC-G2's runs",),
         )  # fmt: skip
     if card in ("RC-E5", "RC-E6", "RC-E7"):
         s = _seed(card, seed, SEEDS)
         exp = card[-2:]
         criteria = _pick(E5_CRITERIA, variants) if exp == "E5" else (None,)
-        runs = [Run(exp, s, b, v) for v in criteria for b in _seed_budgets(s, picked_budgets)]
+        run_budgets = picked_budgets
+        choice = _main_tier_go(card, s)
+        if choice is not None:  # seeds 1 and 2: B2 only, and only E7 and the comparator
+            run_budgets = ("B2",)
+            if exp != "E7":
+                label, _, variant = str(choice["comparator"]).partition(":")
+                if label != exp:
+                    raise CardError(f"{card} seed {s}: the comparator is {choice['comparator']}; "
+                                    f"{exp} has no seed {s} run (seed 0 only)")  # fmt: skip
+                criteria = (variant or None,)
+        runs = [Run(exp, s, b, v) for v in criteria for b in run_budgets]
         kept = runs if exp == "E7" else [r for r in runs if r.budget == "B2"]  # E8 / RC-T1
         handoffs = [Handoff("outcomes", tuple(runs), f"{exp}_seed{s}_outcomes")]
         if kept:
@@ -475,8 +592,8 @@ def build_plan(
             seed=s, internet=True,
         )  # fmt: skip
     if card == "RC-E8":
-        s = _seed(card, seed, SEEDS)
-        runs = [Run("E8", s, b) for b in _seed_budgets(s, picked_budgets)]
+        s = _seed(card, seed, EXPLORATORY_ONLY)
+        runs = [Run("E8", s, b) for b in picked_budgets]
         steps = [step for run in runs for step in (_experiment(run), *_test_evals(run))]
         b2 = tuple(r for r in runs if r.budget == "B2")  # RC-T1 times B2
         return CardPlan(
@@ -489,7 +606,10 @@ def build_plan(
             internet=True,
         )  # fmt: skip
     if card in {f"RC-A{n}" for n in range(1, 7)}:
-        s = _seed(card, seed, SEEDS)
+        # A1 at B2: 3 seeds for the secondary comparison E7 vs A1, seeds 1 and 2 under the
+        # futility rule (2026-11-08); the other ablations seed 0 only
+        s = _seed(card, seed, SEEDS if card == "RC-A1" else EXPLORATORY_ONLY)
+        _main_tier_go(card, s)
         exp = card[3:]
         choices = ABLATION_VARIANTS[exp]
         if variants:
@@ -501,7 +621,11 @@ def build_plan(
         )  # fmt: skip
     if card == "RC-R1":
         _no_seed(card, seed)
-        runs = [Run("E0")] + [Run(e, s) for e in ("E1", "E2") for s in SEEDS]
+        choice = seed_plan_choice()  # E2 seeds 1 and 2 exist only if the futility rule let them
+        e2_seeds = SEEDS if choice is not None and choice.get("futility_stop") is False else (0,)
+        # E1: seed 0 only on the test (2026-11-08: seed 1's outputs were lost; E1 is a control
+        # outside the 3-seed tier)
+        runs = [Run("E0"), Run("E1", 0)] + [Run("E2", s) for s in e2_seeds]
         e2 = tuple(r for r in runs if r.exp == "E2")  # RC-C1 compares E2 with every arm
         return CardPlan(
             card, "E0, E1, E2 on the test split", 2,
@@ -509,7 +633,7 @@ def build_plan(
             handoffs=(Handoff("outcomes", e2, "E2_test_outcomes"),
                       Handoff("outcomes", (Run("E0"),), "E0_test_outcomes")),  # flips vs E0
             needs=(Need("teacher_adapter"),)
-            + tuple(Need("adapter", Run(e, s)) for e in ("E1", "E2") for s in SEEDS),
+            + tuple(Need("adapter", r) for r in runs if r.exp in ("E1", "E2")),
             internet=True,
         )  # fmt: skip
     if card == "RC-C1":
@@ -548,6 +672,20 @@ def build_plan(
             internet=True, quantization=True,
             notes=("the script writes the hand-off E0_teacher_adapter itself",),
         )  # fmt: skip
+    if card == "RC-E10":
+        _no_seed(card, seed)
+        run = Run("E10")
+        check = Step(
+            "tokenizer check (E2 or E1 recipe)",
+            _script("check_tokenizer_match.py", "--config", "experiments/E10.yaml"),
+        )
+        return CardPlan(
+            card, "E10 native 2B student, seed 0 (exploratory)", 1, (check, *_training(run)),
+            handoffs=(Handoff("adapter", (run,), "E10_seed0_adapter"),),
+            needs=(Need("teacher_cache"),), internet=True,
+            notes=("training.mode was set from the tokenizer check on 2026-11-12 (offline_kd); "
+                   "the 2B is pinned at revision 89644892",),
+        )  # fmt: skip
     if card == "RC-T1":
         raise CardError("RC-T1 runs on the rented GPU, not on Kaggle: follow its card")
     if card in ("RC-L1", "RC-S1", "RC-S2", "RC-S3"):
@@ -559,6 +697,7 @@ RUNNABLE_CARDS: tuple[str, ...] = (
     "RC-D1-calibrate", "RC-D1-embed", "RC-D1-label", "RC-D1", "RC-D1-counts", "RC-E0a",
     "RC-E0b", "RC-E1", "RC-E2", "RC-B0", "RC-E3", "RC-E4", "RC-E9", "RC-G2", "RC-E5", "RC-E6",
     "RC-E7", "RC-E8", "RC-A1", "RC-A2", "RC-A3", "RC-A4", "RC-A5", "RC-A6", "RC-R1", "RC-C1",
+    "RC-E10",
     "RC-X1", "RC-TT0", "RC-TT1",
 )  # fmt: skip
 

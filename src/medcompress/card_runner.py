@@ -62,14 +62,37 @@ class Session:
     results: list[str] = field(default_factory=list)
     unusual: list[str] = field(default_factory=list)
     peaks: list[str] = field(default_factory=list)
+    failure: str | None = None
+    """Why the run stopped before its steps (input or environment check), if it did."""
 
     @property
     def ok(self) -> bool:
+        """True only when the run got to its steps and every one ended well (never for an empty
+        step list: a run that stopped at an input or environment check did nothing)."""
+        if self.failure is not None or not self.steps:
+            return False
         return all(s.status in ("ok", "skipped", "waiting on a setting") for s in self.steps)
 
+    @property
+    def outcome(self) -> str:
+        """``all steps ok`` or ``FAILED: <reason>`` for the report."""
+        if self.ok:
+            return "all steps ok"
+        if self.failure is not None:
+            return f"FAILED: {self.failure}"
+        bad = [s for s in self.steps if s.status not in ("ok", "skipped", "waiting on a setting")]
+        if bad:
+            return f"FAILED: {bad[0].label}: {bad[0].status} (exit code {bad[0].code})"
+        return "FAILED: no step ran"
 
-def session_env(out: Path, gpus: int, base: Mapping[str, str] | None = None) -> dict[str, str]:
-    """The environment of every step: path roots under ``out``, the Hugging Face cache, GPUs."""
+
+def session_env(
+    out: Path, gpus: int, base: Mapping[str, str] | None = None, *, quantization: bool = False
+) -> dict[str, str]:
+    """The environment of every step: path roots under ``out``, the Hugging Face cache, GPUs.
+    Quantization cards also get PyTorch's expandable segments, so freed GPTQ matrices leave
+    no fragments that a later 1.34 GiB matrix cannot use (E9, 2026-11-13; no effect on the
+    numbers)."""
     env = dict(os.environ if base is None else base)
     out = Path(out)
     env.setdefault("MEDCOMPRESS_CHECKPOINT_ROOT", str(out / "checkpoints"))
@@ -79,6 +102,8 @@ def session_env(out: Path, gpus: int, base: Mapping[str, str] | None = None) -> 
         env.setdefault("HF_HOME", "/kaggle/temp/hf")
     if gpus == 1:
         env.setdefault("CUDA_VISIBLE_DEVICES", "0")  # a one-GPU card uses the first T4 only
+    if quantization:
+        env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     env["PYTHONUNBUFFERED"] = "1"
     return env
 
@@ -90,6 +115,62 @@ def need_path(need: Need, config: Mapping[str, Any]) -> Path | None:
     run = need.run.context if need.run is not None else None
     root, rel = handoff_items(need.kind, config, run)[0]
     return Path(str(config["paths"][root])) / rel
+
+
+def wanted_items(plan: CardPlan, config: Mapping[str, Any]) -> tuple[set[tuple[str, str]], bool]:
+    """``(items, any_outcomes)``: the ``(path root, relative path)`` items the plan reads (its
+    needs, the adapters and pruned models that let a step be skipped, and the resume state of
+    its training runs), and whether it reads outcomes (which are not single paths)."""
+    needs = list(plan.needs)
+    for step in plan.steps:
+        if step.skip_if_present is not None:
+            needs.append(step.skip_if_present)
+            if step.skip_if_present.kind == "adapter" and step.skip_if_present.run is not None:
+                needs.append(Need("resume", step.skip_if_present.run))
+        if step.skip_if_pruned is not None:
+            needs.append(Need("pruned", step.skip_if_pruned))
+    items: set[tuple[str, str]] = set()
+    outcomes = False
+    for need in needs:
+        if need.text or need.kind == "outcomes":
+            outcomes = True
+            continue
+        run = need.run.context if need.run is not None else None
+        try:
+            items.update(handoff_items(need.kind, config, run))
+        except Exception:  # noqa: BLE001 - a need the config cannot place is checked later
+            continue
+    return items, outcomes
+
+
+def _related(a: str, b: str) -> bool:
+    pa, pb = Path(a), Path(b)
+    return pa == pb or pa.is_relative_to(pb) or pb.is_relative_to(pa)
+
+
+def select_handoffs(
+    plan: CardPlan, config: Mapping[str, Any], paths: Sequence[Path]
+) -> tuple[list[Path], list[str]]:
+    """``(needed, ignored)``: the attached hand-offs this plan reads, and a note for each other
+    one. An extra hand-off (another seed's adapter, say) is ignored, never attached, so it
+    cannot stop the run. A manifest that cannot be read is kept, so its check says why."""
+    items, outcomes = wanted_items(plan, config)
+    needed, ignored = [], []
+    for path in paths:
+        try:
+            bundle = bundles.read_bundle(path)
+        except bundles.BundleError:
+            needed.append(path)
+            continue
+        if bundle.kind == "outcomes" and outcomes:
+            needed.append(path)
+            continue
+        held = [(i.get("root", ""), i.get("path", "")) for i in bundle.items]
+        if any(r == wr and _related(p, wp) for r, p in held for wr, wp in items):
+            needed.append(path)
+        else:
+            ignored.append(f"{bundle.label} at {path}: not read by {plan.card}; ignored")
+    return needed, ignored
 
 
 def missing_needs(plan: CardPlan, config: Mapping[str, Any]) -> list[str]:
@@ -159,6 +240,15 @@ def run_steps(
             continue
         present = need_path(step.skip_if_present, config) if step.skip_if_present else None
         if present is not None and present.exists():
+            if step.skip_if_present and step.skip_if_present.kind == "quantized":
+                from medcompress.compression.quantization.ptq import MANIFEST_NAME, TENSORS_NAME
+
+                if not all((present / name).is_file() for name in (MANIFEST_NAME, TENSORS_NAME)):
+                    message = f"incomplete GPTQ checkpoint at {present}; use a fresh session"
+                    session.steps.append(StepOutcome(step.label, "failed", 1))
+                    session.unusual.append(message)
+                    print(f"STOP: {message}")
+                    break
             session.steps.append(StepOutcome(step.label, "skipped"))
             print(f"== {step.label}: skipped, {step.skip_if_present.label} is already there")  # type: ignore[union-attr]
             continue
@@ -300,7 +390,7 @@ def report_text(session: Session) -> str:
     )
     lines += [f"  - {r}" for r in session.results] or ["  - none"]
     lines.append("- Anything unusual: " + ("; ".join(session.unusual) or "none"))
-    lines.append(f"- Outcome: {'all steps ok' if session.ok else 'stopped early (see above)'}")
+    lines.append(f"- Outcome: {session.outcome}")
     return "\n".join(lines) + "\n"
 
 

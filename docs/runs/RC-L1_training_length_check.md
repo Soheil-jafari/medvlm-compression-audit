@@ -44,12 +44,13 @@ side is chosen):
 | Step | Estimate |
 |---|---|
 | Teacher cache, 20,000 more examples | 20,000 x (0.314 s + T / 4.48 tokens per s), T from RC-D1 (RC-M1 teacher speeds) |
-| E2@30k training | 30,000 examples x 0.74 s, about 6.2 h (RC-S0's one-example LoRA step) |
+| E2@30k training | 1,875 updates x 27.2 s (E2 seed 0's measured update, 2026-11-08), about 14.2 h |
 | E7@30k scoring | about 3.8 h (D07, proposed mix, 0.199 s per probe) |
-| E7@30k recovery | 7,500 x 0.74 s, about 1.5 h |
+| E7@30k recovery | 469 updates (7,500 examples / 16) x 27.2 s, about 3.5 h (E2's step; a pruned student may be faster) |
 | Footprint search, 4 evaluation passes, benchmark | not measured yet (RC-D1 gives the split sizes) |
 
-About 11.5 h plus the cache extension and the evaluations.
+About 21.5 h plus the cache extension and the evaluations (was 11.5 h with RC-S0's 0.74 s per
+example, before E2's measured 27.2 s per update of 16 examples).
 
 ## 3. Commands
 

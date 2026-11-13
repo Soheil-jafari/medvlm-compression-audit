@@ -38,7 +38,7 @@ inputs:
                                           # (Soheil) from RC-S0b run 2 by the D05 rule (results/smoke/RC-S0b/)
 
 seeds:
-  training: [0, 1, 2]                     # 3 seeds for every training arm
+  training: [0, 1, 2]                     # the main-claim tier (E2, E7 and the comparator at B2); other arms seed 0 (seed plan, 2026-11-08)
   data_split: 20261012                    # the seed RC-D1 uses for the val/test halves; it also
                                           # fixes the training pool (offline_kd.training_pool)
   deterministic: false
@@ -79,9 +79,10 @@ evaluation:
   generation_samples: 1000                # D06 (2026-10-12): QA rows answered by free generation (null = all); same rows for every arm
   ci_level: 0.95
   multiple_testing: holm
-  headline_accuracy: macro_balanced_accuracy   # H1 and H4 (comparison step, F1, F4); proposal
+  headline_accuracy: macro_balanced_accuracy   # H1 and H4 (comparison step, F1, F4); decided 2026-11-08: at the operating point
                                           # (iteration 40): the overall probe accuracy mostly
-                                          # measures specificity; [team] confirm at the freeze
+                                          # measures specificity; the per-run row is
+                                          # op_macro_balanced_accuracy
 
 # Shared by the Gate 1 check (E0) and the lesion-mask audit of every arm.
 image_reliance_check:

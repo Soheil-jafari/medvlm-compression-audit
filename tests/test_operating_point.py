@@ -6,15 +6,16 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from medcompress import seed_plan as sp
 from medcompress.compression.distillation.offline_kd import TrainResult
 from medcompress.evaluation import probe_suites as ps
-from medcompress.registry import seeds_at
 
 REPO = Path(__file__).resolve().parents[1]
 FINDINGS = ("polyp", "ulcerative_colitis")
@@ -76,30 +77,36 @@ def test_a_finding_without_negatives_keeps_its_plain_answers() -> None:
     assert np.array_equal(yes[uc], out.yes[uc])
 
 
-def test_three_seeds_at_b2_and_seed0_only_at_b1_and_b3() -> None:
-    from medcompress.cards import build_plan
+def test_three_seeds_for_the_main_tier_and_seed0_for_every_other_arm() -> None:
+    assert sp.planned_seeds("E2", "", None) == (0, 1, 2)
+    assert sp.planned_seeds("E7", "B2", None) == (0, 1, 2)
+    assert sp.planned_seeds("E7", "B1", "E6") == (0,) and sp.planned_seeds("E7", "B3", "E6") == (0,)
+    assert sp.planned_seeds("E5:taylor", "B2", "E5:taylor") == (0, 1, 2)
+    assert sp.planned_seeds("E5:taylor", "B2", "E6") == (0,)  # not the comparator
+    assert sp.planned_seeds("E5:taylor", "B2", None) == (0,)  # before the choice
+    assert sp.planned_seeds("E3:w8", "", None) == (0, 1, 2)  # H2 stays confirmatory (2026-11-08)
+    assert sp.planned_seeds("E6", "B1", "E5:taylor", h2_arm=("E6", "B1")) == (0, 1, 2)
+    for label, budget in (("E3:w4", ""), ("E4", ""), ("E8", "B2"), ("E9", ""),
+                          ("A2", "B2"), ("A4:n32", "B2")):  # fmt: skip
+        assert sp.planned_seeds(label, budget, "E6") == (0,)
+        assert sp.tier(label, budget, "E6") == sp.EXPLORATORY
+    assert sp.planned_seeds("E1", "", None) == (0, 1, 2)  # run before the amendment, kept
+    assert sp.planned_seeds("A1", "B2", None) == (0, 1, 2)  # the secondary comparison E7 vs A1
+    assert sp.tier("A1", "B2", "E6") == sp.SECONDARY
 
-    assert seeds_at((0, 1, 2), "B2") == (0, 1, 2) and seeds_at((0, 1, 2), None) == (0, 1, 2)
-    assert seeds_at((0, 1, 2), "B1") == (0,) and seeds_at((0, 1, 2), "B3") == (0,)
-    for card in ("RC-E5", "RC-E6", "RC-E7", "RC-E8"):
-        budgets = {
-            s.label.split()[-2] for s in build_plan(card, 2).steps if s.label.startswith("run")
-        }
-        assert budgets == {"B2"}
-        assert {s.label.split()[-2] for s in build_plan(card, 0).steps
-                if s.label.startswith("run")} == {"B1", "B2", "B3"}  # fmt: skip
 
-
-def test_trend_rows_are_left_out_of_the_h1_verdict() -> None:
+def test_seed0_rows_are_left_out_of_the_h1_verdict() -> None:
     from medcompress.evaluation.verdicts import SUPPORTED, verdict_h1
 
-    def row(budget: str, low: float, high: float) -> dict:
-        return {"experiment": "E7_vs_E2", "budget": budget, "split": "", "metric": "diff:drop_gap",
+    def row(name: str, budget: str, low: float, high: float) -> dict:
+        return {"experiment": name, "budget": budget, "split": "", "metric": "diff:drop_gap",
                 "n_seeds": 1, "mean": (low + high) / 2, "sd": np.nan, "min": 0, "max": 0,
                 "ci_low": low, "ci_high": high}  # fmt: skip
 
-    summary = pd.DataFrame([row("B2", 0.1, 0.3), row("B1", -0.4, -0.2)])
-    assert verdict_h1(summary).verdict == SUPPORTED  # B1 (seed 0 only) is the trend
+    summary = pd.DataFrame([row("E7_vs_E2", "B2", 0.1, 0.3),
+                            row("E7_vs_E2_seed0", "B1", -0.4, -0.2),
+                            row("E3:w4_vs_E2_seed0", "", -0.4, -0.2)])  # fmt: skip
+    assert verdict_h1(summary).verdict == SUPPORTED  # the seed-0 arms are exploratory
 
 
 def test_every_stage_records_its_environment(
@@ -145,3 +152,41 @@ def test_the_inspector_reads_a_loss_history() -> None:
     spec.loader.exec_module(module)
     line = module.loss_history([0.9, None, 0.7, float("nan"), 0.5])
     assert "5 steps; 2 non-finite at steps [2, 4]" in line and "last 0.5000" in line
+
+
+def test_the_skipped_step_report_maps_a_step_to_its_examples(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = importlib.util.spec_from_file_location("skipped", REPO / "scripts" / "skipped_steps.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "skipped", module)  # its dataclass needs the module
+    spec.loader.exec_module(module)
+    order = list(range(100, 140))
+    assert module.step_indices(order, 1, 1, 16) == order[:16]
+    assert module.step_indices(order, 3, 1, 16) == order[32:] + order[:8]  # wraps like the loop
+    row = module.features(3, [(True, 12, 4), (False, 30, 9), (True, 5, 2)])
+    assert (row.differs, row.teacher_tokens_max, row.gt_words_max) == (2, 30, 9)
+    assert module.mid_rank(2, [1, 2, 2, 3]) == 0.5
+
+
+def test_the_headline_without_ulcerative_colitis_is_a_secondary_row() -> None:
+    names = ("polyp", "ulcerative_colitis")
+    out = _outcomes()
+    renamed = ps.ProbeOutcomes(
+        sample_ids=out.sample_ids, findings=tuple(np.tile(names, len(out.truth) // 2)),
+        truth=out.truth, yes=out.yes, margin=out.margin, area=out.area, has_mask=out.has_mask,
+    )  # fmt: skip
+    thresholds = ps.fit_thresholds(renamed, names)
+    rows = {
+        m.name: m
+        for m in ps.operating_point_metrics(
+            renamed, names, thresholds, size_thresholds=None, mask_findings=None, n_resamples=50
+        )
+    }
+    without = rows["op_macro_balanced_accuracy_without:ulcerative_colitis"]
+    yes = ps.operating_point_answers(renamed, thresholds)
+    polyp = np.array(renamed.findings) == "polyp"
+    expected = (yes[polyp & renamed.truth].mean() + (~yes[polyp & ~renamed.truth]).mean()) / 2
+    assert without.value == pytest.approx(expected)  # polyp alone
+    assert without.ci_low <= without.value <= without.ci_high

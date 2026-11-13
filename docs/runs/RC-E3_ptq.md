@@ -1,14 +1,18 @@
-# Run card RC-E3: post-training quantization of E2 (w4, w8, w8a8), 3 seeds
+# Run card RC-E3: post-training quantization of E2 (w4, w8, w8a8): seed 0, and w8 at seeds 1 and 2 (H2)
 
 ## 1. What and why
 
+- **Seeds (seed plan, pre-registration section 11 items 12 and 14, Soheil and Amir, 2026-11-08):** `w8` joins the 3-seed tier so that **H2 stays confirmatory**: seeds 0, 1, 2 (each E2 seed quantized deterministically; about 5.4 GPU h for seeds 1 and 2), and seeds 1 and 2 run under the futility rule (the plan refuses them before `results/seed_plan/comparator_B2.json` is committed, or when it says stop; a seed 1 or 2 session runs `w8` only). `w4` and `w8a8`: seed 0 only, exploratory. This replaces the seed counts written below.
 - Stage: S08
 - Experiments: E3, variants `w4` and `w8` (GPTQ, groups of 128, GPTQModel kernel) and `w8a8`
   (LLM.int8), one run per E2 seed (0, 1, 2): 9 runs. Each run is evaluated on the
   **validation** split now and on the **test** split after the pre-registration freeze, and
   timed with the budget protocol.
 - Purpose: the "quantize after training" family of the audit (D08).
-- Status: `blocked` (see section 2)
+- Status: `ready` for seed 0 (2026-11-11): every requirement of section 2 is met (frozen,
+  RC-E2 seed 0 done). Seeds 1 and 2 (`w8` only) wait for seed 0's futility check. Seed 0's
+  measured `w8` peak decides H2's matched budget (RC-Q0 measured about 5.20 GB, nearest B3;
+  docs/schedule.md section 7)
 
 ## 2. Requirements
 
@@ -34,7 +38,7 @@ run is independent; one session per seed is fine.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** Soheil, all three seeds (seeds 1 and 2 read the E2 hand-offs of Farzan and Amir).
+- **Who:** Amir, seed 0 (reassigned 2026-11-11); `w8` seed 1 on account 3 (Soheil), seed 2 Amir (docs/schedule.md section 7).
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
@@ -105,7 +109,45 @@ Check before committing: `git status` shows no images, checkpoints, caches or `o
 | Calibration as planned | `quantization_calibration_images` in `metrics.csv` (w4, w8) | equals 128 |
 | Every decoder matrix quantized | `quantized_matrices` (w4, w8) | 7 x the number of decoder layers |
 
+## 5b. Seed 0 run at commit 262a4f1: the offload check (2026-11-13)
+
+At that commit `run_experiment.py` ran each variant's stages (quantize, validation evaluation,
+benchmark) in one process, and the evaluation and benchmark loaded the model with
+`device_map="auto"`. If the quantize stage's student was still on GPU 0, the next load was
+split onto the CPU (as in RC-G2 session 1). Then either the load crashed in the adapter check
+("Tensor.item() cannot be called on meta tensors"), or, when only modules without LoRA weights
+were moved (e.g. `lm_head`), it ran on silently, slower and with wrong memory. The test and
+unfiltered test evaluations are separate steps (their own process) and are not affected.
+
+**Check** (in the session's output): `grep -n -i -E "offload|meta device|meta tensors"
+/kaggle/working/run_card_RC-E3*.txt /kaggle/working/logs/RC-E3_seed0.log`.
+- No match: the evaluation and benchmark were on the GPU; keep the results.
+- Any match: the validation metrics and `efficiency.csv` of that variant are invalid; run
+  `--card RC-E3 --seed 0` again on the fix commit. A second check: each variant's
+  `peak_memory_bytes` should be near RC-Q0's (w4 3,797,138,944; w8 5,197,114,880; w8a8
+  5,073,484,288 bytes, synthetic images) and `warm_latency_s` not far above E2's 0.987 s; an
+  offloaded run shows a much lower peak and a much higher latency.
+
 ## 6. Run report (filled by the person who ran it)
+
+Seed 0 at `d2322fa` failed about 2.2 minutes into `w4` at the first Cholesky factorization
+(leading minor 1). That commit already cast activations to FP32, so the traceback alone
+cannot establish FP16 overflow. Rerun seed 0 in full after the Hessian validation fix.
+For a read-only diagnostic, use the setup in section 3 and replace the runner command and
+final echo with:
+
+```bash
+DATA=$(python scripts/find_inputs.py data)
+ADAPTER=$(python scripts/find_inputs.py handoff E2_seed0_adapter)
+CUDA_VISIBLE_DEVICES=0 python scripts/check_gptq_inputs.py --exp E3 --seed 0 \
+  --variant w4 --layers 0-2 --data-root "$DATA" --from "$ADAPTER"
+```
+
+The diagnostic prints per-batch statistics for each linear on the unquantized E2 parent.
+A finite FP32 Hessian and a non-finite FP16 Hessian demonstrate overflow in the diagnostic's
+FP16 path for that batch. The full rerun checks the actual accumulated Hessians. If finite
+Hessians require damping retries, report the retry count and maximum effective damping
+from the metrics, and the per-matrix entries from the checkpoint manifest.
 
 - Run by / date / seeds:
 - Commit actually used:

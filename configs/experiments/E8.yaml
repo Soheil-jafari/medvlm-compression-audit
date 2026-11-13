@@ -9,15 +9,15 @@ experiment:
   variant_of: null
   requires: []
   budgets: [B1, B2, B3]
-  seeds: [0, 1, 2]                        # one PTQ run per E7 seed
+  seeds: [0]                              # seed 0 only: exploratory (seed plan, 2026-11-08)
   variants: []
   scripts:
     - scripts/03_quantize.py
     - scripts/06_evaluate.py
     - scripts/07_benchmark_efficiency.py
   outputs:
-    - results/E8/<budget>/seed{0,1,2}/metrics.csv
-    - results/E8/<budget>/seed{0,1,2}/efficiency.csv
+    - results/E8/<budget>/seed0/metrics.csv
+    - results/E8/<budget>/seed0/efficiency.csv
   status: planned
 
 model:

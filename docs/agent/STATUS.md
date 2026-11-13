@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-11-06, iteration 64 (interactive run mode)
+**Last updated:** 2026-11-13, iteration 80 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S06: E1 done (3 seeds, rule 3 passes); seed 0's adapter check, the operating-point rows (E0 validation again, E1 from saved outcomes), then RC-E2 on three accounts; the freeze items
+**Current stage:** S07 done: **the pre-registration is frozen** (2026-11-08, Soheil and Amir, commit `18f1b47`); every change now needs a dated amendment. RC-B0 done 2026-11-11 (B1 / B2 / B3 = 6,786,040,422.4 / 5,953,608,908.8 / 5,121,177,395.2 bytes). Next (after the stage-isolation fix of 2026-11-13): RC-G2 in four sessions (`--only`, RC-G2 section 3; Soheil) and `choose_comparator.py`; ready in parallel: RC-E10 training (Soheil; step 1 passed 2026-11-12), RC-E3 seed 0 (Amir, full rerun after the Hessian fix), RC-E9 (resume from attempt 3's quantized hand-off) then RC-E4 seed 0 (account 3); agent code still to come: the `external_test` split and E10's 4-bit run and comparisons.
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
@@ -93,6 +93,44 @@
    2026-11-02: per-finding AUROC and "yes" rate added as a pre-registered secondary metric for
    every model (section 11 item 9); E0's come with its next evaluation (outcomes lost with the
    clone, 2026-11-04). Every cell now sets the path roots under /kaggle/working/.
+   2026-11-08 (iteration 66): **E2 seed 0 done** (`results/E2/nobudget/seed0/`, RC-E2 section
+   6, `docs/results/E2.md`): 27.2 s per update (4.72 h; 1.9 times E1), validation 0.53 h, peak
+   12.66 GB; 16 skipped updates, adapter finite; plain macro balanced accuracy 0.553, at the
+   operating point 0.836 (in-sample: fitted on validation). The hour estimates now use 27.2 s
+   (schedule, RC-E2, RC-E4, RC-L1). Next: E2 seeds 1 and 2 on the fix commit (seed 1's owner
+   open); the commit hash from the `e2-seed0-adapter` manifest into RC-E2 section 6; the
+   skipped-step report (RC-E2 section 6b, CPU); E1's `op_*` rows (RC-E1 section 3c), then the
+   E2-minus-E1 comparison at the operating point.
+   2026-11-11 (iteration 74): **RC-B0 done** (Kaggle T4, commit 1320894): both peak readings
+   7,618,471,936 bytes; decoder layers 5,549,543,424; targets B1 6,786,040,422.4, B2
+   5,953,608,908.8, B3 5,121,177,395.2 bytes (RC-B0 section 6). RC-G2 ready with the 30-group
+   check (`scripts/check_first_order.py`, a report; below 0.7 stop and ask); RC-E3 seed 0,
+   RC-E4 seed 0, RC-E9 ready; RC-E10 step 1 ready. H2 flag: RC-Q0's `w8` peak (5.20 GB, an
+   estimate) is nearest B3; once E3 `w8` seed 0's peak is committed, a B3 match needs the B3
+   arm's seeds 1 and 2 (about 6 GPU h, conditional; the cards do not plan it yet).
+   2026-11-09 (iteration 71): **the pre-registration is frozen** (2026-11-08, Soheil and Amir,
+   commit `18f1b47`); the three agent decisions accepted; RC-B0 `ready`.
+   2026-11-08 (iteration 70): **pre-freeze decisions** (pre-registration section 11 item 14):
+   finding weights (cap 20; tiers action / follow_up / other), scoring method, recovery 157 x
+   2,500, A3, reuse, headline, H2 confirmatory (E3 `w8` on 3 seeds), the co-primary rule,
+   budgets as decoder-byte fractions on the T4, three secondary analyses, PolypGen loader and
+   overlap check, E1 seed 1 final, Farzan left (two authors, three accounts, schedule
+   rebalanced), E11 / E12 documented. Next: the freeze; then RC-B0, RC-G2; agent code still
+   to come: the `external_test` split and E10's 4-bit run and comparisons.
+   2026-11-08 (iteration 69): pre-freeze additions (Soheil and Amir, section 11 item 13): the
+   D07 30-group check stays a report (no exact fallback; Molchanov et al. 2019); A1 at B2 gets
+   3 seeds for the secondary comparison E7 vs A1 and re-weights E7's per-finding effects (code
+   done); E10 (native 2B, exploratory) registered with RC-E10 and the tokenizer check;
+   `docs/related_work.md`. Next for E10 (agent): its 4-bit run and comparisons.
+   2026-11-08 (iteration 67): E1 seed 0's `op_*` rows committed (RC-E1 section 3c); seed 2's
+   rescored locally from Amir's outcomes (iteration 68); seed 1's outputs were not kept (Soheil
+   has asked Farzan). E2 seed 0 minus E1 seed 0 at the operating point in `docs/results/E2.md`
+   (validation, in-sample). **Seed plan amended** (Soheil and Amir, pre-registration section 11
+   item 12): 3 seeds only for E2, E7 at B2 and the comparator at B2; seed 0 for everything else
+   (exploratory); never 2 seeds; the comparator by a 4-step ordering on validation seed 0;
+   futility-only stopping. Code: `seed_plan.py`, `scripts/choose_comparator.py`, the comparison
+   step, verdicts, cards, configs. Open for the team: H2 is exploratory as written (E3 `w8` is
+   seed 0 only); owners of main-tier seed 1, RC-E9 and the E7 / E8 trend; the uneven loads.
 2. Quantization stage (S08): code and run cards done (iterations 37-39). Pre-registration
    draft and freeze guard done (iteration 40). Pruning grid cards RC-E5 to RC-E8 done
    (iteration 41); ablation cards RC-A1 to RC-A6 done, A3 ranking and score reuse fixed
@@ -134,8 +172,8 @@ cards for the team (decision of 2026-10-12).
 | S04 | Model wrappers and unit surgery | done (RC-M1 passed 2026-10-15) | - |
 | S05 | Teacher: Gate 1, cache | done (RC-TT1 2026-10-31; RC-E0a and RC-E0b 2026-11-01) | - |
 | S05b | Student checks (D05 amendment: one student) | RC-S0 done 2026-10-16: both pass G1; training size decided; student revision pinned; RC-S0b run 2 ready (image side) | RC-S0b, team GPU hours, G2; then the selection freeze |
-| S06 | Students E1, E2, budget reference | RC-E1 ready (seed 0 first), RC-E2 ready after it (rule 3) | team runs RC-E1, RC-E2, then RC-B0 |
-| S07 | Pre-registration freeze | evaluation settings frozen 2026-10-31 (amendment, section 11); weights, budgets and the co-primary combination open | team answers, RC-B0 |
+| S06 | Students E1, E2, budget reference | RC-E1 done (3 seeds; `op_*` rows for seeds 0 and 2; seed 1's outputs not kept); RC-E2 seed 0 done 2026-11-08; seeds 1 and 2 after seed 0's futility check (seed plan, 2026-11-08) | RC-B0, the freeze, RC-G2, `choose_comparator.py`; then E2 seeds 1 (owner [team]) and 2 (Amir) |
+| S07 | Pre-registration freeze | **frozen 2026-11-08** (Soheil and Amir, commit `18f1b47`); amendments only, dated (section 10) | - |
 | S08 | Quantization E3, E4, E9 | RC-Q0 done 2026-10-15 (TorchLinear, versions pinned); RC-E3, RC-E4, RC-E9 blocked | S07 freeze, E2, RC-D1 |
 | S09 | Pruning E5-E8, Gate 2 | code and run cards done (RC-G2, RC-E5 to RC-E8, all blocked) | D07 (scoring method, budgets), S07 freeze, E2 |
 | S10 | Ablations A1-A6 | run cards done (RC-A1 to RC-A6, blocked); team: A3 ranking, E7 reuse | S09, S07 freeze |
@@ -146,6 +184,6 @@ cards for the team (decision of 2026-10-12).
 
 | Gate | Status |
 |---|---|
-| Gate 1: teacher uses the image, damage visible | not run |
-| Gate 2: E7 vs best of E5/E6 at B2 (validation) | not run |
-| Pre-registration freeze | not frozen |
+| Gate 1: teacher uses the image, damage visible | **passed** (RC-E0a, 2026-11-01: `gate1_pass` = 1); rule 3's quality part passed 2026-11-06 (E0 0.803 >= E1 seed 0 0.592 + 0.02) |
+| Gate 2: E7 vs best of E5/E6 at B2 (validation) | not run (RC-G2, after the freeze; its rows also choose the comparator and apply the futility rule, seed plan of 2026-11-08) |
+| Pre-registration freeze | **frozen 2026-11-08** at commit `18f1b47` by Soheil and Amir (section 11 items 1-14 before it; later changes as dated amendments, section 10) |

@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -287,7 +287,9 @@ def calibration_batches(
     """One model input per calibration example: image, question and ground-truth answer.
 
     Built with the training batch code (chat template, answer tokens and the stop token
-    appended), one example per batch, so no padding enters the Hessians.
+    appended), one example per batch, so no padding enters the Hessians. The inputs stay on
+    the CPU and go to the model's device one at a time (:func:`collect_hessians`): kept on the
+    GPU, 128 images' float32 pixel values are about a gigabyte (2026-11-12, E9).
     """
     from medcompress.compression.distillation.batching import (
         assemble,
@@ -297,11 +299,10 @@ def calibration_batches(
 
     out = []
     pad = model.tokenizer.pad_token_id  # type: ignore[attr-defined]
-    device = model.module.device  # type: ignore[attr-defined]
     for sample in samples:
         prompt = prompt_inputs(model, Path(data_root) / sample.image_path, sample.question)  # type: ignore[arg-type]
         batch = assemble([prompt], [ground_truth_ids(model, sample.answer)], pad)  # type: ignore[arg-type]
-        out.append({k: v.to(device) for k, v in batch.inputs.items()})
+        out.append({k: v.to("cpu") for k, v in batch.inputs.items()})
     return out
 
 
@@ -314,10 +315,13 @@ def collect_hessians(
     layer_index: int,
     batches: Sequence[Mapping[str, Any]],
     names: Sequence[str],
+    *,
+    inspect_inputs: Callable[[str, Any], None] | None = None,
 ) -> dict[str, Any]:
     """``{target name: H}`` for one decoder layer: ``H = 2 / n * sum x x^T`` of its inputs.
 
-    Targets that read the same input (q/k/v; gate/up) share one Hessian. The forward pass is
+    Targets that read the same input (q/k/v; gate/up) share one Hessian.
+    An input observer bypasses accumulation and sees all target linears. The forward is
     cut after the layer, so calibrating layer ``i`` costs ``i + 1`` layers per example.
     """
     import torch
@@ -329,22 +333,36 @@ def collect_hessians(
     parents = {"self_attn": layer.self_attn, "mlp": layer.mlp}
     sources: dict[str, str] = {}
     for name in names:
-        sources.setdefault(_SHARED_INPUT[name], name)
+        sources.setdefault(name if inspect_inputs else _SHARED_INPUT[name], name)
     sums: dict[str, Any] = {}
     counts: dict[str, int] = {}
+    bounds: dict[str, tuple[Any, Any]] = {}
     handles = []
 
     def make_hook(source: str) -> Any:
         def hook(_module: Any, args: tuple) -> None:
-            x = args[0].detach().reshape(-1, args[0].shape[-1]).to(torch.float32)
-            n_old = counts.get(source, 0)
-            total = n_old + x.shape[0]
-            if source not in sums:
-                sums[source] = torch.zeros(x.shape[1], x.shape[1], device=x.device)
-            sums[source] *= n_old / total
-            x = (2.0 / total) ** 0.5 * x
-            sums[source] += x.T @ x
-            counts[source] = total
+            inputs = args[0].detach().reshape(-1, args[0].shape[-1])
+            if inspect_inputs is not None:
+                inspect_inputs(sources[source], inputs)
+                return
+            if inputs.shape[0] == 0:
+                return
+            with torch.autocast(device_type=inputs.device.type, enabled=False):
+                x = inputs.float()
+                low, high = torch.aminmax(x)
+                if source in bounds:
+                    previous_low, previous_high = bounds[source]
+                    low = torch.minimum(previous_low, low)
+                    high = torch.maximum(previous_high, high)
+                bounds[source] = low, high
+                n_old = counts.get(source, 0)
+                total = n_old + x.shape[0]
+                if source not in sums:
+                    sums[source] = x.new_zeros((x.shape[1], x.shape[1]))
+                sums[source] *= n_old / total
+                x = (2.0 / total) ** 0.5 * x
+                sums[source] += x.T @ x
+                counts[source] = total
 
         return hook
 
@@ -356,16 +374,32 @@ def collect_hessians(
         raise _StopForward
 
     handles.append(layer.register_forward_hook(stop))
+    device = module.device  # where the inputs go (the first GPU of a split model)
     try:
         with torch.inference_mode():
             for batch in batches:
                 try:
-                    module(**batch, use_cache=False)
+                    module(**{k: v.to(device) for k, v in batch.items()}, use_cache=False)
                 except _StopForward:
                     pass
     finally:
         for handle in handles:
             handle.remove()
+    if inspect_inputs is not None:
+        return {}
+    for source, name in sources.items():
+        if source not in sums:
+            raise ValueError(f"GPTQ layer {layer_index} {name}: no calibration tokens")
+        h = sums[source]
+        # Bound the temporary masks for the teacher's largest Hessian.
+        nonfinite = sum((~torch.isfinite(chunk)).sum() for chunk in h.split(256))
+        if nonfinite.item():
+            low, high = bounds[source]
+            matrices = ", ".join(n for n in names if _SHARED_INPUT[n] == source)
+            raise ValueError(
+                f"GPTQ layer {layer_index} {matrices}: Hessian has {nonfinite.item()} "
+                f"non-finite entries; input min={low.item():.6g}, max={high.item():.6g}"
+            )
     return {name: sums[_SHARED_INPUT[name]] for name in names}
 
 
@@ -375,8 +409,16 @@ def gptq_quantize_decoder(
     recipe: PTQRecipe,
     *,
     log: Any = print,
+    pick_device: Any = None,
+    damping_retries: dict[str, dict[str, float | int]] | None = None,
 ) -> dict[str, QuantizedMatrix]:
     """Round every target matrix of the decoder with GPTQ, layer after layer (in place).
+
+    Nothing is kept on the GPU between layers: each layer's Hessians come from a fresh forward
+    pass of each calibration example (its inputs moved from the CPU one at a time) cut after
+    that layer. Each matrix's math runs where :func:`~medcompress.compression.quantization.
+    placement.pick_gptq_device` finds room (``pick_device`` replaces it in tests); the log shows
+    every GPU's memory before and after each layer (2026-11-13).
 
     The rounded weights replace the original ones in the model (still 16-bit tensors), so
     each layer is calibrated on the outputs of the rounded layers before it. Returns the codes
@@ -387,35 +429,62 @@ def gptq_quantize_decoder(
     from medcompress.compression.pruning.surgery import find_decoder_stack
     from medcompress.compression.quantization.gptq import gptq_torch
     from medcompress.compression.quantization.kernels import target_path
+    from medcompress.compression.quantization.placement import (
+        memory_report,
+        pick_gptq_device,
+        reset_peaks,
+    )
 
     if recipe.backend != "gptq" or recipe.group_size is None:
         raise ValueError("gptq_quantize_decoder needs a GPTQ recipe")
     module = getattr(model, "module", model)
     stack = find_decoder_stack(module)
     records: dict[str, QuantizedMatrix] = {}
+    pick = pick_device or pick_gptq_device
+    targets = list(recipe.targets)
+    count = len(stack.layers)
     for i, layer in enumerate(stack.layers):
-        hessians = collect_hessians(model, i, batches, recipe.targets)
-        for name in recipe.targets:
+        reset_peaks()
+        log(f"GPTQ: layer {i + 1}/{count} start; {memory_report() or 'no GPU'}")
+        hessians = collect_hessians(model, i, batches, targets)
+        for k, name in enumerate(targets):
             linear = getattr(getattr(layer, PARENT_OF[name]), name)
+            # q/k/v and gate/up share one Hessian; its last user takes it over and frees it
+            last = not any(_SHARED_INPUT[n] == _SHARED_INPUT[name] for n in targets[k + 1 :])
+            out_features, in_features = linear.weight.shape
+            device = pick(linear.weight.device, in_features, out_features)
+            if device != linear.weight.device:
+                log(f"GPTQ: layer {i + 1} {name}: math on {device}, not "
+                    f"{linear.weight.device} (room); {memory_report()}")  # fmt: skip
+            key = target_path(i, name)
             result = gptq_torch(
                 linear.weight,
-                hessians[name],
+                hessians.pop(name),
                 bits=recipe.weight_bits,
                 group_size=recipe.group_size,
                 damping=recipe.damping,
                 block_size=recipe.block_size,
+                device=device,
+                consume_hessian=last,
+                matrix=key,
+                log=log,
             )
+            if damping_retries is not None and result.damping_retries:
+                damping_retries[key] = {
+                    "retries": result.damping_retries,
+                    "effective_damping": result.effective_damping,
+                }
             with torch.no_grad():
                 rounded = torch.as_tensor(result.dequantized(), dtype=linear.weight.dtype)
                 linear.weight.copy_(rounded.to(linear.weight.device))
-            key = target_path(i, name)
             records[key] = QuantizedMatrix(
                 key, result.codes, result.scales, recipe.weight_bits, recipe.group_size
             )
+            del result, rounded
         del hessians
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        log(f"GPTQ: layer {i + 1}/{len(stack.layers)} done")
+        log(f"GPTQ: layer {i + 1}/{count} done; {memory_report() or 'no GPU'} (peak: this layer)")
     return records
 
 
@@ -478,6 +547,58 @@ def load_quantized(model: VLMWrapper | Any, directory: Path | str, *, kernel_cla
 # ---------------------------------------------------------------------- the stage
 
 
+GPTQ_MARGIN_BYTES = 3 * 2**29
+"""Room per GPU beyond the GPTQ buffers (1.5 GiB): the CUDA context, the layer's other
+Hessians, one example's activations and its inputs."""
+
+
+def gptq_max_memory(
+    capacities: Sequence[int], weights_bytes: int, in_features: int, out_features: int
+) -> dict[int, int]:
+    """``{gpu: cap}`` for the weights of a model split over ``capacities`` (bytes per GPU), so
+    every GPU keeps room for the GPTQ buffers of the largest matrix
+    (:func:`~medcompress.compression.quantization.gptq.gptq_peak_bytes`) plus
+    :data:`GPTQ_MARGIN_BYTES`. ``from_pretrained`` balances the layers under these caps.
+
+    Raises:
+        ConfigError: the caps cannot hold the weights (the model would go to the CPU).
+    """
+    from medcompress.compression.quantization.gptq import gptq_peak_bytes
+
+    room = gptq_peak_bytes(in_features, out_features) + GPTQ_MARGIN_BYTES
+    caps = {i: int(c) - room for i, c in enumerate(capacities)}
+    if sum(max(c, 0) for c in caps.values()) < weights_bytes:
+        raise ConfigError(
+            f"the GPUs ({len(capacities)}) cannot hold {weights_bytes / 2**30:.1f} GiB of weights "
+            f"and keep {room / 2**30:.1f} GiB each for GPTQ"
+        )
+    return caps
+
+
+def _teacher_device_map(spec: Any, model_config: Mapping[str, Any], log: Any = print) -> Any:
+    """E9: the teacher's explicit device map over the T4s, every module counted, balanced, each
+    GPU under the cap of :func:`gptq_max_memory` (room for the largest GPTQ matrix); printed.
+    None without torch or CUDA (the tests; the loader then stops itself)."""
+    try:
+        import torch
+    except ImportError:
+        return None
+    if not torch.cuda.is_available():
+        return None
+    from medcompress.compression.quantization.placement import model_skeleton, plan_for_model
+
+    _skeleton, hub = model_skeleton(spec)
+    text = getattr(hub, "text_config", hub)
+    hidden, intermediate = int(text.hidden_size), int(text.intermediate_size)
+    stored = (model_config.get("model") or {}).get("parameters_stored")
+    log(f"teacher placement: config parameters_stored {stored}")
+
+    def caps(capacities: Sequence[int], weights: int) -> dict[int, int]:
+        return gptq_max_memory(capacities, weights, max(hidden, intermediate), hidden)
+
+    return plan_for_model(spec, caps=caps, log=log)
+
+
 def parent_of(run: RunContext) -> dict[str, Any]:
     """The model a quantized run starts from: E3 <- E2, E8 <- E7 (same budget), E9 <- E0,
     E4 <- the pretrained student (its codes come from quantization-aware training)."""
@@ -511,10 +632,19 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
         spec = ModelSpec.from_config(load_config(student))
         return load_model(spec, allow_candidate=True, image_longest_side=side)
     if parent["experiment"] == "E0":
+        from medcompress.compression.quantization.placement import GIB, placed_bytes
         from medcompress.models.loading import ModelSpec, load_model
 
-        spec = ModelSpec.from_config(load_config(config["components"]["teacher"]))
-        return load_model(spec, image_longest_side=side)
+        teacher = load_config(config["components"]["teacher"])
+        spec = ModelSpec.from_config(teacher)
+        device_map = _teacher_device_map(spec, teacher)  # explicit, every module counted
+        model = load_model(spec, image_longest_side=side, device_map=device_map)
+        placed = placed_bytes(getattr(model, "module", model))
+        print(
+            "teacher placement: loaded "
+            + ", ".join(f"{d} {b / GIB:.2f} GiB" for d, b in sorted(placed.items()))
+        )
+        return model
     student = load_trained_student(config, "E2", run.seed, side)
     if parent["experiment"] == "E2":
         return student
@@ -574,7 +704,14 @@ def run_quantization(
             model = load_parent(config, run, int(side))
         started = time.perf_counter()
         batches = calibration_batches(model, calibration, Path(paths["data_root"]))
-        records = gptq_quantize_decoder(model, batches, recipe)
+        retries: dict[str, dict[str, float | int]] = {}
+        records = gptq_quantize_decoder(model, batches, recipe, damping_retries=retries)
+        rows["quantization_damping_retries"] = sum(r["retries"] for r in retries.values())
+        if retries:
+            rows["quantization_max_effective_damping"] = max(
+                r["effective_damping"] for r in retries.values()
+            )
+            extra["damping_retries"] = retries
         rows["quantization_seconds"] = time.perf_counter() - started
         rows["quantization_calibration_images"] = float(len(calibration))
         extra["calibration_sample_ids"] = [s.sample_id for s in calibration]

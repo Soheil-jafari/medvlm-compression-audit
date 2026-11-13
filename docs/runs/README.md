@@ -44,28 +44,29 @@ Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unf
 | [RC-S2](RC-S2_round2_recipe.md) | S05b | Round 2, top 5 rebuilt with the full recipe | all three | not used (D05 amendment) |
 | [RC-S3](RC-S3_round3_e2_recipe.md) | S05b | Round 3, top 3 with the E2 recipe, 2 seeds | all three | not used (D05 amendment) |
 | [RC-E1](RC-E1_student_answer_finetune.md) | S06 | Student on ground-truth answers, 3 seeds | Farzan (card); seeds 0 Soheil, 1 Farzan, 2 Amir | done (2026-11-06: 3 seeds; rule 3 passes; seed 0 adapter check and the operating-point rows open) |
-| [RC-E2](RC-E2_student_offline_distillation.md) | S06 | Student with offline distillation, 3 seeds | Soheil (card); seeds 0 Soheil, 1 Farzan, 2 Amir | ready (2026-11-06; rule 3 passed; about 3 h per seed, an estimate) |
+| [RC-E2](RC-E2_student_offline_distillation.md) | S06 | Student with offline distillation, 3 seeds | Soheil (card); seeds 0 Soheil, 1 account 3 (Soheil), 2 Amir | in progress (2026-11-08: seed 0 done; seeds 1 and 2 on the fix commit, after the futility check; about 5.2 h per seed with the validation, measured on seed 0) |
 | [RC-L1](RC-L1_training_length_check.md) | S06/S09 | Training-length check: E2 and E7 at B2 with 30,000 examples, seed 0 (pre-registration section 6) | Amir and Soheil (E2@30k Soheil, E7@30k Amir) | blocked (RC-E2, RC-E7 B2 seed 0, RC-B0, freeze; agent code first) |
-| [RC-B0](RC-B0_e2_reference_footprint.md) | S06 | E2 reference footprint and byte split for the budgets | Amir | blocked (RC-E2 seed 0) |
+| [RC-B0](RC-B0_e2_reference_footprint.md) | S06 | E2 reference footprint and byte split for the budgets (converts the frozen B1-B3 into GB) | Amir | done (2026-11-11; both readings 7,618,471,936 bytes; B1 / B2 / B3 = 6.786 / 5.954 / 5.121 GB) |
 | [RC-Q0](RC-Q0_quantization_smoke_test.md) | S08 | Quantization toolchain smoke test: kernel classes, GPTQ and LLM.int8 on the student, versions | Soheil | done 2026-10-15 |
-| [RC-E3](RC-E3_ptq.md) | S08 | E3: GPTQ w4, w8 and LLM.int8 w8a8 of E2, 3 seeds | Soheil | blocked (RC-E2, RC-D1, freeze; RC-Q0 met) |
-| [RC-E4](RC-E4_qakd.md) | S08 | E4: quantization-aware distillation (D08 option B), 3 seeds | Soheil | blocked (RC-E0b, E2 settings, freeze; RC-Q0 met) |
-| [RC-E9](RC-E9_teacher_ptq.md) | S08 | E9: the teacher at 4 bit (supplementary) | Farzan | blocked (RC-TT1, RC-D1, freeze; RC-Q0 met) |
-| [RC-G2](RC-G2_gate2_pilot.md) | S09 | Gate 2 pilot at B2 (validation): E5 (3 criteria), E6, E7 | Amir | blocked (RC-E2, RC-B0, D07 scoring method, finding weights) |
-| [RC-E5](RC-E5_generic_pruning_grid.md) | S09 | E5: magnitude, activation, Taylor x B2 x 3 seeds, B1 and B3 seed 0 (trend) (15 runs) | Amir (card); seeds 0 Amir, 1 Farzan, 2 Amir | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-G2) |
-| [RC-E6](RC-E6_output_similarity_grid.md) | S09 | E6: output-similarity layer pruning x B2 x 3 seeds, B1 and B3 seed 0 (trend) (5 runs) | Amir (card); seeds 0 Amir, 1 Farzan, 2 Amir | blocked (as RC-E5) |
-| [RC-E7](RC-E7_clinical_pruning_grid.md) | S09 | E7: clinical criterion x B2 x 3 seeds, B1 and B3 seed 0 (trend) (5 runs) | Amir (card); seeds 0 Amir, 1 Farzan, 2 Amir | blocked (as RC-E5, weights frozen) |
-| [RC-E8](RC-E8_clinical_pruning_plus_ptq4.md) | S09 | E8: E7 + 4-bit GPTQ x B2 x 3 seeds, B1 and B3 seed 0 (trend) (5 runs) | Amir (card); seeds 0 Amir, 1 Farzan, 2 Amir | blocked (RC-E7, freeze; RC-Q0 met) |
-| [RC-A1](RC-A1_unweighted_criterion.md) | S10 | A1: unweighted clinical criterion, B2 x 3 seeds | Amir (card); seeds 0 Soheil, 1 Farzan, 2 Amir (proposal) | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-E7 at B2) |
-| [RC-A2](RC-A2_rarity_only_weights.md) | S10 | A2: rarity-only weights, B2 x 3 seeds | Amir (card); seeds 0 Soheil, 1 Farzan, 2 Amir (proposal) | blocked (as RC-A1) |
-| [RC-A3](RC-A3_random_removal.md) | S10 | A3: random removal, B2 x 3 seeds | Amir (card); seeds 0 Soheil, 1 Farzan, 2 Amir (proposal) | blocked (as RC-A1) |
-| [RC-A4](RC-A4_calibration_size.md) | S10 | A4: 32 / 64 / 256 calibration images, B2 x 3 seeds (128 = E7) | Amir (card); seeds 0 Soheil, 1 Farzan, 2 Amir (proposal) | blocked (as RC-A1) |
-| [RC-A5](RC-A5_delta_definition.md) | S10 | A5: KL effect, B2 x 3 seeds (log-prob drop = E7) | Amir (card); seeds 0 Soheil, 1 Farzan, 2 Amir (proposal) | blocked (as RC-A1; unit set depends on D07 section 1) |
-| [RC-A6](RC-A6_unit_granularity.md) | S10 | A6: layers only / heads and channel groups, B2 x 3 seeds | Amir (card); seeds 0 Soheil, 1 Farzan, 2 Amir (proposal) | blocked (as RC-A1) |
+| [RC-E3](RC-E3_ptq.md) | S08 | E3: GPTQ w4, w8 and LLM.int8 w8a8 of E2, seed 0 (exploratory) | Amir (seed 0, 2026-11-11) | ready for seed 0 (2026-11-11; `w8` seeds 1 and 2 after the futility check) |
+| [RC-E4](RC-E4_qakd.md) | S08 | E4: quantization-aware distillation (D08 option B), seed 0 (exploratory) | account 3 (after RC-E9; 2026-11-11) | ready for seed 0 (2026-11-11) |
+| [RC-E9](RC-E9_teacher_ptq.md) | S08 | E9: the teacher at 4 bit (supplementary) | Soheil (account 3) | ready (2026-11-11) |
+| [RC-E10](RC-E10_native_small_student.md) | S06/S11 | E10: native Qwen3-VL-2B (D05 fallback), E2 recipe (E1 if its tokenizer does not match the cache), seed 0, exploratory; matched memory against the nearest pruned 3B arm and at 4 bit against E8 (about 4 h, an estimate) | Soheil | step 1 done (2026-11-12: PASS, E2 recipe); training, validation and benchmark ready; the 4-bit E10 and its comparisons wait for agent code |
+| [RC-G2](RC-G2_gate2_pilot.md) | S09 | Gate 2 pilot at B2 (validation): E5 (3 criteria), E6, E7, and the 30-group check of E7's first-order estimate | Soheil (account 1) | ready (2026-11-11); four sessions (section 3, `--only`) |
+| [RC-E5](RC-E5_generic_pruning_grid.md) | S09 | E5: magnitude, activation, Taylor x B1-B3, seed 0 (9 runs); the comparator at B2 also seeds 1, 2 | Amir (card); seeds 0 Amir / RC-G2, 1 account 3, 2 Amir | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-G2) |
+| [RC-E6](RC-E6_output_similarity_grid.md) | S09 | E6: output-similarity layer pruning x B1-B3, seed 0 (3 runs); seeds 1, 2 at B2 if it is the comparator | Amir (card); seeds 0 Amir / RC-G2, 1 account 3, 2 Amir | blocked (as RC-E5) |
+| [RC-E7](RC-E7_clinical_pruning_grid.md) | S09 | E7: clinical criterion x B2 x 3 seeds (main tier), B1 and B3 seed 0 (5 runs) | Amir (card); seeds 0 Amir / RC-G2, 1 account 3, 2 Amir | blocked (as RC-E5, weights frozen) |
+| [RC-E8](RC-E8_clinical_pruning_plus_ptq4.md) | S09 | E8: E7 + 4-bit GPTQ x B1-B3, seed 0 (3 runs) | Amir (card); seed 0 | blocked (RC-E7, freeze; RC-Q0 met) |
+| [RC-A1](RC-A1_unweighted_criterion.md) | S10 | A1: unweighted clinical criterion, B2, 3 seeds (secondary comparison E7 vs A1; re-weights E7's effects) | Amir (card); seeds 0 account 3, 1 account 3, 2 Amir | blocked (freeze, RC-E2, RC-B0, D07 section 1, RC-E7 at B2) |
+| [RC-A2](RC-A2_rarity_only_weights.md) | S10 | A2: rarity-only weights, B2, seed 0 (exploratory) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |
+| [RC-A3](RC-A3_random_removal.md) | S10 | A3: random removal, B2, seed 0 (exploratory) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |
+| [RC-A4](RC-A4_calibration_size.md) | S10 | A4: 32 / 64 / 256 calibration images, B2, seed 0 (128 = E7) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |
+| [RC-A5](RC-A5_delta_definition.md) | S10 | A5: KL effect, B2, seed 0 (log-prob drop = E7) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1; unit set depends on D07 section 1) |
+| [RC-A6](RC-A6_unit_granularity.md) | S10 | A6: layers only / heads and channel groups, B2, seed 0 (exploratory) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |
 | [RC-R1](RC-R1_reference_arms_test_split.md) | S11 | E0, E1, E2 on the test split (after the freeze) | Soheil | blocked (freeze, RC-TT1, RC-E0b, RC-E1, RC-E2) |
 | [RC-C1](RC-C1_paired_comparisons.md) | S11 | Paired comparisons (H1-H4), tables, figures, verdicts; CPU only | Soheil | blocked (every test-split evaluation) |
 | [RC-X1](RC-X1_external_test_endobench.md) | S11 | EndoBench part A: terms, format, overlap with our images (no GPU); part B written after it | Farzan | set aside (D02 amendment 7) |
-| [RC-X2](RC-X2_external_test_other_centre.md) | S11 | External test from another centre, co-primary: **PolypGen first** (2026-10-31), part A: the exact licence (or stop), centres, polyp masks and negatives, overlap (no GPU); part B (probes, strata with our quartiles, the held-out filter's check) planned in section 7 | [team] (proposal: Farzan) | blocked (licence) |
+| [RC-X2](RC-X2_external_test_other_centre.md) | S11 | External test from another centre, co-primary: **PolypGen** (CC BY 4.0 per Ali et al., Sci Data 2023, read 2026-11-08); the loader and the overlap check are written (`scripts/polypgen.py`); the download, `describe` and `overlap` steps, and the release-page terms | Amir | ready to download (the external-test evaluation split is still to be written by the agent) |
 | [RC-T1](RC-T1_final_timing.md) | S11 | Final timing of every arm on the rented GPU (T5) | Amir | blocked (GPU and precision chosen, every arm done) |
 
 Statuses: `not written yet` -> `ready` -> `running` -> `done` (or `failed`, with the

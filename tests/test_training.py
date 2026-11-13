@@ -463,9 +463,11 @@ def _stage_setup(
     monkeypatch.setattr(
         config_module,
         "load_config",
-        lambda path, *a, **k: {"dataset": {}, "model": {}}
-        if str(path).startswith("fake/")
-        else real_load_config(path, *a, **k),
+        lambda path, *a, **k: (
+            {"dataset": {}, "model": {}}
+            if str(path).startswith("fake/")
+            else real_load_config(path, *a, **k)
+        ),
     )
     monkeypatch.setattr(prepared_module, "load_prepared", lambda *a, **k: {"train": samples})
     monkeypatch.setattr(cache_module, "load_teacher_cache", lambda *a, **k: iter(records))

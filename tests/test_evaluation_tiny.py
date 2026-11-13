@@ -89,9 +89,9 @@ def test_e2_evaluation_loads_the_adapter_that_training_saved(
     monkeypatch.setattr(
         config_module,
         "load_config",
-        lambda path, *a, **k: {}
-        if str(path).startswith("fake/")
-        else real_load_config(path, *a, **k),
+        lambda path, *a, **k: (
+            {} if str(path).startswith("fake/") else real_load_config(path, *a, **k)
+        ),
     )
     monkeypatch.setattr(
         loading_module, "ModelSpec", SimpleNamespace(from_config=lambda cfg: "spec")

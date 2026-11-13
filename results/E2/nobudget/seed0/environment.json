@@ -46,5 +46,29 @@
   "python": "3.13.16",
   "torch_build": "2.11.0+cu130",
   "torch_cuda": "13.0"
+ },
+ "07_benchmark_efficiency": {
+  "cudnn": 92700,
+  "gpus": [
+   "Tesla T4"
+  ],
+  "kaggle": true,
+  "nvidia_driver": "580.178.04",
+  "packages": {
+   "accelerate": "1.15.0",
+   "bitsandbytes": "0.50.2",
+   "numpy": "2.2.6",
+   "optimum": "2.3.0",
+   "peft": "0.21.2",
+   "safetensors": "0.8.0",
+   "tensorflow": "2.21.0",
+   "torch": "2.11.0+cu130",
+   "torchao": "0.18.0",
+   "transformers": "5.19.0"
+  },
+  "platform": "Linux-6.18.55+-x86_64-with-glibc2.39",
+  "python": "3.13.16",
+  "torch_build": "2.11.0+cu130",
+  "torch_cuda": "13.0"
  }
 }

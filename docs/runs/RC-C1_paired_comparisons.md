@@ -61,9 +61,13 @@ find -L /kaggle/working/outputs -name outcomes_test_unfiltered.npz | wc -l   # t
 ```
 
 `09_compare_arms.py` stops with "configuration incomplete" if the pre-registration is not
-frozen or a setting is open; tell the agent through the inbox instead of filling it in. An arm
-with a missing seed is left out and listed under `incomplete` in
-`results/comparisons/choices.json`; check that list before committing.
+frozen or a setting is open; tell the agent through the inbox instead of filling it in. Seeds
+follow the seed plan (pre-registration section 11 item 12, 2026-11-08): the main tier (E2, E7
+and the comparator at B2) is compared on its 3 seeds (confirmatory, H1-H3); every other arm is
+read at seed 0 and written as `<arm>_vs_E2_seed0` (exploratory); H4 is exploratory; an arm
+with **2 seeds stops the step** (`SeedPlanError`). A main-tier arm with a missing seed is read
+at seed 0 and listed under `incomplete` in `results/comparisons/choices.json` (with every arm's
+tier and seeds under `tiers`); check that list before committing.
 
 ## 4. What to commit back
 

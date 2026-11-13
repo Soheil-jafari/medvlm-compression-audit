@@ -8,8 +8,9 @@ experiment:
   kind: ablation
   variant_of: E7
   budgets: [B2]
+  seeds: [0]                              # seed 0 only: exploratory (seed plan, 2026-11-08)
   outputs:
-    - results/A2/B2/seed{0,1,2}/metrics.csv
+    - results/A2/B2/seed0/metrics.csv
 
 pruning:
   clinical:

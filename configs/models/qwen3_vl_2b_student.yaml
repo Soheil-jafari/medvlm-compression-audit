@@ -9,7 +9,8 @@ model:
   licence: apache-2.0
   verified_on: "2026-10-12"
   verified_from: https://huggingface.co/api/models/Qwen/Qwen3-VL-2B-Instruct
-  sha_seen: 89644892e4d85e24eaac8bacfd4f463576704203  # pin as revision only once chosen
+  sha_seen: 89644892e4d85e24eaac8bacfd4f463576704203  # seen on the hub 2026-10-12
+  revision: 89644892e4d85e24eaac8bacfd4f463576704203  # pinned 2026-11-12 for E10 (Soheil, after RC-E10 step 1)
   parameters_stored: 2127532032
   architecture:
     vision_encoder: "Qwen3-VL ViT, 24 layers x 1024, patch 16"

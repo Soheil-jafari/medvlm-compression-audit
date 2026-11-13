@@ -37,6 +37,8 @@ class GPTQResult:
     bits: int
     group_size: int
     output_error: float  # sum over columns of squared rounding error weighted by the Hessian
+    damping_retries: int = 0
+    effective_damping: float = DEFAULT_DAMPING
 
     def dequantized(self) -> np.ndarray:
         """The rounded weights ``(q - z) * s``."""
@@ -134,7 +136,7 @@ def gptq_numpy(
             block[:, i:] -= np.outer(err, h_block[i, i:])
             errors[:, i] = err
         w[:, stop:] -= errors @ h_inv[start:stop, stop:]
-    return GPTQResult(codes, scales, bits, group_size, loss)
+    return GPTQResult(codes, scales, bits, group_size, loss, effective_damping=damping)
 
 
 def gptq_torch(
@@ -145,22 +147,86 @@ def gptq_torch(
     group_size: int,
     damping: float = DEFAULT_DAMPING,
     block_size: int = DEFAULT_BLOCK_SIZE,
+    device: Any = None,
+    consume_hessian: bool = False,
+    matrix: str = "matrix",
+    log: Any = print,
 ) -> GPTQResult:
     """The same algorithm as :func:`gptq_numpy` with torch tensors (float32 on their device).
 
     ``weight`` and ``hessian`` are torch tensors; the result holds NumPy arrays. Used by the
     quantization stage on the GPU (E3, E8, E9); the torch tests compare it with the reference.
+
+    ``device``: where the math runs (default: the weight's device); the inputs are copied there
+    (2026-11-13, :func:`~medcompress.compression.quantization.placement.pick_gptq_device`).
+    ``consume_hessian``: the caller hands over its last reference to ``hessian``; it is then
+    used as the working copy when it is already float32 on ``device`` (no copy), or freed as
+    soon as it is copied there. Neither changes the numbers on the same device.
     """
     import torch
 
-    w = weight.detach().to(torch.float32).clone()
-    h = hessian.detach().to(device=w.device, dtype=torch.float32).clone()
+    with torch.inference_mode():  # no autograd; the Hessians of the stage are inference tensors
+        return _gptq_torch(weight, hessian, bits, group_size, damping, block_size, device,
+                           consume_hessian, matrix, log)  # fmt: skip
+
+
+def _gptq_torch(
+    weight: Any,
+    hessian: Any,
+    bits: int,
+    group_size: int,
+    damping: float,
+    block_size: int,
+    device: Any,
+    consume_hessian: bool,
+    matrix: str,
+    log: Any,
+) -> GPTQResult:
+    """The body of :func:`gptq_torch` (run under ``torch.inference_mode``)."""
+    import torch
+
+    target = weight.device if device is None else torch.device(device)
+    w = weight.detach().to(device=target, dtype=torch.float32, copy=True)
+    if consume_hessian and hessian.device == target and hessian.dtype == torch.float32:
+        h = hessian.detach()
+    else:
+        h = hessian.detach().to(device=target, dtype=torch.float32, copy=True)
+    del hessian  # with consume_hessian this was the last reference: freed (or now only ``h``)
     dead = torch.diag(h) == 0
     h[dead, dead] = 1.0
     w[:, dead] = 0.0
-    h += damping * torch.mean(torch.diag(h)) * torch.eye(h.shape[0], device=h.device)
-    lower = torch.linalg.cholesky(h)
-    h_inv = torch.linalg.cholesky(torch.cholesky_inverse(lower), upper=True)
+    # The dampening in place, on the diagonal only (2026-11-12): the same numbers as adding
+    # ``damping * mean(diag) * I`` (off the diagonal that added zeros), without the two extra
+    # (in x in) matrices of the identity and its scaled copy. Each (in x in) matrix is freed as
+    # soon as the next one is made, so at most two of them (three with the caller's Hessian)
+    # are alive at once: 3 x 1.34 GiB for the teacher's down_proj (in 18,944), not 5.
+    diagonal = h.diagonal()
+    original = diagonal.clone()
+    mean = original.mean()
+    retries = 0
+    effective = damping
+    while True:
+        diagonal.copy_(original).add_(effective * mean)
+        lower, info = torch.linalg.cholesky_ex(h)
+        if info.item() == 0:
+            break
+        del lower
+        if effective >= 0.1 or not torch.isfinite(mean) or mean <= 0:
+            raise torch.linalg.LinAlgError(
+                f"GPTQ {matrix}: Hessian Cholesky failed at damping {effective:.6g} "
+                f"(leading minor {info.item()}, diagonal mean {mean.item():.6g})"
+            )
+        retries += 1
+        effective = min(0.1, round(damping + retries * 0.0025, 12))
+        log(f"GPTQ {matrix}: Cholesky retry {retries} with damping {effective:.6g}")
+    if retries:
+        log(f"GPTQ {matrix}: Cholesky succeeded at final damping {effective:.6g}")
+    del diagonal
+    del h
+    inverse = torch.cholesky_inverse(lower)
+    del lower
+    h_inv = torch.linalg.cholesky(inverse, upper=True)
+    del inverse
     rows, columns = w.shape
     groups = grid.check_shape(columns, bits, group_size)
     zero, top = grid.zero_point(bits), grid.max_code(bits)
@@ -190,8 +256,27 @@ def gptq_torch(
             block[:, i:] -= err[:, None] * h_block[i, i:][None, :]
             errors[:, i] = err
         w[:, stop:] -= errors @ h_inv[start:stop, stop:]
+    del h_inv, w
     return GPTQResult(
-        codes.cpu().numpy(), scales.double().cpu().numpy(), bits, group_size, float(loss)
+        codes.cpu().numpy(),
+        scales.double().cpu().numpy(),
+        bits,
+        group_size,
+        float(loss),
+        retries,
+        effective,
+    )
+
+
+def gptq_peak_bytes(in_features: int, out_features: int) -> int:
+    """An upper bound of the GPU memory GPTQ needs for one matrix beyond the model (bytes):
+    three float32 (in x in) matrices (the caller's Hessian, and at most two of the copy, the
+    Cholesky factor, the inverse and its factor), the float32 copy of the weights and the
+    uint8 codes. When the caller hands its Hessian over (``consume_hessian``), two suffice."""
+    return (
+        3 * 4 * in_features * in_features
+        + 4 * out_features * in_features
+        + out_features * in_features
     )
 
 

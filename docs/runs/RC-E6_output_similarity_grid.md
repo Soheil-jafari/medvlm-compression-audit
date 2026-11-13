@@ -1,7 +1,8 @@
-# Run card RC-E6: output-similarity layer pruning (E6), B2 x 3 seeds, B1 and B3 seed 0 (trend)
+# Run card RC-E6: output-similarity layer pruning (E6), B1-B3, seed 0; seeds 1, 2 at B2 if it is the comparator
 
 ## 1. What and why
 
+- **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** every run is seed 0 (exploratory), except if E6 is the **comparator** (validation, seed 0, B2; pre-registration section 5, `scripts/choose_comparator.py`): then E6 at B2 also runs seeds 1 and 2 (main tier), only if the futility rule does not stop the study. The plan refuses a seed 1 or 2 session otherwise. This replaces the seed counts written below.
 - Stage: S09
 - Experiments: E6 (layers only, scored once and removed in one shot; D07 deviation), budget B2 with seeds 0, 1, 2, and B1 and B3 with seed 0 only (the trend, pre-registration section 11 item 11; decided 2026-11-06). The cell of a seed 1 or 2 session runs B2 only
 - Runs: 9. Each run is scored on the **validation** split and on the **test** split
@@ -35,10 +36,10 @@ members freely.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** card owner Amir; seeds: seed 0 Amir (after RC-G2), seed 1 Farzan, seed 2 Amir.
+- **Who:** card owner Amir; seed 0: B2 in RC-G2 (Soheil), B1 and B3 on account 3 (Soheil); seeds 1 and 2 only if E6 is the comparator: seed 1 Soheil on account 3 (lent by Farzan), seed 2 Amir.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter; teacher cache.
-  Seed 0 also attaches the pruned models of RC-G2 (`G2_B2_seed0_pruned`): its B2 runs are then not run again, only their test evaluation.
+  Seed 0 also attaches the pruned models of RC-G2 (one dataset per run, `g2-b2-seed0-pruned-<run>`, since 2026-11-11): its B2 runs are then not run again, only their test evaluation.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
 - **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E6"` and `SEED = <k>` (`DATA` and `FROM` stay empty); it runs `python scripts/run_card.py --card RC-E6 --seed <k>`, which finds the shared data and every attached hand-off by their manifests. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
   - run E6 B1 seed<k>

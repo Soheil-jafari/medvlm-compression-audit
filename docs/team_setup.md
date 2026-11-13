@@ -1,4 +1,9 @@
-# Team setup: running a card from your own Kaggle account (Amir, Farzan, Soheil)
+# Team setup: running a card from your own Kaggle account (Soheil, Amir, account 3)
+
+Since 2026-11-08 the quota is three Kaggle accounts x 30 h = 90 h per week: Soheil's, Amir's,
+and one lent by Farzan (account 3; Soheil starts its sessions). Farzan left the project and is
+not an author. **Share every hand-off dataset to Soheil's account** (Kaggle: dataset settings,
+Sharing, add his user), so each account can attach it.
 
 Read this once before your first card. Who runs what each week is in `docs/schedule.md`. What
 each card needs and writes is in section 2b of the card (`docs/runs/`).

@@ -51,26 +51,20 @@ def _run(variant: str | None = None, seed: int = 0, budget: str | None = None) -
 
 
 def test_the_real_configs_name_every_open_setting() -> None:
-    """The grid and calibration sizes are decided (D07); what is left is named in one error."""
-    expected = {
-        "E5": ("taylor", ["inputs.image_longest_side"]),
-        "E6": (None, ["evaluation.max_new_tokens", "inputs.image_longest_side"]),
-        "E7": (None, ["pruning.clinical.ablation_method", "inputs.image_longest_side"]),
-    }
-    for experiment, (variant, keys) in expected.items():
+    """The grid, calibration sizes, image side, ``max_new_tokens`` and (2026-11-08) the scoring
+    method are decided, so E5, E6 and E7 have nothing open."""
+    for experiment, variant in (("E5", "taylor"), ("E6", None), ("E7", None)):
         config, _ = load_experiment(experiment)
         settings = stage.ScoringSettings.from_config(config, variant)
         assert settings.calibration_size in (None, 128)
         run = RunContext(experiment, seed=0, variant=variant)
-        with pytest.raises(ConfigError) as caught:
-            collect_open_settings(
-                lambda config=config, variant=variant: stage.ScoringSettings.from_config(
-                    config, variant
-                ),
-                lambda config=config, run=run: stage._check_criterion(config, run),
-                lambda config=config: stage._check_side(config, None),
-            )
-        assert str(caught.value) == f"settings still open: {', '.join(keys)}"
+        collect_open_settings(
+            lambda config=config, variant=variant: stage.ScoringSettings.from_config(
+                config, variant
+            ),
+            lambda config=config, run=run: stage._check_criterion(config, run),
+            lambda config=config: stage._check_side(config, None),
+        )
 
 
 def test_variants_resolve_the_criterion_the_sizes_and_the_unit_types() -> None:
@@ -255,3 +249,115 @@ def test_open_settings_stop_the_stage_before_a_model_is_loaded(
     monkeypatch.undo()
     with pytest.raises(ConfigError, match="image_longest_side"):
         stage.score_units_for_experiment(config, _run())
+
+
+def test_a1_and_a2_reweight_e7s_per_finding_effects_without_a_model(tmp_path: Path) -> None:
+    import yaml
+
+    train = write_dataset(tmp_path)
+    table = {
+        "preregistration": {"frozen_on": "2026-11-01"},
+        "weighting": {"normalisation": "none", "tiers": [{"tier": "high", "multiplier": 2.0},
+                                                         {"tier": "low", "multiplier": 1.0}]},
+        "findings": [
+            {"finding": "polyp", "prevalence": 0.5, "importance_tier": "high", "cap": 10,
+             "final_weight": 4.0},
+            {"finding": "bleeding", "prevalence": 0.25, "importance_tier": "low", "cap": 2,
+             "final_weight": 2.0},
+        ],
+    }  # fmt: skip
+
+    def config(weighting: str) -> dict[str, Any]:
+        out = _config(
+            tmp_path,
+            criterion="clinical",
+            clinical={"delta": "logprob_drop", "weighting": weighting,
+                      "negatives_per_positive": None, "negative_delta": "keep",
+                      "ablation_method": {"decoder_layer": "exact", "attention_head": "exact",
+                                          "mlp_channel_group": "first_order"},
+                      "batch_size": 4},
+        )  # fmt: skip
+        (tmp_path / "weights.yaml").write_text(yaml.safe_dump(table))
+        return out
+
+    e7 = stage.run_scoring(config("clinical"), RunContext("E7", seed=1),
+                           tiny_vlm.tiny_wrapper(seed=0), train)  # fmt: skip
+    effects = stage.read_effects(e7.with_name(stage.EFFECTS_FILE))
+    scores = common.read_unit_scores(e7)
+    assert set(effects) == set(scores) and len(scores) == 18
+    weights = {"polyp": 4.0, "bleeding": 2.0}
+    for unit_id, value in scores.items():  # E7's own score is the weighted sum of its effects
+        expected = sum(weights[f] * v for f, v in effects[unit_id].items())
+        assert value == pytest.approx(expected, rel=1e-9, abs=1e-12)
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("a model was loaded")
+
+    original = stage.load_scoring_model
+    stage.load_scoring_model = boom  # A1 and A2 must not load the student
+    try:
+        for exp, scheme in (("A1", "uniform"), ("A2", "rarity_only")):
+            stage.score_units_for_experiment(config(scheme), RunContext(exp, seed=1), train=train)
+            path = tmp_path / f"results/{exp}/nobudget/seed1/unit_scores.csv"
+            got = common.read_unit_scores(path)
+            # uniform: 1 each; rarity only: min(1 / 0.5, 10) = 2 and min(1 / 0.25, 2) = 2
+            w = (
+                {"polyp": 1.0, "bleeding": 1.0}
+                if scheme == "uniform"
+                else {"polyp": 2.0, "bleeding": 2.0}
+            )
+            for unit_id, per in effects.items():
+                assert got[unit_id] == pytest.approx(sum(w[f] * v for f, v in per.items()))
+            assert got != scores  # not E7's clinical weights
+    finally:
+        stage.load_scoring_model = original
+    # another seed has no E7 effects: A1 would score itself (here: the model is needed)
+    with pytest.raises(ConfigError):
+        stage.score_units_for_experiment(
+            {**config("uniform"), "inputs": {"image_longest_side": "TODO"}},
+            RunContext("A1", seed=2), train=train,
+        )  # fmt: skip
+
+
+def test_the_first_order_check_scores_random_channel_groups_exactly(tmp_path: Path) -> None:
+    import csv
+    import math
+
+    train = write_dataset(tmp_path)
+
+    def config(method: Any) -> dict[str, Any]:
+        return _config(
+            tmp_path,
+            criterion="clinical",
+            clinical={"delta": "logprob_drop", "weighting": "uniform",
+                      "negatives_per_positive": None, "negative_delta": "keep",
+                      "ablation_method": method, "batch_size": 4},
+        )  # fmt: skip
+
+    mixed = config({"decoder_layer": "exact", "attention_head": "exact",
+                    "mlp_channel_group": "first_order"})  # fmt: skip
+    run = RunContext("E7", seed=0)
+    with pytest.raises(FileNotFoundError, match="score the units first"):
+        stage.run_first_order_check(mixed, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    path = stage.run_scoring(mixed, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    estimates = common.read_unit_scores(path)
+    values = stage.run_first_order_check(mixed, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    with path.with_name(stage.CHECK_FILE).open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    groups = sorted(u for u in estimates if ".mlp_group" in u)
+    assert [r["unit_id"] for r in rows] == stage.check_sample(groups, 30, 0)
+    assert len(rows) == min(30, len(groups)) and len(rows) >= 2
+    for row in rows:  # the first-order column is the committed estimate
+        assert float(row["first_order"]) == estimates[row["unit_id"]]
+    rho = values["first_order_check:spearman"]
+    assert math.isnan(rho) or -1.0 <= rho <= 1.0
+    assert values["first_order_check:passed"] == float(rho >= stage.CHECK_MIN_RANK_CORRELATION)
+    metrics = (path.with_name("metrics.csv")).read_text()
+    assert "first_order_check:spearman" in metrics and "scoring_units" in metrics
+    # the exact column equals scoring the same groups with exact ablation
+    exact = stage.run_scoring(config("exact"), run, tiny_vlm.tiny_wrapper(seed=0), train)
+    truth = common.read_unit_scores(exact)
+    for row in rows:
+        assert float(row["exact"]) == pytest.approx(truth[row["unit_id"]], rel=1e-9, abs=1e-12)
+    with pytest.raises(ConfigError, match="no first_order unit type"):
+        stage.run_first_order_check(config("exact"), run, tiny_vlm.tiny_wrapper(seed=0), train)

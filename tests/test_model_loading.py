@@ -106,7 +106,9 @@ def test_candidate_student_needs_explicit_permission() -> None:
     assert student.is_candidate and student.revision == student.sha_seen
     assert student.resolved_revision == "66285546d2b821cf421d4f5eb2576359d3770cd3"
     fallback = _spec("qwen3_vl_2b_student.yaml")
-    assert fallback.revision is None and fallback.resolved_revision == fallback.sha_seen
+    # pinned 2026-11-12 for E10 (RC-E10 step 1) at the hash seen on 2026-10-12
+    assert fallback.revision == fallback.sha_seen == fallback.resolved_revision
+    assert fallback.revision == "89644892e4d85e24eaac8bacfd4f463576704203"
     assert student.dtype == "float16"  # TODO in the config falls back to the T4 default
     with pytest.raises(ModelConfigError, match="candidate"):
         check_loadable(student)

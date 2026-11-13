@@ -10,95 +10,40 @@ Example: `- 2026-10-20 (Soheil): D01 decided: endoscopy, Qwen2.5-VL-7B -> 3B. Lo
 ## Open
 
 <!-- newest first -->
-- 2026-10-17 (agent, for Soheil): **pre-registration freeze list.** Every item still open,
-  with a recommended answer and one reason each. `results/data/summary.csv` is not committed yet,
-  so items A1-A10 show their counts as `[RC-D1]` placeholders; the agent fills them by the stated
-  rule when RC-D1's two passes are in. Reply with one line:
-  `- 2026-10-.. (Soheil): freeze list: approve all` or `... approve all except <numbers>: <change>`.
-  The freeze itself needs Amir's and Farzan's approval too (pre-registration section 9).
-
-  **Can be decided now**
-  1. Fixed training pool. Recommended: one pool from `seeds.data_split` for E1, E2, E4 and every
-     recovery, with the teacher cache holding only that pool. Reason: the cache is 10,000
-     answers instead of up to 30,000, and the seeds still differ in order and starting point.
-  2. Finding inclusion rule. Recommended: at least 20 positive training images and at least 10
-     in each of validation and test. Reason: enough positives for a recall interval in each split.
-  3. Prevalence groups. Recommended: common at 10 % or more, rare below 2 %. Reason: fixed cut
-     points chosen before the counts, unlike tertiles, which move with the data.
-  4. Rarity cap. Recommended: 20. Reason: keeps one very rare finding from dominating the
-     criterion.
-  5. Weight normalisation. Recommended: none. Reason: the criterion only ranks units, so a
-     common scale changes nothing.
-  6. Tiers. Recommended: multipliers 2.0 / 1.5 / 1.0 (findings that call for action, for
-     follow-up, others), assigned from the finding names only. Reason: the clinical priority is
-     fixed before any result.
-  7. Comparator "best of E5/E6". Recommended: the generic arm with the highest validation
-     small-finding recall at B2, averaged over 3 seeds, the same for both endpoints. Reason: it
-     is picked on validation only.
-  8. Headline accuracy for H1 and H4. Recommended: macro balanced accuracy. Reason: with few
-     positives, plain accuracy mostly measures specificity.
-  9. H2 matching. Recommended: E3 `w8` against the best generic arm at the budget nearest to
-     `w8`'s measured peak memory. Reason: it compares at equal memory.
-  10. McNemar test. Recommended: per finding, on each probe's majority answer over the 3 seeds.
-      Reason: one paired test per finding instead of three.
-  11. A3 ranking. Recommended: random scores not divided by the unit size. Reason: divided,
-      random removal would take whole layers first (about 98 % of the removed parameters at a
-      30 % cut).
-  12. Reuse E7 for `A4:n128` and `A5:logprob_drop`. Recommended: yes. Reason: identical
-      settings, 6 runs fewer.
-  13. Scoring method (D07 section 1). Recommended: exact for layers and KV groups, first-order
-      for channel groups. Reason: about 7.9 h per seed at side 672, against about 236 h for exact
-      scoring of every unit (estimates); RC-G2's 30-group check tests the approximation.
-  14. Recovery length. Recommended: 157 steps (`ceil(2,500 / 16)`) on the first 2,500
-      examples. Reason: the same rounding as the training steps.
-  15. A1 and A2 reuse of E7's effects. Recommended: the agent adds the reuse (keeps E7's
-      per-probe effects). Reason: D07 already says so, the results are the same, and it saves
-      about 48 GPU hours (estimate).
-  16. Budget hardware. Recommended: the budgets are matched on the Kaggle T4 (as RC-B0 measures);
-      the rented GPU is only for RC-T1's final timing. Reason: every pruned run searches its
-      budget on the T4 in its own session.
-  17. Timing GPU and precision for RC-T1. No recommendation from here: the team chooses the
-      rented GPU (cost and availability). Not needed before the grid.
-  18. Rare-finding pooling. Recommended: pooled within a prevalence group. Reason: rare findings
-      have too few positives each for an interval.
-  19. Stale config notes (A1 at B2 only; A6 `heads_channels` without whole layers).
-      Recommended: confirm as the pre-registration states. Reason: they already match its text.
-
-  **Need the RC-D1 counts** (placeholders until `summary.csv` is in)
-  - A1. Finding list C: findings that pass rule 2. Depends on: `positives:<f>:train/val/test`
-    [RC-D1 pass 2]. For the record (no action): in run 2's split, the rarest answer values had
-    these image counts (train / validation / test): barretts 15 / 4 / 3, short-segment barretts
-    8 / 4 / 1, hemorrhoids 1 / 0 / 0. Run 3's counts replace them.
-  - A2. Display names. Depends on: the answer values as written (`answer_count:*`, pass 1).
-  - A3. Prevalence per finding. Depends on: `prevalence:<f>` [RC-D1 pass 2].
-  - A4. Common and rare groups. Depends on: A3 and rule 3.
-  - A5. Lesion-size strata: quartiles of the training lesion areas; "small" is below q1.
-    Depends on: `lesion_area_threshold:q1..q3` [RC-D1].
-  - A6. Mask findings: `polyp`, if it passes rule 2. Depends on: `positives:polyp:*`.
-  - A7. Tier of each finding. Depends on: A1 and rule 6.
-  - A8. `max_new_tokens` = ceil(1.5 x p99 answer words) + 8, the same value in three configs.
-    Depends on: `answer_words:p99` [RC-D1 pass 1]. Needed before RC-E0b.
-  - A9. Data facts in the document. Depends on: the group rows (`groups:*`,
-    `val_test_confirmed_duplicates_of_train`), `masks:linked/ambiguous/unmatched` and the printed
-    `split_sha256` [RC-D1 run 3]; and the chosen `min_correlation` [RC-D1 calibration].
-  - A10. Enough masked validation images for Gate 1's interval (a check). Depends on:
-    `masked_images:val` [RC-D1].
-  - Before pass 2: the label values of the abnormality question
-    (`configs/data/kvasir_vqa_x1.yaml`). The agent proposes them from `answer_count:*` of pass 1.
-
-  **Need another run**
-  - B1. Budgets B1-B3: about 15 / 30 / 45 % of the decoder's bytes removed, written as fractions
-    of E2's measured peak. Depends on: RC-B0 (E2 seed 0, two readings within 3 %).
-  - B2. E4's memory at 1 x 16 without gradient checkpointing. Depends on: RC-E4 seed 0 (after
-    the freeze; it stops rather than change the setting).
-
-  Already decided or filled: image side 672, G2 0.10, micro-batch 1 x 16 (2026-10-17); the
-  student revision is pinned. Still for Soheil, outside the document: tell Amir and Farzan
-  about the one-student amendment.
+- 2026-11-08 (agent): what is left of the freeze list after the decisions of 2026-11-08 (none
+  of it blocks the freeze):
+  - item 17, the timing GPU and precision for RC-T1: open (team; timing is secondary);
+  - B2, E4's memory at 1 x 16 without gradient checkpointing: RC-E4 seed 0 measures it after
+    the freeze (it stops rather than change the setting).
 
 ## Handled
 
 <!-- - YYYY-MM-DD (name): note -> iteration N, what was done -->
+- 2026-11-09 (Soheil): freeze the pre-registration, approved by Soheil and Amir on 2026-11-08
+  at commit 18f1b47; accept the C4 sensitivity analysis, the 239-246 h estimate and Soheil
+  starting account 3's sessions -> iteration 71: `frozen_on` / `frozen_by` / `commit` set,
+  decisions log, STATUS, RC-B0 `ready`; every later change needs a dated amendment.
+- 2026-11-08 (Soheil and Amir; choices delegated to the research lead): **the freeze list of
+  2026-10-17, decided** -> iteration 70, pre-registration section 11 item 14, configs, decisions
+  log. Item by item, with where it was decided:
+  1 fixed training pool: decided in iteration 36, confirmed (pre-registration section 2);
+  2 finding inclusion rule, 3 prevalence groups, A1-A6 finding list, display names, prevalence,
+  groups (no rare group), size strata, mask finding: frozen in the amendment of 2026-10-31
+  (section 11 items 1-5); 4 cap 20 and 5 normalisation none, 6 tiers (action 2.0 / follow_up
+  1.5 / other 1.0; polyp action, oesophagitis and ulcerative colitis follow_up), A7 the tier of
+  each finding: decided 2026-11-08 (section 3, `finding_weights.yaml`); 7 comparator: decided
+  2026-11-08 in the seed plan (section 5); 8 headline accuracy: macro balanced accuracy at the
+  operating point (section 5); 9 H2 matching and 10 McNemar: decided, H2 confirmatory with E3
+  `w8` in the 3-seed tier (section 6); 11 A3 ranking without the division, 12 reuse of E7 for
+  `A4:n128` and `A5:logprob_drop` (section 7); 13 scoring method: exact for layers and KV groups,
+  first-order for channel groups, the 30-group check a report (section 7; corrected
+  2026-11-08: no exact fallback); 14 recovery 157 updates on 2,500 examples (section 7); 15 A1
+  and A2 re-weight E7's effects (implemented 2026-11-08); 16 budget hardware Kaggle Tesla T4
+  (section 4); 18 rare-finding pooling: moot, no rare group (2026-10-31); 19 the two config
+  notes confirmed (A1 at B2 only; A6 `heads_channels` without whole layers); A8 `max_new_tokens`
+  46 by the D04 rule (2026-10-31); A9 data facts and A10 masked validation images: filled from
+  RC-D1 run 4b; B1 the budgets frozen as 15 / 30 / 45 % of the decoder bytes (RC-B0 converts
+  them). Still open: 17 and B2 (Open above).
 - 2026-10-19 (Soheil, in the session): RC-D1 run 3 not accepted; D02 amendment 3 (embeddings, the rule chosen on human labels, run 4, the strict test subset) -> iteration 54.
 - 2026-10-19 (Soheil, in the session): calibration results and D02 amendment 2 final values (0.65, no automatic join, guard 10 %, the final sheet as the deciding check, the embedding fallback); T4 x2 counts once (N = 38,000); RC-TT1 on the published target modules -> iteration 53.
 - 2026-10-18 (Soheil, in the session): RC-D1 run 2 result; D02 amendment 2 (two-stage near-duplicate detection, calibration step, run 3) -> iteration 52, code, tests, RC-D1, RC-TT0, RC-TT1, data card, D02, log, pre-registration.

@@ -11,7 +11,7 @@ experiment:
   variant_of: null
   requires: [E0]
   budgets: [B1, B2, B3]
-  seeds: [0, 1, 2]
+  seeds: [0, 1, 2]                        # seeds 1, 2 at B2 only (main tier, 2026-11-08)
   variants: []
   scripts:
     - scripts/04_score_pruning_units.py
@@ -35,5 +35,10 @@ pruning:
     probe_template: from_domain           # configs/domain/<domain>.yaml probe.template
     negatives_per_positive: 1             # D07 (2026-10-12)
     negative_delta: keep                  # D07 (2026-10-12): signed effects
-    ablation_method: TODO                 # how a unit is disabled during scoring
+    ablation_method:                      # 2026-11-08 (D07 section 1, Soheil and Amir)
+      decoder_layer: exact                # few, large units: switched off and scored again
+      attention_head: exact               # the KV groups
+      mlp_channel_group: first_order      # many, small units: the gate derivative (Molchanov et
+                                          # al., CVPR 2019); RC-G2's 30-group check is a report:
+                                          # below a rank correlation of 0.7 stop and ask the team
     batch_size: 4                         # D07 (2026-10-12)

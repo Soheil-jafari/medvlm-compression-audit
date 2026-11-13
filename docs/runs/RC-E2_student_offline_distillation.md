@@ -2,14 +2,15 @@
 
 ## 1. What and why
 
+- **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** E2 is in the main-claim tier: seeds 0, 1 and 2. Seeds 1 and 2 run only after seed 0's futility check (`scripts/choose_comparator.py`, after RC-G2): if E7 at B2 ranks below the comparator on validation, seed 0, they do not run. The plan refuses a seed 1 or 2 session before `results/seed_plan/comparator_B2.json` is committed, or when it says stop.
 - Stage: S06
 - Experiments: E2, no budget, seeds 0, 1 and 2
 - Purpose: train the chosen student with the same recipe as E1 plus the teacher's cached
   top-20 token log-probabilities (KD weight 0.5, temperature 2), evaluate it on the validation
   split and measure its footprint. E2 is the starting point of every compression arm and the
   reference of the budgets.
-- Status: `ready` (2026-11-06): rule 3 passes (E0 0.803 >= E1 seed 0 0.592 + 0.02); start after
-  RC-E1 section 3b (seed 0's adapter check) and the team's decision on seed 0.
+- Status: `in progress` (2026-11-08): seed 0 done (section 6); seeds 1 and 2 on the fix commit
+  (after 8e0b3d7), after seed 0's futility check (seed plan above). Rule 3 passes (E0 0.803 >= E1 seed 0 0.592 + 0.02).
 
 ## 2. Requirements
 
@@ -28,16 +29,18 @@ All met except the last, which the training checks itself:
   reads both committed rows first and stops with `rule 3 ...` until E1 seed 0 is committed, or
   if the teacher fails. After the one extension the teacher is accepted either way.
 
-Hours per seed (estimates): training 625 updates x 13.6 s = **2.4 h** (RC-S0b run 2, side 672,
-synthetic probes; real examples are longer, so it may be slower: RC-TT1 ran 3 % over its own
-projection), plus the validation pass, **about 0.5 h** (E0's measured pass took 0.78 h; the
-student scores probes in 0.414 s instead of 0.584 s and generates about 1.9 times faster), plus
-the setup (install, the 7.5 GB student download, loading; not measured). So **about 3 h per
-seed** on T4 x2, which counts once against the quota; the student uses one T4.
+Hours per seed (measured on seed 0, 2026-11-08; seeds 1 and 2 are estimated from it):
+training 625 updates x **27.2 s** = **4.72 h** (16,975 s), plus the validation pass, **0.53 h**
+(1,906 s), plus the setup (install, the 7.5 GB student download, loading; not measured). So
+**about 5.2 h per seed** plus the setup, on T4 x2, which counts once against the quota; the
+student uses one T4. The earlier estimate of 13.6 s per update (RC-S0b run 2, about 3 h per
+seed) held for E1 (13.5-14.7 s measured) but not for E2: the split distillation step (8e0b3d7)
+runs a second forward and backward on every micro-batch whose teacher answer differs from the
+ground truth.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** seeds split across the accounts: seed 0 Soheil, seed 1 Farzan, seed 2 Amir (one session each, in the same week). Card owner: Soheil.
+- **Who:** seed 0 Soheil (done 2026-11-08); seed 1 Soheil on account 3 (lent by Farzan), seed 2 Amir, both after the futility check (seed plan of 2026-11-08). Card owner: Soheil.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher cache.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
@@ -56,7 +59,7 @@ All**. Add Input: `medcompress-data` and `e0-teacher-cache`. One cell; edit only
 
 ```bash
 %%bash
-SEED=0   # Soheil 0, Farzan 1, Amir 2: the only line to edit
+SEED=0   # 0 (done); 1 (account 3) and 2 (Amir) only after the futility check: the only line to edit
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
@@ -129,14 +132,85 @@ is compressed.
 ## 6. Run report (filled by the person who ran it)
 
 - 2026-11-07 E2 seed 0 OOM on one T4 (torch.OutOfMemoryError, 14.56 GiB, in `_step_loss`: when the teacher's cached answer differs from the ground truth, two forward passes kept both autograd graphs alive until one backward). Fix: the CE term is backpropagated first and its graph freed, then the teacher batch is forwarded and the KL term backpropagated (`offline_kd._step_backward`); no change to loss or settings; E2 seeds 0, 1, 2 all run on the fix commit.
-- Run by / date:
-- Commit actually used:
-- Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft"`):
-- Teacher cache: attached `e0-teacher-cache`; the training checks its manifest against the pin
-  (d6ba0cb9...) and the rule 3 line it printed:
-- Per seed: wall time, peak GPU memory, final training loss and KD term:
-- Name of the private datasets with your adapters and `outcomes.npz` files:
-- Anything unusual (errors, retries, changed settings):
+Seed 0 reported by Soheil (2026-11-08); `metrics.csv` and `environment.json` committed
+unchanged (b5f6197; the upload `environment.txt` renamed to `environment.json`, content the
+same). Seeds 1 and 2: not run yet.
+
+| | seed 0 | seed 1 | seed 2 |
+|---|---|---|---|
+| `train_steps` / examples | 625 / 10,000 | | |
+| `train_seconds` | 16,975 (4.72 h; 27.2 s per update) | | |
+| `evaluation_seconds` | 1,906 (0.53 h) | | |
+| `train_peak_gpu_bytes` | 12,656,672,768 (of the T4's 15,636,037,632) | | |
+| `train_loss_final_finite` (finite steps of the last 10) | 0.3244 | | |
+| `train_loss_final` (all of the last 10) | NaN (no row: non-finite rows are not written) | | |
+| non-finite steps / micro-batches / skipped updates | 16 / 16 / 16 (12 of the skips after step 400) | | |
+| validation `macro_balanced_accuracy` (plain) | 0.553 (0.535-0.574) | | |
+| `op_macro_balanced_accuracy` (specificity 0.95 on validation) | 0.836 (0.812-0.859) | | |
+
+- Run by / date: seed 0 Soheil, finished 2026-11-08 (after the two fixes of 2026-11-07).
+- Commit actually used: a commit after 8e0b3d7 (the split backward). The exact hash is the
+  `commit` field of the `e2-seed0-adapter` hand-off's `bundle_manifest.json`; it is not
+  copied here until it is read from there (`python scripts/handoff.py verify <folder>` prints
+  it as `commit ...`). TODO: Soheil fills it in.
+- Hardware and library versions (`results/E2/nobudget/seed0/environment.json`, both stages
+  the same): one Tesla T4 (of T4 x2), driver 580.178.04, Python 3.13.16, torch 2.11.0+cu130
+  (CUDA 13.0, cuDNN 92700), transformers 5.19.0, peft 0.21.2, accelerate 1.15.0, torchao
+  0.18.0, bitsandbytes 0.50.2, optimum 2.3.0, TensorFlow 2.21.0. The same torch build as E1.
+- Teacher cache: attached `e0-teacher-cache`; the manifest matched the pin (d6ba0cb9...). Rule
+  3 line: `E0 0.8028 >= E1 seed 0 0.5923 + 0.02` (passes).
+- Time against E1: E2 training took 16,975 s, **1.9 times** E1's mean of 8,908 s (2.0 times
+  E1 seed 0's 8,409 s). The split backward runs a second forward and backward whenever the
+  teacher's answer differs from the ground truth, so the extra time is expected; the 13.6 s
+  per update of the first estimate held for E1 but not for E2 (section 2 now gives 27.2 s). Peak memory is the same as
+  E1's (12.66 GB against 12.65 GB): the fix did what it was for.
+- Name of the private dataset with the adapter: `e2-seed0-adapter`. `outcomes.npz` stays in
+  the Kaggle version's output (`outputs/E2/nobudget/seed0/`).
+- Anything unusual: 16 of 625 updates were skipped because a micro-batch's loss was not finite
+  (one micro-batch in each of those steps); the adapter's tensors are finite (the training
+  checks them and would have stopped with exit 6). Which examples the skipped steps hold:
+  section 6b. No retry, no setting changed.
+
+## 6b. The skipped steps (CPU, report only)
+
+The per-step history is in the adapter folder (`train_history.json`: `losses`,
+`nonfinite_steps`, `skipped_steps`). On a CPU notebook with `e2-seed0-adapter`,
+`medcompress-data` and `e0-teacher-cache` attached:
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
+pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
+ADAPTER=$(python scripts/find_inputs.py handoff E2_seed0_adapter) || exit 1
+python scripts/handoff.py verify $ADAPTER          # prints OK and the commit used
+python scripts/inspect_adapter.py $ADAPTER         # the 16 skipped steps and the losses
+DATA=$(python scripts/find_inputs.py data) || exit 1
+CACHE=$(python scripts/find_inputs.py handoff E0_teacher_cache) || exit 1
+python scripts/skipped_steps.py --exp E2 --seed 0 --data-root $DATA --from $CACHE \
+    --history "$(find $ADAPTER -name train_history.json | head -n 1)"
+```
+
+`skipped_steps.py` prints, for each skipped step, its 16 examples' count whose cached teacher
+answer differs from the ground truth (stripped text; the training compares token ids), the
+longest and mean teacher answer in tokens, the longest ground-truth answer in words and which
+loss term (CE or KL) was not finite; then the same means over the skipped steps and over all
+625 steps, and the mean mid-rank of the skipped steps (about 0.5 = no clustering). Which of
+the 16 micro-batches was the non-finite one is not recorded. It writes nothing. Tested here on
+its step-to-example mapping only, not end to end (no data here). **Not run yet**: whether the
+skips cluster on teacher-differs micro-batches or long answers is not known until it runs.
+
+Loss scale (derived, not measured): the GradScaler starts at 65,536 and halves at every
+skipped update; it would double only after 2,000 clean updates in a row, more than the 625
+of the run. After 16 skips it ends at 65,536 x 0.5^16 = **1.0**. The 16 skips match the 16
+non-finite micro-batches one to one, so each skip comes from a NaN or inf loss in a
+micro-batch, not from gradients overflowing at a high scale. At a scale of 1.0, small fp16
+gradients can underflow late in the run (12 skips after step 400); whether that affected the
+last updates is not known from these numbers.
 
 ## 7. Training-length check
 

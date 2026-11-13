@@ -55,6 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", type=Path, default=None, help="default /kaggle/working")
     parser.add_argument("--variant", action="append", default=None, help="only these variants")
     parser.add_argument("--budget", action="append", default=None, help="only these budgets")
+    parser.add_argument(
+        "--only", action="append", default=None,
+        help="RC-G2: only these parts (E5:magnitude, E5:activation, E5:taylor, E6, E7:scores, "
+        "E7, E7:check), one session each",
+    )  # fmt: skip
     parser.add_argument("--kvasir-seg", type=Path, default=None, help="RC-D1: Kvasir-SEG input")
     parser.add_argument("--external-images", type=Path, default=None, help="RC-X1: EndoBench")
     parser.add_argument(
@@ -101,6 +106,8 @@ def _environment(session: Session) -> list[str]:
 
 
 def _finish(session: Session, code: int) -> int:
+    if code != 0 and session.failure is None and not session.steps:
+        session.failure = f"stopped before any step (exit code {code})"
     path = write_report(session)
     committed = session.out / "results_to_commit" / "docs" / "runs" / "reports" / path.name
     committed.parent.mkdir(parents=True, exist_ok=True)  # each run's report is its own file
@@ -122,7 +129,7 @@ def find_inputs(args: argparse.Namespace) -> str | None:
     Returns why the shared data were not found (``None`` when found or given): the caller
     stops only if the card needs them.
     """
-    from medcompress.inputs import InputNotFound, find_handoffs, find_shared_data
+    from medcompress.inputs import InputNotFound, classify_bundles, find_shared_data
 
     if _makes_the_data(args.card):
         return None
@@ -134,7 +141,9 @@ def find_inputs(args: argparse.Namespace) -> str | None:
         except InputNotFound as exc:
             missing = str(exc)
     if not args.handoffs:
-        args.handoffs = find_handoffs()
+        args.handoffs, notes = classify_bundles()
+        for note in notes:
+            print(f"note: {note}")
         for path in args.handoffs:
             print(f"hand-off found by its manifest: {path}")
     return missing
@@ -150,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
             out=out or Path("/kaggle/working"), kvasir_seg=args.kvasir_seg,
             data_root=args.data_root, external_images=args.external_images,
             embed_dir=args.embed_dir, labels=args.labels, topup_dir=args.topup_dir,
+            only=args.only,
         )  # fmt: skip
         status = card_status(card_file(plan.card, REPO / "docs" / "runs"))
     except CardError as exc:
@@ -162,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{plan.card}: {plan.title} ({plan.gpus} GPU(s); card status `{status}`)")
     if no_data is not None and any(step.inputs for step in plan.steps):
         print(f"STOP: {no_data}", file=sys.stderr)
+        print(f"Outcome: FAILED: input check failed: {no_data}")
         return INPUT_CHECK_FAILED
     if args.dry_run:
         for step in plan.steps:
@@ -189,13 +200,20 @@ def main(argv: list[str] | None = None) -> int:
     problems = _environment(session)
     if problems:
         session.unusual += problems
+        session.failure = "environment check failed: " + "; ".join(problems)
         print("environment check failed:\n  " + "\n  ".join(problems), file=sys.stderr)
         return _finish(session, ENVIRONMENT_FAILED)
-    env = session_env(out, plan.gpus)
+    env = session_env(out, plan.gpus, quantization=plan.quantization)
     os.environ.update(env)  # the path roots of this session, for the checks below
     from medcompress.config import load_config
 
     config = load_config("base.yaml")
+    from medcompress.card_runner import select_handoffs
+
+    args.handoffs, ignored = select_handoffs(plan, config, args.handoffs)
+    for note in ignored:  # an extra hand-off never stops the run
+        print(f"ignored: {note}")
+        session.unusual.append(f"ignored: {note}")
     tokens = []
     try:
         if args.data_root is not None:
@@ -208,10 +226,12 @@ def main(argv: list[str] | None = None) -> int:
             session.inputs.append(f"{bundle.label} {bundle.root}")
     except BundleError as exc:
         session.unusual.append(f"input check failed: {exc}")
+        session.failure = f"input check failed: {exc}"
         return _finish(session, INPUT_CHECK_FAILED)
     missing = missing_needs(plan, config)
     if missing:
         session.unusual.append("missing inputs (attach with --from): " + "; ".join(missing))
+        session.failure = "missing inputs: " + "; ".join(missing)
         return _finish(session, INPUT_CHECK_FAILED)
     env[VERIFIED_ENV] = os.pathsep.join(tokens)
     os.chdir(REPO)
@@ -223,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
     collect_results(session, REPO)
     failed = [s for s in session.steps if s.status in ("failed", "stopped: setting open")]
     code = 0 if session.ok else next((s.code for s in failed if s.code), 1)
-    return _finish(session, code or 0)
+    return _finish(session, code or (0 if session.ok else 1))
 
 
 if __name__ == "__main__":

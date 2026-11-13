@@ -219,7 +219,7 @@ def load_trained_student(
     are the merged ones.
     """
     from medcompress.config import ConfigError, load_config, student_config_path
-    from medcompress.models.loading import ModelSpec, load_adapter, load_model
+    from medcompress.models.loading import ModelSpec, load_adapter, load_model, require_on_gpu
 
     student = student_config_path(config)
     if _is_open(student):
@@ -233,10 +233,22 @@ def load_trained_student(
         )
     kwargs = {} if device_map is None else {"device_map": device_map}
     model = load_model(spec, allow_candidate=True, image_longest_side=side, **kwargs)
-    return load_adapter(model, adapter / "adapter", merge=True)
+    model = load_adapter(model, adapter / "adapter", merge=True)
+    require_on_gpu(model.module, f"{tag} seed {seed} student")
+    return model
 
 
 def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:
+    """Load the model that ``run`` evaluates (see :func:`_load_run_model`), and refuse it if
+    any of it was offloaded from the GPU (2026-11-13: an offloaded run is invalid)."""
+    from medcompress.models.loading import require_on_gpu
+
+    model = _load_run_model(config, run, side)
+    require_on_gpu(getattr(model, "module", model), f"the {run.experiment_tag} model")
+    return model
+
+
+def _load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:
     """Load the model that ``run`` evaluates.
 
     E0 is the teacher; E1 and E2 are the student with the adapter their training run
@@ -253,7 +265,7 @@ def load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VLM
         quantization = (config.get("evaluation") or {}).get("teacher_quantization")
         # RC-TT1 records the nf4 teacher next to the fp16 one when rule 3 chose QLoRA
         return load_model(spec, image_longest_side=side, quantization=quantization or None)
-    if run.experiment_id in ("E1", "E2"):
+    if run.experiment_id in ("E1", "E2", "E10"):  # E10: the 2B student of its own config
         return load_trained_student(config, run.experiment_tag, run.seed, side)
     from medcompress.registry import SCORE_UNITS, get_experiment
 

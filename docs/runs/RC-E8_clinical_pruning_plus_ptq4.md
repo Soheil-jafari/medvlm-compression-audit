@@ -1,7 +1,8 @@
-# Run card RC-E8: E7 + 4-bit quantization (E8), B2 x 3 seeds, B1 and B3 seed 0 (trend)
+# Run card RC-E8: E7 + 4-bit quantization (E8), B1-B3, seed 0
 
 ## 1. What and why
 
+- **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** seed 0 only, reported as exploratory / descriptive (no confirmatory test); the plan (`scripts/run_card.py`) refuses seeds 1 and 2. This replaces the seed counts written below.
 - Stage: S09
 - Experiments: E8 = each E7 pruned and recovered model (budget B2 with seeds 0, 1, 2, and B1 and B3 with seed 0 only (the trend, pre-registration section 11 item 11; decided 2026-11-06). The cell of a seed 1 or 2 session runs B2 only)
   quantized with the E3 `w4` recipe (GPTQ, groups of 128, the same 128 calibration images of
@@ -26,7 +27,7 @@ plus the evaluation and timing.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** card owner Amir; seeds: seed 0 Amir (after RC-G2), seed 1 Farzan, seed 2 Amir.
+- **Who:** card owner Amir; seed 0 (B2 Soheil; B1 and B3 on account 3, Soheil; docs/schedule.md section 7); no seeds 1 and 2.
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; E2 seed<k> adapter; E7 B1 seed<k> pruned; E7 B2 seed<k> pruned; E7 B3 seed<k> pruned.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.

@@ -1,7 +1,8 @@
-# Run card RC-E4: quantization-aware distillation (E4), 3 seeds
+# Run card RC-E4: quantization-aware distillation (E4), seed 0
 
 ## 1. What and why
 
+- **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** seed 0 only, reported as exploratory / descriptive (no confirmatory test); the plan (`scripts/run_card.py`) refuses seeds 1 and 2. This replaces the seed counts written below.
 - Stage: S08
 - Experiments: E4, seeds 0, 1, 2 (3 runs). The student is trained from its pretrained weights
   with 4-bit weights already in the loop: learned step sizes per group of 128 weights, LoRA
@@ -10,7 +11,9 @@
   The result is exported in the same 4-bit format as E3 `w4` and evaluated and timed the same
   way.
 - Purpose: the "quantize during training" family of the audit.
-- Status: `blocked` (see section 2)
+- Status: `ready` for seed 0 (2026-11-11): every requirement of section 2 is met (frozen,
+  RC-E0b done, the E2 training values set); its peak at 1 x 16 is not measured, so the
+  out-of-memory rule of section 2 applies
 
 ## 2. Requirements
 
@@ -34,12 +37,13 @@ Platform: Kaggle notebook, one T4, Internet on. Dataset access: your own copy of
 and the private RC-D1 outputs; the teacher cache attached as a private dataset.
 
 Runtime per seed: **estimate** 1.5 to 3 times an E2 run of the same length (every step rounds
-the weights, and the layers are recomputed in the backward pass to save memory). RC-E2 reports
-the E2 time; this card then gets a number.
+the weights, and the layers are recomputed in the backward pass to save memory). E2 seed 0's
+training took 4.72 h (RC-E2 section 6, 27.2 s per update), so **about 7.1 to 14.1 h** of
+training per seed (an estimate), plus the validation pass (about 0.5 h).
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
-- **Who:** Soheil, all three seeds.
+- **Who:** account 3 (lent by Farzan; Soheil starts it), seed 0, after RC-E9 (reassigned 2026-11-11; seed plan of 2026-11-08: seeds 1 and 2 are not run).
 - **Kaggle settings:** GPU T4 x2 (the runner uses one T4); Internet on.
 - **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher cache.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.

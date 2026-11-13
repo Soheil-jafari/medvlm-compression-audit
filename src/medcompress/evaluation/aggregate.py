@@ -30,7 +30,7 @@ from pathlib import Path
 import pandas as pd
 
 from medcompress.registry import BUDGET_IDS, REGISTRY
-from medcompress.utils.io import RESULTS_COLUMNS
+from medcompress.utils.io import RESULTS_COLUMNS, parse_float, write_frame
 
 RUN_FILES: tuple[str, ...] = (
     "metrics.csv",
@@ -152,7 +152,9 @@ def read_result_file(result: ResultFile) -> tuple[pd.DataFrame, list[str]]:
     problems: list[str] = []
     name = str(result.path)
     try:
-        frame = pd.read_csv(result.path, dtype={"experiment": str, "budget": str, "metric": str})
+        # every cell as text, numbers through Python's correctly rounded float(): the pandas C
+        # parser is not exact in every version (54602.917348027004 read as ...27010 in 3.0.5)
+        frame = pd.read_csv(result.path, dtype=str, keep_default_na=False)
     except Exception as exc:  # noqa: BLE001 - report any parse failure as a problem
         return _empty(), [f"{name}: unreadable ({exc})"]
     if tuple(frame.columns) != RESULTS_COLUMNS:
@@ -160,7 +162,7 @@ def read_result_file(result: ResultFile) -> tuple[pd.DataFrame, list[str]]:
         return _empty(), problems
     frame["budget"] = frame["budget"].fillna("")
     for column in ("value", "ci_low", "ci_high"):
-        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        frame[column] = frame[column].map(parse_float).astype(float)
     for i, row in frame.iterrows():
         where = f"{name} row {i + 2}"
         if not _known_experiment(str(row["experiment"]), result.kind):
@@ -233,7 +235,7 @@ def summarise_over_seeds(rows: pd.DataFrame) -> pd.DataFrame:
     keys = list(SUMMARY_KEYS)
     columns = [*keys, "n_seeds", "mean", "sd", "min", "max"]
     if rows.empty:
-        return pd.DataFrame(columns=[*columns, "ci_low", "ci_high"])
+        return pd.DataFrame(columns=[*columns, "ci_low", "ci_high", "tier"])
     rows = rows.assign(split=rows["split"].fillna("") if "split" in rows else "")
     grouped = rows.groupby(keys, sort=True)
     summary = grouped["value"].agg(
@@ -244,7 +246,37 @@ def summarise_over_seeds(rows: pd.DataFrame) -> pd.DataFrame:
     summary = summary.merge(single, on=keys)
     multi = summary["n_seeds"] > 1
     summary.loc[multi, ["ci_low", "ci_high"]] = math.nan
+    summary["tier"] = [
+        seed_tier(e, n) for e, n in zip(summary["experiment"], summary["n_seeds"], strict=True)
+    ]
     return summary
+
+
+H4_COMPARISON = "accuracy_vs_clinical"
+SEED0_SUFFIX = "_seed0"
+
+
+def seed_tier(experiment: str, n_seeds: int) -> str:
+    """The label of a summary row by the seed plan of 2026-11-08: a comparison is
+    ``confirmatory`` (3-seed sides), ``exploratory`` (``*_seed0`` rows and H4) or
+    ``descriptive`` (the flips against E0); a run row of a registry arm says how many seeds it
+    has (``3 seeds``, ``1 seed``: outside the main tier a single seed is exploratory, inside it
+    the run is still incomplete); other rows are blank."""
+    if "_vs_" in experiment:
+        if experiment.endswith("_vs_E0"):
+            return "descriptive"  # the flip analysis (secondary)
+        if experiment.endswith(SEED0_SUFFIX) or experiment == H4_COMPARISON:
+            return "exploratory"
+        if experiment == "E7_vs_A1":
+            return "secondary"  # pre-specified, no verdict (2026-11-08)
+        arm = experiment.rsplit("_vs_", 1)[0].split(":")[0]
+        if experiment.endswith("_vs_E2") and arm not in ("E5", "E6", "E7"):
+            return "secondary"  # a 3-seed arm outside H1 (E3 w8, in the tier for H2)
+        return "confirmatory"
+    base, _ = split_experiment(experiment)
+    if base not in REGISTRY:
+        return ""  # data summaries, selection rounds, smoke tests: no seeds to speak of
+    return "1 seed" if int(n_seeds) == 1 else f"{int(n_seeds)} seeds"
 
 
 def write_summary(rows: pd.DataFrame, out_dir: Path) -> list[Path]:
@@ -252,8 +284,8 @@ def write_summary(rows: pd.DataFrame, out_dir: Path) -> list[Path]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = [out_dir / "all_rows.csv", out_dir / "by_arm.csv"]
-    rows.to_csv(paths[0], index=False)
-    summarise_over_seeds(rows).to_csv(paths[1], index=False)
+    write_frame(rows, paths[0])  # one float format for every pandas version (utils/io.py)
+    write_frame(summarise_over_seeds(rows), paths[1])
     return paths
 
 

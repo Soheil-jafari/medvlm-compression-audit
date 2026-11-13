@@ -8,9 +8,10 @@ experiment:
   kind: ablation
   variant_of: E7
   budgets: [B2]
+  seeds: [0]                              # seed 0 only: exploratory (seed plan, 2026-11-08)
   variants: [n32, n64, n128, n256]
   outputs:
-    - results/A4/<variant>/B2/seed{0,1,2}/metrics.csv
+    - results/A4/<variant>/B2/seed0/metrics.csv
 
 pruning:
   calibration:

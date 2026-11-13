@@ -289,12 +289,30 @@ def aggregate_importance(
     negative Delta values (ablation helps) at 0 before averaging; the choice is
     pre-registered (open point in the module docstring).
     """
+    means = finding_means(deltas, clip_negative=clip_negative)
+    missing = sorted(set(means) - set(weights))
+    if missing:
+        raise ValueError(f"No weight for finding {missing[0]!r}")
+    return weighted_sum(means, weights)
+
+
+def finding_means(
+    deltas: Mapping[tuple[str, str], float], *, clip_negative: bool = False
+) -> dict[str, float]:
+    """``{finding: mean_x Delta_j(c, x)}`` of one unit (clipped first if ``clip_negative``).
+
+    The importance is linear in the weights given these means, so they are a sufficient
+    statistic: A1 and A2 re-weight E7's means instead of scoring again (D07 section 1).
+    """
     per_finding: dict[str, list[float]] = {}
     for (finding, _sample), value in deltas.items():
-        if finding not in weights:
-            raise ValueError(f"No weight for finding {finding!r}")
         per_finding.setdefault(finding, []).append(max(value, 0.0) if clip_negative else value)
-    return float(sum(weights[f] * (sum(values) / len(values)) for f, values in per_finding.items()))
+    return {f: sum(values) / len(values) for f, values in per_finding.items()}
+
+
+def weighted_sum(effects: Mapping[str, float], weights: Mapping[str, float]) -> float:
+    """``sum_c w_c * effect_c`` over the findings that have an effect."""
+    return float(sum(weights[f] * value for f, value in effects.items()))
 
 
 @dataclass(frozen=True)
@@ -434,21 +452,15 @@ class ClinicalCriterion(PruningCriterion):
             out["weights"] = load_config(components["finding_weights"])
         return out
 
-    def score(
-        self,
-        model: VLMWrapper,
-        units: Sequence[PrunableUnit],
-        calibration: Sequence[VQASample],
-    ) -> dict[str, float]:
-        """Run steps 1-3 of the procedure and return ``{unit_id: I_j}``."""
+    def _probe_set(
+        self, settings: ClinicalSettings, calibration: Sequence[VQASample]
+    ) -> tuple[list[Any], list[str], dict[str, float]]:
+        """The balanced probes of the calibration images, the findings that have probes and
+        their weights (the same for the scoring and for the first-order check)."""
         from medcompress.compression.pruning import scoring
         from medcompress.config import ConfigError, find_todos, load_config
         from medcompress.evaluation.image_reliance import unique_image_probes
 
-        settings = ClinicalSettings.from_config(self.config)
-        missing = sorted({u.unit_type.value for u in units} - set(settings.methods))
-        if missing:
-            raise ConfigError(f"pruning.clinical.ablation_method has no entry for {missing}")
         domain = load_config(self.config["components"]["domain"])["domain"]
         findings = domain.get("findings")
         template = (domain.get("probe") or {}).get("template")
@@ -467,32 +479,82 @@ class ClinicalCriterion(PruningCriterion):
         weights = finding_weights_for(
             self.config, present, settings.weighting, allow_unfrozen=settings.debug_unfrozen_weights
         )
-        finding_probes = scoring.to_finding_probes(probes)
-        out: dict[str, float] = {}
+        return scoring.to_finding_probes(probes), present, weights
+
+    def _exact_effects(
+        self,
+        model: VLMWrapper,
+        units: Sequence[PrunableUnit],
+        finding_probes: Sequence[Any],
+        settings: ClinicalSettings,
+    ) -> dict[str, dict[str, float]]:
+        """``{unit_id: {finding: mean Delta}}``: each unit switched off and scored again."""
+        from medcompress.compression.pruning import scoring
+
+        effects: dict[str, dict[str, float]] = {}
+        if not units:
+            return effects
+        baseline = scoring.score_probe_images(model, finding_probes, self.data_root)
+        for number, unit in enumerate(units, 1):
+            with scoring.ablate(model, unit):
+                ablated = scoring.score_probe_images(model, finding_probes, self.data_root)
+            deltas = delta(baseline, ablated, finding_probes, settings.delta)
+            effects[unit.unit_id] = finding_means(deltas, clip_negative=settings.clip_negative)
+            if number % 25 == 0 or number == len(units):
+                print(f"[clinical] exact ablation: {number}/{len(units)} units", flush=True)
+        return effects
+
+    def exact_scores(
+        self,
+        model: VLMWrapper,
+        units: Sequence[PrunableUnit],
+        calibration: Sequence[VQASample],
+    ) -> dict[str, float]:
+        """``{unit_id: I_j}`` by exact ablation whatever ``ablation_method`` says, on the same
+        probes and weights as :meth:`score` (RC-G2's check of the first-order estimate)."""
+        settings = ClinicalSettings.from_config(self.config)
+        finding_probes, _present, weights = self._probe_set(settings, calibration)
+        effects = self._exact_effects(model, units, finding_probes, settings)
+        return {unit_id: weighted_sum(e, weights) for unit_id, e in effects.items()}
+
+    def score(
+        self,
+        model: VLMWrapper,
+        units: Sequence[PrunableUnit],
+        calibration: Sequence[VQASample],
+    ) -> dict[str, float]:
+        """Run steps 1-3 of the procedure and return ``{unit_id: I_j}``."""
+        from medcompress.compression.pruning import scoring
+        from medcompress.config import ConfigError
+
+        settings = ClinicalSettings.from_config(self.config)
+        missing = sorted({u.unit_type.value for u in units} - set(settings.methods))
+        if missing:
+            raise ConfigError(f"pruning.clinical.ablation_method has no entry for {missing}")
+        finding_probes, present, weights = self._probe_set(settings, calibration)
         exact = [u for u in units if settings.methods[u.unit_type.value] == "exact"]
         first_order = [u for u in units if settings.methods[u.unit_type.value] == "first_order"]
-        if exact:
-            baseline = scoring.score_probe_images(model, finding_probes, self.data_root)
-            for number, unit in enumerate(exact, 1):
-                with scoring.ablate(model, unit):
-                    ablated = scoring.score_probe_images(model, finding_probes, self.data_root)
-                deltas = delta(baseline, ablated, finding_probes, settings.delta)
-                out[unit.unit_id] = aggregate_importance(
-                    deltas, weights, clip_negative=settings.clip_negative
-                )
-                if number % 25 == 0 or number == len(exact):
-                    print(f"[clinical] exact ablation: {number}/{len(exact)} units", flush=True)
+        effects = self._exact_effects(model, exact, finding_probes, settings)
+        out = {unit_id: weighted_sum(e, weights) for unit_id, e in effects.items()}
         if first_order:
-            objective = scoring.ProbeObjective.build(finding_probes, weights)
-            steps = scoring.probe_objective_steps(
-                model, objective, self.data_root, settings.batch_size
-            )
-            out.update(
-                scoring.accumulate_gate_gradients(
+            # one backward pass per finding (each probe is still forwarded once): the gate
+            # gradient of sum_c w_c * mean_x log p is linear in w, so the per-finding gradients
+            # give E7's score and let A1 / A2 re-weight them (D07 section 1)
+            for finding in present:
+                own = [p for p in finding_probes if p.finding == finding]
+                objective = scoring.ProbeObjective.build(own, {finding: 1.0})
+                steps = scoring.probe_objective_steps(
+                    model, objective, self.data_root, settings.batch_size
+                )
+                grads = scoring.accumulate_gate_gradients(
                     model, first_order, steps, loss_scale=settings.loss_scale
                 )
-            )
+                for unit_id, value in grads.items():
+                    effects.setdefault(unit_id, {})[finding] = value
+            for unit in first_order:
+                out[unit.unit_id] = weighted_sum(effects[unit.unit_id], weights)
             print(f"[clinical] first-order estimate: {len(first_order)} units", flush=True)
+        self.finding_effects = effects
         return out
 
     def ablate(self, model: VLMWrapper, unit: PrunableUnit) -> AbstractContextManager[None]:

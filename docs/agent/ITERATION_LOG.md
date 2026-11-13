@@ -1155,3 +1155,197 @@ Append-only, newest at the bottom. One entry per iteration:
 - Recovery (`compression/recovery.py` -> `train_offline_kd` -> `train_lora`) and QAKD (`train_lora`)
   go through the same step and need no further change.
 
+## Iteration 66: 2026-11-08 (interactive)
+- Stage / item: S06, RC-E2 seed 0's results.
+- Committed unchanged: `results/E2/nobudget/seed0/metrics.csv` and `environment.json` (the
+  upload `environment.txt` renamed, content the same).
+- RC-E2 section 6 filled (the commit hash stays TODO: it is read from the `e2-seed0-adapter`
+  manifest); section 6b: the skipped steps, with `scripts/skipped_steps.py` (CPU, writes
+  nothing; not run yet) and the loss scale derived from the GradScaler defaults (65,536 x
+  0.5^16 = 1.0, not measured).
+- `docs/results/E2.md`: E2 seed 0 against the E1 seeds, validation only; no E2-minus-E1 claim at
+  the operating point until E1's `op_*` rows exist.
+- Hours recomputed with E2's 27.2 s per update (schedule sections 1, 2, 4 and 7; RC-E1 note,
+  RC-E2, RC-E4, RC-L1, the card index). The design is unchanged.
+
+## Iteration 67: 2026-11-08 (interactive)
+- Stage / item: S06 (RC-E1 section 3c) and S07 (the seed plan, a pre-freeze amendment).
+- Job A: `results/E1/nobudget/seed0/metrics.csv` committed as uploaded (31 rows written by the
+  rescoring: 12 already committed and unchanged, 19 new `op_*`); RC-E1 section 6 for 3c (torch
+  2.11.0+cpu, transformers 5.20.2, commit b5f6197); `docs/results/E2.md`: E2 seed 0 minus E1
+  seed 0 at the operating point (validation, in-sample).
+- Job B: the seed plan of Soheil and Amir (pre-registration section 11 item 12) in the
+  pre-registration (sections 5, 6, the ablation row, item 12), README, the experiment plan,
+  the schedule (section 7 recomputed: about 236-243 h; Farzan's assignments removed), the run
+  cards, the configs and the code (`seed_plan.py`, `choose_comparator.py`, `compare_stage`,
+  `verdicts`, `cards`, `aggregate`, `report`, `probe_suites`). Tests: `tests/test_seed_plan.py`,
+  `tests/test_compare_stage.py` and others updated.
+- Found while implementing: H2 is exploratory as written (E3 `w8` seed 0 only); E2 seeds 1 and
+  2 now wait for the futility check (they are main-tier seeds). Both are with the team.
+
+## Iteration 68: 2026-11-08 (interactive)
+- Stage / item: S06, RC-E1 section 3c, seed 2.
+- `scripts/rescore_probes.py --exp E1 --seed 2` run here on CPU from Amir's saved outcomes (kept
+  in the scratchpad, never committed): 7 committed rows identical, no row changed, 21 `op_*` rows
+  added to `results/E1/nobudget/seed2/metrics.csv`. RC-E1 section 6, `docs/results/E1.md` and
+  `E2.md` updated. Seed 1: no outputs; the amendment text for that case waits for Farzan's answer.
+
+## Iteration 69: 2026-11-08 (interactive)
+- Stage / item: S07 (pre-freeze additions, pre-registration section 11 item 13), S09, S10.
+- The D07 correction (no exact fallback for channel groups; the 30-group check is a report).
+- A1 at B2 in the 3-seed secondary tier: `seed_plan`, the comparison step (`E7_vs_A1`), RC-A1,
+  the config, tests. A1 / A2 re-weight E7's per-finding effects (`unit_effects.csv`), tested
+  on the tiny model.
+- E10: registry, config, `scripts/check_tokenizer_match.py`, RC-E10 card and plan, tests.
+- `docs/related_work.md`, the README positioning, schedule recomputed (about 234-241 h).
+- A torch-only test (`test_the_real_configs_name_every_open_setting`) had been failing since the
+  image side and `max_new_tokens` were set; updated to the real open settings.
+
+## Iteration 70: 2026-11-08 (interactive)
+- Stage / item: S07, the pre-freeze decisions (pre-registration section 11 item 14).
+- Configs: finding weights filled from the RC-D1 counts; E7 scoring method; recovery 157 x
+  2,500; budgets as decoder-byte fractions and the T4; E3 seeds; config notes confirmed.
+- Code: the budget rule (`budgets.py`, `recovery.py`), H2 in the 3-seed tier (`seed_plan`,
+  comparison step, RC-E3), `verdicts.combine_tests` and H1 on the pruning arms, the headline
+  without ulcerative colitis, E2 against E0, RC-R1 with E1 seed 0, the PolypGen loader and
+  overlap check (`data/polypgen.py`, `scripts/polypgen.py`); tests for each.
+- Docs: pre-registration (every [team] item resolved, items 14 and section 12), README, inbox,
+  schedule (three accounts, owners), team docs, run cards, related work, decisions log.
+
+## Iteration 71: 2026-11-09 (interactive)
+- Stage / item: S07, the freeze (approved 2026-11-08 by Soheil and Amir at commit 18f1b47).
+- `frozen_on` / `frozen_by` / `commit` in `finding_weights.yaml` and the document; section 9
+  marked done, section 10 opened for dated amendments; the three agent decisions accepted.
+- RC-B0 set `ready` (attach `e2-seed0-adapter`); the tests that assumed an unfrozen table now
+  check the frozen one and test the guard on an unfrozen copy.
+
+## Iteration 72: 2026-11-11 (interactive)
+- Stage / item: S06, RC-B0's first Kaggle attempt (commit 1f914d1) ran no step and still
+  reported "all steps ok". Two runner bugs fixed; no frozen setting or result changed.
+- Inputs: a manifest folder is a hand-off only if its kind is a hand-off kind and it is not part
+  of the shared dataset (`inputs.classify_bundles`; RC-D1's `rc_d1_embed`, kind
+  `near_duplicates`, is skipped with a note); the runner then attaches only the hand-offs the
+  plan reads (`card_runner.select_handoffs`) and prints every other one as "ignored", so an
+  extra hand-off (another seed's adapter) never stops a run.
+- Outcome: `Session.ok` is false when no step ran or the run stopped at the input or
+  environment check; the report prints "Outcome: FAILED: <reason>" and the exit code is not 0.
+- Tests: a shared dataset with a `near_duplicates` sub-bundle, an extra unneeded hand-off, input
+  and environment failures reported as failed.
+
+## Iteration 73: 2026-11-11 (interactive)
+- Stage / item: S11, the pandas float drift of the generated CSVs.
+- One float format for every results and generated CSV (`utils/io.format_cell`: Python's
+  shortest round-trip repr; `write_csv`, `write_frame`, `append_results`); the summaries no longer
+  use `DataFrame.to_csv`; the pruning scores, effects and budget search use the shared writer.
+- Reading: results cells are parsed with Python's correctly rounded `float()`, not the pandas C
+  parser, which read some committed values one ulp off (pandas 3.0.5: 54602.917348027004 as
+  54602.91734802701).
+- `results/summary/all_rows.csv` and `by_arm.csv` regenerated: byte-identical under pandas 2.3.3
+  and 3.1.1; their values now equal the committed run files exactly (9,642 of 9,642 cells; the
+  old summaries differed in 1,415 cells by at most 1.7e-14 relative). No run file, paper table
+  or verdict changed. Tests pass on both pandas versions.
+
+## Iteration 74: 2026-11-11 (interactive)
+- Stage / item: S06 RC-B0 done; S09 RC-G2 ready.
+- Committed RC-B0's three results files unchanged (SHA-256 equal to the uploads):
+  `results/E2/nobudget/seed0/efficiency.csv`, `efficiency_setup.json`, `environment.json`.
+  RC-B0 section 6 filled: both peak readings 7,618,471,936 bytes (identical, within 3 %);
+  state 7,509,246,624; decoder layers 5,549,543,424; vision 1,337,368,736; other 622,334,464;
+  warm latency 0.9872 s; cold 6.70 s then 1.91 s (not a budget metric); the extra
+  `E1_seed2_adapter` input ignored correctly.
+- Budget targets by `budgets.target_value`: B1 6,786,040,422.4, B2 5,953,608,908.8, B3
+  5,121,177,395.2 bytes (3 % bands in RC-B0 section 6).
+- RC-G2's 30-group check implemented (D07 required it before `ready`): `ClinicalCriterion.
+  exact_scores` (same probes and weights; the exact branch of `score` shares the helper),
+  `stage.run_first_order_check` (30 seeded random channel groups, Spearman against the
+  committed first-order scores, `first_order_check.csv` and `first_order_check:*` rows),
+  `scripts/check_first_order.py`, RC-G2's last step. A report, not a gate. Tests.
+- H2 flag in `docs/schedule.md` (conditional B3 arm seeds 1 and 2, about 6 GPU h); hours
+  updated for the check (about 2.2 h; plan about 241-248 h). Ready: RC-G2, RC-E3 seed 0,
+  RC-E4 seed 0, RC-E9, RC-E10 step 1.
+
+## Iteration 75: 2026-11-11 (interactive)
+- Stage / item: S08-S09 scheduling; RC-G2 in sessions.
+- Reassigned (Soheil): RC-E3 seed 0 to Amir; RC-E9, then RC-E4 seed 0, to account 3; Soheil
+  runs RC-E10 step 1 and RC-G2. `docs/schedule.md` (phases, accounts, loads: Soheil about
+  65.8 h, Amir about 88.7 h, account 3 about 87.0-94.0 h, estimates) and the cards updated.
+- RC-G2 in four sessions: `run_card.py --card RC-G2 --only <part>` (parts E5:magnitude,
+  E5:activation, E5:taylor, E6, E7:scores, E7, E7:check); one hand-off per pruned run
+  (`G2_B2_seed0_pruned_<run>`); `--only E7` / `E7:check` refused until E7's scores are
+  committed; the teacher cache is needed only by sessions with a recovery. No full resume: a
+  stopped run repeats its budget search (the recovery's resume state is not handed off).
+  Kaggle session limit: 12 h per GPU session (secondary sources quoting Kaggle's docs;
+  kaggle.com is not reachable from the agent's session). RC-G2 section 3 has the four cells,
+  attachments, datasets to save and estimates (about 25 GPU h with the searches, about 1.4 h
+  per search for E5 / E7 and 0.8 h for E6, from RC-B0's reading times).
+- Datasets each account needs shared: `docs/schedule.md` section 7, "Datasets". Tests.
+
+## Iteration 76: 2026-11-12 (interactive)
+- Stage / item: S11 E10, RC-E10 step 1 done.
+- Committed `results/smoke/RC-E10/tokenizer_check.csv` as reported (the bytes equal what the
+  check's writer gives for those values): 5,238 cache ids, 0 differ; 9,991 of 10,000 answers
+  re-encoded exactly (0.9991 >= 0.99); passed.
+- `training.mode: offline_kd` in `configs/experiments/E10.yaml` (section 11 item 13 rule).
+- Qwen/Qwen3-VL-2B-Instruct pinned at revision 89644892e4d85e24eaac8bacfd4f463576704203 (the
+  hash Soheil gave; equal to the 2026-10-12 `sha_seen`) in its model config; the tokenizer
+  check now reads `resolved_revision` like the model loader (it printed "@ None" before).
+- RC-E10 ready for training, validation and benchmark (Soheil, account 1; `medcompress-data`,
+  `e0-teacher-cache`; about 4-5.3 GPU h, estimate). Tests.
+
+## Iteration 77: 2026-11-12 (interactive)
+- Stage / item: S08 E9, RC-E9 out of memory in GPTQ (commit 262a4f1, T4 x2).
+- `gptq_torch`: the dampening in place on the diagonal (no identity matrix), each (in x in)
+  matrix freed as soon as the next exists (at most 3 alive instead of 5); `gptq_peak_bytes`.
+  `gptq_quantize_decoder` frees each Hessian after its last user. The calibration inputs stay on
+  the CPU and move to the GPU per forward pass. E9's teacher is loaded under per-GPU caps
+  (`gptq_max_memory`, `load_model(max_memory=...)`) that keep room for the largest GPTQ matrix
+  plus 1.5 GiB on each T4.
+- Results unchanged: tests compare the new code with a verbatim copy of the old one (codes,
+  scales and output error equal for single matrices at 4 and 8 bit, and every matrix of the
+  tiny model's decoder: the E3 / E8 path). Expected E9 peak about 12.0-12.6 GiB per T4
+  (estimate; RC-E9 section 6).
+
+## Iteration 78: 2026-11-13 (interactive)
+- Stage / item: S08 E9, RC-E9 attempt 2 out of memory on GPU 1 (commit 5a25147).
+- Cause found offline: `from_pretrained`'s balanced placement put 8.40 GiB on GPU 1 (layers
+  11-27, norm, `lm_head`), not the assumed 7.7 GiB (the teacher's architecture built without
+  weights; its parameter count equals `parameters_stored`).
+- New `compression/quantization/placement.py`: every module counted (`placement_units`), an
+  explicit balanced device map under the caps (`plan_device_map`; teacher: GPU 0 7.92 GiB,
+  GPU 1 7.53 GiB), printed with the bytes actually loaded; `pick_gptq_device` (own GPU, other
+  GPU, CPU); `memory_report` per layer. `gptq_torch(device=, consume_hessian=)` under
+  `inference_mode`; the decoder hands each Hessian to its last user; expandable segments for
+  quantization cards.
+- Results unchanged on the GPUs (tests against the old code); the CPU fallback (38 s per
+  `down_proj`, measured here) can differ in the last bits and is logged. Expected peak about
+  11.0 / 10.6 GiB (up to 11.9 / 11.5 GiB). Tests.
+
+## Iteration 79: 2026-11-13 (interactive)
+- Stage / item: RC-G2 session 1 failed (commit 5a25147): the scoring stage's student stayed on
+  GPU 0, the recovery stage's load in the same process was offloaded ("Tensor.item() cannot be
+  called on meta tensors").
+- `run_experiment.py` runs every stage in its own process (`run_stages_in_processes`), so each
+  stage starts on a clean GPU; the first failing stage stops the run with its exit code.
+- `load_model`: `gpu_memory_check` before every load (frees this process's cache, prints each
+  GPU's free memory, refuses above 1.5 GiB in use); `explicit_device_map` (never "auto": one
+  GPU `{"": 0}`, several an explicit balanced plan of every module, `placement.plan_for_model`;
+  CPU / disk entries refused); `require_on_gpu` after the load and after the adapter (any
+  parameter on CPU or meta, any meta buffer, any CPU / disk map entry is refused). Also in
+  `load_trained_student` and `load_run_model` (pruned and quantized models). A refused load ends
+  the stage with exit code 6.
+- Audit: the cards that ran several stages in one process (RC-E3, RC-E4, RC-E8, RC-E9, the
+  pruning runs E5-E7 and A1-A6) are all covered by the change; RC-E10 and the test
+  evaluations were already separate processes. RC-E3 seed 0 at 262a4f1: the check is in its
+  card, section 5b.
+- Tests (CPU and torch).
+
+## Iteration 80: 2026-11-13 (interactive)
+- Stage / item: RC-E3 seed 0 failed in the first w4 Cholesky factorization at d2322fa.
+  Calibration already cast inputs to FP32. Explicitly keep the running average and product
+  in FP32 and report non-finite Hessians with the matrix names and input bounds.
+- Add a per-linear calibration diagnostic and log any finite-Hessian damping retries in the
+  run metrics and checkpoint manifest. Cover FP16 overflow, NaN inputs, dead columns and
+  successful retries with synthetic tests.
+- RC-E9 attempt 3 finished quantization at 54b5b6d before evaluation ran out of memory.
+  Reuse the verified hand-off and start validation, benchmarking and test evaluation in
+  separate processes using the explicit teacher placement.
