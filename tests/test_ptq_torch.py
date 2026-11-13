@@ -242,7 +242,9 @@ def test_the_decoder_codes_are_the_same_as_before_the_change(
     assert all(v.device.type == "cpu" for b in batches for v in b.values())  # kept off the GPU
     now = gptq_quantize_decoder(tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lambda _m: None)
 
-    def old(weight, hessian, *, device=None, consume_hessian=False, **kwargs):  # type: ignore[no-untyped-def]
+    def old(
+        weight, hessian, *, device=None, consume_hessian=False, matrix=None, log=None, **kwargs
+    ):  # noqa: E501
         assert device is None or torch.device(device) == weight.device  # the CPU here
         codes, scales, loss = _gptq_torch_before_2026_11_12(weight, hessian.clone(), **kwargs)
         return gptq_mod.GPTQResult(codes, scales, kwargs["bits"], kwargs["group_size"], loss)
@@ -372,3 +374,54 @@ def test_the_cpu_fallback_and_the_handed_over_hessian_give_the_same_codes(tmp_pa
     for other in (taken, moved):
         assert np.array_equal(kept.codes, other.codes)
         assert np.array_equal(kept.scales, other.scales)
+
+
+@pytest.mark.parametrize("nan_input", [False, True])
+def test_half_calibration_hessian(nan_input: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+    from medcompress.compression.pruning.surgery import find_decoder_stack
+    from medcompress.compression.quantization.ptq import collect_hessians
+
+    model = tiny_vlm.tiny_wrapper(seed=0)
+    layer = find_decoder_stack(model.module).layers[0]
+    linear = layer.self_attn.q_proj.half()
+    x = torch.eye(linear.in_features, dtype=torch.float16) * 2048
+    x[:, 0] = 0
+
+    # Drive the tiny model's real projection and the calibration hook with synthetic FP16 inputs.
+    def forward(**_kwargs):
+        linear(x)
+
+    monkeypatch.setattr(model.module, "forward", forward)
+    if nan_input:
+        x[0, 0] = float("nan")
+        with pytest.raises(
+            ValueError,
+            match=r"layer 0 q_proj: Hessian has \d+ non-finite entries; input min=.*max=",
+        ):
+            collect_hessians(model, 0, [{}], ("q_proj",))
+        return
+
+    assert not torch.isfinite(x.T @ x).all()
+    h = collect_hessians(model, 0, [{}, {}], ("q_proj",))["q_proj"]
+    assert h.dtype == torch.float32 and torch.isfinite(h).all()
+    acc = HessianAccumulator(linear.in_features)
+    acc.add(x.numpy())
+    acc.add(x.numpy())
+    # Positive weights avoid the negative half-step at the symmetric grid's endpoint.
+    weight = torch.rand(linear.weight.shape, generator=torch.Generator().manual_seed(4))
+    ref = gptq_numpy(weight.numpy(), acc.hessian, bits=4, group_size=16)
+    got = gptq_torch(weight, h, bits=4, group_size=16)
+    np.testing.assert_array_equal(got.codes, ref.codes)
+    assert np.all(got.dequantized()[:, 0] == 0)
+
+
+def test_cholesky_retries_use_absolute_damping_increments() -> None:
+    hessian = torch.tensor([[1.0, 1.012], [1.012, 1.0]])
+    log = []
+    result = gptq_torch(
+        torch.ones(1, 2), hessian, bits=4, group_size=2, matrix="layer0.q_proj", log=log.append
+    )
+    assert result.damping_retries == 1
+    assert result.effective_damping == 0.0125
+    assert torch.equal(hessian, torch.tensor([[1.0, 1.012], [1.012, 1.0]]))
+    assert "layer0.q_proj" in log[0] and "final damping 0.0125" in log[-1]

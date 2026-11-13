@@ -8,9 +8,8 @@
   test after the freeze, and timed with the budget protocol.
 - Purpose: a supplementary comparison at matched memory: a quantized big model against the
   compressed small ones (D08).
-- Status: `ready` (2026-11-13, third attempt): attempts 1 (262a4f1) and 2 (5a25147) ran out of
-  GPU memory in GPTQ (section 6). Now an explicit, printed placement of every module, the GPTQ
-  math wherever there is room (CPU last), a per-layer memory log. Run it on the fix commit
+- Status: `ready` to resume evaluation (2026-11-13). Attempt 3 saved the quantized hand-off
+  before evaluation ran out of memory (section 6). Attach that hand-off for the rerun.
 
 ## 2. Requirements
 
@@ -34,11 +33,14 @@ in section 6 and stop: the agent will move that step to the CPU.
 
 - **Who:** Soheil, on account 3 (lent by Farzan; 2026-11-08); runs before RC-E4 seed 0 there (2026-11-11).
 - **Kaggle settings:** GPU T4 x2 (both T4s); Internet on.
-- **Attach (Add Input), all private datasets:** the shared data of RC-D1; teacher adapter.
+- **Attach (Add Input), all private datasets:** `medcompress-data`, `e0-teacher-adapter` and
+  `e9-seed0-quantized` (folder `E9_seed0_quantized` from attempt 3). The quantized hand-off
+  contains decoder codes and scales. The adapter is still needed to rebuild the parent.
 - **Checks before anything runs:** every stage command takes `--data-root $DATA` and one `--from` per hand-off, found by their manifests, never by fixed paths: `DATA=$(python scripts/find_inputs.py data) || exit 1` (the folder of a `bundle_manifest.json` with `private/` next to it) and `X=$(python scripts/find_inputs.py handoff <name>) || exit 1` (the folder of a `bundle_manifest.json` whose path contains the hand-off's name); a missing input stops the cell with a clear message. The SHA-256 of every file is compared with the dataset's manifest; if one differs, or a hand-off the card needs is missing, the run stops before a model is loaded.
 - **Unattended (Save & Run All):** `notebooks/run_card.ipynb` with `CARD = "RC-E9"` and `SEED = None` (`DATA` and `FROM` stay empty); it runs `python scripts/run_card.py --card RC-E9`, which finds the shared data and every attached hand-off by their manifests. The runner checks the library versions (torchao 0.16.0 or newer, optimum 1.24.0 or newer, the pins of `requirements/`) and the GPUs, runs the steps below, and prints section 6 (also saved as `/kaggle/working/run_report_<card>.md`). Steps:
-  - run E9 seed0
-  - test evaluation E9 seed0
+  - Quantize E9 seed 0 only if the quantized checkpoint is absent.
+  - Evaluate validation and run the efficiency benchmark in separate processes.
+  - Evaluate the filtered and unfiltered test splits in separate processes.
 - **Hand-offs it writes** (each folder under `/kaggle/working/handoff/` becomes ONE private dataset, shared with the team only; manifest with SHA-256, commit, config hash, experiment, seed, budget): `E9_seed0_quantized`.
 - **Results to commit:** the copies under `/kaggle/working/results_to_commit/` (`docs/team_setup.md`).
 - **Session limits:** a T4 x2 session counts **once** against the weekly quota (measured 2026-10-19: a 17-minute T4 x2 session used 16 minutes). The session time limit is unknown here (TODO: the team checks on Kaggle). This card uses T4 x2. A training run saves its state every 50 updates and continues from it in a new session (`docs/team_setup.md`, "If a session stops").
@@ -49,6 +51,7 @@ One cell (Kaggle settings and inputs of section 2b; **Save Version -> Save & Run
 
 ```bash
 %%bash
+set -euo pipefail
 cd /kaggle/working && rm -rf medvlm-compression-audit
 git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
 cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
@@ -66,9 +69,9 @@ sys.exit(0 if version >= (0, 16) else 1)
 PY
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
 python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
-python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/find_inputs.py handoffs
+python scripts/find_inputs.py handoff E9_seed0_quantized > /dev/null
 python scripts/run_card.py --card RC-E9 2>&1 | tee /kaggle/working/run_card_RC-E9.txt
-echo "run_card exit code: ${PIPESTATUS[0]}"
 ```
 
 Keep `outputs/` (the per-probe `outcomes*.npz` files) as a private dataset too: the paired
@@ -162,7 +165,25 @@ about 10.6 GiB**; with attempt 2's unexplained 0.9 GiB, about 11.9 and 11.5 GiB.
 14.56 GiB (about 14.1 usable after the CUDA context). If a GPU is short, the math moves
 instead of failing.
 
-**Attempt 3:**
+**Attempt 3 (reported by Soheil, 2026-11-13; commit 54b5b6d, T4 x2):** GPTQ finished all
+28 layers with reported peaks of 13.53 GiB (GPU 0) and 13.14 GiB (GPU 1). It saved
+`checkpoints/E9/nobudget/seed0/quantized` and the `E9_seed0_quantized` hand-off (two checkpoint
+files, 3.47 GB). Validation evaluation failed in the allocator warmup while reloading the
+teacher: GPU 0 had 6.46 GiB free and the process already used 8.10 GiB, including 7.93 GiB
+allocated, when the loader requested 7.89 GiB. That commit ran both stages in one process.
+
+**Resume:** the runner verifies and attaches the existing hand-off, skips stage 03, and
+starts validation, benchmark and both test evaluations in fresh processes. Each uses the
+explicit teacher placement and swaps the decoder matrices one at a time. The FP16 parent
+plan is 7.92 / 7.53 GiB of weights versus 14.56 GiB per T4, leaving 6.64 / 7.03 GiB before
+runtime overhead. The largest replacement adds about 0.29 GiB for its packed weights and
+a temporary FP32 reference weight during kernel verification. Allow roughly 9 / 8.6 GiB
+allocated during loading as a planning estimate with additional overhead for adapter merge
+and packing. Actual allocator peaks and generation memory still need a Kaggle reading.
+Keep the original stage-03 metrics from attempt 3, if available. The resumed card cannot
+reconstruct its original timing from the two checkpoint files.
+
+**Resumed evaluation:**
 
 - Run by / date:
 - Commit actually used:

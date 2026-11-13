@@ -125,7 +125,7 @@ def wanted_items(plan: CardPlan, config: Mapping[str, Any]) -> tuple[set[tuple[s
     for step in plan.steps:
         if step.skip_if_present is not None:
             needs.append(step.skip_if_present)
-            if step.skip_if_present.run is not None:
+            if step.skip_if_present.kind == "adapter" and step.skip_if_present.run is not None:
                 needs.append(Need("resume", step.skip_if_present.run))
         if step.skip_if_pruned is not None:
             needs.append(Need("pruned", step.skip_if_pruned))
@@ -240,6 +240,15 @@ def run_steps(
             continue
         present = need_path(step.skip_if_present, config) if step.skip_if_present else None
         if present is not None and present.exists():
+            if step.skip_if_present and step.skip_if_present.kind == "quantized":
+                from medcompress.compression.quantization.ptq import MANIFEST_NAME, TENSORS_NAME
+
+                if not all((present / name).is_file() for name in (MANIFEST_NAME, TENSORS_NAME)):
+                    message = f"incomplete GPTQ checkpoint at {present}; use a fresh session"
+                    session.steps.append(StepOutcome(step.label, "failed", 1))
+                    session.unusual.append(message)
+                    print(f"STOP: {message}")
+                    break
             session.steps.append(StepOutcome(step.label, "skipped"))
             print(f"== {step.label}: skipped, {step.skip_if_present.label} is already there")  # type: ignore[union-attr]
             continue

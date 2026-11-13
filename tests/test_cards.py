@@ -411,3 +411,43 @@ def test_quantization_cards_get_expandable_segments(tmp_path: Path) -> None:
     assert env["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"
     assert "PYTORCH_CUDA_ALLOC_CONF" not in runner_mod.session_env(tmp_path, 1, {})
     assert build_plan("RC-E9").quantization and not build_plan("RC-G2").quantization
+
+
+@pytest.mark.parametrize("attached", [False, True])
+def test_e9_reuses_the_quantized_handoff(tmp_path: Path, attached: bool) -> None:
+    from medcompress.compression.quantization.ptq import MANIFEST_NAME, TENSORS_NAME
+    from medcompress.utils.bundles import export_handoff, verify_bundle
+
+    plan = build_plan("RC-E9")
+    config = _config(tmp_path / "work")
+    paths = []
+    if attached:
+        source = _config(tmp_path / "original")
+        rel = "E9/nobudget/seed0/quantized"
+        checkpoint = Path(source["paths"]["checkpoint_root"]) / rel
+        checkpoint.mkdir(parents=True)
+        (checkpoint / MANIFEST_NAME).write_text("{}", encoding="utf-8")
+        (checkpoint / TENSORS_NAME).write_bytes(b"test")
+        bundle = tmp_path / "E9_seed0_quantized"
+        export_handoff(source, [("checkpoint_root", rel)], bundle, kind="quantized", meta={})
+        paths, ignored = runner_mod.select_handoffs(plan, config, [bundle])
+        assert paths == [bundle] and not ignored
+        verify_bundle(bundle, kind="quantized")
+        config["paths"]["checkpoint_root"] = str(bundle / "checkpoint_root")
+
+    calls = []
+    session = runner_mod.Session(plan, tmp_path / "work", "now")
+    runner_mod.run_steps(
+        session,
+        config,
+        {},
+        repo=tmp_path,
+        data_root=None,
+        handoffs=paths,
+        runner=lambda command, _env, _log: calls.append(command[1]) or 0,
+    )
+    assert session.ok
+    assert session.steps[0].status == ("skipped" if attached else "ok")
+    expected = ["scripts/06_evaluate.py", "scripts/07_benchmark_efficiency.py"]
+    expected.extend(["scripts/06_evaluate.py"] * 2)
+    assert calls == (expected if attached else ["scripts/03_quantize.py", *expected])

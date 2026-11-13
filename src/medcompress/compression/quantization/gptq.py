@@ -37,6 +37,8 @@ class GPTQResult:
     bits: int
     group_size: int
     output_error: float  # sum over columns of squared rounding error weighted by the Hessian
+    damping_retries: int = 0
+    effective_damping: float = DEFAULT_DAMPING
 
     def dequantized(self) -> np.ndarray:
         """The rounded weights ``(q - z) * s``."""
@@ -134,7 +136,7 @@ def gptq_numpy(
             block[:, i:] -= np.outer(err, h_block[i, i:])
             errors[:, i] = err
         w[:, stop:] -= errors @ h_inv[start:stop, stop:]
-    return GPTQResult(codes, scales, bits, group_size, loss)
+    return GPTQResult(codes, scales, bits, group_size, loss, effective_damping=damping)
 
 
 def gptq_torch(
@@ -147,6 +149,8 @@ def gptq_torch(
     block_size: int = DEFAULT_BLOCK_SIZE,
     device: Any = None,
     consume_hessian: bool = False,
+    matrix: str = "matrix",
+    log: Any = print,
 ) -> GPTQResult:
     """The same algorithm as :func:`gptq_numpy` with torch tensors (float32 on their device).
 
@@ -163,7 +167,7 @@ def gptq_torch(
 
     with torch.inference_mode():  # no autograd; the Hessians of the stage are inference tensors
         return _gptq_torch(weight, hessian, bits, group_size, damping, block_size, device,
-                           consume_hessian)  # fmt: skip
+                           consume_hessian, matrix, log)  # fmt: skip
 
 
 def _gptq_torch(
@@ -175,6 +179,8 @@ def _gptq_torch(
     block_size: int,
     device: Any,
     consume_hessian: bool,
+    matrix: str,
+    log: Any,
 ) -> GPTQResult:
     """The body of :func:`gptq_torch` (run under ``torch.inference_mode``)."""
     import torch
@@ -194,8 +200,28 @@ def _gptq_torch(
     # (in x in) matrices of the identity and its scaled copy. Each (in x in) matrix is freed as
     # soon as the next one is made, so at most two of them (three with the caller's Hessian)
     # are alive at once: 3 x 1.34 GiB for the teacher's down_proj (in 18,944), not 5.
-    h.diagonal().add_(damping * torch.mean(torch.diag(h)))
-    lower = torch.linalg.cholesky(h)
+    diagonal = h.diagonal()
+    original = diagonal.clone()
+    mean = original.mean()
+    retries = 0
+    effective = damping
+    while True:
+        diagonal.copy_(original).add_(effective * mean)
+        lower, info = torch.linalg.cholesky_ex(h)
+        if info.item() == 0:
+            break
+        del lower
+        if effective >= 0.1 or not torch.isfinite(mean) or mean <= 0:
+            raise torch.linalg.LinAlgError(
+                f"GPTQ {matrix}: Hessian Cholesky failed at damping {effective:.6g} "
+                f"(leading minor {info.item()}, diagonal mean {mean.item():.6g})"
+            )
+        retries += 1
+        effective = min(0.1, round(damping + retries * 0.0025, 12))
+        log(f"GPTQ {matrix}: Cholesky retry {retries} with damping {effective:.6g}")
+    if retries:
+        log(f"GPTQ {matrix}: Cholesky succeeded at final damping {effective:.6g}")
+    del diagonal
     del h
     inverse = torch.cholesky_inverse(lower)
     del lower
@@ -232,7 +258,13 @@ def _gptq_torch(
         w[:, stop:] -= errors @ h_inv[start:stop, stop:]
     del h_inv, w
     return GPTQResult(
-        codes.cpu().numpy(), scales.double().cpu().numpy(), bits, group_size, float(loss)
+        codes.cpu().numpy(),
+        scales.double().cpu().numpy(),
+        bits,
+        group_size,
+        float(loss),
+        retries,
+        effective,
     )
 
 

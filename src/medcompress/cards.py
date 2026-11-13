@@ -538,8 +538,18 @@ def build_plan(
     if card == "RC-E9":
         _no_seed(card, seed)
         run = Run("E9")
+        steps = (
+            Step(
+                f"quantize {run.label}",
+                _script("03_quantize.py", *run.args()),
+                skip_if_present=Need("quantized", run),
+            ),
+            Step(f"validation {run.label}", _script("06_evaluate.py", *run.args())),
+            Step(f"benchmark {run.label}", _script("07_benchmark_efficiency.py", *run.args())),
+            *_test_evals(run),
+        )
         return CardPlan(
-            card, "E9 the teacher at 4 bit", 2, (_experiment(run), *_test_evals(run)),
+            card, "E9 the teacher at 4 bit", 2, steps,
             handoffs=(Handoff("quantized", (run,), "E9_seed0_quantized"),),
             needs=(Need("teacher_adapter"),), quantization=True, internet=True,
         )  # fmt: skip

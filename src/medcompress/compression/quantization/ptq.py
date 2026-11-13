@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -315,10 +315,13 @@ def collect_hessians(
     layer_index: int,
     batches: Sequence[Mapping[str, Any]],
     names: Sequence[str],
+    *,
+    inspect_inputs: Callable[[str, Any], None] | None = None,
 ) -> dict[str, Any]:
     """``{target name: H}`` for one decoder layer: ``H = 2 / n * sum x x^T`` of its inputs.
 
-    Targets that read the same input (q/k/v; gate/up) share one Hessian. The forward pass is
+    Targets that read the same input (q/k/v; gate/up) share one Hessian.
+    An input observer bypasses accumulation and sees all target linears. The forward is
     cut after the layer, so calibrating layer ``i`` costs ``i + 1`` layers per example.
     """
     import torch
@@ -330,22 +333,36 @@ def collect_hessians(
     parents = {"self_attn": layer.self_attn, "mlp": layer.mlp}
     sources: dict[str, str] = {}
     for name in names:
-        sources.setdefault(_SHARED_INPUT[name], name)
+        sources.setdefault(name if inspect_inputs else _SHARED_INPUT[name], name)
     sums: dict[str, Any] = {}
     counts: dict[str, int] = {}
+    bounds: dict[str, tuple[Any, Any]] = {}
     handles = []
 
     def make_hook(source: str) -> Any:
         def hook(_module: Any, args: tuple) -> None:
-            x = args[0].detach().reshape(-1, args[0].shape[-1]).to(torch.float32)
-            n_old = counts.get(source, 0)
-            total = n_old + x.shape[0]
-            if source not in sums:
-                sums[source] = torch.zeros(x.shape[1], x.shape[1], device=x.device)
-            sums[source] *= n_old / total
-            x = (2.0 / total) ** 0.5 * x
-            sums[source] += x.T @ x
-            counts[source] = total
+            inputs = args[0].detach().reshape(-1, args[0].shape[-1])
+            if inspect_inputs is not None:
+                inspect_inputs(sources[source], inputs)
+                return
+            if inputs.shape[0] == 0:
+                return
+            with torch.autocast(device_type=inputs.device.type, enabled=False):
+                x = inputs.float()
+                low, high = torch.aminmax(x)
+                if source in bounds:
+                    previous_low, previous_high = bounds[source]
+                    low = torch.minimum(previous_low, low)
+                    high = torch.maximum(previous_high, high)
+                bounds[source] = low, high
+                n_old = counts.get(source, 0)
+                total = n_old + x.shape[0]
+                if source not in sums:
+                    sums[source] = x.new_zeros((x.shape[1], x.shape[1]))
+                sums[source] *= n_old / total
+                x = (2.0 / total) ** 0.5 * x
+                sums[source] += x.T @ x
+                counts[source] = total
 
         return hook
 
@@ -368,6 +385,21 @@ def collect_hessians(
     finally:
         for handle in handles:
             handle.remove()
+    if inspect_inputs is not None:
+        return {}
+    for source, name in sources.items():
+        if source not in sums:
+            raise ValueError(f"GPTQ layer {layer_index} {name}: no calibration tokens")
+        h = sums[source]
+        # Bound the temporary masks for the teacher's largest Hessian.
+        nonfinite = sum((~torch.isfinite(chunk)).sum() for chunk in h.split(256))
+        if nonfinite.item():
+            low, high = bounds[source]
+            matrices = ", ".join(n for n in names if _SHARED_INPUT[n] == source)
+            raise ValueError(
+                f"GPTQ layer {layer_index} {matrices}: Hessian has {nonfinite.item()} "
+                f"non-finite entries; input min={low.item():.6g}, max={high.item():.6g}"
+            )
     return {name: sums[_SHARED_INPUT[name]] for name in names}
 
 
@@ -378,6 +410,7 @@ def gptq_quantize_decoder(
     *,
     log: Any = print,
     pick_device: Any = None,
+    damping_retries: dict[str, dict[str, float | int]] | None = None,
 ) -> dict[str, QuantizedMatrix]:
     """Round every target matrix of the decoder with GPTQ, layer after layer (in place).
 
@@ -423,6 +456,7 @@ def gptq_quantize_decoder(
             if device != linear.weight.device:
                 log(f"GPTQ: layer {i + 1} {name}: math on {device}, not "
                     f"{linear.weight.device} (room); {memory_report()}")  # fmt: skip
+            key = target_path(i, name)
             result = gptq_torch(
                 linear.weight,
                 hessians.pop(name),
@@ -432,11 +466,17 @@ def gptq_quantize_decoder(
                 block_size=recipe.block_size,
                 device=device,
                 consume_hessian=last,
+                matrix=key,
+                log=log,
             )
+            if damping_retries is not None and result.damping_retries:
+                damping_retries[key] = {
+                    "retries": result.damping_retries,
+                    "effective_damping": result.effective_damping,
+                }
             with torch.no_grad():
                 rounded = torch.as_tensor(result.dequantized(), dtype=linear.weight.dtype)
                 linear.weight.copy_(rounded.to(linear.weight.device))
-            key = target_path(i, name)
             records[key] = QuantizedMatrix(
                 key, result.codes, result.scales, recipe.weight_bits, recipe.group_size
             )
@@ -598,7 +638,7 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
         teacher = load_config(config["components"]["teacher"])
         spec = ModelSpec.from_config(teacher)
         device_map = _teacher_device_map(spec, teacher)  # explicit, every module counted
-        model = load_model(spec, image_longest_side=side, device_map=device_map or "auto")
+        model = load_model(spec, image_longest_side=side, device_map=device_map)
         placed = placed_bytes(getattr(model, "module", model))
         print(
             "teacher placement: loaded "
@@ -664,7 +704,14 @@ def run_quantization(
             model = load_parent(config, run, int(side))
         started = time.perf_counter()
         batches = calibration_batches(model, calibration, Path(paths["data_root"]))
-        records = gptq_quantize_decoder(model, batches, recipe)
+        retries: dict[str, dict[str, float | int]] = {}
+        records = gptq_quantize_decoder(model, batches, recipe, damping_retries=retries)
+        rows["quantization_damping_retries"] = sum(r["retries"] for r in retries.values())
+        if retries:
+            rows["quantization_max_effective_damping"] = max(
+                r["effective_damping"] for r in retries.values()
+            )
+            extra["damping_retries"] = retries
         rows["quantization_seconds"] = time.perf_counter() - started
         rows["quantization_calibration_images"] = float(len(calibration))
         extra["calibration_sample_ids"] = [s.sample_id for s in calibration]

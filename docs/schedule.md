@@ -226,6 +226,11 @@ training + 0.53 h validation, measured on seed 0).
 | Amir (2) | 8.1 (RC-E3 seed 0: 3 x under 1 h GPTQ + 3 x 1.7 h evaluation; 2026-11-11) + 17.3 (E5 trend) + 25.7 (A4 `n64`, `n256`) + 24.5 (seed 2: E2 5.2, E7 10.8, comparator 2.9, A1 2.9, E3 `w8` 2.7) + 13.1 (RC-L1 E7@30k) = **about 88.7 h** |
 | Account 3 (Soheil) | 3.5 (RC-E9) + 8.8-15.8 (RC-E4 seed 0: 7.1-14.1 h training + 1.7 h evaluation; 2026-11-11) + 17.0 (E6, E7, E8 trend) + 33.2 (A1, A2, A3, A5, A6 seed 0) + 24.5 (seed 1, as seed 2) = **about 87.0-94.0 h** |
 
+2026-11-13 reruns: RC-E3 seed 0 needs a full rerun after the first `w4` Cholesky failure.
+RC-E9 resumes evaluation and benchmarking from the verified `e9-seed0-quantized` dataset
+alongside the shared data and teacher adapter (RC-E9 section 3). The time table includes the
+original quantization work. RC-G2 session 1 still runs at `c624d0f` or later.
+
 Reassigned on 2026-11-11 (Soheil): RC-E3 seed 0 to Amir; RC-E9, then RC-E4 seed 0, to account
 3; Soheil keeps RC-G2 and RC-E10. Account 3 is then above three weeks of 30 h by up to about
 4 h if E4 takes the long end of its estimate; Soheil's account has about 24 h of room. RC-G2's

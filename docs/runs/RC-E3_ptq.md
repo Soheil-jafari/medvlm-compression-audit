@@ -130,6 +130,25 @@ unfiltered test evaluations are separate steps (their own process) and are not a
 
 ## 6. Run report (filled by the person who ran it)
 
+Seed 0 at `d2322fa` failed about 2.2 minutes into `w4` at the first Cholesky factorization
+(leading minor 1). That commit already cast activations to FP32, so the traceback alone
+cannot establish FP16 overflow. Rerun seed 0 in full after the Hessian validation fix.
+For a read-only diagnostic, use the setup in section 3 and replace the runner command and
+final echo with:
+
+```bash
+DATA=$(python scripts/find_inputs.py data)
+ADAPTER=$(python scripts/find_inputs.py handoff E2_seed0_adapter)
+CUDA_VISIBLE_DEVICES=0 python scripts/check_gptq_inputs.py --exp E3 --seed 0 \
+  --variant w4 --layers 0-2 --data-root "$DATA" --from "$ADAPTER"
+```
+
+The diagnostic prints per-batch statistics for each linear on the unquantized E2 parent.
+A finite FP32 Hessian and a non-finite FP16 Hessian demonstrate overflow in the diagnostic's
+FP16 path for that batch. The full rerun checks the actual accumulated Hessians. If finite
+Hessians require damping retries, report the retry count and maximum effective damping
+from the metrics, and the per-matrix entries from the checkpoint manifest.
+
 - Run by / date / seeds:
 - Commit actually used:
 - Hardware and `pip freeze | grep -E "torch|transformers|peft|gptqmodel|bitsandbytes"`:

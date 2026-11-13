@@ -291,7 +291,7 @@ def require_on_gpu(module: Any, what: str, *, cuda: bool | None = None) -> None:
 def load_model(
     spec: ModelSpec,
     *,
-    device_map: str | Mapping[str, Any] = "auto",
+    device_map: str | Mapping[str, Any] | None = "auto",
     quantization: Mapping[str, Any] | None = None,
     allow_candidate: bool = False,
     allow_remote_code: bool = False,

@@ -1339,3 +1339,13 @@ Append-only, newest at the bottom. One entry per iteration:
   card, section 5b.
 - Tests (CPU and torch).
 
+## Iteration 80: 2026-11-13 (interactive)
+- Stage / item: RC-E3 seed 0 failed in the first w4 Cholesky factorization at d2322fa.
+  Calibration already cast inputs to FP32. Explicitly keep the running average and product
+  in FP32 and report non-finite Hessians with the matrix names and input bounds.
+- Add a per-linear calibration diagnostic and log any finite-Hessian damping retries in the
+  run metrics and checkpoint manifest. Cover FP16 overflow, NaN inputs, dead columns and
+  successful retries with synthetic tests.
+- RC-E9 attempt 3 finished quantization at 54b5b6d before evaluation ran out of memory.
+  Reuse the verified hand-off and start validation, benchmarking and test evaluation in
+  separate processes using the explicit teacher placement.

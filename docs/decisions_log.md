@@ -725,6 +725,11 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-13 (Soheil):** rerun RC-E3 seed 0 in full after validating FP32 GPTQ Hessians.
+  For a finite Hessian that fails its first Cholesky factorization, log retries in 0.0025
+  increments up to 0.1 as a run deviation and keep the configured base damping.
+  Resume RC-E9 from attempt 3's saved quantized hand-off in fresh evaluation processes.
+
 ## Open decisions
 
 | Topic | Options / notes | Owner | Due |
