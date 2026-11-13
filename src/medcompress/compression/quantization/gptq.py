@@ -145,16 +145,47 @@ def gptq_torch(
     group_size: int,
     damping: float = DEFAULT_DAMPING,
     block_size: int = DEFAULT_BLOCK_SIZE,
+    device: Any = None,
+    consume_hessian: bool = False,
 ) -> GPTQResult:
     """The same algorithm as :func:`gptq_numpy` with torch tensors (float32 on their device).
 
     ``weight`` and ``hessian`` are torch tensors; the result holds NumPy arrays. Used by the
     quantization stage on the GPU (E3, E8, E9); the torch tests compare it with the reference.
+
+    ``device``: where the math runs (default: the weight's device); the inputs are copied there
+    (2026-11-13, :func:`~medcompress.compression.quantization.placement.pick_gptq_device`).
+    ``consume_hessian``: the caller hands over its last reference to ``hessian``; it is then
+    used as the working copy when it is already float32 on ``device`` (no copy), or freed as
+    soon as it is copied there. Neither changes the numbers on the same device.
     """
     import torch
 
-    w = weight.detach().to(torch.float32).clone()
-    h = hessian.detach().to(device=w.device, dtype=torch.float32).clone()
+    with torch.inference_mode():  # no autograd; the Hessians of the stage are inference tensors
+        return _gptq_torch(weight, hessian, bits, group_size, damping, block_size, device,
+                           consume_hessian)  # fmt: skip
+
+
+def _gptq_torch(
+    weight: Any,
+    hessian: Any,
+    bits: int,
+    group_size: int,
+    damping: float,
+    block_size: int,
+    device: Any,
+    consume_hessian: bool,
+) -> GPTQResult:
+    """The body of :func:`gptq_torch` (run under ``torch.inference_mode``)."""
+    import torch
+
+    target = weight.device if device is None else torch.device(device)
+    w = weight.detach().to(device=target, dtype=torch.float32, copy=True)
+    if consume_hessian and hessian.device == target and hessian.dtype == torch.float32:
+        h = hessian.detach()
+    else:
+        h = hessian.detach().to(device=target, dtype=torch.float32, copy=True)
+    del hessian  # with consume_hessian this was the last reference: freed (or now only ``h``)
     dead = torch.diag(h) == 0
     h[dead, dead] = 1.0
     w[:, dead] = 0.0
@@ -206,9 +237,10 @@ def gptq_torch(
 
 
 def gptq_peak_bytes(in_features: int, out_features: int) -> int:
-    """The GPU memory :func:`gptq_torch` needs for one matrix beyond the model (bytes): three
-    float32 (in x in) matrices (the caller's Hessian, and at most two of the copy, the Cholesky
-    factor, the inverse and its factor), the float32 copy of the weights and the uint8 codes."""
+    """An upper bound of the GPU memory GPTQ needs for one matrix beyond the model (bytes):
+    three float32 (in x in) matrices (the caller's Hessian, and at most two of the copy, the
+    Cholesky factor, the inverse and its factor), the float32 copy of the weights and the
+    uint8 codes. When the caller hands its Hessian over (``consume_hessian``), two suffice."""
     return (
         3 * 4 * in_features * in_features
         + 4 * out_features * in_features

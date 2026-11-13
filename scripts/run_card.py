@@ -203,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         session.failure = "environment check failed: " + "; ".join(problems)
         print("environment check failed:\n  " + "\n  ".join(problems), file=sys.stderr)
         return _finish(session, ENVIRONMENT_FAILED)
-    env = session_env(out, plan.gpus)
+    env = session_env(out, plan.gpus, quantization=plan.quantization)
     os.environ.update(env)  # the path roots of this session, for the checks below
     from medcompress.config import load_config
 

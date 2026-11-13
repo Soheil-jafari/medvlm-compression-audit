@@ -8,8 +8,9 @@
   test after the freeze, and timed with the budget protocol.
 - Purpose: a supplementary comparison at matched memory: a quantized big model against the
   compressed small ones (D08).
-- Status: `ready` (2026-11-12, again): the first attempt (commit 262a4f1) ran out of GPU memory in
-  GPTQ (section 6); fixed without changing the result. Run it again on the fix commit
+- Status: `ready` (2026-11-13, third attempt): attempts 1 (262a4f1) and 2 (5a25147) ran out of
+  GPU memory in GPTQ (section 6). Now an explicit, printed placement of every module, the GPTQ
+  math wherever there is room (CPU last), a per-layer memory log. Run it on the fix commit
 
 ## 2. Requirements
 
@@ -112,7 +113,56 @@ about 7.7 GiB of weights), and would have held five such matrices at its Cholesk
   Hessians, one example's activations, its inputs): **about 12.0-12.6 GiB of the T4's 14.56
   GiB**. By construction even a GPU filled to its cap keeps 4.33 + 1.5 GiB free.
 
-**Attempt 2:**
+**Attempt 2 (reported by Soheil, 2026-11-13; commit 5a25147, T4 x2): failed after "GPTQ: layer
+12/28 done".** `torch.cholesky_inverse(lower)` (gptq.py line 169) tried to allocate 1.34 GiB on
+GPU 1 with 12.24 GiB allocated by PyTorch. **Why:** the caps were right but the automatic
+"balanced" placement of `from_pretrained` put **8.40 GiB** of weights on GPU 1 (layers 11-27,
+the final norm, `lm_head`), not the 7.7 GiB the estimate assumed (reproduced offline with the
+same accelerate 1.15.0 on the teacher's architecture, built without weights; its parameter
+count equals `parameters_stored`, 8,292,166,656). With the caller's Hessian, the Cholesky factor,
+the weight copy and the codes (2.95 GiB) that is 11.35 GiB; about 0.9 GiB of the 12.24 is not
+accounted for (the new log will show it). The estimate of attempt 1's fix was wrong because it
+guessed the split instead of computing it.
+
+**The fix (2026-11-13; the numbers are unchanged on the GPUs):**
+1. **Per-layer memory log:** before and after every layer, each GPU's allocated, reserved and
+   peak memory (`GPTQ: layer i/28 start; GPU0 alloc .. / reserved .. / peak .. GiB; GPU1 ..`),
+   and a line whenever a matrix's math runs off its layer's GPU.
+2. **Nothing stays on the GPU between layers:** each layer's Hessians come from a fresh forward
+   of each calibration example (inputs moved from the CPU one at a time, since attempt 2) cut
+   after that layer; no hidden states are kept. Each Hessian is handed over to its last user
+   and freed inside GPTQ as soon as it is copied (`consume_hessian`), so a `down_proj` needs
+   two (in x in) matrices at a time, not three.
+3. **The GPTQ math goes where there is room** (`placement.pick_gptq_device`): the layer's GPU
+   if the allocator can hand out GPTQ's working memory (2.99 GiB for `down_proj`) plus 1 GiB,
+   else the other GPU, else the CPU in float32. Between the two T4s the numbers are identical.
+   On the CPU they can differ from the GPU's in the last bits (other Cholesky and matrix
+   routines), which can flip a code on a rounding tie; the log names every matrix that runs
+   there. **Expected extra time if the CPU is used:** 38 s per teacher `down_proj` (measured
+   2026-11-13 on 4 CPU threads, the agent's machine; Kaggle's 4 CPUs may be slower), the
+   other matrices (in 3,584) seconds; at most about 20 minutes if all 28 `down_proj` fell
+   back. Not expected with the plan below.
+4. **Explicit placement of every module** (`placement.placement_units`, `plan_device_map`):
+   the vision tower (patch embedding, 32 blocks, merger), the embeddings, the 28 layers, the
+   final norm, the rotary buffers and `lm_head`, 69 units, 15.45 GiB, balanced in order under
+   the 8.74 GiB caps: **GPU 0: vision, embeddings, layers 0-12 = 7.92 GiB (8,502,597,792 B);
+   GPU 1: layers 13-27, norm, rotary, `lm_head` = 7.53 GiB (8,081,736,192 B)**. The run prints
+   the plan and, after loading, the bytes actually on each device. Quantization cards also run
+   with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (no fragments left by freed
+   matrices; no effect on the numbers).
+5. Tests: the codes and scales equal the old code's for single matrices and the tiny model's
+   whole decoder (also with the math forced to the CPU and with the handed-over Hessians: on
+   this machine the tiny model is on the CPU, so that test checks the plumbing, not GPU-versus-
+   CPU rounding); the teacher's plan above is a test.
+
+**Expected peak per GPU (estimate, allocated by PyTorch):** weights + the larger of the Hessian
+collection (the `down_proj` Hessian and its temporary product, 2.68 GiB, plus small ones and
+one example's activations, about 0.3 GiB) and GPTQ (2.99 GiB): **GPU 0 about 11.0 GiB, GPU 1
+about 10.6 GiB**; with attempt 2's unexplained 0.9 GiB, about 11.9 and 11.5 GiB. A T4 has
+14.56 GiB (about 14.1 usable after the CUDA context). If a GPU is short, the math moves
+instead of failing.
+
+**Attempt 3:**
 
 - Run by / date:
 - Commit actually used:

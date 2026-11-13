@@ -242,8 +242,9 @@ def test_the_decoder_codes_are_the_same_as_before_the_change(
     assert all(v.device.type == "cpu" for b in batches for v in b.values())  # kept off the GPU
     now = gptq_quantize_decoder(tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lambda _m: None)
 
-    def old(weight, hessian, **kwargs):  # type: ignore[no-untyped-def]
-        codes, scales, loss = _gptq_torch_before_2026_11_12(weight, hessian, **kwargs)
+    def old(weight, hessian, *, device=None, consume_hessian=False, **kwargs):  # type: ignore[no-untyped-def]
+        assert device is None or torch.device(device) == weight.device  # the CPU here
+        codes, scales, loss = _gptq_torch_before_2026_11_12(weight, hessian.clone(), **kwargs)
         return gptq_mod.GPTQResult(codes, scales, kwargs["bits"], kwargs["group_size"], loss)
 
     monkeypatch.setattr(gptq_mod, "gptq_torch", old)
@@ -254,3 +255,120 @@ def test_the_decoder_codes_are_the_same_as_before_the_change(
     for key, record in now.items():
         assert np.array_equal(record.codes, before[key].codes), key
         assert np.array_equal(record.scales, before[key].scales), key
+
+
+# ------------------------------------------------- placement and the GPTQ device (2026-11-13)
+
+
+def test_the_plan_places_every_tensor_once_balanced_and_under_the_caps() -> None:
+    from medcompress.compression.quantization.placement import (
+        device_map_lines,
+        placement_units,
+        plan_device_map,
+    )
+
+    model = tiny_vlm.tiny_wrapper(seed=0).module
+    units = placement_units(model)
+    names = [n for n, _ in model.named_parameters()] + [n for n, _ in model.named_buffers()]
+    for name in names:  # every tensor under exactly one unit
+        hits = [u for u, _ in units if name == u or name.startswith(u + ".")]
+        assert len(hits) == 1, (name, hits)
+    total = sum(s for _, s in units)
+    assert total == sum(
+        t.numel() * t.element_size() for t in [*model.parameters(), *model.buffers()]
+    )
+    device_map, used = plan_device_map(units, {0: total, 1: total})
+    order = [device_map[u] for u, _ in units]
+    assert order == sorted(order) and set(order) == {0, 1}  # in model order, both GPUs used
+    biggest = max(s for _, s in units)
+    assert abs(used[0] - used[1]) <= biggest  # balanced within one unit
+    assert len(device_map_lines(units, device_map)) == 2
+    with pytest.raises(ValueError, match="exceeds the caps"):
+        plan_device_map(units, {0: total // 4, 1: total // 4})
+
+
+def test_the_teachers_plan_on_two_t4s() -> None:
+    """The teacher's architecture (Qwen2.5-VL-7B: the dimensions of its model config and of
+    RC-E9's log) built without weights: its plan, the one RC-E9 prints."""
+    import transformers
+    from accelerate import init_empty_weights
+
+    from medcompress.compression.quantization.placement import placement_units, plan_device_map
+    from medcompress.compression.quantization.ptq import gptq_max_memory
+
+    config = transformers.Qwen2_5_VLConfig(
+        text_config=dict(vocab_size=152064, hidden_size=3584, intermediate_size=18944,
+                         num_hidden_layers=28, num_attention_heads=28, num_key_value_heads=4,
+                         tie_word_embeddings=False),
+        vision_config=dict(depth=32, hidden_size=1280, intermediate_size=3420, num_heads=16,
+                           out_hidden_size=3584),
+        tie_word_embeddings=False,
+    )  # fmt: skip
+    with init_empty_weights():
+        model = transformers.AutoModelForImageTextToText.from_config(config, dtype=torch.float16)
+    assert sum(p.numel() for p in model.parameters()) == 8_292_166_656  # parameters_stored
+    units = placement_units(model)
+    t4 = 15_636_037_632  # RC-B0's efficiency_setup.json
+    caps = gptq_max_memory([t4, t4], sum(s for _, s in units), 18944, 3584)
+    device_map, used = plan_device_map(units, caps)
+    assert device_map["model.visual.patch_embed.proj"] == 0 and device_map["lm_head"] == 1
+    assert device_map["model.language_model.layers.12"] == 0
+    assert device_map["model.language_model.layers.13"] == 1
+    assert used == {0: 8_502_597_792, 1: 8_081_736_192}  # 7.92 / 7.53 GiB
+    assert all(used[g] <= caps[g] for g in used)
+
+
+def test_the_gptq_device_is_the_layers_gpu_then_the_roomiest_then_the_cpu() -> None:
+    from medcompress.compression.quantization.placement import (
+        GPTQ_DEVICE_MARGIN,
+        gptq_work_bytes,
+        memory_report,
+        pick_gptq_device,
+    )
+
+    need = gptq_work_bytes(18944, 3584) + GPTQ_DEVICE_MARGIN
+    layer = torch.device("cuda", 1)
+
+    def pick(rooms: dict[int, int]) -> object:
+        return pick_gptq_device(layer, 18944, 3584, room=rooms.__getitem__, gpus=rooms)
+
+    assert pick({0: need * 2, 1: need}) == torch.device("cuda", 1)  # its own GPU first
+    assert pick({0: need, 1: need - 1}) == torch.device("cuda", 0)  # then the other one
+    assert pick({0: need - 1, 1: need - 1}) == torch.device("cpu")  # neither: the CPU
+    assert pick_gptq_device(torch.device("cpu"), 8, 8) == torch.device("cpu")
+    if not torch.cuda.is_available():
+        assert memory_report() == ""
+
+
+def test_the_cpu_fallback_and_the_handed_over_hessian_give_the_same_codes(tmp_path: Path) -> None:
+    """On this machine the tiny model is on the CPU, so this checks the plumbing (the device
+    choice, the copies, the handed-over Hessians), not GPU-versus-CPU rounding."""
+    batches = calibration_batches(tiny_vlm.tiny_wrapper(seed=0), _samples(tmp_path), tmp_path)
+    plain = gptq_quantize_decoder(
+        tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lambda _m: None
+    )
+    choices: list[object] = []
+
+    def to_cpu(layer_device: object, in_features: int, out_features: int) -> object:
+        choices.append(layer_device)
+        return torch.device("cpu")
+
+    lines: list[str] = []
+    fallback = gptq_quantize_decoder(
+        tiny_vlm.tiny_wrapper(seed=0), batches, RECIPE, log=lines.append, pick_device=to_cpu
+    )
+    assert len(choices) == len(plain)
+    assert any("start" in line for line in lines) and any("done" in line for line in lines)
+    for key, record in plain.items():
+        assert np.array_equal(record.codes, fallback[key].codes), key
+        assert np.array_equal(record.scales, fallback[key].scales), key
+    generator = torch.Generator().manual_seed(3)
+    weight = torch.randn(24, 64, generator=generator)
+    x = torch.randn(100, 64, generator=generator)
+    hessian = 2.0 * x.T @ x / 100
+    kept = gptq_torch(weight, hessian.clone(), bits=4, group_size=16)
+    taken = gptq_torch(weight, hessian.clone(), bits=4, group_size=16, consume_hessian=True)
+    moved = gptq_torch(weight, hessian, bits=4, group_size=16, device="cpu")
+    for other in (taken, moved):
+        assert np.array_equal(kept.codes, other.codes)
+        assert np.array_equal(kept.scales, other.scales)

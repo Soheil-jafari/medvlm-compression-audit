@@ -86,8 +86,13 @@ class Session:
         return "FAILED: no step ran"
 
 
-def session_env(out: Path, gpus: int, base: Mapping[str, str] | None = None) -> dict[str, str]:
-    """The environment of every step: path roots under ``out``, the Hugging Face cache, GPUs."""
+def session_env(
+    out: Path, gpus: int, base: Mapping[str, str] | None = None, *, quantization: bool = False
+) -> dict[str, str]:
+    """The environment of every step: path roots under ``out``, the Hugging Face cache, GPUs.
+    Quantization cards also get PyTorch's expandable segments, so freed GPTQ matrices leave
+    no fragments that a later 1.34 GiB matrix cannot use (E9, 2026-11-13; no effect on the
+    numbers)."""
     env = dict(os.environ if base is None else base)
     out = Path(out)
     env.setdefault("MEDCOMPRESS_CHECKPOINT_ROOT", str(out / "checkpoints"))
@@ -97,6 +102,8 @@ def session_env(out: Path, gpus: int, base: Mapping[str, str] | None = None) -> 
         env.setdefault("HF_HOME", "/kaggle/temp/hf")
     if gpus == 1:
         env.setdefault("CUDA_VISIBLE_DEVICES", "0")  # a one-GPU card uses the first T4 only
+    if quantization:
+        env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     env["PYTHONUNBUFFERED"] = "1"
     return env
 

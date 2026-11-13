@@ -404,3 +404,10 @@ def test_rc_g2_runs_in_sessions_with_only_and_one_handoff_per_run(
     )  # fmt: skip
     assert "run E5 taylor B2 seed0" in done.stdout and "G2_B2_seed0_pruned_E6" in done.stdout
     assert "run E7" not in done.stdout
+
+
+def test_quantization_cards_get_expandable_segments(tmp_path: Path) -> None:
+    env = runner_mod.session_env(tmp_path, 2, {}, quantization=True)
+    assert env["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"
+    assert "PYTORCH_CUDA_ALLOC_CONF" not in runner_mod.session_env(tmp_path, 1, {})
+    assert build_plan("RC-E9").quantization and not build_plan("RC-G2").quantization

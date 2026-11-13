@@ -1305,3 +1305,18 @@ Append-only, newest at the bottom. One entry per iteration:
   tiny model's decoder: the E3 / E8 path). Expected E9 peak about 12.0-12.6 GiB per T4
   (estimate; RC-E9 section 6).
 
+## Iteration 78: 2026-11-13 (interactive)
+- Stage / item: S08 E9, RC-E9 attempt 2 out of memory on GPU 1 (commit 5a25147).
+- Cause found offline: `from_pretrained`'s balanced placement put 8.40 GiB on GPU 1 (layers
+  11-27, norm, `lm_head`), not the assumed 7.7 GiB (the teacher's architecture built without
+  weights; its parameter count equals `parameters_stored`).
+- New `compression/quantization/placement.py`: every module counted (`placement_units`), an
+  explicit balanced device map under the caps (`plan_device_map`; teacher: GPU 0 7.92 GiB,
+  GPU 1 7.53 GiB), printed with the bytes actually loaded; `pick_gptq_device` (own GPU, other
+  GPU, CPU); `memory_report` per layer. `gptq_torch(device=, consume_hessian=)` under
+  `inference_mode`; the decoder hands each Hessian to its last user; expandable segments for
+  quantization cards.
+- Results unchanged on the GPUs (tests against the old code); the CPU fallback (38 s per
+  `down_proj`, measured here) can differ in the last bits and is logged. Expected peak about
+  11.0 / 10.6 GiB (up to 11.9 / 11.5 GiB). Tests.
+

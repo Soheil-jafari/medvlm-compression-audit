@@ -377,8 +377,15 @@ def gptq_quantize_decoder(
     recipe: PTQRecipe,
     *,
     log: Any = print,
+    pick_device: Any = None,
 ) -> dict[str, QuantizedMatrix]:
     """Round every target matrix of the decoder with GPTQ, layer after layer (in place).
+
+    Nothing is kept on the GPU between layers: each layer's Hessians come from a fresh forward
+    pass of each calibration example (its inputs moved from the CPU one at a time) cut after
+    that layer. Each matrix's math runs where :func:`~medcompress.compression.quantization.
+    placement.pick_gptq_device` finds room (``pick_device`` replaces it in tests); the log shows
+    every GPU's memory before and after each layer (2026-11-13).
 
     The rounded weights replace the original ones in the model (still 16-bit tensors), so
     each layer is calibrated on the outputs of the rounded layers before it. Returns the codes
@@ -389,25 +396,42 @@ def gptq_quantize_decoder(
     from medcompress.compression.pruning.surgery import find_decoder_stack
     from medcompress.compression.quantization.gptq import gptq_torch
     from medcompress.compression.quantization.kernels import target_path
+    from medcompress.compression.quantization.placement import (
+        memory_report,
+        pick_gptq_device,
+        reset_peaks,
+    )
 
     if recipe.backend != "gptq" or recipe.group_size is None:
         raise ValueError("gptq_quantize_decoder needs a GPTQ recipe")
     module = getattr(model, "module", model)
     stack = find_decoder_stack(module)
     records: dict[str, QuantizedMatrix] = {}
+    pick = pick_device or pick_gptq_device
+    targets = list(recipe.targets)
+    count = len(stack.layers)
     for i, layer in enumerate(stack.layers):
-        hessians = collect_hessians(model, i, batches, recipe.targets)
-        for name in recipe.targets:
+        reset_peaks()
+        log(f"GPTQ: layer {i + 1}/{count} start; {memory_report() or 'no GPU'}")
+        hessians = collect_hessians(model, i, batches, targets)
+        for k, name in enumerate(targets):
             linear = getattr(getattr(layer, PARENT_OF[name]), name)
-            # each Hessian is freed after its last user (q/k/v and gate/up share one; 2026-11-12)
-            hessian = hessians.pop(name)
+            # q/k/v and gate/up share one Hessian; its last user takes it over and frees it
+            last = not any(_SHARED_INPUT[n] == _SHARED_INPUT[name] for n in targets[k + 1 :])
+            out_features, in_features = linear.weight.shape
+            device = pick(linear.weight.device, in_features, out_features)
+            if device != linear.weight.device:
+                log(f"GPTQ: layer {i + 1} {name}: math on {device}, not "
+                    f"{linear.weight.device} (room); {memory_report()}")  # fmt: skip
             result = gptq_torch(
                 linear.weight,
-                hessian,
+                hessians.pop(name),
                 bits=recipe.weight_bits,
                 group_size=recipe.group_size,
                 damping=recipe.damping,
                 block_size=recipe.block_size,
+                device=device,
+                consume_hessian=last,
             )
             with torch.no_grad():
                 rounded = torch.as_tensor(result.dequantized(), dtype=linear.weight.dtype)
@@ -416,11 +440,11 @@ def gptq_quantize_decoder(
             records[key] = QuantizedMatrix(
                 key, result.codes, result.scales, recipe.weight_bits, recipe.group_size
             )
-            del hessian, result, rounded
+            del result, rounded
         del hessians
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        log(f"GPTQ: layer {i + 1}/{len(stack.layers)} done")
+        log(f"GPTQ: layer {i + 1}/{count} done; {memory_report() or 'no GPU'} (peak: this layer)")
     return records
 
 
@@ -511,28 +535,50 @@ def gptq_max_memory(
     return caps
 
 
-def _teacher_max_memory(spec: Any, model_config: Mapping[str, Any]) -> dict[int, int] | None:
-    """E9: caps that leave each T4 room for the teacher's largest GPTQ matrix (down_proj, in
-    = the intermediate size). None without torch or CUDA (the tests; the loader then stops
-    with its own message)."""
+def _teacher_device_map(spec: Any, model_config: Mapping[str, Any], log: Any = print) -> Any:
+    """E9: the explicit device map of the teacher over the T4s (2026-11-13), from every module's
+    real size (:func:`~medcompress.compression.quantization.placement.placement_units` on the
+    model built without weights), balanced, each GPU under the cap of :func:`gptq_max_memory`.
+    Printed in full. None without torch or CUDA (the tests; the loader then stops itself)."""
     try:
         import torch
     except ImportError:
         return None
     if not torch.cuda.is_available():
         return None
-    from transformers import AutoConfig
+    from accelerate import init_empty_weights
+    from transformers import AutoConfig, AutoModelForImageTextToText
+
+    from medcompress.compression.quantization.placement import (
+        GIB,
+        device_map_lines,
+        placement_units,
+        plan_device_map,
+    )
 
     capacities = [
         torch.cuda.get_device_properties(i).total_memory for i in range(torch.cuda.device_count())
     ]
     hub = AutoConfig.from_pretrained(spec.source, revision=spec.resolved_revision)
+    with init_empty_weights():
+        skeleton = AutoModelForImageTextToText.from_config(hub, dtype=torch.float16)
+    units = placement_units(skeleton)
+    weights = sum(size for _name, size in units)
+    stored = (model_config.get("model") or {}).get("parameters_stored")
     text = getattr(hub, "text_config", hub)
     hidden, intermediate = int(text.hidden_size), int(text.intermediate_size)
-    stored = (model_config.get("model") or {}).get("parameters_stored")
-    if not isinstance(stored, int):
-        raise ConfigError("the teacher's model config has no parameters_stored")
-    return gptq_max_memory(capacities, 2 * stored, max(hidden, intermediate), hidden)
+    caps = gptq_max_memory(capacities, weights, max(hidden, intermediate), hidden)
+    device_map, used = plan_device_map(units, caps)
+    log(f"teacher placement: {weights / GIB:.2f} GiB in {len(units)} modules "
+        f"(config parameters_stored {stored}); caps "
+        + ", ".join(f"GPU{g} {c / GIB:.2f}" for g, c in caps.items()) + " GiB")  # fmt: skip
+    for line in device_map_lines(units, device_map):
+        log(f"teacher placement: {line}")
+    log(
+        "teacher placement: planned "
+        + ", ".join(f"GPU{g} {b / GIB:.2f} GiB" for g, b in used.items())
+    )
+    return device_map
 
 
 def parent_of(run: RunContext) -> dict[str, Any]:
@@ -568,12 +614,19 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
         spec = ModelSpec.from_config(load_config(student))
         return load_model(spec, allow_candidate=True, image_longest_side=side)
     if parent["experiment"] == "E0":
+        from medcompress.compression.quantization.placement import GIB, placed_bytes
         from medcompress.models.loading import ModelSpec, load_model
 
         teacher = load_config(config["components"]["teacher"])
         spec = ModelSpec.from_config(teacher)
-        memory = _teacher_max_memory(spec, teacher)  # room for GPTQ on both T4s (2026-11-12)
-        return load_model(spec, image_longest_side=side, max_memory=memory)
+        device_map = _teacher_device_map(spec, teacher)  # explicit, every module counted
+        model = load_model(spec, image_longest_side=side, device_map=device_map or "auto")
+        placed = placed_bytes(getattr(model, "module", model))
+        print(
+            "teacher placement: loaded "
+            + ", ".join(f"{d} {b / GIB:.2f} GiB" for d, b in sorted(placed.items()))
+        )
+        return model
     student = load_trained_student(config, "E2", run.seed, side)
     if parent["experiment"] == "E2":
         return student
