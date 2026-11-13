@@ -725,6 +725,15 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-13 (Soheil and Amir; pre-registration section 10, second amendment of 2026-11-13;
+  before any test evaluation and before the RC-CAL0 scan results): test images that are not
+  finite in fp16 are dropped.** Any test image (filtered or unfiltered internal test, later
+  PolypGen) whose fp16 vision tower output is non-finite for the student or the teacher is dropped
+  from that test for every arm before any test evaluation; the list is committed and its count is
+  reported next to the test sizes. Reason: a non-finite probe has no defined answer; the student
+  arms share the vision tower, the union with the teacher's keeps one test set for every arm, and
+  the rule reads no model output. The list comes from RC-CAL0's scan; the code that leaves the
+  images out comes before RC-R1.
 - **2026-11-13 (Soheil and Amir; pre-registration section 10, amendment of 2026-11-13; before any
   compression result): calibration images that are not finite in fp16 are replaced.** Calibration
   images whose fp16 forward through the model gives any non-finite value are replaced by the next

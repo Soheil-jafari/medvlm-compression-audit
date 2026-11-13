@@ -76,16 +76,12 @@ cp results/calibration/seed0_replaced.csv /kaggle/working/results_to_commit/resu
   decides about E9's existing quantized hand-off (made at 54b5b6d with the original 128 images,
   before the finiteness check): if the teacher replaces none of them, E9's calibration was
   already the cleaned set and the hand-off stands; if it replaces any, E9 is quantized again.
-- **Test images (decided before any test result).** No student arm changes the vision tower
-  (pruning and quantization touch the decoder only), so the student-encoder set is the same for
-  every student arm; the teacher's encoder (E0, E9) has its own set. **Proposal, if any test
-  image (filtered or unfiltered) is affected:** leave the union of the student-encoder and
-  teacher-encoder images out of the test split for **every** arm, before any test evaluation, list
-  their ids in a committed file, and report the count with the test sizes. All arms are then
-  scored on the same images, and nothing is decided after a result. The alternatives are worse:
-  scoring a non-finite answer as wrong penalizes the students and the teacher differently (other
-  encoders); running the vision tower in fp32 only for those images changes the numerics the
-  study measures. Validation and the training images are handled by the amendment (calibration)
+- **Test images: decided (second amendment of 2026-11-13, Soheil and Amir, before these
+  results).** Any test image (filtered or unfiltered, later PolypGen) whose fp16 vision tower
+  output is non-finite for the student or the teacher is dropped from that test for every arm
+  before any test evaluation; the agent commits the list from part A and reports its count next
+  to the test sizes. No student arm changes the vision tower, so the student list holds for every
+  student arm; the union with the teacher's keeps one test set for all arms. Validation and the training images are handled by the amendment (calibration)
   and by the training loop, which already skips a non-finite step (E2: 16 of 625).
 - PolypGen (the external test) is scanned the same way once it is downloaded.
 

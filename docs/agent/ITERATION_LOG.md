@@ -1394,3 +1394,11 @@ Append-only, newest at the bottom. One entry per iteration:
   test-image proposal is in it. RC-SMOKE runs the seed-0 check first. Tests (tiny model, injected
   non-finite example; the vision tower alone equals the full model's).
 
+## Iteration 82: 2026-11-13 (interactive)
+- Second amendment of 2026-11-13 recorded (Soheil and Amir; before the RC-CAL0 scan results and
+  any test evaluation): test images (filtered and unfiltered internal test, later PolypGen) whose
+  fp16 vision tower output is non-finite for the student or the teacher are dropped for every arm
+  before any test evaluation; committed list, count reported next to the test sizes.
+  Pre-registration section 10, decisions log, README, RC-CAL0, RC-R1, RC-X2. Still to come
+  (agent): the code that leaves the listed images out of the test splits, before RC-R1.
+
