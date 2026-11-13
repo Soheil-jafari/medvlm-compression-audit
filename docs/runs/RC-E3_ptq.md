@@ -109,6 +109,25 @@ Check before committing: `git status` shows no images, checkpoints, caches or `o
 | Calibration as planned | `quantization_calibration_images` in `metrics.csv` (w4, w8) | equals 128 |
 | Every decoder matrix quantized | `quantized_matrices` (w4, w8) | 7 x the number of decoder layers |
 
+## 5b. Seed 0 run at commit 262a4f1: the offload check (2026-11-13)
+
+At that commit `run_experiment.py` ran each variant's stages (quantize, validation evaluation,
+benchmark) in one process, and the evaluation and benchmark loaded the model with
+`device_map="auto"`. If the quantize stage's student was still on GPU 0, the next load was
+split onto the CPU (as in RC-G2 session 1). Then either the load crashed in the adapter check
+("Tensor.item() cannot be called on meta tensors"), or, when only modules without LoRA weights
+were moved (e.g. `lm_head`), it ran on silently, slower and with wrong memory. The test and
+unfiltered test evaluations are separate steps (their own process) and are not affected.
+
+**Check** (in the session's output): `grep -n -i -E "offload|meta device|meta tensors"
+/kaggle/working/run_card_RC-E3*.txt /kaggle/working/logs/RC-E3_seed0.log`.
+- No match: the evaluation and benchmark were on the GPU; keep the results.
+- Any match: the validation metrics and `efficiency.csv` of that variant are invalid; run
+  `--card RC-E3 --seed 0` again on the fix commit. A second check: each variant's
+  `peak_memory_bytes` should be near RC-Q0's (w4 3,797,138,944; w8 5,197,114,880; w8a8
+  5,073,484,288 bytes, synthetic images) and `warm_latency_s` not far above E2's 0.987 s; an
+  offloaded run shows a much lower peak and a much higher latency.
+
 ## 6. Run report (filled by the person who ran it)
 
 - Run by / date / seeds:

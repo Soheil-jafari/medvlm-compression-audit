@@ -201,3 +201,48 @@ def placed_bytes(model: Any) -> dict[str, int]:
         key = str(tensor.device)
         out[key] = out.get(key, 0) + tensor.numel() * tensor.element_size()
     return out
+
+
+def model_skeleton(spec: Any) -> tuple[Any, Any]:
+    """``(model without weights, its hub config)`` of a model spec (float16; for planning)."""
+    import torch
+    from accelerate import init_empty_weights
+    from transformers import AutoConfig, AutoModelForImageTextToText
+
+    hub = AutoConfig.from_pretrained(spec.source, revision=spec.resolved_revision)
+    with init_empty_weights():
+        skeleton = AutoModelForImageTextToText.from_config(hub, dtype=torch.float16)
+    return skeleton, hub
+
+
+def plan_for_model(
+    spec: Any,
+    *,
+    reserve: int = 0,
+    caps: Callable[[Sequence[int], int], Mapping[int, int]] | None = None,
+    log: Callable[[str], None] = print,
+) -> dict[str, int]:
+    """The explicit device map of ``spec`` over every visible GPU, printed: every module
+    counted, balanced, each GPU under ``caps(capacities, weights)`` (default: its capacity
+    minus ``reserve``)."""
+    import torch
+
+    capacities = [
+        torch.cuda.get_device_properties(i).total_memory for i in range(torch.cuda.device_count())
+    ]
+    skeleton, _hub = model_skeleton(spec)
+    units = placement_units(skeleton)
+    weights = sum(size for _name, size in units)
+    limits = (
+        dict(caps(capacities, weights))
+        if caps is not None
+        else {i: c - reserve for i, c in enumerate(capacities)}
+    )
+    device_map, used = plan_device_map(units, limits)
+    log(f"placement of {spec.name}: {weights / GIB:.2f} GiB in {len(units)} modules; caps "
+        + ", ".join(f"GPU{g} {c / GIB:.2f}" for g, c in limits.items()) + " GiB")  # fmt: skip
+    for line in device_map_lines(units, device_map):
+        log(f"placement of {spec.name}: {line}")
+    log(f"placement of {spec.name}: planned "
+        + ", ".join(f"GPU{g} {b / GIB:.2f} GiB" for g, b in used.items()))  # fmt: skip
+    return device_map

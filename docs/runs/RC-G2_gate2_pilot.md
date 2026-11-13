@@ -12,6 +12,10 @@
 - Status: `ready` (2026-11-11): every requirement of section 2 is met (RC-B0 done, B2 =
   5,953,608,908.8 bytes; the mixed scoring method is set, so the 30-group check of the
   first-order estimate is added as the card's last step, section 2c)
+  Session 1 at commit 5a25147 failed after 1.5 min (2026-11-13): the scoring stage's student
+  stayed on GPU 0 and the recovery stage's second load was offloaded to the CPU. Fixed: every
+  stage of a run now runs in its own process, every load checks the GPU is clean and uses an
+  explicit device map, and an offloaded model is refused. Run session 1 again on the fix commit
 
 ## 2. Requirements
 

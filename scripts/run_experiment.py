@@ -2,8 +2,9 @@
 """Run one experiment end to end: validate the ID, show the plan, run its stages.
 
 The experiment ID, budget, variant and seed are validated against the registry
-(src/medcompress/registry.py) and the experiment config. Stages run in order and
-stop at the first stage that is not implemented yet.
+(src/medcompress/registry.py) and the experiment config. Stages run in order, each in its
+own process (a clean GPU for every stage's model), and stop at the first stage that fails or
+waits on a setting.
 
 Examples:
     python scripts/run_experiment.py --list
@@ -13,10 +14,13 @@ Examples:
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "src"))
 
 from medcompress.cli import (  # noqa: E402
     build_parser,
@@ -24,8 +28,6 @@ from medcompress.cli import (  # noqa: E402
     report_todos,
     resolve_config,
     run_context,
-    run_stage,
-    stage_functions,
 )
 from medcompress.config import ExperimentConfig  # noqa: E402
 from medcompress.registry import get_experiment, list_experiments  # noqa: E402
@@ -75,11 +77,27 @@ def main(argv: list[str] | None = None) -> int:
     if args.plan_only:
         return 0
 
-    functions = stage_functions()
-    for script in spec.scripts:
-        code = run_stage(Path(script).stem, functions[script], config=config, run=run)
+    forwarded = [a for a in (sys.argv[1:] if argv is None else argv) if a != "--plan-only"]
+    return run_stages_in_processes(spec.scripts, forwarded)
+
+
+def run_stages_in_processes(
+    scripts: list[str] | tuple[str, ...], forwarded: list[str], *, runner: Any = None
+) -> int:
+    """Run each stage script in its own process with the same arguments (2026-11-13).
+
+    One process per stage guarantees a clean GPU for the next stage's model: RC-G2 session 1
+    crashed because the scoring stage's student (7.6 GB) was still on GPU 0 when the recovery
+    stage loaded the student again in the same process. Stops at the first non-zero exit code
+    and returns it (4 = a setting is open, as before).
+    """
+    run = runner or (lambda command: subprocess.run(command, check=False).returncode)
+    for script in scripts:
+        command = [sys.executable, str(REPO / script), *forwarded]
+        print(f"== stage {script} (own process)", flush=True)
+        code = run(command)
         if code != 0:
-            return code
+            return int(code)
     return 0
 
 

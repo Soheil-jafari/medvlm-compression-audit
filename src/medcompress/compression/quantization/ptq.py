@@ -536,49 +536,27 @@ def gptq_max_memory(
 
 
 def _teacher_device_map(spec: Any, model_config: Mapping[str, Any], log: Any = print) -> Any:
-    """E9: the explicit device map of the teacher over the T4s (2026-11-13), from every module's
-    real size (:func:`~medcompress.compression.quantization.placement.placement_units` on the
-    model built without weights), balanced, each GPU under the cap of :func:`gptq_max_memory`.
-    Printed in full. None without torch or CUDA (the tests; the loader then stops itself)."""
+    """E9: the teacher's explicit device map over the T4s, every module counted, balanced, each
+    GPU under the cap of :func:`gptq_max_memory` (room for the largest GPTQ matrix); printed.
+    None without torch or CUDA (the tests; the loader then stops itself)."""
     try:
         import torch
     except ImportError:
         return None
     if not torch.cuda.is_available():
         return None
-    from accelerate import init_empty_weights
-    from transformers import AutoConfig, AutoModelForImageTextToText
+    from medcompress.compression.quantization.placement import model_skeleton, plan_for_model
 
-    from medcompress.compression.quantization.placement import (
-        GIB,
-        device_map_lines,
-        placement_units,
-        plan_device_map,
-    )
-
-    capacities = [
-        torch.cuda.get_device_properties(i).total_memory for i in range(torch.cuda.device_count())
-    ]
-    hub = AutoConfig.from_pretrained(spec.source, revision=spec.resolved_revision)
-    with init_empty_weights():
-        skeleton = AutoModelForImageTextToText.from_config(hub, dtype=torch.float16)
-    units = placement_units(skeleton)
-    weights = sum(size for _name, size in units)
-    stored = (model_config.get("model") or {}).get("parameters_stored")
+    _skeleton, hub = model_skeleton(spec)
     text = getattr(hub, "text_config", hub)
     hidden, intermediate = int(text.hidden_size), int(text.intermediate_size)
-    caps = gptq_max_memory(capacities, weights, max(hidden, intermediate), hidden)
-    device_map, used = plan_device_map(units, caps)
-    log(f"teacher placement: {weights / GIB:.2f} GiB in {len(units)} modules "
-        f"(config parameters_stored {stored}); caps "
-        + ", ".join(f"GPU{g} {c / GIB:.2f}" for g, c in caps.items()) + " GiB")  # fmt: skip
-    for line in device_map_lines(units, device_map):
-        log(f"teacher placement: {line}")
-    log(
-        "teacher placement: planned "
-        + ", ".join(f"GPU{g} {b / GIB:.2f} GiB" for g, b in used.items())
-    )
-    return device_map
+    stored = (model_config.get("model") or {}).get("parameters_stored")
+    log(f"teacher placement: config parameters_stored {stored}")
+
+    def caps(capacities: Sequence[int], weights: int) -> dict[int, int]:
+        return gptq_max_memory(capacities, weights, max(hidden, intermediate), hidden)
+
+    return plan_for_model(spec, caps=caps, log=log)
 
 
 def parent_of(run: RunContext) -> dict[str, Any]:

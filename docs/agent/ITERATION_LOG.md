@@ -1320,3 +1320,22 @@ Append-only, newest at the bottom. One entry per iteration:
   `down_proj`, measured here) can differ in the last bits and is logged. Expected peak about
   11.0 / 10.6 GiB (up to 11.9 / 11.5 GiB). Tests.
 
+## Iteration 79: 2026-11-13 (interactive)
+- Stage / item: RC-G2 session 1 failed (commit 5a25147): the scoring stage's student stayed on
+  GPU 0, the recovery stage's load in the same process was offloaded ("Tensor.item() cannot be
+  called on meta tensors").
+- `run_experiment.py` runs every stage in its own process (`run_stages_in_processes`), so each
+  stage starts on a clean GPU; the first failing stage stops the run with its exit code.
+- `load_model`: `gpu_memory_check` before every load (frees this process's cache, prints each
+  GPU's free memory, refuses above 1.5 GiB in use); `explicit_device_map` (never "auto": one
+  GPU `{"": 0}`, several an explicit balanced plan of every module, `placement.plan_for_model`;
+  CPU / disk entries refused); `require_on_gpu` after the load and after the adapter (any
+  parameter on CPU or meta, any meta buffer, any CPU / disk map entry is refused). Also in
+  `load_trained_student` and `load_run_model` (pruned and quantized models). A refused load ends
+  the stage with exit code 6.
+- Audit: the cards that ran several stages in one process (RC-E3, RC-E4, RC-E8, RC-E9, the
+  pruning runs E5-E7 and A1-A6) are all covered by the change; RC-E10 and the test
+  evaluations were already separate processes. RC-E3 seed 0 at 262a4f1: the check is in its
+  card, section 5b.
+- Tests (CPU and torch).
+

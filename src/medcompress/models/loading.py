@@ -11,7 +11,7 @@ torch, transformers and peft are imported only inside the functions that need th
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -171,6 +171,123 @@ def _quantization_config(quantization: Mapping[str, Any], torch_module: Any) -> 
     raise ModelConfigError(f"bits must be 4 or 8, got {bits}")
 
 
+GPU_CLEAN_LIMIT = 3 * 2**29
+"""Memory a GPU may already have in use when a model is loaded (1.5 GiB: this process's CUDA
+context and allocator slack). More means a model of an earlier stage, or another process, is
+still there, and the new model would be offloaded or run out of memory (RC-G2, 2026-11-13)."""
+GPU_RESERVE = 3 * 2**29
+"""Room kept free on every GPU when a model is split over several (activations, workspaces)."""
+
+
+class GPUPlacementError(RuntimeError):
+    """A model load would not sit entirely on the GPU(s): a dirty GPU, or offloaded tensors.
+    A run whose model is offloaded is invalid (its memory and latency would be wrong)."""
+
+
+def gpu_memory_check(
+    what: str,
+    *,
+    cuda: bool | None = None,
+    mem_info: Callable[[int], tuple[int, int]] | None = None,
+    count: int | None = None,
+    log: Callable[[str], None] = print,
+) -> None:
+    """Free this process's cached GPU memory, print every GPU's free memory, and refuse to load
+    ``what`` when a GPU already has more than :data:`GPU_CLEAN_LIMIT` in use."""
+    if cuda is None or mem_info is None or count is None:
+        try:
+            import torch
+        except ImportError:
+            return
+        cuda = torch.cuda.is_available() if cuda is None else cuda
+        if not cuda:
+            return
+        import gc
+
+        gc.collect()
+        torch.cuda.empty_cache()
+        mem_info = mem_info or torch.cuda.mem_get_info
+        count = torch.cuda.device_count() if count is None else count
+    if not cuda:
+        return
+    dirty = []
+    for index in range(count):
+        free, total = mem_info(index)
+        gib = (free / 2**30, total / 2**30)
+        log(f"[{what}] GPU{index}: {gib[0]:.2f} of {gib[1]:.2f} GiB free before loading")
+        if total - free > GPU_CLEAN_LIMIT:
+            dirty.append(f"GPU{index} has {(total - free) / 2**30:.2f} GiB in use")
+    if dirty:
+        raise GPUPlacementError(
+            f"{what}: {', '.join(dirty)} before the load (a model of an earlier stage or another "
+            "process is still there); refusing to load, the model would be offloaded"
+        )
+
+
+def explicit_device_map(
+    device_map: Any,
+    spec: ModelSpec | None = None,
+    *,
+    cuda: bool | None = None,
+    count: int | None = None,
+    planner: Callable[[], dict[str, int]] | None = None,
+) -> Any:
+    """The device map a load uses: never "auto". One GPU: ``{"": 0}``; several: an explicit
+    balanced plan of every module (``placement.plan_for_model``); a given mapping is kept but
+    may name GPUs only. Without CUDA (the tests) the given map is kept.
+
+    Raises:
+        GPUPlacementError: the map names the CPU or the disk while a GPU is there.
+    """
+    if cuda is None or count is None:
+        import torch
+
+        cuda = torch.cuda.is_available() if cuda is None else cuda
+        count = torch.cuda.device_count() if count is None else count
+    if not cuda:
+        return device_map
+    if isinstance(device_map, Mapping):
+        bad = {k: v for k, v in device_map.items() if str(v) in ("cpu", "disk", "meta")}
+        if bad:
+            raise GPUPlacementError(f"the device map puts modules off the GPU: {bad}")
+        return dict(device_map)
+    if device_map not in (None, "auto", "balanced"):
+        raise GPUPlacementError(f"device_map {device_map!r} while a GPU is there: use the GPU")
+    if count == 1:
+        return {"": 0}
+    if planner is None:
+        from medcompress.compression.quantization.placement import plan_for_model
+
+        if spec is None:
+            raise GPUPlacementError("a model split over several GPUs needs its spec to be planned")
+        return plan_for_model(spec, reserve=GPU_RESERVE)
+    return planner()
+
+
+def require_on_gpu(module: Any, what: str, *, cuda: bool | None = None) -> None:
+    """Raise :class:`GPUPlacementError` if any parameter is on the CPU or the meta device, any
+    buffer is on the meta device, or the device map names the CPU or the disk (an offload).
+    Without CUDA (the tests) nothing is checked unless ``cuda=True``."""
+    if cuda is None:
+        try:
+            import torch
+        except ImportError:
+            return
+        cuda = torch.cuda.is_available()
+    if not cuda:
+        return
+    off = [f"{n} on {p.device}" for n, p in module.named_parameters()
+           if p.device.type in ("cpu", "meta")]  # fmt: skip
+    off += [f"{n} (buffer) on meta" for n, b in module.named_buffers() if b.device.type == "meta"]
+    mapped = getattr(module, "hf_device_map", None) or {}
+    off += [f"{n} mapped to {d}" for n, d in mapped.items() if str(d) in ("cpu", "disk")]
+    if off:
+        raise GPUPlacementError(
+            f"{what}: {len(off)} tensors are not on the GPU (offloaded), e.g. {off[:3]}; a run "
+            "that offloads is invalid (its memory and latency would be wrong)"
+        )
+
+
 def load_model(
     spec: ModelSpec,
     *,
@@ -221,6 +338,8 @@ def load_model(
     common: dict[str, Any] = {"trust_remote_code": allow_remote_code}
     if revision is not None and not Path(spec.source).expanduser().exists():
         common["revision"] = revision
+    gpu_memory_check(spec.name)  # a clean GPU before every load (2026-11-13)
+    device_map = explicit_device_map(device_map, spec)  # never "auto": no silent offload
     model_kwargs: dict[str, Any] = {"dtype": dtype, "device_map": device_map, **common}
     if max_memory is not None:
         model_kwargs["max_memory"] = dict(max_memory)
@@ -239,9 +358,11 @@ def load_model(
         batch_size=batch_size,
         mlp_channel_group_size=mlp_channel_group_size,
     )
+    require_on_gpu(module, spec.name)  # before the adapter: an offload is named, not hit
     if spec.adapter:
         adapter_kwargs = {"revision": spec.adapter_revision} if spec.adapter_revision else {}
         wrapper = load_adapter(wrapper, spec.adapter, merge=not quantization, **adapter_kwargs)
+        require_on_gpu(wrapper.module, f"{spec.name} with its adapter")
     return wrapper
 
 
