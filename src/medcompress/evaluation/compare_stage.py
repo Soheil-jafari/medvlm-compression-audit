@@ -36,7 +36,8 @@ all intervals share the resamples:
   any budget) whose measured peak memory is nearest to E10's; ``E10Q_vs_E8_seed0``, E10 at 4 bit
   minus the E8 budget whose measured peak memory is nearest to E10Q's. ``diff:`` rows with
   intervals for the headline accuracy, the small-finding recall, the rare-group recall and the
-  ECE; no p-value, no verdict. The chosen arms and their peak memories go to ``choices.json``.
+  ECE; no p-value, no verdict, outside H1-H4. The chosen arms and their peak memories go to
+  ``choices.json``. Both rules: pre-registration section 10, clarification of 2026-11-14.
 
 H2 and H3 also get McNemar's test per finding on each probe's majority answer over the seeds,
 Holm-corrected across findings (``mcnemar_p:`` and ``mcnemar_p_holm:``). The rule-based

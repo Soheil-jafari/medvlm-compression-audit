@@ -725,6 +725,10 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-14 (Soheil and Amir; pre-registration section 10, clarification of 2026-11-14): E10's
+  comparisons confirmed as proposed.** "The pruned 3B arm" is E5, E6 or E7 only (not the
+  ablations), the one nearest E10's measured peak memory; E10Q is compared with E8 at the budget
+  nearest E10Q's measured peak memory. Both rows are descriptive, outside H1-H4. No code change.
 - **2026-11-14 (agent; code the frozen plan names, section 12 note): E10 at 4 bit and E10's two
   comparisons.** New registry entry `E10Q` (config `configs/experiments/E10Q.yaml`, card
   `RC-E10Q_e10_at_4bit.md`): the merged E10 quantized with the E3 `w4` recipe (the frozen GPTQ
@@ -735,7 +739,8 @@ must be logged here.
   accuracy, the small-finding recall, the rare-group recall and the ECE; no p-value, no verdict;
   not part of H1 or H4): `E10_vs_matched_pruned_seed0`, E10 minus the pruned 3B arm (E5, E6 or E7,
   any budget) whose measured peak memory is nearest to E10's; `E10Q_vs_E8_seed0`, E10Q minus the
-  E8 budget whose measured peak memory is nearest to E10Q's. **To confirm by Soheil and Amir before
+  E8 budget whose measured peak memory is nearest to E10Q's. **Confirmed by Soheil and Amir the same
+  day (entry above); proposed as: to confirm by Soheil and Amir before
   the comparison step:** which arms count as "the pruned 3B arm" (the agent took E5, E6 and E7,
   not the ablations), and the nearest-peak-memory rule for E8's budget (item 14.3 says only "at 4
   bit against E8"). RC-E10Q runs after RC-SMOKE passes for it (its smoke job quantizes the smoke's
@@ -850,7 +855,7 @@ must be logged here.
 | Reuse of E7 for identical ablation arms | **decided 2026-11-08**: E7 stands for `A4:n128` and `A5:logprob_drop` | — | — |
 | H2 matching and McNemar | **decided 2026-11-08** (H2 confirmatory with E3 `w8` on 3 seeds; McNemar on the 3-seed majority) | — | — |
 | H2 under the seed plan | **decided 2026-11-08**: E3 `w8` joins the 3-seed tier | — | — |
-| E10 code | **done 2026-11-14**: `E10Q` (GPTQ `w4` of the merged 2B, card RC-E10Q) and the two comparisons; to confirm: the arms that count as "the pruned 3B arm" (E5, E6, E7 taken) and the nearest-peak-memory rule for E8's budget | Soheil and Amir | before the comparison step |
+| E10 code and comparisons | **done and decided 2026-11-14**: `E10Q` (GPTQ `w4` of the merged 2B, card RC-E10Q); "the pruned 3B arm" = E5, E6, E7 nearest E10's peak memory; E8 at the budget nearest E10Q's peak memory; descriptive, outside H1-H4 (pre-registration section 10, clarification of 2026-11-14) | — | — |
 | E10 owner | **Soheil** (2026-11-08) | — | — |
 | E3 `w4` at seeds 1 and 2 | **decided 2026-11-08**: seed 0 only | — | — |
 | Budgets and timing hardware | budgets **decided 2026-11-08** (15 / 30 / 45 % of the decoder bytes; RC-B0 converts); the rented timing GPU (RC-T1) still open, does not block the freeze | team | before RC-T1 |

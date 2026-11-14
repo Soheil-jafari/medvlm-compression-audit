@@ -1463,3 +1463,6 @@ Append-only, newest at the bottom. One entry per iteration:
   calibration check (model `e10`), card RC-E10Q and a smoke job; the comparison step writes
   `E10_vs_matched_pruned_seed0` and `E10Q_vs_E8_seed0` (nearest measured peak memory,
   descriptive). The arm set and the E8 rule are flagged for the authors. Tests.
+- E10's comparisons confirmed by Soheil and Amir (2026-11-14): E5, E6, E7 only, nearest E10's peak
+  memory; E8 at the budget nearest E10Q's peak memory; descriptive, outside H1-H4. Recorded as the
+  clarification of 2026-11-14 in pre-registration section 10 and in the decisions log.

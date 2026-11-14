@@ -80,9 +80,10 @@ test split at seed 0, `E10_vs_matched_pruned_seed0` (E10 minus the pruned 3B arm
 any budget, whose measured peak memory is nearest to E10's) and `E10Q_vs_E8_seed0` (E10Q minus
 the E8 budget whose measured peak memory is nearest to E10Q's): differences with intervals for
 the headline accuracy, the small-finding recall, the rare-group recall and the ECE, no p-value.
-The arms chosen and their peak memories are in `results/comparisons/choices.json`. The
-nearest-peak-memory rule for E8's budget is the agent's reading of "at 4 bit against E8"
-(2026-11-14); the authors confirm or change it before the comparison step runs.
+The arms chosen and their peak memories are in `results/comparisons/choices.json`. Both rules
+(E5, E6, E7 only, not the ablations; E8 at the budget nearest E10Q's peak memory) were confirmed
+by Soheil and Amir on 2026-11-14 (pre-registration section 10, clarification of 2026-11-14). Both
+rows are descriptive, outside H1-H4.
 
 ## 6. Run report (filled by the person who ran it)
 

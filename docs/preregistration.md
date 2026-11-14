@@ -333,6 +333,16 @@ same seed (an exact score does not depend on which other units are scored), so i
 scoring of its own; its removal, recovery and evaluation are its own (about 3 GPU h plus a budget
 search, an estimate).
 
+**Clarification of 2026-11-14 (Soheil and Amir; before any E10 or E10Q comparison).** E10's two
+comparisons (section 11 item 14.3): "the pruned 3B arm nearest its footprint" is the arm among E5
+(any criterion), E6 and E7, at any budget, seed 0, whose measured peak memory is nearest to E10's
+(the ablations A1-A6 do not count). "At 4 bit against E8" compares E10Q (E10 quantized with the E3
+`w4` recipe) with E8 at the budget whose measured peak memory is nearest to E10Q's. Both are
+descriptive (differences with intervals on the test split, seed 0, no p-value) and outside H1-H4.
+*Why:* item 14.3 named neither the arm set nor E8's budget. *How:* `nearest_by_memory` in the
+comparison step (`E10_vs_matched_pruned_seed0`, `E10Q_vs_E8_seed0`); the chosen arms and their
+peak memories go to `results/comparisons/choices.json`.
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result
