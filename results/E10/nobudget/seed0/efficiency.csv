@@ -1,0 +1,12 @@
+experiment,budget,seed,metric,value,ci_low,ci_high
+E10,,0,num_parameters,2127532032.0,,
+E10,,0,state_bytes,4255064704.0,,
+E10,,0,peak_memory_bytes,4384105472.0,,
+E10,,0,cold_latency_s,1.9740651329993852,,
+E10,,0,warm_latency_s,0.6679572779994487,,
+E10,,0,throughput_samples_per_s,1.3986955996007577,,
+E10,,0,energy_joules_per_sample,47.76988137517475,,
+E10,,0,benchmark_seconds,206.00021082199964,,
+E10,,0,decoder_layers_bytes,2818816000.0,,
+E10,,0,vision_bytes,813914240.0,,
+E10,,0,other_bytes,622334464.0,,

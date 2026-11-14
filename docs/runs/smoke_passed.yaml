@@ -7,7 +7,7 @@ passed:
   RC-G2:
     commit: 9113632
     date: 2026-11-13
-    note: "also gates RC-E5 / RC-E6 / RC-E7; the stages still wait for RC-CAL0's committed calibration file (amendment of 2026-11-13)"
+    note: "also gates RC-E5 / RC-E6 / RC-E7; the stages still wait for RC-CAL0's committed calibration file (amendment of 2026-11-13). E7 05 prune+recover was killed by host RAM in the reduced smoke at a237c5c (fixed 2026-11-14); it smokes again before any E7 05 production run"
   RC-E8:
     commit: 9113632
     date: 2026-11-13
@@ -24,3 +24,19 @@ passed:
   RC-A3:
     commit: 9113632
     date: 2026-11-13
+  RC-E3:
+    commit: a237c5c
+    date: 2026-11-14
+    note: "reduced smoke, with the cleaned calibration set"
+  RC-E4:
+    commit: a237c5c
+    date: 2026-11-14
+    note: "reduced smoke; QAT peak 11.29 GiB"
+  RC-A4:
+    commit: a237c5c
+    date: 2026-11-14
+    note: "reduced smoke"
+  RC-A6:
+    commit: a237c5c
+    date: 2026-11-14
+    note: "reduced smoke"
