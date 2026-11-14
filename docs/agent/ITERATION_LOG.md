@@ -1442,4 +1442,7 @@ Append-only, newest at the bottom. One entry per iteration:
 - Validation: `scripts/check_val_nonfinite_use.py` (CPU) checks the free-text set, the only use
   that could hold the 2 images; proposal in RC-CAL0 section 6. RC-R1 leaves `smoke_passed.yaml`
   until it smokes again with the drop. Tests.
+- 2026-11-14: `results/data/nonfinite_drop.csv` built with `scripts/make_drop_list.py` from the
+  re-attached scan files and committed (5 filtered-test, 8 unfiltered-test images; the teacher's
+  list is empty; SHA-256 7486212f...).
 

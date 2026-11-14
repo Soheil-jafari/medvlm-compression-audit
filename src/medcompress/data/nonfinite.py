@@ -76,8 +76,10 @@ def drop_for_split(
     listed = read_drop(config["paths"]["results_root"], split)
     if listed is None:
         where = drop_path(config["paths"]["results_root"])
-        raise ConfigError(f"no committed list of non-finite test images ({where}): the test "
-                          "evaluations wait for it (second amendment of 2026-11-13, RC-CAL0)")
+        raise ConfigError(
+            f"no committed list of non-finite test images ({where}): the test "
+            "evaluations wait for it (second amendment of 2026-11-13, RC-CAL0)"
+        )
     images_before = len({s.image_path for s in samples})
     kept, images, rows = apply_drop(samples, listed)
     counts = {

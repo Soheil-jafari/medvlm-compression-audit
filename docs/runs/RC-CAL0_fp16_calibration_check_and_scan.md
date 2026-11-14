@@ -113,8 +113,10 @@ per split:
   `nonfinite_images_dropped`, `nonfinite_rows_dropped`, `eval_images_after_drop` and
   `eval_rows_after_drop` (the 12,067 / 21,728 rows of section 1 shrink by those rows). The list is
   `results/data/nonfinite_drop.csv`, made from the two scan files by `scripts/make_drop_list.py`.
-  **Not committed yet:** the scan files did not reach the agent (only the counts above); the ids
-  are not typed from memory.
+  **Committed 2026-11-14** (built from the re-attached scan files: student SHA-256 927fe30d...,
+  teacher 283ca427..., an empty list; `nonfinite_drop.csv` SHA-256 7486212f...): 5 filtered-test
+  and 8 unfiltered-test images, all from the student's encoder; the 5 filtered ones are among the
+  8.
 - **Validation:** the student's 2 images (clbnxtowu6umq079oar8d56lx:e28d18f5f7e5,
   clbnxtoncarbp07554f82d7ij:43bda143abf0) are not among E2's 227 probe images (Amir, from the
   saved outcomes). The probe suites, the operating point, the mask audit and the other-image

@@ -84,6 +84,11 @@ def split_experiment(experiment: str) -> tuple[str, str | None]:
     return base, (variant or None)
 
 
+DATA_LISTS: tuple[str, ...] = ("nonfinite_drop.csv",)
+"""Lists under ``results/data`` that are not metric rows: the test images dropped by the second
+amendment of 2026-11-13 (``data/nonfinite.py``)."""
+
+
 def classify_path(path: Path, root: Path) -> ResultFile | None:
     """Return what a CSV path under ``root`` encodes, or None if it is not a results file."""
     rel = path.relative_to(root)
@@ -101,6 +106,8 @@ def classify_path(path: Path, root: Path) -> ResultFile | None:
         )
     if parts[0] == "selection":
         return ResultFile(path, relative=rel.as_posix(), kind="selection", split="val")
+    if parts[0] == "data" and path.name in DATA_LISTS:
+        return None  # a committed list, not metric rows
     if parts[0] in ("data", "smoke"):
         return ResultFile(path, relative=rel.as_posix(), kind=parts[0])
     if path.name not in RUN_FILES:
