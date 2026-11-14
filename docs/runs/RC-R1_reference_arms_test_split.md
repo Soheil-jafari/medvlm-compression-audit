@@ -10,8 +10,10 @@
   paper is on the test split, and E2 is the reference of H1 and of tables T2 and F1 to F5, so
   these three arms need a test-split evaluation after the freeze.
 - Status: `blocked` (see section 2). Also before any test evaluation (second amendment of
-  2026-11-13): RC-CAL0's scan, the committed list of test images that are not finite in fp16 for
-  the student or the teacher, and the code that leaves them out of the test for every arm
+  2026-11-13): the committed list `results/data/nonfinite_drop.csv` (RC-CAL0 part A: 5 filtered
+  and 8 unfiltered test images, from the student's encoder; the code that drops them is in since
+  2026-11-14 and every test evaluation refuses without the list), then RC-SMOKE again for RC-R1
+  (removed from `smoke_passed.yaml` until it passes with the drop)
 
 ## 2. Requirements
 

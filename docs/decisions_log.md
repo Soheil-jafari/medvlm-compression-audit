@@ -725,6 +725,14 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-14 (agent; applying the second amendment of 2026-11-13): RC-CAL0 part A.** Teacher
+  encoder: no non-finite image in any split. Student encoder: 2 / 390 validation, 5 / 512 filtered
+  test, 8 / 968 unfiltered test, 24 / 4,513 training images, all first at vision block 31. The
+  test drop (union of both encoders) leaves 507 and 960 test images; the code is in
+  (`data/nonfinite.py`, test evaluations refuse without `results/data/nonfinite_drop.csv`); the
+  list is committed when the scan files arrive. Validation: only the free-text set could hold the
+  2 images (the probe-based suites draw from the 227 probe images, which do not contain them);
+  check and proposal in RC-CAL0 section 6.
 - **2026-11-13 (Soheil and Amir; pre-registration section 10, clarification): A5 logprob_drop
   is its own run on layers and KV groups.** As section 7 and D07 state for both A5 variants (the
   KL effect is scored exactly, and channel groups are scored by the first-order estimate), A5

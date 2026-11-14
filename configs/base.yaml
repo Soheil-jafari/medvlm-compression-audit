@@ -24,6 +24,11 @@ paths:
 # that draws calibration images reads the cleaned set and refuses to run without the check.
 calibration_check:
   required: true
+# Second amendment of 2026-11-13 (Soheil and Amir): test images whose fp16 vision tower output is
+# non-finite for the student or the teacher are dropped for every arm before any test evaluation
+# (results/data/nonfinite_drop.csv, scripts/make_drop_list.py); test evaluations refuse without it.
+nonfinite_drop:
+  required: true
 
 # Which candidate configs are active. Nothing here is decided yet.
 components:

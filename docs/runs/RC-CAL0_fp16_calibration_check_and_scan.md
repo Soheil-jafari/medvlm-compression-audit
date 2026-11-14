@@ -97,7 +97,44 @@ committed unchanged (SHA-256 `73a999df43b4da0d7622aa756b9b1b8875a87debf3c80d76e7
   54b5b6d was already the cleaned set: the existing hand-off `e9-seed0-quantized` stands under
   the amendment.
 
-**Part A (the scan):**
+**Part A (the scan; reported by Amir, 2026-11-14).** Non-finite fp16 vision tower output, images
+per split:
 
-- Run by / date, commit:
-- Per split and encoder: non-finite images / images:
+| Encoder | Validation | Test (filtered) | Test (unfiltered) | Training |
+|---|---|---|---|---|
+| Teacher | 0 / 390 | 0 / 512 | 0 / 968 | 0 / 4,513 |
+| Student | 2 / 390 | 5 / 512 | 8 / 968 | 24 / 4,513 |
+
+- Every student failure first appears at vision block 31, the last of the 32 blocks.
+- **Test:** by the second amendment of 2026-11-13 the union of both encoders' lists, which is
+  the student's 5 filtered-test and 8 unfiltered-test images, is dropped for every arm before any
+  test evaluation: **filtered test 512 -> 507 images, unfiltered test 968 -> 960 images**. Their
+  QA rows (all rows of these images) are counted by the first test evaluation, which writes
+  `nonfinite_images_dropped`, `nonfinite_rows_dropped`, `eval_images_after_drop` and
+  `eval_rows_after_drop` (the 12,067 / 21,728 rows of section 1 shrink by those rows). The list is
+  `results/data/nonfinite_drop.csv`, made from the two scan files by `scripts/make_drop_list.py`.
+  **Not committed yet:** the scan files did not reach the agent (only the counts above); the ids
+  are not typed from memory.
+- **Validation:** the student's 2 images (clbnxtowu6umq079oar8d56lx:e28d18f5f7e5,
+  clbnxtoncarbp07554f82d7ij:43bda143abf0) are not among E2's 227 probe images (Amir, from the
+  saved outcomes). The probe suites, the operating point, the mask audit and the other-image
+  partners all draw from the probe images, so they are unaffected. The free-text set is the one
+  validation use that draws from every row (1,000 seeded rows of all 390 images): whether these
+  images are in it is checked by `scripts/check_val_nonfinite_use.py` (CPU; see the proposal
+  below).
+- **Training:** 24 of 4,513 images (0.5 %) overflow. That is the same order as E2's 16 skipped
+  updates (one non-finite micro-batch each, 0.16 % of 10,000 examples), but fewer than the
+  roughly 50 one would expect if every training-pool row of these images had failed (about 2.2
+  pool rows per image on average, an estimate). Which examples the skipped steps held (RC-E2
+  section 6b, CPU) would show whether they are these images.
+
+**Proposal for the free-text set (before any compressed arm's result), if the check finds rows
+of the 2 validation images among the 1,000:** those answers were generated from non-finite vision
+features, so E1's and E2's committed `token_f1`, `exact_match` and hallucination rows include them
+(the answers are not saved, so they cannot be re-scored without generating again). Proposed: leave
+the rows of the student-encoder's non-finite validation images out of the free-text set for every
+arm (the same seeded 1,000 rows minus those rows, every other row unchanged), and generate E1's
+and E2's free-text answers again on that set (the free-text part of a validation pass, under
+0.5 GPU h per model, an estimate), recording the old and the new values. A metric in [0, 1] moves
+by at most k / 1,000 for k affected rows, so the change is small either way. If the check finds
+none, nothing changes.

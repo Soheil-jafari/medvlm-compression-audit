@@ -1429,3 +1429,17 @@ Append-only, newest at the bottom. One entry per iteration:
   no model loaded); RC-SMOKE runs it end to end after E7. Schedule: about 3 h more plus a budget
   search. Tests.
 
+## Iteration 85: 2026-11-14 (interactive)
+- RC-CAL0 part A (Amir): teacher 0 non-finite images anywhere; student 2 / 390 val, 5 / 512 test,
+  8 / 968 unfiltered test, 24 / 4,513 train, all first at vision block 31. Recorded in RC-CAL0
+  section 6, with the training note (same order as E2's 16 skipped updates, fewer than the ~50 a
+  full failure of these images' pool rows would give).
+- The test rule in code: `data/nonfinite.py` (every row of a listed image goes; counts written as
+  rows), applied in the evaluation before the model loads; test evaluations refuse without
+  `results/data/nonfinite_drop.csv` (`nonfinite_drop.required`); `scripts/make_drop_list.py`
+  builds the list from the two scan files. New sizes: 507 and 960 test images. The scan files did
+  not arrive, so the list is not committed yet.
+- Validation: `scripts/check_val_nonfinite_use.py` (CPU) checks the free-text set, the only use
+  that could hold the 2 images; proposal in RC-CAL0 section 6. RC-R1 leaves `smoke_passed.yaml`
+  until it smokes again with the drop. Tests.
+

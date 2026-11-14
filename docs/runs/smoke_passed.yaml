@@ -1,6 +1,8 @@
 # Cards for which RC-SMOKE passed (2026-11-13). The agent adds a card here from the
 # smoke_report.md that RC-SMOKE prints, with the commit it ran on; scripts/run_card.py refuses
 # a gated card (medcompress.smoke.GATED_CARDS) that is not listed.
+# RC-R1 passed at 9113632 but was removed on 2026-11-14: it smokes again with the drop of the
+# non-finite test images (second amendment of 2026-11-13), then runs.
 passed:
   RC-G2:
     commit: 9113632
@@ -16,10 +18,6 @@ passed:
   RC-E10:
     commit: 9113632
     date: 2026-11-13
-  RC-R1:
-    commit: 9113632
-    date: 2026-11-13
-    note: "the test evaluations also wait for the committed list of non-finite test images (second amendment of 2026-11-13)"
   RC-A2:
     commit: 9113632
     date: 2026-11-13

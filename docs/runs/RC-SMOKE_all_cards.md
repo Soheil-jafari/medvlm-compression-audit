@@ -26,6 +26,8 @@
 - First of all, on T4 0, the smoke runs the fp16 calibration check of seed 0 (student, 128
   images; `scripts/check_calibration.py`) into its own temporary results, which every later
   calibration set reads (amendment of 2026-11-13).
+- The test evaluations (RC-R1's E0, E1 and E2, RC-E3 `w4`) apply the committed drop list of
+  non-finite test images (second amendment of 2026-11-13); without it they wait (exit 4).
 - What is tiny (`src/medcompress/smoke.py`): 2 calibration images; the budget search's two
   end points and at most 2 bisection steps; 2 recovery and 2 training updates; for evaluation
   the first validation images that give every finding 2 positive and 2 negative images plus one
@@ -79,12 +81,12 @@ The table is also saved as `/kaggle/working/smoke/smoke_report.md`, and each sta
 under `/kaggle/working/smoke/logs/`. One card or more only: `python scripts/smoke_cards.py
 --card RC-E9 --card RC-G2`.
 
-**Reduced RC-SMOKE (2026-11-13), after RC-CAL0's calibration file is committed:** the same cell
+**Reduced RC-SMOKE (2026-11-13; RC-R1 added 2026-11-14), after RC-CAL0's calibration file and the drop list of non-finite test images are committed:** the same cell
 with its last line replaced by
 
 ```bash
 python scripts/smoke_cards.py --card RC-E3 --card RC-E4 --card RC-A1 --card RC-A4 --card RC-A5 \
-  --card RC-A6 2>&1 | tee /kaggle/working/smoke_cards_reduced.txt
+  --card RC-A6 --card RC-R1 2>&1 | tee /kaggle/working/smoke_cards_reduced.txt
 ```
 
 `--card` also runs what those jobs read: the calibration check first, and E7 (A1 re-weights E7's

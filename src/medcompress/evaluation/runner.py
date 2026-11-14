@@ -640,6 +640,7 @@ def run_evaluation(
         raise ConfigError("settings still open: inputs.image_longest_side")
     paths = config["paths"]
     data_root = Path(paths["data_root"])
+    drop_counts: dict[str, float] = {}
     if samples is None:
         from medcompress.data.prepared import load_prepared
 
@@ -648,6 +649,10 @@ def run_evaluation(
             data_root, dataset, Path(paths["private_root"]),
             unfiltered_test=settings.split == "test_unfiltered",
         )[settings.split]  # fmt: skip
+        from medcompress.data.nonfinite import drop_for_split
+
+        # the second amendment of 2026-11-13: non-finite test images go, for every arm
+        samples, drop_counts = drop_for_split(config, settings.split, samples)
         per_label = smoke_setting(config, "eval_images_per_label")
         if per_label is not None:  # RC-SMOKE only: a few images, every finding both ways
             samples = smoke_subset(samples, settings.findings, int(per_label))
@@ -660,7 +665,9 @@ def run_evaluation(
     started = time.perf_counter()
     result = evaluate_model(model, samples, settings, data_root, seed, thresholds=thresholds)
     seconds = time.perf_counter() - started  # compute used (appendix)
-    metrics, arrays = [*result.metrics, Metric("evaluation_seconds", seconds)], result.arrays
+    metrics = [*result.metrics, Metric("evaluation_seconds", seconds),
+               *(Metric(name, value) for name, value in drop_counts.items())]  # fmt: skip
+    arrays = result.arrays
     budget = run.budget or ""
     rows = to_rows(metrics, run.experiment_tag, budget, seed)
     undefined = sorted(m.name for m in metrics if math.isnan(m.value))
