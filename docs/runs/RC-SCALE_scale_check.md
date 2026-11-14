@@ -67,6 +67,18 @@ python scripts/scale_check.py 2>&1 | tee /kaggle/working/scale_check.txt
 echo "scale_check exit code: ${PIPESTATUS[0]}"
 ```
 
+**Second run (2026-11-14), the four checks that failed or were near a limit at 48097bd:** the
+same cell with its last two lines replaced by
+
+```bash
+python scripts/scale_check.py --check budget_search --check recovery --check e4_training --check e9_eval 2>&1 | tee /kaggle/working/scale_check_2.txt
+echo "scale_check exit code: ${PIPESTATUS[0]}"
+```
+
+Attach the same datasets, plus `e9-seed0-quantized` and `e0-teacher-adapter` for E9's check.
+Each check now gets only the hand-offs its card reads (`run_card.py`'s selection). Estimate:
+about 35 min.
+
 ## 4. What to send back
 
 `/kaggle/working/scale/scale_report.md` (the table), `/kaggle/working/scale_check.txt` (the
@@ -88,5 +100,37 @@ from this card: the agent records the outcome.
 
 ## 6. Run report
 
-- Run by / date / commit:
-- Table:
+**First run, reported by Soheil on 2026-11-14 (commit 48097bd, 32 min):**
+
+- PASS `e7_first_order`: GPU memory flat at 7.01 GiB after each step, peak 7.71 GiB (the
+  estimate was 8.5-9.5), 3.5 s per step.
+- PASS `gptq`: flat, peak 8.89 GiB.
+- `recovery`: GPU flat, peak 11.43 GiB; **host RSS 23.6 GiB during the updates and 27.53 GiB at
+  the save, lowest available 2.9 GiB** (near the host limit; very likely the smoke's exit -9).
+  8 of 20 updates skipped by the loss scaler (updates 1-7 and 11: the scale settling).
+- FAIL `budget_search`: 7.12 GiB were still on GPU 0 when the first measurement loaded its
+  model (the check's own first load).
+- FAIL `e4_training`: `torch.cuda.reset_peak_memory_stats(device)` refused ("Invalid device
+  argument") before CUDA was in use, in the check itself.
+- FAIL `e9_eval`: the check passed every attached hand-off to E9, among them an unrelated E1
+  adapter, which was then compared with the teacher's settings.
+
+What the agent changed (2026-11-14):
+
+- Host RAM of the recovery: every cached teacher record kept a full copy of its shard's arrays
+  alive (`NpzFile` reads a whole array on every access, and each record kept a slice of its own
+  copy): with 1,000 records per shard, each record held the shard's three token arrays. Now each
+  shard's arrays are read once and each record owns only its rows (the values are the same;
+  test). This applies to every run that reads the teacher cache (E1, E2, E4, E10, every
+  recovery). The save of the pruned model now writes one tensor at a time from the GPU instead of
+  building the whole model in host memory first (the same file; test), and the pruned model is
+  loaded straight to the GPU. Stage 05 prints host memory after the examples, the recovery and
+  the save. Expected: host RSS a few GiB (estimate); the second run measures it.
+- `budget_search`: the first load, the removal set and the release now happen in one helper,
+  which checks that the GPU is empty again before any measurement and otherwise fails with the
+  largest live CUDA tensors. The reference that kept 7.12 GiB alive was not found on the CPU
+  (the same sequence there frees everything); the check will name it if it is still there.
+  Production stage 05 releases its first load before the search (`release_model(base)`), and
+  its 6 loads in one process each loaded at 9113632 (GPU peak 8.14 GB each).
+- `e4_training`: CUDA is initialised before the peak counters are reset.
+- `e9_eval` and every other check: only the hand-offs of its card (`select_handoffs`).

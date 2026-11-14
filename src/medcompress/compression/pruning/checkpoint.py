@@ -32,6 +32,53 @@ def _module(model: Any) -> Any:
     return getattr(model, "module", model)
 
 
+def stream_save(module: Any, path: Path | str) -> Path:
+    """Write ``module``'s weights as a safetensors file one tensor at a time (2026-11-14).
+
+    ``safetensors.torch.save_model`` first builds every tensor in host memory (RC-SCALE: host
+    RSS 27.5 GiB at the save of a pruned 3B). Here the header is computed from the shapes, then
+    each tensor is copied from the GPU, written and freed, so the host holds one tensor at a
+    time. The file is the format ``save_model`` writes: shared tensors are stored once, the
+    dropped names are listed in the metadata, and ``safetensors`` reads it back unchanged
+    (``tests/test_surgery.py``). Written to a temporary name and renamed at the end.
+    """
+    import os
+    import struct
+
+    import torch
+    from safetensors.torch import _TYPES, _remove_duplicate_names
+
+    names = {dtype: name for name, dtype in _TYPES.items()}
+    state = module.state_dict()
+    metadata: dict[str, str] = {}
+    for kept, dropped in _remove_duplicate_names(state).items():
+        for name in dropped:
+            metadata.setdefault(name, kept)
+            del state[name]
+    header: dict[str, Any] = {"__metadata__": metadata} if metadata else {}
+    offset = 0
+    for name in sorted(state):
+        tensor = state[name]
+        size = tensor.numel() * tensor.element_size()
+        header[name] = {"dtype": names[tensor.dtype], "shape": list(tensor.shape),
+                        "data_offsets": [offset, offset + size]}  # fmt: skip
+        offset += size
+    raw = json.dumps(header, separators=(",", ":")).encode("utf-8")
+    raw += b" " * (-len(raw) % 8)  # the data starts on an 8-byte boundary
+    target = Path(path)
+    partial = target.with_name(target.name + ".partial")
+    with partial.open("wb") as handle:
+        handle.write(struct.pack("<Q", len(raw)))
+        handle.write(raw)
+        for name in sorted(state):
+            with torch.no_grad():
+                host = state[name].detach().contiguous().to("cpu").reshape(-1)
+            handle.write(memoryview(host.view(torch.uint8).numpy()))
+            del host
+    os.replace(partial, target)
+    return target
+
+
 def save_pruned(
     model: Any,
     directory: Path | str,
@@ -45,8 +92,6 @@ def save_pruned(
     to the model before that step; ``mlp_channel_group_size`` is the group size used
     to enumerate the MLP units.
     """
-    from safetensors.torch import save_model
-
     from medcompress.utils.disk import require_free_disk
 
     module = _module(model)
@@ -59,7 +104,7 @@ def save_pruned(
             need += tensor.numel() * tensor.element_size()
     require_free_disk(out, need, "the pruned model")  # before anything is written
     out.mkdir(parents=True, exist_ok=True)
-    save_model(module, str(out / WEIGHTS_NAME))
+    stream_save(module, out / WEIGHTS_NAME)  # one tensor at a time in host memory (2026-11-14)
     manifest = {
         "format_version": FORMAT_VERSION,
         "mlp_channel_group_size": mlp_channel_group_size,
@@ -99,7 +144,8 @@ def load_pruned(base_model: Any, directory: Path | str) -> Any:
         if missing:
             raise ValueError(f"step {number}: units not in the base model: {missing[:3]}")
         remove_units(module, [by_id[unit_id] for unit_id in step])
-    load_model(module, str(Path(directory) / WEIGHTS_NAME), strict=True)
+    device = str(next(module.parameters()).device)  # straight to the GPU: no host copy
+    load_model(module, str(Path(directory) / WEIGHTS_NAME), strict=True, device=device)
     count = surgery.count_parameters(module)
     if count != manifest["parameters_after"]:
         raise ValueError(f"parameter count {count} != manifest {manifest['parameters_after']}")

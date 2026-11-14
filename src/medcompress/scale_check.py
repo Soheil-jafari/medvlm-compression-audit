@@ -105,6 +105,7 @@ def _reset_peak() -> None:
     import torch
 
     if torch.cuda.is_available():
+        torch.cuda.init()  # before CUDA is used, resetting a device's peak is refused (E4)
         for device in range(torch.cuda.device_count()):
             torch.cuda.reset_peak_memory_stats(device)
 
@@ -131,6 +132,43 @@ def judge(result: CheckResult, growth: Sequence[GrowthCheck], peak_gib: float | 
 
 
 # ------------------------------------------------------------------ shared pieces
+
+
+def release_and_verify(model: Any, what: str, limit_bytes: int = 1 << 30) -> None:
+    """Release ``model`` and check that this process holds less than ``limit_bytes`` of GPU
+    memory afterwards; otherwise fail with the largest live CUDA tensors (2026-11-14: the
+    budget-search check found 7.12 GiB still on GPU 0 when the first measurement loaded)."""
+    import gc
+
+    import torch
+
+    from medcompress.models.loading import release_model
+
+    release_model(model)
+    del model
+    gc.collect()
+    if not torch.cuda.is_available():
+        return
+    torch.cuda.empty_cache()
+    left = int(torch.cuda.memory_allocated())
+    if left <= limit_bytes:
+        return
+    live = sorted(
+        ((o.numel() * o.element_size(), tuple(o.shape), str(o.dtype)) for o in gc.get_objects()
+         if torch.is_tensor(o) and o.is_cuda),
+        reverse=True,
+    )[:5]  # fmt: skip
+    raise RuntimeError(f"{what}: {left / GIB:.2f} GiB still allocated after the release; "
+                       f"largest live CUDA tensors (bytes, shape, dtype): {live}")  # fmt: skip
+
+
+def removal_from_a_fresh_load(factory: Callable[[], Any], config: Mapping[str, Any]) -> list[Any]:
+    """Load the student, take the B2-level magnitude removal set, release the model and check
+    the GPU is empty again before anything else loads."""
+    model = factory()
+    removal = magnitude_removal(model, config, b2_fraction(config))
+    release_and_verify(model, "the budget-search check's first load")
+    return removal
 
 
 def magnitude_removal(model: Any, config: Mapping[str, Any], fraction: float) -> list[Any]:
@@ -290,16 +328,12 @@ def check_budget_search(config: Mapping[str, Any], result: CheckResult, *, loads
     from medcompress.config import RunContext, load_config
     from medcompress.data.prepared import load_prepared
     from medcompress.evaluation.efficiency import timing_samples
-    from medcompress.models.loading import release_model
 
     run = RunContext("E7", seed=0, budget="B2")
     settings = read_prune_settings(config, run, need_protocol=True)
     factory = _student_factory(config, run)
     paths = config["paths"]
-    model = factory()  # stage 05's first load: the units and their order
-    removal = magnitude_removal(model, config, b2_fraction(config))
-    release_model(model)
-    del model
+    removal = removal_from_a_fresh_load(factory, config)  # like stage 05's first load
     protocol = replace(settings.protocol, samples=2, warmup_runs=0, repeats=1)
     dataset = load_config(config["components"]["datasets"]["train_qa"])["dataset"]
     pool = load_prepared(Path(paths["data_root"]), dataset, Path(paths["private_root"]))["val"]

@@ -725,6 +725,20 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-14 (Soheil and Amir): skipped updates kept and reported.** RC-SCALE's recovery
+  check (20 real updates on a pruned 3B) skipped 8 updates, at updates 1-7 and 11: the fp16 loss
+  scaler settling. Decision: keep the frozen scaler; record the skipped updates of every recovery
+  (`recovery_skipped_steps`) and every E4 run (`train_skipped_steps`, as E1, E2 and E10 already
+  do) in metrics, and report them per run in the paper (appendix table `appendix_updates`).
+- **2026-11-14 (agent; RC-SCALE at 48097bd, implementation, no setting changed): host RAM of the
+  recovery.** 23.6 GiB during the updates and 27.53 GiB at the save. Cause in the cache reader:
+  each teacher record kept its own full copy of its shard's arrays (`NpzFile` re-reads an array
+  on every access); now one read per shard and each record owns its rows (same values). The
+  pruned model is saved one tensor at a time from the GPU (same file format) and loaded straight
+  to the GPU. Scale-check harness fixed: the first load is released and verified before measuring
+  (`budget_search`), CUDA is initialised before resetting peaks (`e4_training`), each check gets
+  only its card's hand-offs (`e9_eval`). The test drop list (`results/data/nonfinite_drop.csv`,
+  9f04c4f) was rebuilt from the re-sent scan files: identical, so it stays as committed.
 - **2026-11-14 (Soheil and Amir; pre-registration section 10, clarification of 2026-11-14): E10's
   comparisons confirmed as proposed.** "The pruned 3B arm" is E5, E6 or E7 only (not the
   ablations), the one nearest E10's measured peak memory; E10Q is compared with E8 at the budget

@@ -128,8 +128,8 @@ def compute_table(rows: pd.DataFrame) -> str:
     """
     table = []
     totals = {m: 0.0 for m, _ in TIME_METRICS}
-    for experiment in ("E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9",
-                       "A1", "A2", "A3", "A4", "A5", "A6"):  # fmt: skip
+    for experiment in ("E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10",
+                       "E10Q", "A1", "A2", "A3", "A4", "A5", "A6"):  # fmt: skip
         if rows.empty:
             break
         mine = rows[rows["experiment"].astype(str).str.split(":").str[0] == experiment]
@@ -148,6 +148,37 @@ def compute_table(rows: pd.DataFrame) -> str:
     else:
         table = [[MISSING] * (len(TIME_METRICS) + 2)]
     return tabular(["Experiment", *[label for _, label in TIME_METRICS], "Total"], table)
+
+
+UPDATE_METRICS: tuple[tuple[str, str, str, str], ...] = (
+    ("train_steps", "train_skipped_steps", "train_nonfinite_steps", "Training"),
+    ("recovery_steps", "recovery_skipped_steps", "recovery_nonfinite_steps", "Recovery"),
+)
+"""(updates, updates the loss scaler skipped, steps with a non-finite loss, label) per kind."""
+
+
+def updates_table(rows: pd.DataFrame) -> str:
+    """Every training and recovery run: its optimizer updates, the updates the fp16 loss scaler
+    skipped (inf / NaN gradients; the first updates while the scale settles) and the steps with
+    a non-finite loss (Soheil and Amir, 2026-11-14: reported per arm, the frozen scaler kept)."""
+    header = ["Run", "Kind", "Updates", "Skipped by the scaler", "Non-finite loss"]
+    table = []
+    if not rows.empty:
+        budgets = rows["budget"].fillna("").astype(str)
+        keyed = rows.assign(budget=budgets)
+        for steps, skipped, nonfinite, label in UPDATE_METRICS:
+            mine = keyed[keyed["metric"].isin([steps, skipped, nonfinite])]
+            for (experiment, budget, seed), group in sorted(
+                mine.groupby(["experiment", "budget", "seed"]), key=lambda x: x[0]
+            ):
+                values = dict(zip(group["metric"], group["value"], strict=False))
+                if steps not in values:
+                    continue
+                run = f"{experiment} @{budget}" if budget else str(experiment)
+                table.append([latex_escape(f"{run} seed {int(seed)}"), label,
+                              fmt_value(values.get(steps), 0), fmt_value(values.get(skipped), 0),
+                              fmt_value(values.get(nonfinite), 0)])  # fmt: skip
+    return tabular(header, table or [[MISSING] * len(header)])
 
 
 def selection_table(rows: pd.DataFrame) -> str:
@@ -365,6 +396,7 @@ def write_appendix(
         "appendix_free_text.tex": _per_metric_table(summary, FREE_TEXT_METRICS),
         "appendix_e9.tex": e9_table(summary),
         "appendix_compute.tex": compute_table(rows),
+        "appendix_updates.tex": updates_table(rows),
         "appendix_student_selection.tex": selection_table(rows),
         "appendix_hyperparameters.tex": hyperparameter_table(),
     }

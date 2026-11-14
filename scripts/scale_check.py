@@ -26,6 +26,16 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 QUANTIZATION_CHECKS = ("e4_training", "gptq", "e9_eval")  # the env of their cards
+PLAN_OF: dict[str, tuple[str, int | None, tuple[str, ...]]] = {
+    "e7_first_order": ("RC-G2", None, ()),
+    "budget_search": ("RC-G2", None, ()),
+    "recovery": ("RC-G2", None, ()),
+    "e4_training": ("RC-E4", 0, ()),
+    "gptq": ("RC-E3", 0, ("w4",)),
+    "e9_eval": ("RC-E9", None, ()),
+}
+"""The card whose hand-offs each check reads (2026-11-14: E9's check was given an unrelated E1
+adapter, whose settings were then compared with the teacher's)."""
 TWO_GPU_CHECKS = ("e9_eval",)
 
 
@@ -84,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         except InputNotFound as exc:
             print(f"STOP: {exc}")
             return 2
-    handoffs = list(args.handoffs) or classify_bundles()[0]
+    found = list(args.handoffs) or classify_bundles()[0]
     env = dict(os.environ)
     env.update(
         MEDCOMPRESS_RESULTS_ROOT=str(roots["results"]),
@@ -95,6 +105,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     if Path("/kaggle").is_dir():
         env.setdefault("HF_HOME", "/kaggle/temp/hf")
+    for key in ("RESULTS", "CHECKPOINT", "OUTPUT", "CACHE"):  # the base config reads them
+        os.environ[f"MEDCOMPRESS_{key}_ROOT"] = env[f"MEDCOMPRESS_{key}_ROOT"]
+    from medcompress.card_runner import select_handoffs
+    from medcompress.cards import build_plan
+    from medcompress.config import load_config
+
+    base = load_config("base.yaml")
     checks = [c for c in CHECKS if args.check is None or c in args.check]
     rows = []
     started = time.perf_counter()
@@ -104,6 +121,9 @@ def main(argv: list[str] | None = None) -> int:
                    "--steps", str(args.steps), "--loads", str(args.loads),
                    "--updates", str(args.updates), "--e4-updates", str(args.e4_updates),
                    "--layers", str(args.layers), "--batches", str(args.batches)]  # fmt: skip
+        card, seed, variants = PLAN_OF[name]
+        plan = build_plan(card, seed, variants=list(variants) or None)
+        handoffs, ignored = select_handoffs(plan, base, found)  # only what this card reads
         for path in handoffs:
             command += ["--from", str(path)]
         check_env = dict(env)

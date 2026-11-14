@@ -301,14 +301,19 @@ def run_prune_and_recover(
     pool = training_pool(train, recovery.get("data_subset"), pool_seed)
     examples = examples_from_samples(pool, data_root, records=records)
     require_teacher_records(pool, examples)
+    from medcompress.utils.memory import print_memory
+
+    print_memory("stage 05: teacher records and examples ready")  # host RAM (2026-11-14)
     resume_dir = pruned_dir(config, run).parent / "resume"  # removed once the model is saved
     result = run_recovery(model, examples, recovery, seed=run.seed, resume_dir=resume_dir)  # type: ignore[arg-type]
+    print_memory("stage 05: recovery done")
     directory = save_pruned(
         model,
         pruned_dir(config, run),
         [list(search.removal)],
         mlp_channel_group_size=scoring.mlp_channel_group_size or NO_CHANNEL_GROUPS,
     )
+    print_memory("stage 05: pruned model saved")
     from medcompress.compression.distillation.resume import ResumeStore
 
     ResumeStore(resume_dir, "").clear()

@@ -176,3 +176,30 @@ def test_pruned_checkpoint_round_trip_over_two_steps(tmp_path) -> None:  # noqa:
     )
     with pytest.raises(ValueError, match="not in the base model"):
         load_pruned(_tiny("qwen2_5_vl"), tmp_path)
+
+
+def test_the_streamed_save_reads_back_like_save_model(tmp_path) -> None:  # noqa: ANN001
+    """2026-11-14: the pruned model is written one tensor at a time; the file must hold what
+    ``safetensors.torch.save_model`` holds (shared weights once, the dropped names in the
+    metadata) and load back with ``load_model``."""
+    from safetensors import safe_open
+    from safetensors.torch import load_file, load_model, save_model
+
+    from medcompress.compression.pruning.checkpoint import stream_save
+
+    model = _tiny("qwen2_5_vl")
+    model.lm_head.weight = model.model.language_model.embed_tokens.weight  # a shared tensor
+    model.get_input_embeddings().weight.data[0, 0] = 3.0
+    ours, theirs = tmp_path / "ours.safetensors", tmp_path / "theirs.safetensors"
+    stream_save(model, ours)
+    save_model(model, str(theirs))
+    a, b = load_file(str(ours)), load_file(str(theirs))
+    assert a.keys() == b.keys() and all(torch.equal(a[k], b[k]) for k in a)
+    with safe_open(str(ours), "pt") as x, safe_open(str(theirs), "pt") as y:
+        assert x.metadata() == y.metadata() and x.metadata()  # the dropped name is recorded
+    fresh = _tiny("qwen2_5_vl")
+    fresh.lm_head.weight = fresh.model.language_model.embed_tokens.weight
+    load_model(fresh, str(ours), strict=True)
+    assert all(torch.equal(p, q) for p, q in zip(fresh.state_dict().values(),
+                                                  model.state_dict().values(), strict=True))  # fmt: skip
+    assert not (tmp_path / "ours.safetensors.partial").exists()

@@ -121,3 +121,26 @@ def test_e9s_check_waits_without_its_hand_offs(tmp_path: Path) -> None:
     result = scale_check.CheckResult("e9_eval")
     scale_check.check_e9_eval(eval_config(tmp_path), result, batches=1)
     assert result.status == "WAIT" and "not attached" in result.lines[-1]
+
+
+def test_each_check_reads_only_the_hand_offs_of_its_card() -> None:
+    import importlib.util
+
+    from medcompress.cards import build_plan
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "scale_check.py"
+    spec = importlib.util.spec_from_file_location("scale_check_script", path)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    assert set(script.PLAN_OF) == set(scale_check.CHECKS)
+    plans = {name: build_plan(card, seed, variants=list(v) or None)
+             for name, (card, seed, v) in script.PLAN_OF.items()}  # fmt: skip
+    e9 = plans["e9_eval"]
+    assert {n.kind for n in e9.needs} == {"teacher_adapter"}  # never a student adapter
+    assert {n.kind for n in plans["recovery"].needs} == {"adapter", "teacher_cache"}
+
+
+def test_a_release_that_leaves_nothing_on_the_gpu_passes() -> None:
+    model = tiny_vlm.tiny_wrapper(seed=0)
+    scale_check.release_and_verify(model, "tiny")  # no CUDA here: only the release
+    assert all(p.device.type == "meta" for p in model.module.parameters())

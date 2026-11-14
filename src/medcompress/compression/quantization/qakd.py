@@ -552,6 +552,10 @@ def run_qakd_training(
         "train_examples_seen": result.examples_seen,
         "train_loss_final": result.final_loss(),
         "train_seconds": result.seconds,
+        # recorded for every E4 run like every recovery's (Soheil and Amir, 2026-11-14)
+        "train_skipped_steps": len(result.skipped_steps),
+        "train_nonfinite_steps": len(result.nonfinite_steps),
+        "train_nonfinite_microbatches": result.nonfinite_microbatches,
         "quantized_matrices": len(quantized),
         "quantization_weight_bits": settings.bits,
     }

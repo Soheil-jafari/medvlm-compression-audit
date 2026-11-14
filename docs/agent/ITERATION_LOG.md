@@ -1466,3 +1466,9 @@ Append-only, newest at the bottom. One entry per iteration:
 - E10's comparisons confirmed by Soheil and Amir (2026-11-14): E5, E6, E7 only, nearest E10's peak
   memory; E8 at the budget nearest E10Q's peak memory; descriptive, outside H1-H4. Recorded as the
   clarification of 2026-11-14 in pre-registration section 10 and in the decisions log.
+- RC-SCALE at 48097bd: e7 first-order, GPTQ and the recovery's GPU memory flat; the recovery's host
+  RSS 23.6 GiB (27.53 at the save). Cause: each teacher record kept its shard's arrays; fixed in
+  the cache reader. The pruned model is saved one tensor at a time and loaded to the GPU. Harness
+  fixes for budget_search, e4_training, e9_eval. Skipped updates (8 of 20, updates 1-7 and 11)
+  kept per the authors' decision; E4 records them; appendix table `appendix_updates`. The drop
+  list rebuilt from the re-sent scans is identical to the committed one. Tests.
