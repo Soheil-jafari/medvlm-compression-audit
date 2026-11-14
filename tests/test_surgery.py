@@ -200,6 +200,6 @@ def test_the_streamed_save_reads_back_like_save_model(tmp_path) -> None:  # noqa
     fresh = _tiny("qwen2_5_vl")
     fresh.lm_head.weight = fresh.model.language_model.embed_tokens.weight
     load_model(fresh, str(ours), strict=True)
-    assert all(torch.equal(p, q) for p, q in zip(fresh.state_dict().values(),
-                                                  model.state_dict().values(), strict=True))  # fmt: skip
+    pairs = zip(fresh.state_dict().values(), model.state_dict().values(), strict=True)
+    assert all(torch.equal(p, q) for p, q in pairs)
     assert not (tmp_path / "ours.safetensors.partial").exists()
