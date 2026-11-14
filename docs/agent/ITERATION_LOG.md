@@ -1419,3 +1419,13 @@ Append-only, newest at the bottom. One entry per iteration:
 - `smoke_cards.py --card` pulls in the calibration check and the jobs a job reads. RC-E10's
   production cell is in its card.
 
+## Iteration 84: 2026-11-13 (interactive)
+- RC-CAL0 part B committed: `results/calibration/seed0_replaced.csv` (SHA-256 checked equal to
+  the upload). Student: 4 of 260 replaced, the first 256 finite; teacher: 0 of 128, so E9's
+  quantized hand-off stands (RC-E9, RC-CAL0 section 6).
+- Clarification of 2026-11-13 (Soheil and Amir): A5 `logprob_drop` runs on layers and KV groups
+  as its own B2 run (D07, pre-registration section 7); `SAME_AS_E7` is `A4:n128` only; RC-A5 runs
+  both variants; A5 `logprob_drop` takes E7's exact scores of its units (`stage.subset_source`,
+  no model loaded); RC-SMOKE runs it end to end after E7. Schedule: about 3 h more plus a budget
+  search. Tests.
+

@@ -251,11 +251,20 @@ def smoke_jobs() -> list[SmokeJob]:
         ),
         SmokeJob(
             "RC-A5",
+            "A5 logprob_drop",
+            "B",
+            _pruning("A5", "logprob_drop"),
+            ("RC-A5", 0, ("logprob_drop",), ()),
+            after="E7",
+            note="E7's exact scores of layers and KV groups, then its own 05-07",
+        ),
+        SmokeJob(
+            "RC-A5",
             "A5 kl",
             "B",
             (SmokeStage("04 score", SCORE, _run_args("A5", variant="kl"), cap),),
             ("RC-A5", 0, ("kl",), ()),
-            note=f"first {CAPPED_UNITS} units; 05-07 as E7",
+            note="its 108 layers and KV groups scored exactly; 05-07 as A5 logprob_drop",
         ),
         SmokeJob(
             "RC-A6",

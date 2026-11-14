@@ -725,6 +725,20 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-13 (Soheil and Amir; pre-registration section 10, clarification): A5 logprob_drop
+  is its own run on layers and KV groups.** As section 7 and D07 state for both A5 variants (the
+  KL effect is scored exactly, and channel groups are scored by the first-order estimate), A5
+  `logprob_drop` runs on layers and KV groups only, as its own B2 run on seed 0; the reuse of E7
+  for it (freeze item 12) assumed identical settings, which is false (E7 also removes first-order
+  channel groups). `A4:n128` stays E7. Code: `configs/experiments/ablations/A5.yaml` (both
+  variants on layers and KV groups), `registry.SAME_AS_E7` = `A4:n128` only, RC-A5 runs both
+  variants, and A5 `logprob_drop` takes E7's exact scores of those units
+  (`pruning/stage.py: subset_source`), so it adds about 3 GPU h plus a budget search.
+- **2026-11-13 (Soheil and Amir): RC-CAL0 part B.** `results/calibration/seed0_replaced.csv`
+  committed unchanged (SHA-256 73a999df...b747d). Student (E2 seed 0, 256 images): 260 checked, 4
+  replaced, the first 256 finite. Teacher (128 images): 128 checked, none replaced, so E9's
+  existing quantized hand-off (`e9-seed0-quantized`, made at 54b5b6d from the original 128
+  images) stands under the amendment.
 - **2026-11-13 (Soheil and Amir; pre-registration section 10, second amendment of 2026-11-13;
   before any test evaluation and before the RC-CAL0 scan results): test images that are not
   finite in fp16 are dropped.** Any test image (filtered or unfiltered internal test, later

@@ -323,6 +323,16 @@ teacher differently (different encoders); running the encoder in fp32 for those 
 the numerics the study measures. *How:* `scripts/scan_vision_finite.py` (RC-CAL0) finds the images;
 the agent commits the list; the test evaluation leaves those images out (code before RC-R1).
 
+**Clarification of 2026-11-13 (Soheil and Amir; before any compression result).** A5
+`logprob_drop` runs on layers and KV groups only (exactly scored), as section 7 and D07 already
+state for both A5 variants, as **its own B2 run on seed 0**. The reuse of E7 for A5
+`logprob_drop` (freeze item 12, section 7 row "Reuse of E7") assumed identical settings, which is
+false: E7 also scores and removes first-order channel groups. That reuse is withdrawn for A5 only;
+`A4:n128` stays E7. A5 `logprob_drop` takes E7's exact scores of the layers and KV groups of the
+same seed (an exact score does not depend on which other units are scored), so it needs no
+scoring of its own; its removal, recovery and evaluation are its own (about 3 GPU h plus a budget
+search, an estimate).
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result

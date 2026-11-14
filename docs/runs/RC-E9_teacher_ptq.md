@@ -206,6 +206,10 @@ cannot open the Kaggle dataset; the check runs on Kaggle and prints `E9: quantiz
 matches the parent: 196 matrices in 28 decoder layers, shapes ... (made from E0)`. Paste that
 line below. If the check fails, the hand-off is not the teacher's decoder: re-quantize.
 
+**Calibration amendment (2026-11-13):** RC-CAL0 checked the teacher on its 128 calibration
+images in fp16: none is non-finite, none replaced. E9's quantization at 54b5b6d used exactly the
+cleaned set, so `e9-seed0-quantized` stands; no re-quantization.
+
 **Resumed evaluation (after RC-SMOKE passed for RC-E9):**
 
 - The verification line (`quantized checkpoint matches the parent: ...`):

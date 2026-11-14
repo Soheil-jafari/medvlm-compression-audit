@@ -26,7 +26,7 @@ ABLATION_VARIANTS: dict[str, tuple[str | None, ...]] = {
     "A2": (None,),
     "A3": (None,),
     "A4": ("n32", "n64", "n256"),  # n128 is E7 itself (registry.SAME_AS_E7)
-    "A5": ("kl",),  # logprob_drop is E7 itself
+    "A5": ("logprob_drop", "kl"),  # both on layers and KV groups (clarification, 2026-11-13)
     "A6": ("layers_only", "heads_channels"),
 }
 RC_D1_RUN4B: tuple[str, ...] = ("--rule", "full:0.92:or_crop:0.80", "--heldout-filter", "0.86")

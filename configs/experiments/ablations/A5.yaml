@@ -16,10 +16,13 @@ experiment:
 pruning:
   units:
     # D07 / pre-registration section 7 (A5): the KL effect is scored exactly, so with the
-    # first-order estimate for the channel groups (D07 section 1) A5 runs on the exactly scored
-    # unit types only: layers and KV groups (exact removal); reported as such (2026-11-13)
+    # first-order estimate for the channel groups (D07 section 1) BOTH A5 variants run on the
+    # exactly scored unit types only: layers and KV groups (exact removal); reported as such.
+    # 2026-11-13 (Soheil and Amir, clarification in section 10): logprob_drop is its own B2
+    # run, not E7 (E7 also removes first-order channel groups); it takes E7's exact scores of
+    # these units (stage.subset_source), so it needs no scoring of its own
     types_by_variant:
-      logprob_drop: [decoder_layer, attention_head, mlp_channel_group]   # E7 itself
+      logprob_drop: [decoder_layer, attention_head]
       kl: [decoder_layer, attention_head]
   clinical:
     delta_by_variant:

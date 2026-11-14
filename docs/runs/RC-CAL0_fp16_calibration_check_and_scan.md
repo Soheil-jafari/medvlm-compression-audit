@@ -87,6 +87,17 @@ cp results/calibration/seed0_replaced.csv /kaggle/working/results_to_commit/resu
 
 ## 6. Run report
 
+**Part B (reported by Soheil and Amir, 2026-11-13).** `results/calibration/seed0_replaced.csv`
+committed unchanged (SHA-256 `73a999df43b4da0d7622aa756b9b1b8875a87debf3c80d76e7ee5088197b747d`).
+
+- Student (E2 seed 0, `--size 256`): 260 images checked, **4 replaced** (their sample ids are in
+  the file; two of them are the images RC-E3 found among the first 128); the first 256 of the
+  cleaned order are finite. Every student arm of seed 0 now reads this set (A4 up to `n256`).
+- Teacher (E9's parent, `--size 128`): 128 checked, **none replaced**. So E9's calibration at
+  54b5b6d was already the cleaned set: the existing hand-off `e9-seed0-quantized` stands under
+  the amendment.
+
+**Part A (the scan):**
+
 - Run by / date, commit:
-- Part A, per split and encoder: non-finite images / images:
-- Part B: student replaced ids, teacher replaced ids:
+- Per split and encoder: non-finite images / images:

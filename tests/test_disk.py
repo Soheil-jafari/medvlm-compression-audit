@@ -66,8 +66,10 @@ def test_the_smoke_deletes_a_jobs_checkpoints_once_nothing_reads_them() -> None:
     assert smoke.job_experiments(by_name["E3 w4"]) == {("E3", "w4")}
     assert smoke.job_experiments(by_name["E9 evaluation path"]) == set()  # attached links kept
     finished = {"E7"}
-    assert by_name["E7"] not in smoke.ready_for_cleanup(jobs, finished)  # E8 and A1 still read it
+    assert by_name["E7"] not in smoke.ready_for_cleanup(jobs, finished)  # E8, A1, A5 read it
     finished |= {"E7 30-group check", "E8 B2", "A1"}
+    assert by_name["E7"] not in smoke.ready_for_cleanup(jobs, finished)  # A5 logprob_drop
+    finished |= {"A5 logprob_drop"}
     assert by_name["E7"] in smoke.ready_for_cleanup(jobs, finished)
     reduced = smoke.with_dependencies(jobs, ["RC-A1", "RC-E3"])
     names = [j.name for j in reduced]

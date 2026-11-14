@@ -69,6 +69,5 @@ def test_a5_kl_scores_layers_and_kv_groups_exactly() -> None:
     clinical = {**e7["pruning"]["clinical"], "delta": "kl"}
     with pytest.raises(ConfigError, match="does not support delta: kl"):
         ClinicalSettings.from_config({**e7, "pruning": {**e7["pruning"], "clinical": clinical}})
-    assert ScoringSettings.from_config(config, "logprob_drop").unit_types == (
-        "decoder_layer", "attention_head", "mlp_channel_group",
-    )  # fmt: skip
+    # both variants on the same units (clarification of 2026-11-13): A5 logprob_drop is not E7
+    assert ScoringSettings.from_config(config, "logprob_drop").unit_types == kl.unit_types

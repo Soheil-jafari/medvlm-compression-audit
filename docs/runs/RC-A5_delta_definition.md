@@ -13,6 +13,13 @@
 - Purpose: does the criterion need the right answer, or does any change of the prediction do?
 - Status: `blocked` (see section 2)
 
+- **Both A5 variants run, on layers and KV groups (clarification of 2026-11-13, Soheil and
+  Amir; pre-registration section 10):** `logprob_drop` is its own B2 run on seed 0, no longer E7
+  (E7 also removes first-order channel groups, so the settings were not identical). It takes E7's
+  exact scores of the layers and KV groups of seed 0 (`stage.subset_source`; no scoring of its
+  own) and adds about 3 GPU h (1.2 h recovery, 1.7 h evaluation, estimates) plus a budget search.
+  `kl` scores the same 108 units exactly. Steps: `run A5 logprob_drop B2`, its test evaluations,
+  then the same for `kl`. Needs E7 seed 0's scores committed (RC-G2 session 3).
 - **A5 `kl` scores layers and KV groups only (2026-11-13; D07 and pre-registration section 7,
   no new decision):** the KL effect is scored exactly, and D07 section 1 scores channel groups by
   the first-order estimate, which has no KL form; so A5 `kl` runs on the exactly scored unit types

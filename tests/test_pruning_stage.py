@@ -361,3 +361,44 @@ def test_the_first_order_check_scores_random_channel_groups_exactly(tmp_path: Pa
         assert float(row["exact"]) == pytest.approx(truth[row["unit_id"]], rel=1e-9, abs=1e-12)
     with pytest.raises(ConfigError, match="no first_order unit type"):
         stage.run_first_order_check(config("exact"), run, tiny_vlm.tiny_wrapper(seed=0), train)
+
+
+def test_a5_logprob_drop_takes_e7s_exact_scores_of_layers_and_kv_groups(tmp_path: Path) -> None:
+    """Clarification of 2026-11-13: A5 logprob_drop runs on layers and KV groups (exactly scored),
+    as its own run; E7's exact scores of those units stand in, with no model loaded."""
+    train = write_dataset(tmp_path)
+    clinical = {"delta": "logprob_drop", "weighting": "uniform", "negatives_per_positive": None,
+                "negative_delta": "keep", "batch_size": 4,
+                "ablation_method": {"decoder_layer": "exact", "attention_head": "exact",
+                                    "mlp_channel_group": "first_order"}}  # fmt: skip
+    e7_config = _config(tmp_path, criterion="clinical", clinical=clinical)
+    e7 = stage.run_scoring(
+        e7_config, RunContext("E7", seed=1), tiny_vlm.tiny_wrapper(seed=0), train
+    )
+    e7_scores = common.read_unit_scores(e7)
+    a5_config = _config(tmp_path, criterion="clinical", clinical=clinical)
+    a5_config["pruning"]["units"]["types"] = ["decoder_layer", "attention_head"]
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("a model was loaded")
+
+    original = stage.load_scoring_model
+    stage.load_scoring_model = boom
+    try:
+        run = RunContext("A5", seed=1, variant="logprob_drop")
+        stage.score_units_for_experiment(a5_config, run, train=train)
+    finally:
+        stage.load_scoring_model = original
+    got = common.read_unit_scores(
+        tmp_path / "results/A5/logprob_drop/nobudget/seed1/unit_scores.csv"
+    )
+    assert got == {u: s for u, s in e7_scores.items() if ".mlp_group" not in u}
+    assert got and all(".mlp_group" not in u for u in got)
+    # a unit type that E7 scored by the first-order estimate is never taken over
+    with_groups = _config(tmp_path, criterion="clinical", clinical=clinical)
+    settings = stage.ScoringSettings.from_config(with_groups, "logprob_drop")
+    assert stage.subset_source(with_groups, RunContext("A5", seed=1, variant="x"), settings) is None
+    other = _config(tmp_path, criterion="clinical", clinical={**clinical, "batch_size": 2})
+    other["pruning"]["units"]["types"] = ["decoder_layer", "attention_head"]
+    settings = stage.ScoringSettings.from_config(other, None)
+    assert stage.subset_source(other, RunContext("A5", seed=1, variant="y"), settings) is None

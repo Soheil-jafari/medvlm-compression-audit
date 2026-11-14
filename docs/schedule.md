@@ -234,7 +234,7 @@ training + 0.53 h validation, measured on seed 0).
 | A1 at B2, seeds 1 and 2 (secondary; under the futility rule) | 2 | per seed 1.2 h recovery (E7's effects re-weighted, no scoring) | 2 x 1.7 h | **5.8 h** + 2 S |
 | E3 `w8`, seeds 1 and 2 (H2; under the futility rule; added 2026-11-08) | 2 | per seed GPTQ under 1 h (deterministic) | 2 x 1.7 h | **5.4 h** |
 | **Conditional** (2026-11-11): H2's matched pruning arm at B3, seeds 1 and 2 (under the futility rule) | 2 | per seed 1.2 h recovery (E5 / E6 scoring minutes) | 2 x 1.7 h | **about 5.8 h (~6 h)** + 2 S, only if the rule below applies |
-| Ablations, seed 0 (A1, A2, A3, A4 x 3, A5, A6 x 2; `A4:n128` and `A5:logprob_drop` are E7) | 9 | 48.3 h (37.7 h scoring: A1 and A2 re-weight E7's effects; + 9 x 1.2 h recovery) | 9 x 1.7 h | **63.7 h** + 9 S (was 79.5 h with A1 and A2 scoring) |
+| Ablations, seed 0 (A1, A2, A3, A4 x 3, A5 x 2, A6 x 2; `A4:n128` is E7; A5 `logprob_drop` is its own run since 2026-11-13, with E7's exact scores) | 10 | 49.5 h (37.7 h scoring: A1 and A2 re-weight E7's effects, A5 `logprob_drop` takes E7's exact scores; + 10 x 1.2 h recovery) | 10 x 1.7 h | **66.6 h** + 10 S (63.7 h before A5 `logprob_drop` ran on its own) |
 | RC-E10 (seed 0) | 1 (+ its 4-bit run) | about 4 h (the card: training on the 2B, not measured, and its validation); GPTQ `w4` under 1 h | 4-bit validation 1.7 h; the tests about 1.2 h | about **7.9 h** |
 | RC-L1 (seed 0) | 2 | E2@30k 14.2 h; E7@30k recovery 3.5 h and scoring 7.9 h | 2 x 1.7 h | **29.0 h** + 2 C + S |
 | RC-R1 | 7 test pairs (E2 seeds 1, 2 only without a futility stop) | | E0 about 2 h (T4 x2), six students about 1.2 h each | about **9 h** |
@@ -245,7 +245,7 @@ training + 0.53 h validation, measured on seed 0).
 |---|---|
 | Soheil (1) | 27.3 (RC-G2: 5 recoveries 6.0, E7 scoring 7.9, the 30-group check 2.2; E8 at B2 1; six evaluations 10.2) + 7.9 (RC-E10) + 4.9 (A4 `n32`) + 9 (RC-R1) + 0.8 (E0) + 15.9 (RC-L1 E2@30k) = **about 65.8 h** (plus 2 C; RC-E3 and RC-E4 moved away on 2026-11-11) |
 | Amir (2) | 8.1 (RC-E3 seed 0: 3 x under 1 h GPTQ + 3 x 1.7 h evaluation; 2026-11-11) + 17.3 (E5 trend) + 25.7 (A4 `n64`, `n256`) + 24.5 (seed 2: E2 5.2, E7 10.8, comparator 2.9, A1 2.9, E3 `w8` 2.7) + 13.1 (RC-L1 E7@30k) = **about 88.7 h** |
-| Account 3 (Soheil) | 3.5 (RC-E9) + 8.8-15.8 (RC-E4 seed 0: 7.1-14.1 h training + 1.7 h evaluation; 2026-11-11) + 17.0 (E6, E7, E8 trend) + 33.2 (A1, A2, A3, A5, A6 seed 0) + 24.5 (seed 1, as seed 2) = **about 87.0-94.0 h** |
+| Account 3 (Soheil) | 3.5 (RC-E9) + 8.8-15.8 (RC-E4 seed 0: 7.1-14.1 h training + 1.7 h evaluation; 2026-11-11) + 17.0 (E6, E7, E8 trend) + 36.1 (A1, A2, A3, A5 x 2, A6 seed 0; A5 `logprob_drop` added 2026-11-13) + 24.5 (seed 1, as seed 2) = **about 89.9-96.9 h** |
 
 2026-11-13 reruns: RC-E3 seed 0 needs a full rerun after the first `w4` Cholesky failure.
 RC-E9 resumes evaluation and benchmarking from the verified `e9-seed0-quantized` dataset
