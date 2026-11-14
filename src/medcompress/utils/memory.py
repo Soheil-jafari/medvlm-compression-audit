@@ -208,3 +208,50 @@ def run_watched(command: list[str], env: dict[str, str] | None = None,
         out.seek(0)
         err.seek(0)
         return WatchedRun(int(child.returncode), out.read(), err.read(), peak, lowest)
+
+
+def live_cuda_tensors(limit: int = 5) -> list[tuple[int, tuple[int, ...], str, list[str]]]:
+    """The largest CUDA tensors this process still holds: ``(bytes, shape, dtype, the types of
+    the objects that refer to them)``, largest first (2026-11-14: to name what keeps GPU memory
+    after a release)."""
+    try:
+        import torch
+    except ImportError:  # pragma: no cover - torch is a hard requirement of the stages
+        return []
+    if not torch.cuda.is_available():
+        return []
+    gc.collect()
+    found = []
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) and obj.is_cuda:
+                found.append(obj)
+        except Exception:  # noqa: BLE001 - some objects refuse attribute access
+            continue
+    found.sort(key=lambda t: t.numel() * t.element_size(), reverse=True)
+    out = []
+    for tensor in found[:limit]:
+        owners = sorted({type(r).__name__ for r in gc.get_referrers(tensor)} - {"list", "frame"})
+        out.append((tensor.numel() * tensor.element_size(), tuple(tensor.shape),
+                    str(tensor.dtype), owners[:6]))  # fmt: skip
+    return out
+
+
+def report_leftover_gpu(what: str, limit_bytes: int = 1 << 30) -> int:
+    """After a release: print this process's allocated and reserved GPU memory, and, above
+    ``limit_bytes``, the largest live CUDA tensors (``MEDCOMPRESS_LEFTOVER`` line). Returns the
+    allocated bytes (0 without CUDA)."""
+    try:
+        import torch
+    except ImportError:  # pragma: no cover
+        return 0
+    if not torch.cuda.is_available():
+        return 0
+    allocated = sum(int(torch.cuda.memory_allocated(d)) for d in range(torch.cuda.device_count()))
+    reserved = sum(int(torch.cuda.memory_reserved(d)) for d in range(torch.cuda.device_count()))
+    line = (f"MEDCOMPRESS_LEFTOVER {what}: allocated {allocated / GIB:.2f} GiB, reserved "
+            f"{reserved / GIB:.2f} GiB")  # fmt: skip
+    if allocated > limit_bytes:
+        line += f"; largest live CUDA tensors {live_cuda_tensors()}"
+    print(line, flush=True)
+    return allocated

@@ -9,10 +9,13 @@
   **validation** split now and on the **test** split after the pre-registration freeze, and
   timed with the budget protocol.
 - Purpose: the "quantize after training" family of the audit (D08).
-- Status: `blocked` for seed 0 (2026-11-13): root cause found (2 of 128 calibration images give
-  a non-finite fp16 vision output; section 5c). Amendment of 2026-11-13: such images are
-  replaced. Next: RC-CAL0 (the check of seed 0, committed), RC-SMOKE for RC-E3, then seed 0
-  again (it reads the cleaned set)
+- Status: `ready` for seed 0 (2026-11-14): every requirement is met. The fp16 calibration check
+  of seed 0 is committed (RC-CAL0 part B: the student checked on 256 images, 4 replaced;
+  `results/calibration/seed0_replaced.csv`), RC-SMOKE passed for RC-E3 at a237c5c (with the
+  cleaned calibration set and the layer-0 GPTQ checks), and the test drop list is committed
+  (`results/data/nonfinite_drop.csv`, 9f04c4f) for its test evaluations. Seed 0 runs again in full
+  (attempt 1 stopped on a NaN Hessian, section 5c). Seeds 1 and 2 (`w8` only) stay behind the
+  futility gate (seed plan).
 
 ## 2. Requirements
 

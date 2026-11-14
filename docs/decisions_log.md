@@ -725,6 +725,14 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-14 (agent, Soheil's request): RC-E3 `ready`; RC-SCALE second run recorded.** RC-E3
+  seed 0 is `ready` (the seed-0 calibration check committed, RC-SMOKE passed at a237c5c, the test
+  drop list committed). RC-SCALE at 2846e81: recovery (host RSS 2.7 GiB during the updates, 8.0
+  at the save, was 23.6 / 27.53), E4 training (7 of 10 updates skipped at the start, recorded)
+  and E9's evaluation passed with flat memory; `budget_search` failed again in the check's
+  measurement loop (7.12 GiB on GPU 0 before a load). Soheil: not blocking (production stage 05
+  did its 6 loads in both smokes). Diagnostics added (`MEDCOMPRESS_LEFTOVER` after every
+  measurement's release; a refused load names this process's share).
 - **2026-11-14 (Soheil and Amir): skipped updates kept and reported.** RC-SCALE's recovery
   check (20 real updates on a pruned 3B) skipped 8 updates, at updates 1-7 and 11: the fp16 loss
   scaler settling. Decision: keep the frozen scaler; record the skipped updates of every recovery

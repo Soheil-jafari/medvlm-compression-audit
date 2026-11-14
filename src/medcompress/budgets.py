@@ -394,6 +394,9 @@ def make_removal_measurer(
             release_model(model)
             del model
             release_memory()
+            from medcompress.utils.memory import report_leftover_gpu
+
+            report_leftover_gpu(f"after the measurement of {len(removal)} removed units")
         return metric_value(report, metric)
 
     return measure

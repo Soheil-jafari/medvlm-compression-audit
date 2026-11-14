@@ -218,10 +218,26 @@ def gpu_memory_check(
         if total - free > GPU_CLEAN_LIMIT:
             dirty.append(f"GPU{index} has {(total - free) / 2**30:.2f} GiB in use")
     if dirty:
+        own = ""
+        if mem_info is torch_mem_info():  # a real GPU: say whose memory it is (2026-11-14)
+            from medcompress.utils.memory import report_leftover_gpu
+
+            allocated = report_leftover_gpu(f"refused load of {what}")
+            own = (f"; this process holds {allocated / 2**30:.2f} GiB of it (the rest belongs "
+                   "to another process or to non-PyTorch allocations)")  # fmt: skip
         raise GPUPlacementError(
             f"{what}: {', '.join(dirty)} before the load (a model of an earlier stage or another "
-            "process is still there); refusing to load, the model would be offloaded"
+            f"process is still there){own}; refusing to load, the model would be offloaded"
         )
+
+
+def torch_mem_info() -> Any:
+    """``torch.cuda.mem_get_info`` (None without torch)."""
+    try:
+        import torch
+    except ImportError:  # pragma: no cover
+        return None
+    return torch.cuda.mem_get_info
 
 
 def explicit_device_map(

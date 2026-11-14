@@ -169,3 +169,12 @@ def test_a_watched_child_reports_its_peak_and_a_kill() -> None:
         interval=0.1,
     )
     assert killed.returncode == -9
+
+
+def test_the_leftover_report_is_quiet_without_a_gpu(capsys: pytest.CaptureFixture) -> None:
+    from medcompress.utils.memory import live_cuda_tensors, report_leftover_gpu
+
+    if torch.cuda.is_available():
+        pytest.skip("checks the CPU path")
+    assert report_leftover_gpu("probe") == 0 and live_cuda_tensors() == []
+    assert capsys.readouterr().out == ""
