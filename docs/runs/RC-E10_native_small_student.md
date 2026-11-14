@@ -94,6 +94,38 @@ cat results/smoke/RC-E10/tokenizer_check.csv
 It prints both revisions, the ids that differ, the share of answers re-encoded exactly and
 `PASS` / `FAIL` with the training mode the rule gives. Commit the CSV and paste the lines.
 
+**Steps 2-4 (training, validation, benchmark; RC-SMOKE passed for RC-E10 at 9113632).** Kaggle
+GPU T4 x2 (the training uses one T4), Internet on (the 2B download); attach `medcompress-data`
+and `e0-teacher-cache`. Save Version -> Save & Run All:
+
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
+python - <<'PY' || pip uninstall -y -q torchao
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null
+python scripts/find_inputs.py handoffs
+python scripts/run_card.py --card RC-E10 2>&1 | tee /kaggle/working/run_card_RC-E10.txt
+```
+
+Afterwards: make `/kaggle/working/handoff/E10_seed0_adapter` the private dataset
+`e10-seed0-adapter`; send `results_to_commit/` and the run report. About 4-5.3 GPU h
+(estimate); the disk holds the adapter only (tens of MB).
+
 ## 4. What to commit back
 
 - `results/smoke/RC-E10/tokenizer_check.csv`
@@ -124,8 +156,21 @@ without distillation in mind, and the text says so.
 
 **Steps 2-4 (training, validation, benchmark):**
 
-- Run by / date:
-- Commit actually used:
-- Wall time, peak GPU memory, final training loss:
-- Name of the private dataset with the adapter:
-- Anything unusual:
+Reported by Soheil on 2026-11-14 (run on account 3). All steps ok.
+
+- Commit actually used: c6c7cbd.
+- Files committed unchanged (byte-identical to the attached files): `results/E10/nobudget/seed0/`
+  `metrics.csv`, `environment.json`, `efficiency.csv`, `efficiency_setup.json`.
+- Revision printed by the run: Qwen/Qwen3-VL-2B-Instruct @
+  89644892e4d85e24eaac8bacfd4f463576704203, the revision already pinned in
+  `configs/models/qwen3_vl_2b_student.yaml`.
+- Training: 625 steps, 10,000 examples seen, final loss 0.339, 0 non-finite steps, 0 skipped
+  updates; 8,146 s; training peak 6.99 GB (`train_peak_gpu_bytes` 6,985,088,000).
+- Evaluation (681 probes; 904.6 s): op macro balanced accuracy 0.876 (CI 0.855-0.897); macro
+  balanced accuracy at the default threshold 0.630; small-finding recall 0.769, at the
+  operating point 1.000; lesion-mask effect 0.384 (CI 0.279-0.488); token F1 0.680;
+  hallucination rate 0.029.
+- Benchmark (development timing, one T4): 2,127,532,032 parameters; state 4.26 GB; peak memory
+  4.38 GB; warm latency 0.668 s, cold 1.974 s.
+- Hand-off: private dataset `e10-seed0-adapter`.
+- Anything unusual: nothing reported.

@@ -1,0 +1,32 @@
+_base_: [E10.yaml, ../quantization.yaml]
+
+experiment:
+  id: E10Q
+  name: native_small_student_ptq4
+  description: >-
+    E10's 4-bit run (pre-registration section 11 item 14.3: "at 4 bit against E8"; the code was
+    open at the freeze, section 12 note): the merged E10 (Qwen3-VL-2B, seed 0) quantized with
+    the E3 w4 recipe (GPTQ, the same frozen settings as E8 and E9), on 128 calibration images of
+    seed 0 cleaned by the fp16 check of the 2B itself (amendment of 2026-11-13). Exploratory,
+    seed 0 only, no verdict.
+  kind: main
+  parent: E10
+  variant_of: null
+  requires: []
+  budgets: []
+  seeds: [0]                              # seed 0 only, like E10
+  variants: []
+  scripts:
+    - scripts/03_quantize.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E10Q/nobudget/seed0/metrics.csv
+    - results/E10Q/nobudget/seed0/efficiency.csv
+  status: planned
+
+model:
+  start_from: E10
+
+quantization:
+  recipe: w4                              # D08: the E3 w4 recipe, as for E8 and E9

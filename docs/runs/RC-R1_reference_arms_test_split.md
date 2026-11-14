@@ -9,7 +9,11 @@
   pre-registration is frozen, while the test split is still locked. Every comparison of the
   paper is on the test split, and E2 is the reference of H1 and of tables T2 and F1 to F5, so
   these three arms need a test-split evaluation after the freeze.
-- Status: `blocked` (see section 2)
+- Status: `blocked` (see section 2). Also before any test evaluation (second amendment of
+  2026-11-13): the list `results/data/nonfinite_drop.csv` is committed (2026-11-14; RC-CAL0 part
+  A: 5 filtered and 8 unfiltered test images, from the student's encoder; every test evaluation
+  drops them and refuses without the list); next, RC-SMOKE again for RC-R1
+  (removed from `smoke_passed.yaml` until it passes with the drop)
 
 ## 2. Requirements
 

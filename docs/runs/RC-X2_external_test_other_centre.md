@@ -19,7 +19,7 @@
     images come from other centres than our Kvasir images, what its masks hold, and how many
     of its images are near-copies of ours.
 - Who: **Amir** (the download and the two CPU steps; 2026-11-08).
-- Status: `blocked` until the download (2026-11-08): the licence is recorded from the paper
+- Status: `blocked` until the download (2026-11-08; after it, the fp16 vision scan of the second amendment of 2026-11-13: images non-finite for the student or the teacher are dropped for every arm before any test evaluation): the licence is recorded from the paper
   (Ali et al., Sci Data 2023: **CC BY 4.0**, research use allowed, citation and acknowledgement
   required; the paper's commercial-use wording is inconsistent, irrelevant for academic use);
   confirming the Synapse page's terms is Amir's step when he downloads, and does not block the

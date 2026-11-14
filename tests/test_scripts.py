@@ -62,14 +62,15 @@ def test_a_stage_that_is_still_a_stub_exits_cleanly(capsys: pytest.CaptureFixtur
         ("select_student.py", ["--round", "R1", "--candidate", "qwen3_vl_2b"], "compute_unit_b"),
         ("select_student.py", ["--rank", "R1"], "run the round before ranking it"),
         # every setting is decided (2026-11-08): after the freeze the stages wait for inputs
-        ("04_score_pruning_units.py", ["--exp", "E7"], "the E2 seed 0 adapter"),
+        # since 2026-11-13 the fp16 calibration check is needed before the model is loaded
+        ("04_score_pruning_units.py", ["--exp", "E7"], "fp16 calibration check of seed 0"),
         ("05_prune_and_recover.py", ["--exp", "E7", "--budget", "B2"], "no unit scores"),
         ("07_benchmark_efficiency.py", ["--exp", "E9"], "teacher_adapter"),
         ("03_quantize.py", ["--exp", "E3", "--variant", "w4"], "--data-root"),
         ("03_quantize.py", ["--exp", "E8", "--budget", "B2"], "--data-root"),
         ("run_experiment.py", ["--exp", "E3", "--variant", "w4", "--seed", "0"], "--data-root"),
         # scoring loads the E2 student first: it stops before any download if E2 is missing
-        ("04_score_pruning_units.py", ["--exp", "E5", "--variant", "taylor"], "--from"),
+        ("04_score_pruning_units.py", ["--exp", "E5", "--variant", "taylor"], "check_calibration"),
         ("run_experiment.py", ["--exp", "E7", "--budget", "B2", "--seed", "0"], "pruning"),
     ],
 )

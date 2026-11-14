@@ -104,6 +104,21 @@ COMPAT_KEYS_BY_KIND: Mapping[str, tuple[str, ...]] = {
     "teacher_adapter": TEACHER_COMPAT_KEYS,
 }
 """The compared settings per hand-off kind; any other kind compares :data:`COMPAT_KEYS`."""
+TEACHER_EXPERIMENTS: tuple[str, ...] = ("E0", "E9")
+"""Runs whose model is the teacher: their hand-offs of any kind (E9's quantized decoder, the
+outcomes of E0 and E9) compare :data:`TEACHER_COMPAT_KEYS` (2026-11-13: E9's validation was
+refused because its quantized hand-off recorded the student fields)."""
+
+
+def compat_keys(bundle: Bundle) -> tuple[str, ...]:
+    """The settings compared for ``bundle``: by its kind, then by the run that wrote it."""
+    if bundle.kind in COMPAT_KEYS_BY_KIND:
+        return COMPAT_KEYS_BY_KIND[bundle.kind]
+    if bundle.meta.get("experiment") in TEACHER_EXPERIMENTS:
+        return TEACHER_COMPAT_KEYS
+    return COMPAT_KEYS
+
+
 _CHUNK = 1 << 20
 
 
@@ -370,7 +385,7 @@ def check_compat(bundle: Bundle, config: Mapping[str, Any]) -> None:
 
     theirs = bundle.meta.get("compat") or {}
     ours = compat_values(config)
-    keys = COMPAT_KEYS_BY_KIND.get(bundle.kind, COMPAT_KEYS)
+    keys = compat_keys(bundle)
     clashes = [
         f"{key}: {theirs.get(key)!r} there, {ours.get(key)!r} here"
         for key in keys
@@ -466,12 +481,15 @@ def export_handoff(
     meta: Mapping[str, Any],
     commit: str | None = None,
 ) -> Bundle:
-    """Copy the items ``(path root, relative path)`` into ``out_dir`` and write its manifest.
+    """Hard-link (or copy) the items ``(path root, relative path)`` into ``out_dir`` and write
+    its manifest.
 
     Each item keeps its place, ``<out_dir>/<path root>/<relative path>``, so the reading run
-    links it back under its own path root. ``out_dir`` must be new or empty.
+    links it back under its own path root. ``out_dir`` must be new or empty. Files are hard-linked
+    when the item and ``out_dir`` share a filesystem (no second copy on Kaggle's 20 GB disk;
+    2026-11-13), copied otherwise, after a check that the copy fits.
     """
-    import shutil
+    from medcompress.utils.disk import link_or_copy, require_free_disk, same_device, tree_bytes
 
     if kind not in HANDOFF_KINDS:
         raise BundleError(f"unknown hand-off kind {kind!r}; use one of {HANDOFF_KINDS}")
@@ -479,6 +497,13 @@ def export_handoff(
     if out_dir.exists() and any(out_dir.iterdir()):
         raise BundleError(f"{out_dir} is not empty; give a new folder")
     paths = config.get("paths") or {}
+    out_dir.mkdir(parents=True, exist_ok=True)
+    copied = sum(
+        tree_bytes(Path(str(paths[r])) / rel) for r, rel in items
+        if r in paths and (Path(str(paths[r])) / rel).exists()
+        and not same_device(Path(str(paths[r])) / rel, out_dir)
+    )  # fmt: skip
+    require_free_disk(out_dir, copied, f"hand-off {out_dir.name}")
     listed = []
     for root_key, rel in items:
         if root_key not in PATH_ROOTS:
@@ -488,10 +513,7 @@ def export_handoff(
             raise BundleError(f"{source} does not exist: has the run that writes it finished?")
         target = out_dir / root_key / rel
         target.parent.mkdir(parents=True, exist_ok=True)
-        if source.is_dir():
-            shutil.copytree(source, target)
-        else:
-            shutil.copy2(source, target)
+        link_or_copy(source, target)
         listed.append({"root": root_key, "path": Path(rel).as_posix()})
     return write_bundle_manifest(out_dir, kind=kind, meta=meta, items=listed, commit=commit)
 

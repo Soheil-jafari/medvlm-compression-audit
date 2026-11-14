@@ -220,6 +220,17 @@ _SPECS: tuple[ExperimentSpec, ...] = (
         trains=True,
     ),
     ExperimentSpec(
+        id="E10Q",
+        title="E10 at 4 bit (exploratory)",
+        description="GPTQ w4 of the merged E10 (the E3 w4 recipe), seed 0; compared at 4 bit "
+        "with E8 (pre-registration section 11 item 14.3; code added 2026-11-14).",
+        kind="main",
+        parent="E10",
+        stages=("quantize", "evaluate", "benchmark"),
+        scripts=(QUANTIZE, EVALUATE, BENCHMARK),
+        outputs=_outputs("E10Q"),
+    ),
+    ExperimentSpec(
         id="A1",
         title="Ablation: unweighted criterion (w_c = 1)",
         description="Clinical criterion with uniform finding weights.",
@@ -315,7 +326,9 @@ REGISTRY: dict[str, ExperimentSpec] = {spec.id: spec for spec in _SPECS}
 # Proposal (iteration 42, [team] decision in the pre-registration): report E7's B2 runs for
 # them instead of training the same models again (6 runs fewer). The ablation table falls
 # back to E7 only for an arm that has no runs of its own.
-SAME_AS_E7: tuple[str, ...] = ("A4:n128", "A5:logprob_drop")
+SAME_AS_E7: tuple[str, ...] = ("A4:n128",)
+"""``A5:logprob_drop`` was here until 2026-11-13: it runs on layers and KV groups only (D07,
+pre-registration section 7; clarification in section 10), so it is its own run."""
 
 # Pre-registered primary endpoints (see docs/preregistration.md).
 PRIMARY_ENDPOINTS: tuple[str, ...] = ("small_finding_recall", "lesion_mask_effect")

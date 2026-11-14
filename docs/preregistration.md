@@ -308,7 +308,40 @@ The document was frozen on 2026-11-08 at commit `18f1b47`. From now on **every c
 dated amendment here** (date, what changes, why, approved by both authors) and an entry in
 `docs/decisions_log.md`; the freeze record itself is the only edit made at the freeze.
 
-*No amendments yet.*
+**Amendment of 2026-11-13 (Soheil and Amir; before any compression result).** Calibration images whose fp16 forward through the model gives any non-finite value are replaced by the next eligible image in the same seeded order, keeping the nested subsets (A4) and the finding stratification. The rule is applied once per seed, before any criterion or quantization, identically for every arm that uses the calibration set (pruning criteria, GPTQ, E4, E8, E11/E12). The replaced ids are listed in a committed file. *Why:* RC-E3 seed 0 stopped on a NaN Hessian; 2 of its 128 calibration images give a non-finite vision tower output in fp16 (the frozen Qwen2.5-VL vision encoder overflows on them; their pixel values are finite; `scripts/check_gptq_inputs.py`, Amir, commit 9113632). The saved validation outcomes of E2 seed 0 and E1 seed 2 have no NaN margin (681 each). No other setting changes; the vision tower stays fp16. *How:* `scripts/check_calibration.py` checks each candidate with the fp16 forward of the model being calibrated (E2 of the seed for the student arms, the teacher for E9) and writes `results/calibration/seed<k>_replaced.csv`; every stage that draws calibration images reads the cleaned set (`data/calibration.py`) and refuses to run without it. E4 trains on the teacher cache and draws no calibration set, so the rule does not change it.
+
+**Amendment of 2026-11-13, second (Soheil and Amir; before any test evaluation and before the
+RC-CAL0 scan results).** Any test image (the filtered or the unfiltered internal test, and later
+PolypGen) whose fp16 vision tower output is non-finite for the student **or** the teacher is
+dropped from that test for **every** arm before any test evaluation; the list is committed and its
+count is reported next to the test sizes. *Why:* the fp16 vision encoder overflows on some images
+(the amendment above); a non-finite probe has no defined answer. No student arm changes the vision
+tower, so the student list holds for every student arm, and the union with the teacher's keeps one
+test set for all arms. Dropping is decided before any result, from the encoders alone (no model
+output of any arm is read). Scoring such an answer as wrong would treat the students and the
+teacher differently (different encoders); running the encoder in fp32 for those images would change
+the numerics the study measures. *How:* `scripts/scan_vision_finite.py` (RC-CAL0) finds the images;
+the agent commits the list; the test evaluation leaves those images out (code before RC-R1).
+
+**Clarification of 2026-11-13 (Soheil and Amir; before any compression result).** A5
+`logprob_drop` runs on layers and KV groups only (exactly scored), as section 7 and D07 already
+state for both A5 variants, as **its own B2 run on seed 0**. The reuse of E7 for A5
+`logprob_drop` (freeze item 12, section 7 row "Reuse of E7") assumed identical settings, which is
+false: E7 also scores and removes first-order channel groups. That reuse is withdrawn for A5 only;
+`A4:n128` stays E7. A5 `logprob_drop` takes E7's exact scores of the layers and KV groups of the
+same seed (an exact score does not depend on which other units are scored), so it needs no
+scoring of its own; its removal, recovery and evaluation are its own (about 3 GPU h plus a budget
+search, an estimate).
+
+**Clarification of 2026-11-14 (Soheil and Amir; before any E10 or E10Q comparison).** E10's two
+comparisons (section 11 item 14.3): "the pruned 3B arm nearest its footprint" is the arm among E5
+(any criterion), E6 and E7, at any budget, seed 0, whose measured peak memory is nearest to E10's
+(the ablations A1-A6 do not count). "At 4 bit against E8" compares E10Q (E10 quantized with the E3
+`w4` recipe) with E8 at the budget whose measured peak memory is nearest to E10Q's. Both are
+descriptive (differences with intervals on the test split, seed 0, no p-value) and outside H1-H4.
+*Why:* item 14.3 named neither the arm set nor E8's budget. *How:* `nearest_by_memory` in the
+comparison step (`E10_vs_matched_pruned_seed0`, `E10Q_vs_E8_seed0`); the chosen arms and their
+peak memories go to `results/comparisons/choices.json`.
 
 ## 11. Amendments before the freeze
 

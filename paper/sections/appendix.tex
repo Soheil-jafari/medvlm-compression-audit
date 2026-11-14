@@ -98,4 +98,13 @@ fallback.
   \resizebox{\linewidth}{!}{\input{tables/appendix_compute}}
 \end{table}
 
+\subsection{Optimizer updates skipped by the loss scaler}
+\begin{table}[h]
+  \centering
+  \caption{Every training and recovery run: its optimizer updates, the updates the fp16 loss
+  scaler skipped (non-finite gradients, mostly the first updates while the scale settles; the
+  scaler is part of the frozen recipe) and the steps with a non-finite loss.}
+  \resizebox{\linewidth}{!}{\input{tables/appendix_updates}}
+\end{table}
+
 % TODO (S12): the pre-registration document and the list of deviations.

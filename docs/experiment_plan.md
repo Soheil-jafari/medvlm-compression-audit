@@ -19,6 +19,7 @@ The registry (`src/medcompress/registry.py`) is the source of truth;
 | E8 | E7 + 4-bit PTQ | E7 | - | B1-B3 | 1 (seed 0) | 03, 06, 07 | metrics |
 | E9 | Teacher at 4-bit (supplementary, matched memory) | E0 | - | measured | 1 | 03, 06, 07 | metrics |
 | E10 | Native Qwen3-VL-2B (D05 fallback), E2 recipe, or E1 if its tokenizer does not match the cache (RC-E10 step 1); exploratory, compared at matched memory with the nearest pruned 3B arm and at 4 bit with E8 | pretrained | E0 cache | measured | 1 (seed 0) | 02, 06, 07 | adapter, metrics |
+| E10Q | E10 at 4 bit: GPTQ `w4` of the merged E10 (the E3 `w4` recipe; calibration cleaned by the 2B's own fp16 check); exploratory, compared with the E8 budget nearest in measured peak memory (code 2026-11-14) | E10 | — | measured | 1 (seed 0) | 03, 06, 07 | quantized codes, metrics |
 
 Scripts: `00_check_teacher_image_reliance`, `01_cache_teacher_outputs`,
 `02_train_student`, `03_quantize`, `04_score_pruning_units`, `05_prune_and_recover`,

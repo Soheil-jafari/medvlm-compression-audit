@@ -19,7 +19,7 @@ import dataclasses
 import hashlib
 import math
 import random
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -184,7 +184,12 @@ def check_patient_disjoint(splits: Mapping[str, Sequence[VQASample]]) -> list[st
 
 
 def make_calibration_subset(
-    train: Sequence[VQASample], size: int, *, seed: int, stratify_by_finding: bool = True
+    train: Sequence[VQASample],
+    size: int,
+    *,
+    seed: int,
+    stratify_by_finding: bool = True,
+    exclude: Collection[str] = (),
 ) -> list[VQASample]:
     """Return a calibration subset of the training split for pruning-unit scoring.
 
@@ -194,6 +199,11 @@ def make_calibration_subset(
     front, so every finding with a positive in the training split is covered when
     ``size`` allows. Because the order does not depend on ``size``, subsets for
     different sizes are nested (A4).
+
+    ``exclude``: sample ids (each image's representative sample) left out of the seeded order
+    before the stratification (pre-registration section 10, amendment of 2026-11-13: an image
+    whose fp16 forward gives a non-finite value is replaced by the next eligible image in the
+    same order; the subsets stay nested and stratified). Empty: the subsets are unchanged.
 
     Used by: E5, E6, E7, A1-A6 (``scripts/04_score_pruning_units.py``).
     """
@@ -206,6 +216,11 @@ def make_calibration_subset(
     if size <= 0 or size > len(images):
         raise ValueError(f"size must be in 1..{len(images)}, got {size}")
     random.Random(seed).shuffle(images)
+    if exclude:
+        left_out = set(exclude)
+        images = [image for image in images if by_image[image].sample_id not in left_out]
+        if size > len(images):
+            raise ValueError(f"size must be in 1..{len(images)} after the exclusions, got {size}")
     if stratify_by_finding:
         findings = sorted(
             {f for s in by_image.values() for f, present in s.findings.items() if present}

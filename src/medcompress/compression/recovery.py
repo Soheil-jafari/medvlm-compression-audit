@@ -252,6 +252,9 @@ def run_prune_and_recover(
         mlp_channel_group_size=scoring.mlp_channel_group_size,
     )
     parameters_before = count_parameters(base)
+    from medcompress.models.loading import release_model
+
+    release_model(base)  # its GPU memory is freed before the search loads its own copies
     del base
     unknown = sorted({u.unit_id for u in units} - set(scores))
     if unknown:
@@ -272,9 +275,11 @@ def run_prune_and_recover(
     target = target_value(spec, reference, decoder_bytes=decoder_bytes)
     if measure is None:
         measure = _default_measure(config, factory, settings, data_root)
+    smoke_steps = (config.get("smoke") or {}).get("budget_search_steps")  # RC-SMOKE only
     search = search_matched_budget(
-        units, ordered, spec, target, measure, protected_layers=protected
-    )
+        units, ordered, spec, target, measure, protected_layers=protected,
+        max_steps=None if smoke_steps is None else int(smoke_steps),
+    )  # fmt: skip
     if search.count == 0:
         raise ValueError(f"{run.budget} asks for no compression: E2 already meets the target")
 
@@ -296,14 +301,19 @@ def run_prune_and_recover(
     pool = training_pool(train, recovery.get("data_subset"), pool_seed)
     examples = examples_from_samples(pool, data_root, records=records)
     require_teacher_records(pool, examples)
+    from medcompress.utils.memory import print_memory
+
+    print_memory("stage 05: teacher records and examples ready")  # host RAM (2026-11-14)
     resume_dir = pruned_dir(config, run).parent / "resume"  # removed once the model is saved
     result = run_recovery(model, examples, recovery, seed=run.seed, resume_dir=resume_dir)  # type: ignore[arg-type]
+    print_memory("stage 05: recovery done")
     directory = save_pruned(
         model,
         pruned_dir(config, run),
         [list(search.removal)],
         mlp_channel_group_size=scoring.mlp_channel_group_size or NO_CHANNEL_GROUPS,
     )
+    print_memory("stage 05: pruned model saved")
     from medcompress.compression.distillation.resume import ResumeStore
 
     ResumeStore(resume_dir, "").clear()
@@ -398,6 +408,12 @@ def _write_outputs(
         ("recovery_steps", result.steps),
         ("recovery_loss_final", result.final_loss()),
         ("recovery_seconds", result.seconds),
+        # updates the loss scaler skipped for inf / NaN gradients and steps with a non-finite
+        # loss, recorded the same way for every arm (2026-11-14: the smoke's E7 recovery
+        # skipped 2 of 2 updates with finite losses)
+        ("recovery_skipped_steps", len(result.skipped_steps)),
+        ("recovery_nonfinite_steps", len(result.nonfinite_steps)),
+        ("recovery_nonfinite_microbatches", result.nonfinite_microbatches),
     ]
     if result.peak_gpu_bytes is not None:
         numbers.append(("recovery_peak_gpu_bytes", result.peak_gpu_bytes))

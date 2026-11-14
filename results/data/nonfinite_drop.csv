@@ -1,0 +1,14 @@
+split,sample_id,encoder,first_non_finite
+test,cl8k2u1r41fkj08326h8dhpr8:deef33f554f3,student,block 31
+test,clb0kvxvf90l8074y8reqhehu:4b440eea90c0,student,block 31
+test,clb0lbwykdo88086ug59e2bpc:2a66b68b5b4e,student,block 31
+test,clbnxtowx6utm079oadk8asu7:e511209e07fb,student,block 31
+test,clbnxtoxi6vum079o2gaed9wn:abfad496aadb,student,block 31
+test_unfiltered,cl8k2u1r41fkj08326h8dhpr8:deef33f554f3,student,block 31
+test_unfiltered,clb0kvxvf90l8074y8reqhehu:4b440eea90c0,student,block 31
+test_unfiltered,clb0lbwykdo88086ug59e2bpc:2a66b68b5b4e,student,block 31
+test_unfiltered,clbnxtoeubkxa074c0otia3ue:0bc56030dc9a,student,block 31
+test_unfiltered,clbnxtowx6utm079oadk8asu7:e511209e07fb,student,block 31
+test_unfiltered,clbnxtoxh6vse079oh50n1uc8:754f5f6da1e4,student,block 31
+test_unfiltered,clbnxtoxi6vum079o2gaed9wn:abfad496aadb,student,block 31
+test_unfiltered,clbnxtoxq6w7e079o2mv28fyl:ddc1e42f786b,student,block 31

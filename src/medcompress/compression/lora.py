@@ -131,6 +131,11 @@ def save_adapter(wrapper: Any, directory: Path | str) -> Path:
 
     if not isinstance(wrapper.module, peft.PeftModel):
         raise ValueError("no adapter is attached")
+    from medcompress.utils.disk import require_free_disk
+
+    trainable = [p for n, p in wrapper.module.named_parameters() if "lora_" in n]
+    need = sum(p.numel() * p.element_size() for p in trainable)
+    require_free_disk(Path(directory), need, "the adapter")
     wrapper.module.save_pretrained(str(directory))
     return Path(directory)
 

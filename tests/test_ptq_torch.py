@@ -425,3 +425,109 @@ def test_cholesky_retries_use_absolute_damping_increments() -> None:
     assert result.effective_damping == 0.0125
     assert torch.equal(hessian, torch.tensor([[1.0, 1.012], [1.012, 1.0]]))
     assert "layer0.q_proj" in log[0] and "final damping 0.0125" in log[-1]
+
+
+def test_a_quantized_checkpoint_must_be_exactly_the_parents_decoder(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from medcompress.compression.quantization.kernels import decoder_targets
+    from medcompress.compression.quantization.ptq import (
+        MANIFEST_NAME,
+        load_run_quantized,
+        verify_against_parent,
+    )
+
+    wrapper = tiny_vlm.tiny_wrapper(seed=0)
+    batches = calibration_batches(wrapper, _samples(tmp_path), tmp_path)
+    records = gptq_quantize_decoder(wrapper, batches, RECIPE, log=lambda _m: None)
+    targets = decoder_targets(tiny_vlm.tiny_wrapper(seed=0), RECIPE.targets)
+    summary = verify_against_parent(records, targets)
+    assert summary.startswith(
+        f"quantized checkpoint matches the parent: {len(records)} matrices in 3"
+    )
+    key = sorted(records)[0]
+    extra = {**records, key.replace("layer0.", "layer99."): records[key]}
+    with pytest.raises(ValueError, match="another model's decoder"):
+        verify_against_parent(extra, targets)
+    with pytest.raises(ValueError, match="lacks 1 matrices"):
+        verify_against_parent({k: v for k, v in records.items() if k != key}, targets)
+    bad = {**records, key: replace(records[key], codes=records[key].codes[:, :-1])}
+    with pytest.raises(ValueError, match="shape"):
+        verify_against_parent(bad, targets)
+    # a checkpoint made from another parent is refused before any model is loaded
+    config = {"paths": {"checkpoint_root": str(tmp_path / "ckpt")}}
+    run = RunContext("E9", seed=0)
+    folder = quantized_dir(config, run)
+    folder.mkdir(parents=True)
+    (folder / MANIFEST_NAME).write_text(json.dumps({"start_from": {"experiment": "E2"}}))
+    with pytest.raises(ValueError, match="made from 'E2', but E9 starts from 'E0'"):
+        load_run_quantized(config, run, 672)
+
+
+# ---------------------------------------------- the capture of GPTQ's inputs (2026-11-13)
+
+
+def _check_script():  # type: ignore[no-untyped-def]
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "check_gptq_inputs.py"
+    spec = importlib.util.spec_from_file_location("check_gptq_inputs", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_captured_inputs_equal_the_models_own_forward_exactly(tmp_path: Path) -> None:
+    from medcompress.compression.pruning.surgery import find_decoder_stack
+    from medcompress.compression.quantization.ptq import collect_hessians
+
+    script = _check_script()
+    wrapper = tiny_vlm.tiny_wrapper(seed=0)
+    module = wrapper.module
+    layers = find_decoder_stack(module).layers
+    batches = calibration_batches(wrapper, _samples(tmp_path), tmp_path)
+    for layer in (0, 1):
+        for batch in batches:
+            trace = script.Trace(module, layers)
+            trace.put("pixel_values", batch.get("pixel_values"))
+            collect_hessians(
+                wrapper, layer, [batch], DECODER_TARGETS,
+                inspect_inputs=lambda name, x, t=trace: t.put(f"captured {name} input", x),
+            )  # fmt: skip
+            trace.remove()
+            steps = set(trace.steps)
+            assert {"pixel_values", "inputs_embeds", "layer-0 input"} <= steps
+            assert {f"captured {n} input" for n in DECODER_TARGETS} <= steps
+            assert all(script.describe(v)[0] for v in trace.steps.values())  # all finite
+            # the same tensors as the model's own full forward, bit for bit
+            assert script.own_forward_difference(module, layers, layer, batch, DECODER_TARGETS,
+                                                 trace) is None  # fmt: skip
+
+
+def test_a_non_finite_calibration_example_is_named(tmp_path: Path) -> None:
+    from medcompress.compression.pruning.surgery import find_decoder_stack
+    from medcompress.compression.quantization.ptq import collect_hessians
+
+    script = _check_script()
+    wrapper = tiny_vlm.tiny_wrapper(seed=0)
+    batches = calibration_batches(wrapper, _samples(tmp_path), tmp_path)
+    broken = dict(batches[1])
+    broken["pixel_values"] = broken["pixel_values"].clone()
+    broken["pixel_values"][0, 0] = float("nan")  # one value of one example
+    batches = [batches[0], broken, *batches[2:]]
+    labels = [f"sample-{i}" for i in range(len(batches))]
+    with pytest.raises(ValueError, match=r"non-finite inputs in 1 calibration example\(s\): "
+                                         r"\['sample-1'\]"):  # fmt: skip
+        collect_hessians(wrapper, 0, batches, DECODER_TARGETS, labels=labels)
+    module = wrapper.module
+    trace = script.Trace(module, find_decoder_stack(module).layers)
+    trace.put("pixel_values", broken["pixel_values"])
+
+    def record(name: str, x: object) -> None:
+        trace.put(f"captured {name} input", x)
+
+    collect_hessians(wrapper, 0, [broken], DECODER_TARGETS, inspect_inputs=record)
+    trace.remove()
+    first = [k for k, v in trace.steps.items() if not script.describe(v)[0]][0]
+    assert first == "pixel_values"  # the trace names the first step that is not finite

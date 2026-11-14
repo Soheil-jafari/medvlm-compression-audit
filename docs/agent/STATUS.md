@@ -1,8 +1,8 @@
 # Status
 
-**Last updated:** 2026-11-13, iteration 80 (interactive run mode)
+**Last updated:** 2026-11-14, iteration 86 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
-**Current stage:** S07 done: **the pre-registration is frozen** (2026-11-08, Soheil and Amir, commit `18f1b47`); every change now needs a dated amendment. RC-B0 done 2026-11-11 (B1 / B2 / B3 = 6,786,040,422.4 / 5,953,608,908.8 / 5,121,177,395.2 bytes). Next (after the stage-isolation fix of 2026-11-13): RC-G2 in four sessions (`--only`, RC-G2 section 3; Soheil) and `choose_comparator.py`; ready in parallel: RC-E10 training (Soheil; step 1 passed 2026-11-12), RC-E3 seed 0 (Amir, full rerun after the Hessian fix), RC-E9 (resume from attempt 3's quantized hand-off) then RC-E4 seed 0 (account 3); agent code still to come: the `external_test` split and E10's 4-bit run and comparisons.
+**Current stage:** S07 done: **the pre-registration is frozen** (2026-11-08, Soheil and Amir, commit `18f1b47`); every change now needs a dated amendment. RC-B0 done 2026-11-11 (B1 / B2 / B3 = 6,786,040,422.4 / 5,953,608,908.8 / 5,121,177,395.2 bytes). Next (2026-11-14): **RC-SCALE** (each heavy step at full size, about 1 h), then RC-G2 session 3 again (E7's scores; the first-order pass ran out of GPU memory, fixed) and E7's stage 05 in RC-SMOKE again (`--card RC-G2 --card RC-A5 --sequential`; killed by host RAM at a237c5c, fixed), then RC-G2 session 4 and `choose_comparator.py`; RC-E10 done (account 3, c6c7cbd); passed the reduced smoke at a237c5c: RC-E3, RC-E4, RC-A4, RC-A6; ready in parallel: RC-E3 seed 0 (Amir, full rerun after the Hessian fix), RC-E9 (resume from attempt 3's quantized hand-off) then RC-E4 seed 0 (account 3); agent code still to come: the `external_test` split (E10's 4-bit run, `E10Q` / RC-E10Q, and its two comparisons written 2026-11-14; RC-E10Q waits for RC-SMOKE).
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action

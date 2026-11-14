@@ -1349,3 +1349,126 @@ Append-only, newest at the bottom. One entry per iteration:
 - RC-E9 attempt 3 finished quantization at 54b5b6d before evaluation ran out of memory.
   Reuse the verified hand-off and start validation, benchmarking and test evaluation in
   separate processes using the explicit teacher placement.
+
+## Iteration 80: 2026-11-13 (interactive)
+- Read 427c3ce first (Soheil's GPTQ work: float32 Hessian accumulation with a finiteness check,
+  Cholesky retries with damping up to 0.1 logged as deviations, RC-E9 resume steps, the GPTQ
+  input diagnostic). E3 diagnostic confirmed by Soheil: float32 accumulation kept.
+- RC-G2 session 1 (exit 6 in stage 05): the stage held its first student while the search
+  loaded another. `loading.release_model` moves a copy's tensors to the meta device (frees the
+  GPU memory even if a stray reference survives), used for the base copy and after every
+  footprint measurement; tests check that no two copies are alive at any load. Audit: the other
+  stages load one model each (04 scoring incl. E6 and E7, 03 quantize incl. E8 and E9, 02
+  training incl. E4 and E10, 06, 07, the 30-group check); the teacher-cache reader reads NumPy
+  files on the CPU.
+- RC-E9 resume (exit 5): hand-offs record their own run's settings (`card_runner.run_config`);
+  hand-offs of E0 and E9 compare the teacher's settings (`bundles.compat_keys`); a quantized
+  checkpoint is checked against its parent before use (`ptq.verify_against_parent`,
+  `start_from`), printed. The existing `e9-seed0-quantized` is verified on Kaggle by that check.
+- New RC-SMOKE card: `scripts/smoke_cards.py` and `medcompress/smoke.py` run the real stages of
+  every card still to run with tiny settings (smoke-only keys under `smoke.`, refused with the
+  repository's results root), two lanes on the two T4s, PASS / WAIT / FAIL table with per-load
+  and per-stage peaks. `run_card.py` refuses a gated card until it is in
+  `docs/runs/smoke_passed.yaml`. Tests.
+- RC-E3 seed 0 at 427c3ce: NaN Hessian at layer 0. Reading: the error's min / max are running
+  bounds over all 128 examples and one non-finite token makes all 4,194,304 entries NaN; the
+  diagnostic had covered examples 1-4 only. `collect_hessians` now names the calibration
+  examples with non-finite inputs (no number changes); `scripts/check_gptq_inputs.py` runs stage
+  03's capture over all batches with a step-by-step trace and a comparison with the model's own
+  forward; tiny-model tests show the capture equals the own forward exactly and a NaN example is
+  named. RC-SMOKE runs E3 layer 0 (w4, w8) with all 128 examples. The handling of a non-finite
+  example is a team decision (RC-E3 section 5c).
+
+## Iteration 81: 2026-11-13 (interactive)
+- RC-E3 root cause (Amir, `check_gptq_inputs.py` at 9113632): 2 of 128 calibration images give a
+  non-finite fp16 vision tower output (pixel values finite). Amendment of 2026-11-13 (Soheil and
+  Amir; pre-registration section 10, decisions log, D07, D08, README): such calibration images
+  are replaced by the next eligible image of the same seeded order (nested, stratified).
+- Code: `make_calibration_subset(exclude=...)` (unchanged without exclusions);
+  `data/calibration.py` (the rule `find_replacements`, `forward_is_finite`, the committed file
+  `results/calibration/seed<k>_replaced.csv`, `calibration_set`, `require_check`); stages 04, the
+  30-group check, 03 (student or teacher) and `check_gptq_inputs.py` read the cleaned set and
+  stop without the check (`calibration_check.required` in `configs/base.yaml`);
+  `scripts/check_calibration.py`; `models/vision_only.py` and `scripts/scan_vision_finite.py`
+  (the fp16 vision tower alone on every split, student and teacher, one T4). RC-CAL0 card; the
+  test-image proposal is in it. RC-SMOKE runs the seed-0 check first. Tests (tiny model, injected
+  non-finite example; the vision tower alone equals the full model's).
+
+## Iteration 82: 2026-11-13 (interactive)
+- Second amendment of 2026-11-13 recorded (Soheil and Amir; before the RC-CAL0 scan results and
+  any test evaluation): test images (filtered and unfiltered internal test, later PolypGen) whose
+  fp16 vision tower output is non-finite for the student or the teacher are dropped for every arm
+  before any test evaluation; committed list, count reported next to the test sizes.
+  Pre-registration section 10, decisions log, README, RC-CAL0, RC-R1, RC-X2. Still to come
+  (agent): the code that leaves the listed images out of the test splits, before RC-R1.
+
+## Iteration 83: 2026-11-13 (interactive)
+- RC-SMOKE at 9113632 (125 min): passed RC-G2, RC-E8, RC-E9, RC-E10, RC-R1, A2, A3 (recorded in
+  `docs/runs/smoke_passed.yaml`; RC-G2 and RC-E8 also wait for RC-CAL0's calibration file).
+- E4: the QAT layer as one autograd function that keeps only its input and references to small
+  state; the quantized weight is rebuilt in the backward (bit-identical output and gradients;
+  no weight-sized tensor per layer kept). Expected peak about 13-14 GB.
+- Disk: `utils/disk.py` (free-space check before every large save, exit code 7; hand-offs
+  hard-link their files; the runner drops the checkpoint-side names after the export); the
+  smoke deletes each job's checkpoints once nothing reads them and logs disk per stage; the
+  worst case per card session is in `docs/schedule.md`.
+- The smoke's unit cap keeps whole layers (`stage.whole_layers_within`); the real 3B grid (built
+  without weights, 3,754,622,976 parameters) covers every MLP channel in the gates (test).
+- A5 `kl`: layers and KV groups only, scored exactly (D07); the KL check reads only the scored
+  unit types.
+- `smoke_cards.py --card` pulls in the calibration check and the jobs a job reads. RC-E10's
+  production cell is in its card.
+
+## Iteration 84: 2026-11-13 (interactive)
+- RC-CAL0 part B committed: `results/calibration/seed0_replaced.csv` (SHA-256 checked equal to
+  the upload). Student: 4 of 260 replaced, the first 256 finite; teacher: 0 of 128, so E9's
+  quantized hand-off stands (RC-E9, RC-CAL0 section 6).
+- Clarification of 2026-11-13 (Soheil and Amir): A5 `logprob_drop` runs on layers and KV groups
+  as its own B2 run (D07, pre-registration section 7); `SAME_AS_E7` is `A4:n128` only; RC-A5 runs
+  both variants; A5 `logprob_drop` takes E7's exact scores of its units (`stage.subset_source`,
+  no model loaded); RC-SMOKE runs it end to end after E7. Schedule: about 3 h more plus a budget
+  search. Tests.
+
+## Iteration 85: 2026-11-14 (interactive)
+- RC-CAL0 part A (Amir): teacher 0 non-finite images anywhere; student 2 / 390 val, 5 / 512 test,
+  8 / 968 unfiltered test, 24 / 4,513 train, all first at vision block 31. Recorded in RC-CAL0
+  section 6, with the training note (same order as E2's 16 skipped updates, fewer than the ~50 a
+  full failure of these images' pool rows would give).
+- The test rule in code: `data/nonfinite.py` (every row of a listed image goes; counts written as
+  rows), applied in the evaluation before the model loads; test evaluations refuse without
+  `results/data/nonfinite_drop.csv` (`nonfinite_drop.required`); `scripts/make_drop_list.py`
+  builds the list from the two scan files. New sizes: 507 and 960 test images. The scan files did
+  not arrive, so the list is not committed yet.
+- Validation: `scripts/check_val_nonfinite_use.py` (CPU) checks the free-text set, the only use
+  that could hold the 2 images; proposal in RC-CAL0 section 6. RC-R1 leaves `smoke_passed.yaml`
+  until it smokes again with the drop. Tests.
+- 2026-11-14: `results/data/nonfinite_drop.csv` built with `scripts/make_drop_list.py` from the
+  re-attached scan files and committed (5 filtered-test, 8 unfiltered-test images; the teacher's
+  list is empty; SHA-256 7486212f...).
+
+
+## Iteration 86: 2026-11-14 (interactive)
+- RC-E10 committed unchanged (account 3, c6c7cbd; four files byte-identical to the attached
+  ones); section 6 filled; the revision Qwen/Qwen3-VL-2B-Instruct @ 89644892... was already
+  pinned. Summaries regenerated, identical on pandas 2.3.3 and 3.1.1.
+- Reduced RC-SMOKE (a237c5c): RC-E3, RC-E4, RC-A4, RC-A6 added to `smoke_passed.yaml`; E7's
+  stage 05 killed with exit -9 (host RAM), so RC-A1 and RC-A5 wait.
+- RC-G2 session 3 OOM in E7's first-order pass: per-layer recomputation in the backward pass,
+  weights checked frozen, memory logged; exact effects saved and resumed. Host RAM: memory lines
+  at every load and release, the release frees host memory, no hub requests after the first
+  load, a 15-load test; the smoke samples each stage's RSS and has `--sequential`. Recovery
+  records its skipped updates. RC-SCALE (`scripts/scale_check.py`): six heavy steps at full size
+  for a few steps, failing on growth. Tests.
+- E10 at 4 bit: registry `E10Q` (GPTQ `w4` of the merged 2B, seed 0), its config, the 2B's own
+  calibration check (model `e10`), card RC-E10Q and a smoke job; the comparison step writes
+  `E10_vs_matched_pruned_seed0` and `E10Q_vs_E8_seed0` (nearest measured peak memory,
+  descriptive). The arm set and the E8 rule are flagged for the authors. Tests.
+- E10's comparisons confirmed by Soheil and Amir (2026-11-14): E5, E6, E7 only, nearest E10's peak
+  memory; E8 at the budget nearest E10Q's peak memory; descriptive, outside H1-H4. Recorded as the
+  clarification of 2026-11-14 in pre-registration section 10 and in the decisions log.
+- RC-SCALE at 48097bd: e7 first-order, GPTQ and the recovery's GPU memory flat; the recovery's host
+  RSS 23.6 GiB (27.53 at the save). Cause: each teacher record kept its shard's arrays; fixed in
+  the cache reader. The pruned model is saved one tensor at a time and loaded to the GPU. Harness
+  fixes for budget_search, e4_training, e9_eval. Skipped updates (8 of 20, updates 1-7 and 11)
+  kept per the authors' decision; E4 records them; appendix table `appendix_updates`. The drop
+  list rebuilt from the re-sent scans is identical to the committed one. Tests.

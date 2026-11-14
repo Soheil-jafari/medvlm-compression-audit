@@ -308,3 +308,12 @@ def test_a_stopped_stage_still_counts_its_time(
                             samples=_samples(3), stop_after_hours=0.1)  # fmt: skip
     metrics = (tmp_path / "results" / "E0" / "nobudget" / "seed0" / "metrics.csv").read_text()
     assert "teacher_cache_seconds" in metrics
+
+
+def test_each_record_owns_only_its_rows(tmp_path: Path) -> None:
+    """2026-11-14 (RC-SCALE: 23.6 GiB of host memory during a recovery): a record must not keep
+    its whole shard's arrays alive (``NpzFile`` reads a full array on every access)."""
+    out = _cache(tmp_path, FakeTeacher(), n=6)
+    for record in load_teacher_cache(out):
+        for array in (record.answer_token_ids, record.topk_token_ids, record.topk_logprobs):
+            assert array.base is None  # its own buffer, not a view of the shard

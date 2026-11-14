@@ -269,6 +269,20 @@ def run_steps(
         break
 
 
+def run_config(run: Any, fallback: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The resolved config of the run that made a hand-off, for its manifest's settings
+    (2026-11-13): E9's quantized decoder records the teacher, E10's adapter the 2B; the
+    session's base config named the 3B student for every hand-off. ``fallback`` when the run's
+    config cannot be read."""
+    from medcompress.config import load_experiment
+
+    try:
+        config, _experiment = load_experiment(run.exp)
+    except Exception:  # noqa: BLE001 - the base config still records the shared settings
+        return fallback
+    return config
+
+
 def export_handoffs(session: Session, config: Mapping[str, Any]) -> None:
     """Write each hand-off of the card whose items exist; items that came from a dataset stay."""
     target_root = session.out / "handoff"
@@ -292,7 +306,7 @@ def export_handoffs(session: Session, config: Mapping[str, Any]) -> None:
             continue
         first = handoff.runs[0]
         meta = bundles.handoff_meta(
-            config,
+            run_config(first, config),
             experiment=first.exp,
             seed=None if handoff.kind == "teacher_cache" else first.seed,
             budget=first.budget if len(handoff.runs) == 1 else None,
@@ -311,6 +325,14 @@ def export_handoffs(session: Session, config: Mapping[str, Any]) -> None:
             f"{handoff.name}: {made.root} ({len(made.files)} files, {size / 1e9:.2f} GB); "
             "make it a private dataset"
         )
+        # the hand-off folder holds the files now (hard links): drop the checkpoint-side names,
+        # so the session's output holds each model once (Kaggle's /kaggle/working: 2026-11-13)
+        for root, rel in items:
+            source = Path(str(config["paths"][root])) / rel
+            if source.is_dir() and not source.is_symlink():
+                shutil.rmtree(source, ignore_errors=True)
+            elif source.is_file() and not source.is_symlink():
+                source.unlink(missing_ok=True)
 
 
 def report_step_handoffs(session: Session) -> None:

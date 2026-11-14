@@ -288,6 +288,91 @@ def require_on_gpu(module: Any, what: str, *, cuda: bool | None = None) -> None:
         )
 
 
+PEAKS_ENV = "MEDCOMPRESS_REPORT_PEAKS"
+"""Set to ``1`` (RC-SMOKE) to print each load's and each stage's peak GPU memory."""
+_STAGE_PEAK: dict[int, int] = {}
+
+
+def _reporting() -> Any:
+    """torch when peaks are reported and CUDA is there, else None."""
+    import os
+
+    if os.environ.get(PEAKS_ENV) != "1":
+        return None
+    try:
+        import torch
+    except ImportError:
+        return None
+    return torch if torch.cuda.is_available() else None
+
+
+def _keep_stage_peak(torch: Any) -> None:
+    for i in range(torch.cuda.device_count()):
+        _STAGE_PEAK[i] = max(_STAGE_PEAK.get(i, 0), int(torch.cuda.max_memory_allocated(i)))
+
+
+def peak_before_load() -> None:
+    """Keep the stage's peak so far, then reset the counters (this load's own peak follows)."""
+    torch = _reporting()
+    if torch is not None:
+        _keep_stage_peak(torch)
+        for i in range(torch.cuda.device_count()):
+            torch.cuda.reset_peak_memory_stats(i)
+
+
+def peak_after_load(name: str) -> None:
+    """Print ``MEDCOMPRESS_LOAD_PEAK <name> gpu0=<bytes> ...`` (the load's own peak)."""
+    torch = _reporting()
+    if torch is not None:
+        sizes = " ".join(
+            f"gpu{i}={int(torch.cuda.max_memory_allocated(i))}"
+            for i in range(torch.cuda.device_count())
+        )
+        print(f"MEDCOMPRESS_LOAD_PEAK {name.replace(' ', '_')} {sizes}", flush=True)
+
+
+def print_stage_peak(stage: str) -> None:
+    """Print ``MEDCOMPRESS_STAGE_PEAK <stage> gpu0=<bytes> ...`` (the whole stage's peak)."""
+    torch = _reporting()
+    if torch is not None:
+        _keep_stage_peak(torch)
+        sizes = " ".join(f"gpu{i}={b}" for i, b in sorted(_STAGE_PEAK.items()))
+        print(f"MEDCOMPRESS_STAGE_PEAK {stage} {sizes}", flush=True)
+
+
+def release_model(model: Any) -> None:
+    """Free a loaded model's GPU memory now: move every parameter and buffer to the meta device,
+    then collect garbage and empty the CUDA cache (2026-11-13).
+
+    Moving the tensors frees their storage even if a stray reference to the module object
+    survives somewhere (RC-G2 session 1: after ``del base`` the student's 7.2 GiB stayed on GPU 0
+    and the next load of the same stage was refused). The model cannot be used afterwards.
+
+    Since 2026-11-14 it also drops the wrapper's processor and returns freed host memory to the
+    system (RC-SMOKE at a237c5c: E7's stage 05 was killed by the kernel's out-of-memory killer
+    after many loads in one process).
+    """
+    import gc
+
+    module = getattr(model, "module", model)
+    try:
+        import torch
+    except ImportError:  # pragma: no cover - a model implies torch
+        return
+    with torch.no_grad():
+        module.to("meta")
+    for name in ("processor", "tokenizer"):  # host-side objects of the wrapper (2026-11-14)
+        if model is not module and hasattr(model, name):
+            setattr(model, name, None)
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    from medcompress.utils.memory import print_memory, trim_host_memory
+
+    trim_host_memory()  # freed heap back to the system: RSS must not climb load after load
+    print_memory("after release")
+
+
 def load_model(
     spec: ModelSpec,
     *,
@@ -339,6 +424,12 @@ def load_model(
     if revision is not None and not Path(spec.source).expanduser().exists():
         common["revision"] = revision
     gpu_memory_check(spec.name)  # a clean GPU before every load (2026-11-13)
+    from medcompress.utils.memory import print_memory
+
+    print_memory(f"before load {spec.name}")  # host RAM too (RC-SMOKE exit -9, 2026-11-14)
+    if _already_fetched(spec.source, revision):  # no hub request for files already here
+        common["local_files_only"] = True
+    peak_before_load()
     device_map = explicit_device_map(device_map, spec)  # never "auto": no silent offload
     model_kwargs: dict[str, Any] = {"dtype": dtype, "device_map": device_map, **common}
     if max_memory is not None:
@@ -363,7 +454,22 @@ def load_model(
         adapter_kwargs = {"revision": spec.adapter_revision} if spec.adapter_revision else {}
         wrapper = load_adapter(wrapper, spec.adapter, merge=not quantization, **adapter_kwargs)
         require_on_gpu(wrapper.module, f"{spec.name} with its adapter")
+    peak_after_load(spec.name)
+    _FETCHED.add((str(spec.source), revision))
+    print_memory(f"after load {spec.name}")
     return wrapper
+
+
+_FETCHED: set[tuple[str, str | None]] = set()
+"""``(source, revision)`` pairs this process has loaded once: their files are in the local
+cache, so later loads pass ``local_files_only`` and make no hub requests (2026-11-14: E7's stage
+05 loads the student up to about 16 times; each load asked the hub again)."""
+
+
+def _already_fetched(source: str, revision: str | None) -> bool:
+    """True when this process loaded ``source`` at ``revision`` before (a pinned revision only:
+    an unpinned name may move on the hub, so it is asked again)."""
+    return revision is not None and (str(source), revision) in _FETCHED
 
 
 def remap_adapter_key(key: str, module_names: Sequence[str]) -> str:

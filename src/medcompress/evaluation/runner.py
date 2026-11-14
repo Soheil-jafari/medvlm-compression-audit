@@ -210,6 +210,38 @@ def resolve_settings(config: Mapping[str, Any]) -> EvalSettings:
 # ------------------------------------------------------------------- the model
 
 
+def smoke_setting(config: Mapping[str, Any], key: str) -> Any:
+    """A setting of the ``smoke`` section (RC-SMOKE's tiny runs; absent in every real run)."""
+    return (config.get("smoke") or {}).get(key)
+
+
+def smoke_subset(
+    samples: Sequence[VQASample], findings: Sequence[str], per_label: int
+) -> list[VQASample]:
+    """RC-SMOKE: every row of the first images (in split order) that give each finding
+    ``per_label`` positive and ``per_label`` negative images, plus one image with a mask, so
+    the operating point of every finding can be fitted on a few probes."""
+    need = {(f, label): per_label for f in findings for label in (True, False)}
+    need_mask = 1
+    chosen: list[str] = []
+    for sample in samples:
+        if sample.image_path in chosen:
+            continue
+        helps = [k for k in need if need[k] > 0 and k[0] in sample.findings
+                 and bool(sample.findings[k[0]]) == k[1]]  # fmt: skip
+        masked = need_mask > 0 and getattr(sample, "mask_path", None)
+        if helps or masked:
+            chosen.append(sample.image_path)
+            for key in helps:
+                need[key] -= 1
+            if masked:
+                need_mask -= 1
+        if not any(need.values()) and need_mask <= 0:
+            break
+    keep = set(chosen)
+    return [s for s in samples if s.image_path in keep]
+
+
 def load_trained_student(
     config: Mapping[str, Any], tag: str, seed: int, side: int, *, device_map: Any = None
 ) -> VLMWrapper:
@@ -254,7 +286,7 @@ def _load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VL
     E0 is the teacher; E1 and E2 are the student with the adapter their training run
     saved (merged into the weights, as the compression arms start from it). The pruned
     arms (E5-E7, A1-A6) reload E2 of the same seed and replay the removal that stage 05
-    saved. The post-training quantized arms (E3, E8, E9) reload their parent and swap in the
+    saved. The post-training quantized arms (E3, E8, E9, E10Q) reload their parent and swap in the
     kernel modules of the saved codes (``compression/quantization/ptq.py``).
     """
     from medcompress.config import load_config
@@ -275,7 +307,7 @@ def _load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VL
 
         base = load_trained_student(config, "E2", run.seed, side)
         return load_pruned(base, pruned_dir(config, run))
-    if run.experiment_id in ("E3", "E4", "E8", "E9"):
+    if run.experiment_id in ("E3", "E4", "E8", "E9", "E10Q"):
         from medcompress.compression.quantization.ptq import load_run_quantized
 
         return load_run_quantized(config, run, side)
@@ -608,6 +640,7 @@ def run_evaluation(
         raise ConfigError("settings still open: inputs.image_longest_side")
     paths = config["paths"]
     data_root = Path(paths["data_root"])
+    drop_counts: dict[str, float] = {}
     if samples is None:
         from medcompress.data.prepared import load_prepared
 
@@ -616,6 +649,13 @@ def run_evaluation(
             data_root, dataset, Path(paths["private_root"]),
             unfiltered_test=settings.split == "test_unfiltered",
         )[settings.split]  # fmt: skip
+        from medcompress.data.nonfinite import drop_for_split
+
+        # the second amendment of 2026-11-13: non-finite test images go, for every arm
+        samples, drop_counts = drop_for_split(config, settings.split, samples)
+        per_label = smoke_setting(config, "eval_images_per_label")
+        if per_label is not None:  # RC-SMOKE only: a few images, every finding both ways
+            samples = smoke_subset(samples, settings.findings, int(per_label))
     thresholds = None
     if settings.split in TEST_SPLITS and "clinical" in settings.suites:
         thresholds = validation_thresholds(Path(paths["results_root"]), run, settings.findings)
@@ -625,7 +665,9 @@ def run_evaluation(
     started = time.perf_counter()
     result = evaluate_model(model, samples, settings, data_root, seed, thresholds=thresholds)
     seconds = time.perf_counter() - started  # compute used (appendix)
-    metrics, arrays = [*result.metrics, Metric("evaluation_seconds", seconds)], result.arrays
+    metrics = [*result.metrics, Metric("evaluation_seconds", seconds),
+               *(Metric(name, value) for name, value in drop_counts.items())]  # fmt: skip
+    arrays = result.arrays
     budget = run.budget or ""
     rows = to_rows(metrics, run.experiment_tag, budget, seed)
     undefined = sorted(m.name for m in metrics if math.isnan(m.value))

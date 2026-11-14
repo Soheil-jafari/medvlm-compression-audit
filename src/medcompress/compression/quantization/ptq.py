@@ -238,6 +238,9 @@ def save_quantized(
         arrays[f"{key}.scales"] = rec.scales.astype(np.float32)
         arrays[f"{key}.in_features"] = np.array(rec.codes.shape[1], dtype=np.int64)
     if arrays:
+        from medcompress.utils.disk import require_free_disk
+
+        require_free_disk(out, sum(a.nbytes for a in arrays.values()), "the quantized model")
         np.savez(out / TENSORS_NAME, **arrays)
     manifest = {
         "format_version": FORMAT_VERSION,
@@ -317,12 +320,15 @@ def collect_hessians(
     names: Sequence[str],
     *,
     inspect_inputs: Callable[[str, Any], None] | None = None,
+    labels: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """``{target name: H}`` for one decoder layer: ``H = 2 / n * sum x x^T`` of its inputs.
 
     Targets that read the same input (q/k/v; gate/up) share one Hessian.
     An input observer bypasses accumulation and sees all target linears. The forward is
     cut after the layer, so calibrating layer ``i`` costs ``i + 1`` layers per example.
+    A non-finite Hessian stops the stage and names the calibration examples whose inputs were
+    not finite (``labels``: their sample ids; 2026-11-13: one such token makes every entry NaN).
     """
     import torch
 
@@ -337,6 +343,8 @@ def collect_hessians(
     sums: dict[str, Any] = {}
     counts: dict[str, int] = {}
     bounds: dict[str, tuple[Any, Any]] = {}
+    current = {"batch": 0}
+    nonfinite_batches: dict[str, list[int]] = {}
     handles = []
 
     def make_hook(source: str) -> Any:
@@ -349,6 +357,8 @@ def collect_hessians(
                 return
             with torch.autocast(device_type=inputs.device.type, enabled=False):
                 x = inputs.float()
+                if not bool(torch.isfinite(x).all()):  # named in the error below
+                    nonfinite_batches.setdefault(source, []).append(current["batch"])
                 low, high = torch.aminmax(x)
                 if source in bounds:
                     previous_low, previous_high = bounds[source]
@@ -377,7 +387,8 @@ def collect_hessians(
     device = module.device  # where the inputs go (the first GPU of a split model)
     try:
         with torch.inference_mode():
-            for batch in batches:
+            for index, batch in enumerate(batches):
+                current["batch"] = index
                 try:
                     module(**{k: v.to(device) for k, v in batch.items()}, use_cache=False)
                 except _StopForward:
@@ -396,9 +407,13 @@ def collect_hessians(
         if nonfinite.item():
             low, high = bounds[source]
             matrices = ", ".join(n for n in names if _SHARED_INPUT[n] == source)
+            bad = nonfinite_batches.get(source, [])
+            named = [labels[i] if labels is not None else f"#{i}" for i in bad]
             raise ValueError(
                 f"GPTQ layer {layer_index} {matrices}: Hessian has {nonfinite.item()} "
-                f"non-finite entries; input min={low.item():.6g}, max={high.item():.6g}"
+                f"non-finite entries; input min={low.item():.6g}, max={high.item():.6g} (running "
+                f"bounds over all {len(batches)} examples); non-finite inputs in {len(bad)} "
+                f"calibration example(s): {named[:10]}"
             )
     return {name: sums[_SHARED_INPUT[name]] for name in names}
 
@@ -411,6 +426,7 @@ def gptq_quantize_decoder(
     log: Any = print,
     pick_device: Any = None,
     damping_retries: dict[str, dict[str, float | int]] | None = None,
+    batch_labels: Sequence[str] | None = None,
 ) -> dict[str, QuantizedMatrix]:
     """Round every target matrix of the decoder with GPTQ, layer after layer (in place).
 
@@ -446,7 +462,7 @@ def gptq_quantize_decoder(
     for i, layer in enumerate(stack.layers):
         reset_peaks()
         log(f"GPTQ: layer {i + 1}/{count} start; {memory_report() or 'no GPU'}")
-        hessians = collect_hessians(model, i, batches, targets)
+        hessians = collect_hessians(model, i, batches, targets, labels=batch_labels)
         for k, name in enumerate(targets):
             linear = getattr(getattr(layer, PARENT_OF[name]), name)
             # q/k/v and gate/up share one Hessian; its last user takes it over and frees it
@@ -488,6 +504,39 @@ def gptq_quantize_decoder(
     return records
 
 
+def verify_against_parent(
+    records: Mapping[str, QuantizedMatrix], targets: Sequence[tuple[str, Any, str]]
+) -> str:
+    """Check that a checkpoint holds exactly the parent's decoder matrices, each with the
+    parent's shape; return a one-line summary (2026-11-13: E9's hand-off is accepted only when
+    its files are the teacher's decoder: 28 layers, hidden size 3,584).
+
+    Raises:
+        ValueError: a matrix is missing, extra (another model's layers), or of another shape.
+    """
+    wanted = {key for key, _, _ in targets}
+    missing = sorted(wanted - set(records))
+    extra = sorted(set(records) - wanted)
+    if missing:
+        raise ValueError(f"the checkpoint lacks {len(missing)} matrices, e.g. {missing[:3]}")
+    if extra:
+        raise ValueError(f"the checkpoint has {len(extra)} matrices the parent lacks, e.g. "
+                         f"{extra[:3]}: another model's decoder")  # fmt: skip
+    shapes: dict[str, tuple[int, ...]] = {}
+    layers = set()
+    for key, parent, attr in targets:
+        old = getattr(parent, attr)
+        if tuple(old.weight.shape) != records[key].codes.shape:
+            raise ValueError(
+                f"{key}: shape {tuple(old.weight.shape)} != {records[key].codes.shape}"
+            )
+        shapes.setdefault(attr, records[key].codes.shape)
+        layers.add(key.split(".", 1)[0])  # ``layer<i>`` (kernels.target_path)
+    listed = ", ".join(f"{name} {s[0]} x {s[1]}" for name, s in shapes.items())
+    return (f"quantized checkpoint matches the parent: {len(records)} matrices in {len(layers)} "
+            f"decoder layers, shapes {listed}")  # fmt: skip
+
+
 def install_quantized(
     model: VLMWrapper | Any,
     records: Mapping[str, QuantizedMatrix],
@@ -503,13 +552,9 @@ def install_quantized(
     )
 
     targets = decoder_targets(model, recipe.targets)
-    missing = [key for key, _, _ in targets if key not in records]
-    if missing:
-        raise ValueError(f"the checkpoint lacks {len(missing)} matrices, e.g. {missing[:3]}")
+    verify_against_parent(records, targets)
     for key, parent, attr in targets:
         old, rec = getattr(parent, attr), records[key]
-        if tuple(old.weight.shape) != rec.codes.shape:
-            raise ValueError(f"{key}: shape {tuple(old.weight.shape)} != {rec.codes.shape}")
         kwargs = {
             "bits": rec.bits,
             "group_size": rec.group_size,
@@ -601,7 +646,8 @@ def _teacher_device_map(spec: Any, model_config: Mapping[str, Any], log: Any = p
 
 def parent_of(run: RunContext) -> dict[str, Any]:
     """The model a quantized run starts from: E3 <- E2, E8 <- E7 (same budget), E9 <- E0,
-    E4 <- the pretrained student (its codes come from quantization-aware training)."""
+    E10Q <- E10 (the merged 2B, 2026-11-14), E4 <- the pretrained student (its codes come from
+    quantization-aware training)."""
     if run.experiment_id == "E4":
         return {"experiment": "pretrained", "budget": None, "seed": run.seed}
     if run.experiment_id == "E3":
@@ -612,7 +658,16 @@ def parent_of(run: RunContext) -> dict[str, Any]:
         return {"experiment": "E7", "budget": run.budget, "seed": run.seed}
     if run.experiment_id == "E9":
         return {"experiment": "E0", "budget": None, "seed": 0}
+    if run.experiment_id == "E10Q":
+        return {"experiment": "E10", "budget": None, "seed": run.seed}
     raise ValueError(f"{run.experiment_id} is not a post-training quantization arm")
+
+
+def calibration_model(run: RunContext) -> str:
+    """Whose fp16 check cleans the calibration set of a quantized run: the teacher for E9, the
+    2B of E10 for E10Q (2026-11-14), the 3B student (E2 of the seed) for every other arm."""
+    parent = parent_of(run)["experiment"]
+    return {"E0": "teacher", "E10": "e10"}.get(parent, "student")
 
 
 def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:
@@ -645,6 +700,8 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
             + ", ".join(f"{d} {b / GIB:.2f} GiB" for d, b in sorted(placed.items()))
         )
         return model
+    if parent["experiment"] == "E10":  # the 2B of E10's own config (model.config), merged
+        return load_trained_student(config, "E10", run.seed, side)
     student = load_trained_student(config, "E2", run.seed, side)
     if parent["experiment"] == "E2":
         return student
@@ -655,11 +712,33 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
 
 
 def load_run_quantized(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:
-    """The quantized model of ``run`` for evaluation and timing (runner, benchmark)."""
-    model = load_parent(config, run, side)
-    return load_quantized(
-        model, quantized_dir(config, run), kernel_class=kernel_class_from_config(config)
-    )
+    """The quantized model of ``run`` for evaluation and timing (runner, benchmark).
+
+    The checkpoint must have been made from this run's parent (its ``start_from``) and hold
+    exactly the parent's decoder matrices with their shapes; the check is printed."""
+    from medcompress.compression.quantization.kernels import decoder_targets
+
+    folder = quantized_dir(config, run)
+    manifest: dict[str, Any] = {}
+    if (folder / MANIFEST_NAME).is_file():  # checked before the parent is loaded
+        manifest = json.loads((folder / MANIFEST_NAME).read_text(encoding="utf-8"))
+        made_from = (manifest.get("start_from") or {}).get("experiment")
+        expected = parent_of(run)["experiment"]
+        if made_from != expected:
+            raise ValueError(f"{folder}: made from {made_from!r}, but {run.experiment_tag} "
+                             f"starts from {expected!r}")  # fmt: skip
+    model = load_parent(config, run, side)  # its own checks first (adapters, settings)
+    if not manifest:
+        raise ConfigError(f"no quantized checkpoint at {folder}: run stage 03 first (or attach "
+                          "its hand-off)")  # fmt: skip
+    made_from = (manifest.get("start_from") or {}).get("experiment")
+    if manifest.get("matrices"):
+        _manifest, records = read_quantized(folder)
+        targets = decoder_targets(model, tuple(manifest["recipe"]["targets"]))
+        print(f"{run.experiment_tag}: {verify_against_parent(records, targets)} (made from "
+              f"{made_from})", flush=True)  # fmt: skip
+        del records
+    return load_quantized(model, folder, kernel_class=kernel_class_from_config(config))
 
 
 def run_quantization(
@@ -696,16 +775,23 @@ def run_quantization(
             from medcompress.compression.pruning.stage import load_train_samples
 
             train = load_train_samples(config)
-        from medcompress.data.splits import make_calibration_subset
+        from medcompress.data.calibration import calibration_set
 
         assert recipe.calibration_size is not None
-        calibration = make_calibration_subset(train, recipe.calibration_size, seed=run.seed)
+        # the images the fp16 check replaced are left out (amendment of 2026-11-13); the
+        # teacher's own check for E9, the student's for E3 and E8; refused without the check
+        model_name = calibration_model(run)
+        calibration = calibration_set(config, train, recipe.calibration_size, run.seed,
+                                      model_name)  # fmt: skip
         if model is None:
             model = load_parent(config, run, int(side))
         started = time.perf_counter()
         batches = calibration_batches(model, calibration, Path(paths["data_root"]))
         retries: dict[str, dict[str, float | int]] = {}
-        records = gptq_quantize_decoder(model, batches, recipe, damping_retries=retries)
+        records = gptq_quantize_decoder(
+            model, batches, recipe, damping_retries=retries,
+            batch_labels=[s.sample_id for s in calibration],
+        )  # fmt: skip
         rows["quantization_damping_retries"] = sum(r["retries"] for r in retries.values())
         if retries:
             rows["quantization_max_effective_damping"] = max(

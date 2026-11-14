@@ -31,6 +31,13 @@ all intervals share the resamples:
 * Secondary (pre-specified, not part of any verdict), ``E7_vs_A1`` at B2: E7 minus A1 (uniform
   finding weights) on the two primary endpoints, ``diff:`` and unadjusted ``p:`` rows, and
   McNemar per finding; on 3 seeds each, or ``E7_vs_A1_seed0`` when either has seed 0 only.
+* Exploratory, descriptive (pre-registration section 11 item 14.3; code 2026-11-14), seed 0:
+  ``E10_vs_matched_pruned_seed0``, the native 2B (E10) minus the pruned 3B arm (E5, E6 or E7 at
+  any budget) whose measured peak memory is nearest to E10's; ``E10Q_vs_E8_seed0``, E10 at 4 bit
+  minus the E8 budget whose measured peak memory is nearest to E10Q's. ``diff:`` rows with
+  intervals for the headline accuracy, the small-finding recall, the rare-group recall and the
+  ECE; no p-value, no verdict, outside H1-H4. The chosen arms and their peak memories go to
+  ``choices.json``. Both rules: pre-registration section 10, clarification of 2026-11-14.
 
 H2 and H3 also get McNemar's test per finding on each probe's majority answer over the seeds,
 Holm-corrected across findings (``mcnemar_p:`` and ``mcnemar_p_holm:``). The rule-based
@@ -93,6 +100,14 @@ OURS = "E7"
 BOOTSTRAP_SEED = 0
 SEED0_SUFFIX = "_seed0"
 """Appended to the name of every exploratory comparison (a seed-0-only side)."""
+NATIVE = "E10"
+"""The native 2B student (exploratory; pre-registration section 11 item 14.3)."""
+NATIVE_4BIT = "E10Q"
+"""E10 at 4 bit (GPTQ w4 of the merged 2B; 2026-11-14)."""
+PRUNED_3B: tuple[str, ...] = ("E5", "E6", "E7")
+"""The pruned 3B arms E10 is matched against (any variant, any budget)."""
+FOUR_BIT_PRUNED = "E8"
+"""The 4-bit pruned 3B arm E10Q is compared with."""
 UNIFORM_WEIGHTS = "A1"
 """The secondary comparison's arm: E7 with uniform finding weights (amendment of 2026-11-08)."""
 HEADLINES: tuple[str, ...] = ("overall_accuracy", "macro_balanced_accuracy")
@@ -550,6 +565,62 @@ def matched_budget(rows: pd.DataFrame) -> tuple[dict[str, Any] | None, str]:
     }, ""
 
 
+def nearest_by_memory(
+    rows: pd.DataFrame, target: Arm, candidates: Sequence[Arm]
+) -> tuple[Arm | None, dict[str, Any]]:
+    """The candidate whose measured seed-0 peak memory is nearest to ``target``'s (ties: name).
+
+    Read from the committed efficiency rows (``peak_memory_bytes``, no split, seed 0), so the
+    choice does not depend on which test outcomes are present.
+    """
+
+    def peak(arm: Arm) -> float | None:
+        if rows.empty:
+            return None
+        budget = rows["budget"].fillna("").astype(str)
+        split = rows["split"].fillna("").astype(str) if "split" in rows else ""
+        hit = rows[
+            (rows["experiment"] == arm.label)
+            & (budget == arm.budget)
+            & (rows["metric"] == "peak_memory_bytes")
+            & (split == "")
+            & (rows["seed"] == 0)
+        ]
+        return None if hit.empty else float(hit["value"].iloc[0])
+
+    own = peak(target)
+    if own is None:
+        return None, {"skipped": f"no peak_memory_bytes of {target.name} (seed 0)"}
+    measured = {arm: value for arm in candidates if (value := peak(arm)) is not None}
+    if not measured:
+        return None, {"skipped": "no peak_memory_bytes of any candidate (seed 0)"}
+    best = min(measured, key=lambda a: (abs(measured[a] - own), a.name))
+    return best, {
+        "arm": best.name,
+        f"{target.label}_peak_memory_bytes": own,
+        "arm_peak_memory_bytes": measured[best],
+        "relative_gap": (own - measured[best]) / measured[best],
+        "candidates": {a.name: v for a, v in sorted(measured.items(), key=lambda x: x[0].name)},
+    }
+
+
+def descriptive_rows(
+    observed: np.ndarray, draws: np.ndarray, a: int, b: int, name: str, budget: str,
+    headline: str, alpha: float,
+) -> list[dict[str, Any]]:  # fmt: skip
+    """``diff:`` rows (arm ``a`` minus arm ``b``) with intervals, no p-value: the headline
+    accuracy, the small-finding recall, the rare-group recall (when the domain has one) and the
+    ECE."""
+    rows = []
+    for metric, column in ((headline, HEAD), (SMALL, SMALL_COL), (RARE, RARE_COL), (ECE, ECE_COL)):
+        value = float(observed[a, column] - observed[b, column])
+        if math.isnan(value):
+            continue
+        diffs = draws[:, a, column] - draws[:, b, column]
+        rows.append(_row(name, budget, f"diff:{metric}", value, percentile_ci(diffs, alpha)))
+    return rows
+
+
 # --------------------------------------------------------------------- stage
 
 
@@ -718,6 +789,7 @@ def run_comparisons(
                                      "confirmatory H2")  # fmt: skip
     wanted = [Arm(REFERENCE)] + [arm for e in COMPRESSED for arm in arms_of(e)]
     wanted.append(Arm(UNIFORM_WEIGHTS, PRIMARY_BUDGET))  # the secondary comparison only
+    wanted += [Arm(NATIVE), Arm(NATIVE_4BIT)]  # exploratory (item 14.3); not in H1 or H4
     outcomes_file = UNFILTERED_OUTCOMES_FILE if unfiltered else OUTCOMES_FILE
     found, notes = load_arms(output_root, wanted, comparator, outcomes_file, h2_arm)
     if Arm(REFERENCE) not in found:
@@ -870,6 +942,23 @@ def run_comparisons(
                              n_resamples=resamples, alpha=alpha, seed=BOOTSTRAP_SEED,
                              clusters=table.audit_images)  # fmt: skip
         rows += mcnemar_rows(table, outcomes[i], outcomes[j], name, PRIMARY_BUDGET)
+
+    # exploratory, descriptive (item 14.3): E10 at matched peak memory, E10Q against E8
+    pruned = [arm for e in PRUNED_3B for arm in arms_of(e)]
+    for target, pool, label in (
+        (Arm(NATIVE), pruned, "matched_pruned"),
+        (Arm(NATIVE_4BIT), arms_of(FOUR_BIT_PRUNED), FOUR_BIT_PRUNED),
+    ):
+        name = f"{target.label}_vs_{label}{SEED0_SUFFIX}"
+        other, choice = nearest_by_memory(results, target, pool)
+        choices[f"exploratory_{name}"] = choice
+        if other is None:
+            continue
+        if (target, False) not in index or (other, False) not in index:
+            choice["skipped"] = f"test outcomes of {target.name} or {other.name} (seed 0) missing"
+            continue
+        rows += descriptive_rows(observed, draws, index[(target, False)], index[(other, False)],
+                                 name, other.budget, headline, alpha)  # fmt: skip
 
     # H4 (exploratory): every compressed arm at seed 0, at B2 and without a budget
     ranked = [index[(a, False)] for a in compressed if a.budget in ("", PRIMARY_BUDGET)]

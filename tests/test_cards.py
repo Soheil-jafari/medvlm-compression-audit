@@ -22,7 +22,7 @@ from medcompress.cards import (
     g2_runs,
 )
 from medcompress.config import experiment_config_path, load_config
-from medcompress.registry import REGISTRY
+from medcompress.registry import ALL_SCRIPTS, REGISTRY
 from medcompress.utils import kaggle
 
 REPO = Path(__file__).resolve().parents[1]
@@ -64,7 +64,7 @@ def test_every_runnable_card_has_a_plan_whose_scripts_exist_and_are_registered()
                 continue
             script = step.argv[0]
             assert (REPO / script).is_file(), (plan.tag, script)
-            if "--exp" in step.argv and script != "scripts/run_experiment.py":
+            if "--exp" in step.argv and script in ALL_SCRIPTS:  # stages; checks are not
                 exp = step.argv[step.argv.index("--exp") + 1]
                 assert script in REGISTRY[exp].scripts, (plan.tag, script)
         for handoff in plan.handoffs:
@@ -210,6 +210,10 @@ def test_an_unattended_e2_run_trains_hands_off_and_reports(tmp_path: Path) -> No
     )
     assert (manifest["kind"], manifest["experiment"], manifest["seed"]) == ("adapter", "E2", 1)
     assert manifest["card"] == "RC-E2" and manifest["runs"] == ["E2 seed1"]
+    exported = tmp_path / "work" / "handoff" / "E2_seed1_adapter" / "checkpoint_root"
+    assert (exported / "E2" / "seed1" / "adapter" / "adapter_model.safetensors").is_file()
+    adapter = Path(config["paths"]["checkpoint_root"]) / "E2" / "seed1" / "adapter"
+    assert not adapter.exists()  # the hand-off holds the files; the checkpoint-side name is gone
     runner_mod.collect_results(session, repo)
     copied = tmp_path / "work" / "results_to_commit" / "results" / "E2" / "nobudget" / "seed1"
     assert (copied / "metrics.csv").is_file()

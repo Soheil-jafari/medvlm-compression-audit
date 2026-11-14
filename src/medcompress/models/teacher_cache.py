@@ -302,18 +302,25 @@ def load_teacher_cache(cache_dir: Path, *, verify: bool = True) -> Iterator[Cach
         path = cache_dir / entry["file"]
         if verify and _sha256_file(path) != entry["sha256"]:
             raise ValueError(f"{path} does not match the manifest checksum")
+        # each array is read once per shard and every record gets its own copy of its rows:
+        # ``data[name]`` reads the whole array from the file on every access, and a slice of it
+        # kept the whole shard's array alive, once per record (2026-11-14, RC-SCALE: about
+        # 23.6 GiB of host memory during a recovery). The values are the same.
         with np.load(path, allow_pickle=False) as data:
-            counts = data["token_counts"]
-            offsets = np.concatenate([[0], np.cumsum(counts)])
-            for i, sample_id in enumerate(data["sample_ids"]):
-                a, b = int(offsets[i]), int(offsets[i + 1])
-                yield CacheRecord(
-                    sample_id=str(sample_id),
-                    answer_text=str(data["texts"][i]),
-                    answer_token_ids=data["token_ids"][a:b],
-                    topk_token_ids=data["topk_ids"][a:b],
-                    topk_logprobs=data["topk_logprobs"][a:b],
-                )
+            arrays = {name: data[name] for name in
+                      ("token_counts", "sample_ids", "texts", "token_ids", "topk_ids",
+                       "topk_logprobs")}  # fmt: skip
+        offsets = np.concatenate([[0], np.cumsum(arrays["token_counts"])])
+        for i, sample_id in enumerate(arrays["sample_ids"]):
+            a, b = int(offsets[i]), int(offsets[i + 1])
+            yield CacheRecord(
+                sample_id=str(sample_id),
+                answer_text=str(arrays["texts"][i]),
+                answer_token_ids=arrays["token_ids"][a:b].copy(),
+                topk_token_ids=arrays["topk_ids"][a:b].copy(),
+                topk_logprobs=arrays["topk_logprobs"][a:b].copy(),
+            )
+        del arrays
 
 
 def cache_metadata(cache_dir: Path) -> Mapping[str, Any]:

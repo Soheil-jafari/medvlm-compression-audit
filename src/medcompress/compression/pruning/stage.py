@@ -40,6 +40,9 @@ SCORES_FILE = "unit_scores.csv"
 SETTINGS_FILE = "unit_scores.settings.json"
 EFFECTS_FILE = "unit_effects.csv"
 EFFECTS_SETTINGS_FILE = "unit_effects.settings.json"
+EXACT_RESUME_FILE = "exact_effects.resume.json"
+"""The exact effects of the clinical criterion, saved when the exact pass ends and removed once
+the scores are written; a rerun with the same settings resumes from it (2026-11-14)."""
 EFFECTS_SOURCE = "E7"
 """The run whose per-finding effects A1 and A2 re-weight (same seed)."""
 REWEIGHTED_SCHEMES: tuple[str, ...] = ("uniform", "rarity_only")
@@ -279,12 +282,94 @@ def reweight_from_source(
     return target
 
 
+def subset_source(
+    config: Mapping[str, Any], run: RunContext, settings: ScoringSettings
+) -> Path | None:
+    """E7's run folder of the same seed when E7's scores of this run's unit types stand in for
+    scoring it: every other setting equal, this run's unit types among E7's, and each of them
+    scored **exactly** by both (A5 ``logprob_drop`` on layers and KV groups, 2026-11-13). An
+    exact score of a unit does not depend on which other units are scored, so the values are
+    the same as scoring again."""
+    from medcompress.compression.pruning.criteria.clinical import ClinicalSettings
+    from medcompress.utils.io import read_json
+
+    if settings.criterion != "clinical" or run.experiment_id == EFFECTS_SOURCE:
+        return None
+    effective = apply_variant(config, run.variant)
+    methods = ClinicalSettings.from_config(effective).methods
+    if any(methods.get(unit_type) != "exact" for unit_type in settings.unit_types):
+        return None
+    source = RunContext(EFFECTS_SOURCE, seed=run.seed).run_dir(config["paths"]["results_root"])
+    if not ((source / SCORES_FILE).is_file() and (source / SETTINGS_FILE).is_file()):
+        return None
+    theirs = dict(read_json(source / SETTINGS_FILE))
+    ours = dict(_fingerprint(effective, settings, run))
+    if not set(ours.get("unit_types") or ()) <= set(theirs.get("unit_types") or ()):
+        return None
+    no_groups = "mlp_channel_group" not in settings.unit_types
+    for fingerprint in (theirs, ours):
+        fingerprint.pop("variant", None)
+        fingerprint.pop("unit_types", None)
+        if no_groups:  # the group size does not touch the layer and KV-group scores
+            fingerprint.pop("mlp_channel_group_size", None)
+    return source if theirs == ours else None
+
+
+def subset_from_source(
+    config: Mapping[str, Any], run: RunContext, settings: ScoringSettings
+) -> Path | None:
+    """Write ``run``'s scores as E7's scores of its unit types (see :func:`subset_source`)."""
+    import csv
+
+    from medcompress.utils.io import upsert_results, write_csv, write_json
+
+    source = subset_source(config, run, settings)
+    if source is None:
+        return None
+    effective = apply_variant(config, run.variant)
+    with (source / SCORES_FILE).open(encoding="utf-8", newline="") as handle:
+        rows = [r for r in csv.DictReader(handle) if r["unit_type"] in settings.unit_types]
+    if not rows:
+        return None
+    target = scores_path(config, run)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    columns = list(rows[0])
+    write_csv(target, columns, ([row[c] for c in columns] for row in rows))
+    write_json(_fingerprint(effective, settings, run), target.with_name(SETTINGS_FILE))
+    upsert_results(
+        [{"experiment": run.experiment_tag, "budget": "", "seed": run.seed, "metric": m,
+          "value": v}
+         for m, v in (("scoring_units", len(rows)), ("scoring_exact_subset_of_e7", 1.0),
+                      ("scoring_seconds", 0.0))],
+        target.with_name("metrics.csv"),
+    )  # fmt: skip
+    print(f"took {EFFECTS_SOURCE} seed {run.seed}'s exact scores of {list(settings.unit_types)} "
+          f"({len(rows)} units); wrote {target}")  # fmt: skip
+    return target
+
+
 def _reusable(target: Path, fingerprint: Mapping[str, Any]) -> bool:
     """True when ``target`` was written with exactly these settings."""
     from medcompress.utils.io import read_json
 
     sidecar = target.with_name(SETTINGS_FILE)
     return target.exists() and sidecar.exists() and read_json(sidecar) == dict(fingerprint)
+
+
+def whole_layers_within(units: Sequence[PrunableUnit], cap: int) -> list[PrunableUnit]:
+    """RC-SMOKE: the units of the first decoder layers, whole layers only, at most ``cap`` units
+    (at least one layer). A cut through a layer's channel groups would leave the MLP width
+    partly covered, which the first-order gates refuse (2026-11-13: A4, A6 in RC-SMOKE)."""
+    by_layer: dict[int, list[PrunableUnit]] = {}
+    for unit in units:
+        by_layer.setdefault(unit.layer_index, []).append(unit)
+    kept: list[PrunableUnit] = []
+    for index in sorted(by_layer):
+        if kept and len(kept) + len(by_layer[index]) > cap:
+            break
+        kept += by_layer[index]
+    order = {id(u): i for i, u in enumerate(units)}
+    return sorted(kept, key=lambda u: order[id(u)])
 
 
 def run_scoring(
@@ -305,7 +390,7 @@ def run_scoring(
     from medcompress.compression.pruning.criteria import get_criterion
     from medcompress.compression.pruning.criteria.common import write_unit_scores
     from medcompress.compression.pruning.units import enumerate_units
-    from medcompress.data.splits import make_calibration_subset
+    from medcompress.data.calibration import calibration_set
     from medcompress.utils.io import upsert_results, write_json
 
     effective = apply_variant(config, run.variant)
@@ -323,11 +408,17 @@ def run_scoring(
     )
     if not units:
         raise ConfigError("the unit types give no prunable units")
+    cap = (config.get("smoke") or {}).get("max_scored_units")  # RC-SMOKE only
+    if cap is not None:
+        units = whole_layers_within(units, int(cap))
     instance = criterion or get_criterion(settings.criterion)(effective, seed=run.seed)
     calibration: list[VQASample] = []
-    if settings.calibration_size is not None:
-        calibration = make_calibration_subset(train, settings.calibration_size, seed=run.seed)
+    if settings.calibration_size is not None:  # without the images the fp16 check replaced
+        calibration = calibration_set(config, train, settings.calibration_size, run.seed)
 
+    resume = target.with_name(EXACT_RESUME_FILE)
+    if hasattr(instance, "exact_resume"):  # the clinical criterion (2026-11-14)
+        instance.exact_resume = (resume, {**fingerprint, "smoke_cap": cap})
     peak = _reset_peak_memory()
     started = time.perf_counter()
     scores = instance.score(model, units, calibration)
@@ -364,6 +455,7 @@ def run_scoring(
             }
         )
     upsert_results(rows, target.with_name("metrics.csv"))
+    resume.unlink(missing_ok=True)  # the scores are written: the resume file has done its job
     print(f"scored {len(units)} units with {settings.criterion} in {seconds:.0f} s; wrote {target}")
     return target
 
@@ -451,10 +543,16 @@ def score_units_for_experiment(
             return False
         return reweight_source(config, run, holder["settings"]) is not None
 
+    def subset() -> bool:
+        """True when E7's exact scores of this run's unit types stand in (A5 logprob_drop)."""
+        if model is not None or criterion is not None or force or "settings" not in holder:
+            return False
+        return subset_source(config, run, holder["settings"]) is not None
+
     collect_open_settings(  # fail early, before any model is loaded, with everything that is open
         lambda: holder.update(settings=ScoringSettings.from_config(config, run.variant)),
         lambda: _check_criterion(config, run),
-        lambda: None if reusable() or reweighted() else _check_side(config, model),
+        lambda: None if reusable() or reweighted() or subset() else _check_side(config, model),
     )
     settings = holder["settings"]
     target = scores_path(config, run)
@@ -463,6 +561,12 @@ def score_units_for_experiment(
         return  # nothing to load: the scores of these settings exist already
     if reweighted() and reweight_from_source(config, run, settings) is not None:
         return  # A1 / A2: E7's per-finding effects re-weighted, no model loaded
+    if subset() and subset_from_source(config, run, settings) is not None:
+        return  # A5 logprob_drop: E7's exact scores of its unit types, no model loaded
+    if settings.calibration_size is not None and model is None:
+        from medcompress.data.calibration import require_check
+
+        require_check(config, run.seed, settings.calibration_size)  # before the model loads
     if model is None:
         model = load_scoring_model(config, run)
     if train is None:
@@ -512,7 +616,7 @@ def run_first_order_check(
     from medcompress.compression.pruning.criteria.clinical import ClinicalSettings
     from medcompress.compression.pruning.criteria.common import read_unit_scores
     from medcompress.compression.pruning.units import enumerate_units
-    from medcompress.data.splits import make_calibration_subset
+    from medcompress.data.calibration import calibration_set
     from medcompress.utils.io import upsert_results, write_csv
 
     effective = apply_variant(config, run.variant)
@@ -537,7 +641,7 @@ def run_first_order_check(
     instance = criterion or get_criterion("clinical")(effective, seed=run.seed)
     calibration: list[VQASample] = []
     if settings.calibration_size is not None:
-        calibration = make_calibration_subset(train, settings.calibration_size, seed=run.seed)
+        calibration = calibration_set(config, train, settings.calibration_size, run.seed)
     started = time.perf_counter()
     exact = instance.exact_scores(model, [candidates[c] for c in chosen], calibration)
     seconds = time.perf_counter() - started
@@ -577,6 +681,10 @@ def first_order_check_for_experiment(
     settings = ScoringSettings.from_config(config, run.variant)
     _check_criterion(config, run)
     _check_side(config, model)
+    if settings.calibration_size is not None and model is None:
+        from medcompress.data.calibration import require_check
+
+        require_check(config, run.seed, settings.calibration_size)
     if model is None:
         model = load_scoring_model(config, run)
     if train is None:

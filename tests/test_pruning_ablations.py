@@ -128,6 +128,8 @@ def test_the_arms_declared_same_as_e7_resolve_to_e7s_settings() -> None:
         for section in ("pruning", "recovery", "training", "evaluation", "model", "seeds"):
             assert resolved.get(section) == e7.get(section), (arm, section)
     # and no other ablation arm is identical
-    for exp_id, variant in (("A4", "n64"), ("A5", "kl"), ("A6", "heads_channels"), ("A1", None)):
+    others = (("A4", "n64"), ("A5", "kl"), ("A5", "logprob_drop"), ("A6", "heads_channels"),
+              ("A1", None))  # fmt: skip
+    for exp_id, variant in others:
         resolved = apply_variant(load_experiment(exp_id)[0], variant)
         assert resolved["pruning"] != e7["pruning"], (exp_id, variant)

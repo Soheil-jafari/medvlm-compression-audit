@@ -26,7 +26,7 @@ ABLATION_VARIANTS: dict[str, tuple[str | None, ...]] = {
     "A2": (None,),
     "A3": (None,),
     "A4": ("n32", "n64", "n256"),  # n128 is E7 itself (registry.SAME_AS_E7)
-    "A5": ("kl",),  # logprob_drop is E7 itself
+    "A5": ("logprob_drop", "kl"),  # both on layers and KV groups (clarification, 2026-11-13)
     "A6": ("layers_only", "heads_channels"),
 }
 RC_D1_RUN4B: tuple[str, ...] = ("--rule", "full:0.92:or_crop:0.80", "--heldout-filter", "0.86")
@@ -686,6 +686,28 @@ def build_plan(
             notes=("training.mode was set from the tokenizer check on 2026-11-12 (offline_kd); "
                    "the 2B is pinned at revision 89644892",),
         )  # fmt: skip
+    if card == "RC-E10Q":
+        _no_seed(card, seed)
+        run = Run("E10Q")
+        steps = (
+            Step(  # the amendment of 2026-11-13: the 2B's own fp16 check of seed 0's images
+                "fp16 calibration check of the 2B (128 images)",
+                _script("check_calibration.py", *run.args(), "--size", "128"),
+            ),
+            Step(
+                f"quantize {run.label}",
+                _script("03_quantize.py", *run.args()),
+                skip_if_present=Need("quantized", run),
+            ),
+            Step(f"validation {run.label}", _script("06_evaluate.py", *run.args())),
+            Step(f"benchmark {run.label}", _script("07_benchmark_efficiency.py", *run.args())),
+        )
+        return CardPlan(
+            card, "E10 at 4 bit (GPTQ w4 of the merged 2B), seed 0 (exploratory)", 1, steps,
+            handoffs=(Handoff("quantized", (run,), "E10Q_seed0_quantized"),),
+            needs=(Need("adapter", Run("E10")),), quantization=True, internet=True,
+            notes=("commit results/calibration/seed0_replaced.csv with the 2B's rows (model e10)",),
+        )  # fmt: skip
     if card == "RC-T1":
         raise CardError("RC-T1 runs on the rented GPU, not on Kaggle: follow its card")
     if card in ("RC-L1", "RC-S1", "RC-S2", "RC-S3"):
@@ -697,7 +719,7 @@ RUNNABLE_CARDS: tuple[str, ...] = (
     "RC-D1-calibrate", "RC-D1-embed", "RC-D1-label", "RC-D1", "RC-D1-counts", "RC-E0a",
     "RC-E0b", "RC-E1", "RC-E2", "RC-B0", "RC-E3", "RC-E4", "RC-E9", "RC-G2", "RC-E5", "RC-E6",
     "RC-E7", "RC-E8", "RC-A1", "RC-A2", "RC-A3", "RC-A4", "RC-A5", "RC-A6", "RC-R1", "RC-C1",
-    "RC-E10",
+    "RC-E10", "RC-E10Q",
     "RC-X1", "RC-TT0", "RC-TT1",
 )  # fmt: skip
 

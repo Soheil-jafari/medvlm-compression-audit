@@ -361,3 +361,133 @@ def test_the_first_order_check_scores_random_channel_groups_exactly(tmp_path: Pa
         assert float(row["exact"]) == pytest.approx(truth[row["unit_id"]], rel=1e-9, abs=1e-12)
     with pytest.raises(ConfigError, match="no first_order unit type"):
         stage.run_first_order_check(config("exact"), run, tiny_vlm.tiny_wrapper(seed=0), train)
+
+
+def test_a5_logprob_drop_takes_e7s_exact_scores_of_layers_and_kv_groups(tmp_path: Path) -> None:
+    """Clarification of 2026-11-13: A5 logprob_drop runs on layers and KV groups (exactly scored),
+    as its own run; E7's exact scores of those units stand in, with no model loaded."""
+    train = write_dataset(tmp_path)
+    clinical = {"delta": "logprob_drop", "weighting": "uniform", "negatives_per_positive": None,
+                "negative_delta": "keep", "batch_size": 4,
+                "ablation_method": {"decoder_layer": "exact", "attention_head": "exact",
+                                    "mlp_channel_group": "first_order"}}  # fmt: skip
+    e7_config = _config(tmp_path, criterion="clinical", clinical=clinical)
+    e7 = stage.run_scoring(
+        e7_config, RunContext("E7", seed=1), tiny_vlm.tiny_wrapper(seed=0), train
+    )
+    e7_scores = common.read_unit_scores(e7)
+    a5_config = _config(tmp_path, criterion="clinical", clinical=clinical)
+    a5_config["pruning"]["units"]["types"] = ["decoder_layer", "attention_head"]
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("a model was loaded")
+
+    original = stage.load_scoring_model
+    stage.load_scoring_model = boom
+    try:
+        run = RunContext("A5", seed=1, variant="logprob_drop")
+        stage.score_units_for_experiment(a5_config, run, train=train)
+    finally:
+        stage.load_scoring_model = original
+    got = common.read_unit_scores(
+        tmp_path / "results/A5/logprob_drop/nobudget/seed1/unit_scores.csv"
+    )
+    assert got == {u: s for u, s in e7_scores.items() if ".mlp_group" not in u}
+    assert got and all(".mlp_group" not in u for u in got)
+    # a unit type that E7 scored by the first-order estimate is never taken over
+    with_groups = _config(tmp_path, criterion="clinical", clinical=clinical)
+    settings = stage.ScoringSettings.from_config(with_groups, "logprob_drop")
+    assert stage.subset_source(with_groups, RunContext("A5", seed=1, variant="x"), settings) is None
+    other = _config(tmp_path, criterion="clinical", clinical={**clinical, "batch_size": 2})
+    other["pruning"]["units"]["types"] = ["decoder_layer", "attention_head"]
+    settings = stage.ScoringSettings.from_config(other, None)
+    assert stage.subset_source(other, RunContext("A5", seed=1, variant="y"), settings) is None
+
+
+# ------------------------------------------- resuming E7's exact pass (2026-11-14, RC-G2 s3)
+
+
+def _mixed_clinical(root: Path) -> dict[str, Any]:
+    return _config(
+        root,
+        criterion="clinical",
+        clinical={
+            "delta": "logprob_drop",
+            "weighting": "uniform",
+            "negatives_per_positive": None,
+            "negative_delta": "keep",
+            "ablation_method": {
+                "decoder_layer": "exact",
+                "attention_head": "exact",
+                "mlp_channel_group": "first_order",
+            },
+            "batch_size": 4,
+        },
+    )
+
+
+def test_a_failed_first_order_pass_keeps_the_exact_effects_for_the_rerun(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    from medcompress.compression.pruning import scoring
+    from medcompress.compression.pruning.criteria import clinical
+
+    monkeypatch.setenv("MEDCOMPRESS_INPUT_ROOT", str(tmp_path / "no_inputs"))
+    train = write_dataset(tmp_path)
+    config = _mixed_clinical(tmp_path)
+    run = RunContext("E7", seed=0)
+    resume = stage.scores_path(config, run).with_name(stage.EXACT_RESUME_FILE)
+    real = scoring.accumulate_gate_gradients
+
+    def out_of_memory(*args: Any, **kwargs: Any) -> None:
+        raise torch.OutOfMemoryError("CUDA out of memory (simulated)")
+
+    monkeypatch.setattr(scoring, "accumulate_gate_gradients", out_of_memory)
+    with pytest.raises(torch.OutOfMemoryError):
+        stage.run_scoring(config, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    assert resume.is_file() and not stage.scores_path(config, run).exists()
+    saved = read_json(resume)
+    assert len(saved["effects"]) == 3 + 3 * 2  # 3 layers and 2 KV groups each
+
+    def no_ablation(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("the exact pass ran again")
+
+    monkeypatch.setattr(scoring, "accumulate_gate_gradients", real)
+    monkeypatch.setattr(clinical.ClinicalCriterion, "_exact_effects", no_ablation)
+    path = stage.run_scoring(config, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    assert "resumed 9 units" in capsys.readouterr().out
+    assert len(common.read_unit_scores(path)) == 18
+    assert not resume.exists()  # removed once the scores are written
+
+
+def test_the_exact_effects_resume_only_with_the_same_settings_and_from_an_attached_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    from medcompress.compression.pruning import scoring
+
+    train = write_dataset(tmp_path)
+    config = _mixed_clinical(tmp_path)
+    run = RunContext("E7", seed=0)
+    resume = stage.scores_path(config, run).with_name(stage.EXACT_RESUME_FILE)
+    monkeypatch.setenv("MEDCOMPRESS_INPUT_ROOT", str(tmp_path / "inputs"))
+
+    def out_of_memory(*args: Any, **kwargs: Any) -> None:
+        raise torch.OutOfMemoryError("simulated")
+
+    real = scoring.accumulate_gate_gradients
+    monkeypatch.setattr(scoring, "accumulate_gate_gradients", out_of_memory)
+    with pytest.raises(torch.OutOfMemoryError):
+        stage.run_scoring(config, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    # the failed session's output, attached to the rerun as an input
+    attached = tmp_path / "inputs" / "g2-session3-output" / "results" / resume.name
+    attached.parent.mkdir(parents=True)
+    resume.rename(attached)
+    monkeypatch.setattr(scoring, "accumulate_gate_gradients", real)
+    other = _mixed_clinical(tmp_path)
+    other["pruning"]["clinical"]["batch_size"] = 2  # another setting: the file is not used
+    stage.run_scoring(other, run, tiny_vlm.tiny_wrapper(seed=0), train)
+    out = capsys.readouterr().out
+    assert "not used" in out and "resumed" not in out
+    stage.scores_path(config, run).unlink()
+    stage.run_scoring(config, run, tiny_vlm.tiny_wrapper(seed=0), train, force=True)
+    assert f"resumed 9 units from {attached}" in capsys.readouterr().out
