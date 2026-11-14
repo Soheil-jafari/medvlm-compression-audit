@@ -206,7 +206,53 @@ python scripts/run_card.py --card RC-G2 --only E7:scores 2>&1 | tee /kaggle/work
 echo "run_card exit code: ${PIPESTATUS[0]}"
 ```
 
-Session 4 (after session 3's results are committed):
+**Session 3, attempt 1 (Amir, commit 9f04c4f, 2026-11-14): failed after 96 min.** The exact
+ablation finished (108 of 108 units); the first-order pass then ran out of GPU memory on one T4
+(14.18 GiB allocated, in `scoring.accumulate_gate_gradients` -> `yes_no_logprobs(grad=True)`).
+Cause (2026-11-14): the backward pass to the gates kept every decoder layer's intermediate
+tensors for all 36 layers at once; with a batch of four 672-px probes that is about 7 GiB on top
+of the 6.99 GiB of weights. The smoke's capped unit set and two probes per finding kept it
+small there (11.02 GiB). **Fixed without changing a setting** (batch 4 stays): each decoder
+layer is recomputed in the backward pass instead of kept (the same gradients, bit for bit on the
+tiny model), the weights are checked to collect no gradient, each step's graph is freed before
+the next, and a `MEDCOMPRESS_MEM` line gives the GPU memory every 25 steps. Expected peak about
+8.5-9.5 GiB (estimate; RC-SCALE measures it). **The exact effects are now saved as soon as the
+exact pass ends** (`exact_effects.resume.json` next to the scores, removed once the scores are
+written): a rerun with the same settings, units and probes reads them instead of ablating again,
+from its own output folder or from an attached input (the failed session's output added with
+Add Input). Attempt 1 ran before this code, so its 108 units are not saved: the rerun ablates
+them again (attempt 1 reached the first-order pass after less than 96 min, loading included).
+
+Session 3, rerun (run RC-SCALE first; attach `medcompress-data` and `e2-seed0-adapter`; if an
+attempt that already had this fix (2026-11-14, the commit that adds RC-SCALE) failed after its
+exact pass, also attach that notebook's output):
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E7:scores 2>&1 | tee /kaggle/working/run_card_RC-G2_s3_rerun.txt
+echo "run_card exit code: ${PIPESTATUS[0]}"
+```
+
+Session 4 (after session 3's results are committed, and after RC-SMOKE passed again for E7's
+stage 05: `python scripts/smoke_cards.py --card RC-G2 --sequential`, see RC-SMOKE section 6):
 
 ```bash
 %%bash

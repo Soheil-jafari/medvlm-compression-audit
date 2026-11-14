@@ -33,6 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--from", dest="handoffs", type=Path, action="append", default=[])
     parser.add_argument("--card", action="append", default=None, help="only these cards")
     parser.add_argument("--dry-run", action="store_true", help="print the commands only")
+    parser.add_argument("--sequential", action="store_true",
+                        help="run lane B after lane A instead of at the same time (half the host "
+                             "RAM, about twice the time)")  # fmt: skip
     return parser
 
 
@@ -56,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         with_dependencies,
     )
     from medcompress.utils.disk import free_bytes, tree_bytes
+    from medcompress.utils.memory import run_watched
 
     args = build_parser().parse_args(argv)
     out = (args.out or Path("/kaggle/working/smoke")).resolve()
@@ -122,8 +126,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             log = roots["logs"] / f"{job.card}_{job.name}_{stage.label}.log".replace(" ", "_")
             started = time.perf_counter()
-            done = subprocess.run(command, env=stage_env, capture_output=True, text=True,
-                                  check=False)  # fmt: skip
+            done = run_watched(command, env=stage_env)  # samples the host RAM (2026-11-14)
             seconds = time.perf_counter() - started
             text = done.stdout + "\n" + done.stderr
             log.write_text(text, encoding="utf-8")
@@ -139,12 +142,17 @@ def main(argv: list[str] | None = None) -> int:
                 peak,
                 job.note,
                 *disk,
+                done.peak_rss,
+                done.min_available,
             )
             with lock:
                 results.append(result)
                 minutes = seconds / 60
+                rss = "n/a" if done.peak_rss is None else f"{done.peak_rss / 2**30:.1f} GiB"
+                low = "n/a" if done.min_available is None else f"{done.min_available / 2**30:.1f}"
                 print(f"[{devices}] {job.card} {job.name} {stage.label}: exit {done.returncode} "
-                      f"in {minutes:.1f} min (log {log})", flush=True)  # fmt: skip
+                      f"in {minutes:.1f} min, host RSS peak {rss}, lowest available {low} GiB "
+                      f"(log {log})", flush=True)  # fmt: skip
             if done.returncode != 0:
                 tail = "\n".join(text.strip().splitlines()[-15:])
                 print(f"--- last lines of {log.name} ---\n{tail}\n---", flush=True)
@@ -176,11 +184,15 @@ def main(argv: list[str] | None = None) -> int:
 
     started = time.perf_counter()
     lane("pre", "0")  # the calibration check that the lanes' calibration sets read
-    lanes = [threading.Thread(target=lane, args=(n, d)) for n, d in (("A", "0"), ("B", "1"))]
-    for thread in lanes:
-        thread.start()
-    for thread in lanes:
-        thread.join()
+    if args.sequential:
+        lane("A", "0")
+        lane("B", "1")
+    else:
+        lanes = [threading.Thread(target=lane, args=(n, d)) for n, d in (("A", "0"), ("B", "1"))]
+        for thread in lanes:
+            thread.start()
+        for thread in lanes:
+            thread.join()
     lane("both", "0,1")
     if args.dry_run:
         return 0

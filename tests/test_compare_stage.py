@@ -431,3 +431,47 @@ def test_the_two_co_primary_tests_combine_by_intersection_union() -> None:
     assert v.combine_tests(v.NOT_SUPPORTED, v.INCONCLUSIVE) == v.INCONCLUSIVE
     assert v.combine_tests(v.PENDING, v.NOT_SUPPORTED) == v.PENDING
     assert v.combine_tests(v.EXPLORATORY, v.EXPLORATORY) == v.EXPLORATORY
+
+
+def test_e10_is_matched_by_peak_memory_and_e10q_is_compared_with_e8(tmp_path: Path) -> None:
+    """Exploratory, descriptive (item 14.3, code 2026-11-14): the nearest arm by measured peak
+    memory, diff rows with intervals, no p-value, never in H1 or H4."""
+    from medcompress.evaluation.aggregate import load_results, paper_rows, summarise_over_seeds
+    from medcompress.evaluation.verdicts import all_verdicts
+
+    config = _config(tmp_path)
+    _write_tree(tmp_path, config)
+    out, res = Path(config["paths"]["output_root"]), Path(config["paths"]["results_root"])
+    peaks = {("E10", ""): 4.38e9, ("E10Q", ""): 2.9e9, ("E7", "B2"): 6.0e9,
+             ("E5:taylor", "B2"): 5.9e9, ("E6", "B3"): 4.6e9, ("E8", "B2"): 3.4e9,
+             ("E8", "B3"): 3.0e9}  # fmt: skip
+    for number, ((label, budget), peak) in enumerate(peaks.items()):
+        experiment, _, variant = label.partition(":")
+        run = RunContext(experiment, seed=0, budget=budget or None, variant=variant or None)
+        row = {"experiment": label, "budget": budget, "seed": 0, "metric": "peak_memory_bytes",
+               "value": peak}  # fmt: skip
+        append_results([row], run.run_dir(res) / "efficiency.csv")
+        path = run.run_dir(out) / cs.OUTCOMES_FILE
+        if not path.is_file() and label != "E6":  # E6 at B3 has no test outcomes yet
+            path.parent.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(path, **_arrays(0.7, seed=900 + number))
+    cs.run_comparisons(config, n_resamples=100)
+    choices = json.loads((res / "comparisons" / cs.CHOICES_FILE).read_text())
+    matched = choices["exploratory_E10_vs_matched_pruned_seed0"]
+    assert matched["arm"] == "E6@B3"  # 4.6e9 is nearest to 4.38e9
+    assert "missing" in matched["skipped"]  # ... but its test outcomes are not there
+    four = choices["exploratory_E10Q_vs_E8_seed0"]
+    assert four["arm"] == "E8@B3" and four["relative_gap"] == pytest.approx(2.9 / 3.0 - 1)
+    summary = summarise_over_seeds(paper_rows(load_results(res)))
+    rows = summary[summary["experiment"] == "E10Q_vs_E8_seed0"]
+    assert set(rows["metric"]) == {"diff:macro_balanced_accuracy", "diff:small_finding_recall",
+                                   "diff:rare_recall", "diff:ece"}  # fmt: skip
+    assert set(rows["budget"]) == {"B3"} and set(rows["tier"]) == {"exploratory"}
+    assert not (res / "comparisons" / "E10_vs_E2_seed0").exists()  # not an H1 arm
+    assert "E10Q" not in json.dumps(choices["h4"])
+    for verdict in all_verdicts(summary):
+        assert not any(e.startswith("E10") for e in verdict.evidence)
+    # no E10 peak yet: skipped with the reason
+    assert cs.nearest_by_memory(load_results(res).iloc[0:0], cs.Arm("E10"), [])[1] == {
+        "skipped": "no peak_memory_bytes of E10 (seed 0)"
+    }

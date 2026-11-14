@@ -167,6 +167,11 @@ class TrainResult:
         }
 
 
+AFTER_STEP_HOOKS: list[Callable[[Any], None]] = []
+"""Called with the progress after every optimizer step. Only ``scripts/scale_check.py`` adds
+one (to read the memory after each update and stop after a few); no stage does (2026-11-14)."""
+
+
 class NonFiniteAdapter(RuntimeError):
     """A trainable weight became NaN or inf: the run stops and saves nothing."""
 
@@ -541,6 +546,8 @@ def train_lora(
             progress.nonfinite_steps.append(progress.step)
         if scale_before is not None and scaler.get_scale() < scale_before:
             progress.skipped_steps.append(progress.step)  # the scaler skipped this update
+        for hook in AFTER_STEP_HOOKS:  # the scale check only; empty in every stage
+            hook(progress)
         saved = store is not None and store.due(progress.step, cfg.steps)
         if saved or progress.step == cfg.steps or progress.step % LOG_EVERY == 0:
             _check_finite(named_trainable(module), progress.step)  # never save a broken state

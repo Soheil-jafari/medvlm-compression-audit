@@ -60,6 +60,10 @@ def test_the_report_parses_the_peaks_and_ranks_the_verdicts() -> None:
     table = smoke.report_table(rows)
     assert "| RC-G2 | E7 | 05 prune+recover | FAIL (exit 6) |" in table
     assert "Qwen2.5-VL-3B: gpu0 7.45" in table and "| WAIT |" in table and "not run" in table
+    killed = smoke.StageResult("RC-G2", "E7", "05 prune+recover", -9, 1014.0,
+                               host_peak_rss=28 << 30, host_min_available=1 << 29)  # fmt: skip
+    line = smoke.report_table([killed]).splitlines()[-1]
+    assert "| 28.0 / 0.5 |" in line and "killed (exit -9): host RAM" in line
 
 
 def test_the_smoke_budgets_change_only_the_measurement_counts() -> None:

@@ -121,7 +121,7 @@ every hand-off is shared to Soheil's account). The hours are in section 7.
 | Phase | Soheil (account 1) | Amir (account 2) | Account 3 (lent; Soheil starts it) |
 |---|---|---|---|
 | A. after the freeze | RC-G2 in four sessions (the five B2 runs of seed 0: E5 x 3, E6, E7, and the 30-group check; RC-G2 section 3); RC-E10 step 1 (the tokenizer check); then `scripts/choose_comparator.py` (CPU): the comparator and the futility decision | RC-B0 (done 2026-11-11); RC-E3 seed 0 (`w4`, `w8`, `w8a8`; reassigned 2026-11-11); the PolypGen download and `scripts/polypgen.py describe` / `overlap` (CPU) | RC-E9, then RC-E4 seed 0 (reassigned 2026-11-11) |
-| B. seed 0 of the rest (exploratory) | RC-E8 seed 0 at B2; the rest of RC-E10 (once its 4-bit code is in); RC-A4 `n32` | the E5 trend (B1, B3); RC-A4 `n64`, `n256` | the E6, E7 and E8 trend (B1, B3); RC-A1, RC-A2, RC-A3, RC-A5, RC-A6 seed 0 |
+| B. seed 0 of the rest (exploratory) | RC-E8 seed 0 at B2; RC-E10Q (E10 at 4 bit, code in 2026-11-14; after RC-SMOKE passes for it); RC-A4 `n32` | the E5 trend (B1, B3); RC-A4 `n64`, `n256` | the E6, E7 and E8 trend (B1, B3); RC-A1, RC-A2, RC-A3, RC-A5, RC-A6 seed 0 |
 | C. seeds 1 and 2 (only without a futility stop) | | seed 2: RC-E2, then E7 and the comparator at B2, A1 at B2, E3 `w8` | seed 1: the same |
 | D. tests and the rest | RC-R1 (E1 seed 0 only); E0's validation again (RC-E0a section 3c); RC-L1 E2@30k and the cache extension; RC-C1 (CPU) | RC-L1 E7@30k; RC-T1 on the rented GPU (not Kaggle, when the GPU is chosen) | |
 

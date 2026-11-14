@@ -24,7 +24,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_experiment_ids_are_exactly_the_planned_ladder() -> None:
-    assert experiment_ids("main") == tuple(f"E{i}" for i in range(11))  # E10: 2026-11-08
+    # E10: 2026-11-08; E10Q (E10 at 4 bit): 2026-11-14
+    assert experiment_ids("main") == (*(f"E{i}" for i in range(11)), "E10Q")
     assert experiment_ids("ablation") == tuple(f"A{i}" for i in range(1, 7))
 
 

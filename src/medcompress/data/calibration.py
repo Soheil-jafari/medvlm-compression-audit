@@ -10,7 +10,9 @@ nested subsets (A4) and the finding stratification
 per seed, before any criterion or quantization, identically for every arm that uses the
 calibration set (the pruning criteria, GPTQ of E3 and E8, E11 / E12 when built; E4 trains on the
 teacher cache and draws no calibration set). The model is the student (E2 of that seed) for the
-student arms and the teacher for E9. The vision tower stays fp16.
+student arms, the teacher for E9 and the 2B of E10 (``e10``) for E10Q (2026-11-14: the rule
+says the model being calibrated, and the 2B has its own vision encoder). The vision tower stays
+fp16.
 
 ``scripts/check_calibration.py`` runs the check and writes
 ``results/calibration/seed<k>_replaced.csv`` (rows ``seed, model, kind, value``: one
@@ -33,7 +35,7 @@ if TYPE_CHECKING:
     from medcompress.data.base import VQASample
 
 FOLDER = "calibration"
-MODELS: tuple[str, ...] = ("student", "teacher")
+MODELS: tuple[str, ...] = ("student", "teacher", "e10")
 
 
 def replaced_path(results_root: Path | str, seed: int) -> Path:

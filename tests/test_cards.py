@@ -22,7 +22,7 @@ from medcompress.cards import (
     g2_runs,
 )
 from medcompress.config import experiment_config_path, load_config
-from medcompress.registry import REGISTRY
+from medcompress.registry import ALL_SCRIPTS, REGISTRY
 from medcompress.utils import kaggle
 
 REPO = Path(__file__).resolve().parents[1]
@@ -64,7 +64,7 @@ def test_every_runnable_card_has_a_plan_whose_scripts_exist_and_are_registered()
                 continue
             script = step.argv[0]
             assert (REPO / script).is_file(), (plan.tag, script)
-            if "--exp" in step.argv and script != "scripts/run_experiment.py":
+            if "--exp" in step.argv and script in ALL_SCRIPTS:  # stages; checks are not
                 exp = step.argv[step.argv.index("--exp") + 1]
                 assert script in REGISTRY[exp].scripts, (plan.tag, script)
         for handoff in plan.handoffs:

@@ -40,6 +40,9 @@ SCORES_FILE = "unit_scores.csv"
 SETTINGS_FILE = "unit_scores.settings.json"
 EFFECTS_FILE = "unit_effects.csv"
 EFFECTS_SETTINGS_FILE = "unit_effects.settings.json"
+EXACT_RESUME_FILE = "exact_effects.resume.json"
+"""The exact effects of the clinical criterion, saved when the exact pass ends and removed once
+the scores are written; a rerun with the same settings resumes from it (2026-11-14)."""
 EFFECTS_SOURCE = "E7"
 """The run whose per-finding effects A1 and A2 re-weight (same seed)."""
 REWEIGHTED_SCHEMES: tuple[str, ...] = ("uniform", "rarity_only")
@@ -413,6 +416,9 @@ def run_scoring(
     if settings.calibration_size is not None:  # without the images the fp16 check replaced
         calibration = calibration_set(config, train, settings.calibration_size, run.seed)
 
+    resume = target.with_name(EXACT_RESUME_FILE)
+    if hasattr(instance, "exact_resume"):  # the clinical criterion (2026-11-14)
+        instance.exact_resume = (resume, {**fingerprint, "smoke_cap": cap})
     peak = _reset_peak_memory()
     started = time.perf_counter()
     scores = instance.score(model, units, calibration)
@@ -449,6 +455,7 @@ def run_scoring(
             }
         )
     upsert_results(rows, target.with_name("metrics.csv"))
+    resume.unlink(missing_ok=True)  # the scores are written: the resume file has done its job
     print(f"scored {len(units)} units with {settings.criterion} in {seconds:.0f} s; wrote {target}")
     return target
 

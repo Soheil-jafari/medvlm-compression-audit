@@ -725,6 +725,49 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-14 (agent; code the frozen plan names, section 12 note): E10 at 4 bit and E10's two
+  comparisons.** New registry entry `E10Q` (config `configs/experiments/E10Q.yaml`, card
+  `RC-E10Q_e10_at_4bit.md`): the merged E10 quantized with the E3 `w4` recipe (the frozen GPTQ
+  settings of E8 and E9), seed 0, validation and benchmark. Its 128 calibration images of seed 0
+  are cleaned by the 2B's own fp16 check (model `e10` in `results/calibration/seed0_replaced.csv`;
+  the amendment of 2026-11-13 names "the model being calibrated"); the card runs that check first.
+  Comparison step, seed 0, test split, descriptive (differences with intervals for the headline
+  accuracy, the small-finding recall, the rare-group recall and the ECE; no p-value, no verdict;
+  not part of H1 or H4): `E10_vs_matched_pruned_seed0`, E10 minus the pruned 3B arm (E5, E6 or E7,
+  any budget) whose measured peak memory is nearest to E10's; `E10Q_vs_E8_seed0`, E10Q minus the
+  E8 budget whose measured peak memory is nearest to E10Q's. **To confirm by Soheil and Amir before
+  the comparison step:** which arms count as "the pruned 3B arm" (the agent took E5, E6 and E7,
+  not the ablations), and the nearest-peak-memory rule for E8's budget (item 14.3 says only "at 4
+  bit against E8"). RC-E10Q runs after RC-SMOKE passes for it (its smoke job quantizes the smoke's
+  own 2-step E10).
+- **2026-11-14 (Soheil's request; implementation, no frozen setting changed): memory at full
+  size.** (1) RC-G2 session 3 (Amir, 9f04c4f) ran out of GPU memory in E7's first-order pass
+  after the exact pass had finished (14.18 GiB allocated). The backward pass to the gates kept
+  every decoder layer's intermediate tensors at once; now each layer is recomputed in the
+  backward pass (`scoring.checkpointed_decoder_layers`; the same gradients, bit for bit on the
+  tiny model), the weights are checked to collect no gradient, each step's graph is freed, and
+  memory is logged every 25 steps. Probe batch 4 stays. Expected peak about 8.5-9.5 GiB
+  (estimate). The exact effects are saved when the exact pass ends and a rerun with the same
+  settings, units and probes resumes from them (`exact_effects.resume.json`, also found in an
+  attached input). (2) RC-SMOKE at a237c5c: E7's stage 05 was killed with exit -9 (host RAM).
+  Every load and release prints GPU and host memory; the release drops the processor, empties
+  the pinned-memory cache and returns freed heap pages (`malloc_trim`); later loads of a pinned
+  model pass `local_files_only`; 15 loads in one process keep the RSS flat (test). The smoke
+  samples each stage's RSS from outside and has `--sequential`. Stage 05 keeps loading a fresh
+  copy for every footprint measurement (the measured path is unchanged, so there is nothing to
+  prove equal); building copies from one CPU copy is not needed unless RC-SCALE shows growth.
+  (3) Every recovery now records `recovery_skipped_steps` (updates the loss scaler skipped),
+  `recovery_nonfinite_steps` and `recovery_nonfinite_microbatches` in its metrics, the same for
+  every arm (a recorded number, not a setting). The smoke's E7 recovery skipped 2 of its 2
+  updates with finite losses: the scaler starts at 65,536 and halves after each overflow, so the
+  first updates of a fp16 run are where skips are expected. RC-SCALE counts them over 20 real
+  updates; above 5 % the agent asks before anything changes (the scaler is part of the frozen
+  recipe). (4) RC-SCALE (`scripts/scale_check.py`, card `RC-SCALE_scale_check.md`): each heavy
+  step at its real settings for a few steps (E7 first-order pass, budget search, recovery, E4
+  training, GPTQ, E9's evaluation), failing when memory grows step over step or a step peaks
+  within 1 GiB of a T4. (5) RC-E10 committed (account 3, c6c7cbd); RC-E3, RC-E4, RC-A4 and RC-A6
+  passed the reduced smoke at a237c5c. Before any E7 stage 05 production run (RC-G2 session 4),
+  E7's stage 05 smokes again.
 - **2026-11-14 (agent; applying the second amendment of 2026-11-13): RC-CAL0 part A.** Teacher
   encoder: no non-finite image in any split. Student encoder: 2 / 390 validation, 5 / 512 filtered
   test, 8 / 968 unfiltered test, 24 / 4,513 training images, all first at vision block 31. The
@@ -807,7 +850,7 @@ must be logged here.
 | Reuse of E7 for identical ablation arms | **decided 2026-11-08**: E7 stands for `A4:n128` and `A5:logprob_drop` | — | — |
 | H2 matching and McNemar | **decided 2026-11-08** (H2 confirmatory with E3 `w8` on 3 seeds; McNemar on the 3-seed majority) | — | — |
 | H2 under the seed plan | **decided 2026-11-08**: E3 `w8` joins the 3-seed tier | — | — |
-| E10 code still to come | the 4-bit E10 (GPTQ `w4` of the merged 2B) and its two exploratory comparisons (matched memory against the nearest pruned 3B arm; 4 bit against E8) in the comparison step | agent | before RC-E10 is `ready` |
+| E10 code | **done 2026-11-14**: `E10Q` (GPTQ `w4` of the merged 2B, card RC-E10Q) and the two comparisons; to confirm: the arms that count as "the pruned 3B arm" (E5, E6, E7 taken) and the nearest-peak-memory rule for E8's budget | Soheil and Amir | before the comparison step |
 | E10 owner | **Soheil** (2026-11-08) | — | — |
 | E3 `w4` at seeds 1 and 2 | **decided 2026-11-08**: seed 0 only | — | — |
 | Budgets and timing hardware | budgets **decided 2026-11-08** (15 / 30 / 45 % of the decoder bytes; RC-B0 converts); the rented timing GPU (RC-T1) still open, does not block the freeze | team | before RC-T1 |

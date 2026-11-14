@@ -536,12 +536,18 @@ class ClinicalCriterion(PruningCriterion):
         finding_probes, present, weights = self._probe_set(settings, calibration)
         exact = [u for u in units if settings.methods[u.unit_type.value] == "exact"]
         first_order = [u for u in units if settings.methods[u.unit_type.value] == "first_order"]
-        effects = self._exact_effects(model, exact, finding_probes, settings)
+        effects = self._resumed_exact_effects(exact, finding_probes)
+        if effects is None:
+            effects = self._exact_effects(model, exact, finding_probes, settings)
+            self._save_exact_effects(exact, finding_probes, effects)
         out = {unit_id: weighted_sum(e, weights) for unit_id, e in effects.items()}
         if first_order:
             # one backward pass per finding (each probe is still forwarded once): the gate
             # gradient of sum_c w_c * mean_x log p is linear in w, so the per-finding gradients
             # give E7's score and let A1 / A2 re-weight them (D07 section 1)
+            from medcompress.utils.memory import print_memory
+
+            print_memory("first-order pass start")
             for finding in present:
                 own = [p for p in finding_probes if p.finding == finding]
                 objective = scoring.ProbeObjective.build(own, {finding: 1.0})
@@ -549,8 +555,9 @@ class ClinicalCriterion(PruningCriterion):
                     model, objective, self.data_root, settings.batch_size
                 )
                 grads = scoring.accumulate_gate_gradients(
-                    model, first_order, steps, loss_scale=settings.loss_scale
-                )
+                    model, first_order, steps, loss_scale=settings.loss_scale,
+                    label=f"first-order {finding}", growth=self.memory_growth,
+                )  # fmt: skip
                 for unit_id, value in grads.items():
                     effects.setdefault(unit_id, {})[finding] = value
             for unit in first_order:
@@ -558,6 +565,82 @@ class ClinicalCriterion(PruningCriterion):
             print(f"[clinical] first-order estimate: {len(first_order)} units", flush=True)
         self.finding_effects = effects
         return out
+
+    # -------------------------------------------- resuming the exact pass (2026-11-14)
+
+    exact_resume: tuple[Any, Mapping[str, Any]] | None = None
+    """``(path, fingerprint)`` set by the scoring stage: where the exact effects are saved as
+    soon as the exact pass ends, and what they depend on. A rerun with the same fingerprint
+    reads them instead of ablating again (RC-G2 session 3 lost 108 finished units to an
+    out-of-memory error in the first-order pass that followed)."""
+
+    memory_growth: Any = None
+    """A :class:`medcompress.utils.memory.GrowthCheck` the scale check passes in."""
+
+    def _resume_key(
+        self, units: Sequence[PrunableUnit], finding_probes: Sequence[Any]
+    ) -> dict[str, Any]:
+        assert self.exact_resume is not None
+        return {
+            "settings": dict(self.exact_resume[1]),
+            "units": [u.unit_id for u in units],
+            "probes": [[p.finding, p.sample_id, p.answer] for p in finding_probes],
+        }
+
+    def _resume_candidates(self) -> list[Any]:
+        """The stage's own file, then a file of the same name in an attached input (the output
+        of the failed session, added as an input of the rerun)."""
+        from pathlib import Path
+
+        from medcompress.inputs import input_root
+
+        assert self.exact_resume is not None
+        own = Path(self.exact_resume[0])
+        root = input_root()
+        attached = sorted(root.rglob(own.name)) if root.is_dir() else []
+        return [own, *[p for p in attached if p != own]]
+
+    def _resumed_exact_effects(
+        self, units: Sequence[PrunableUnit], finding_probes: Sequence[Any]
+    ) -> dict[str, dict[str, float]] | None:
+        """The saved exact effects of exactly these settings, units and probes, or ``None``."""
+        import json
+
+        if self.exact_resume is None or not units:
+            return None
+        key = self._resume_key(units, finding_probes)
+        for path in self._resume_candidates():
+            if not path.is_file():
+                continue
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            if saved.get("key") == json.loads(json.dumps(key)):
+                print(f"[clinical] exact ablation: resumed {len(units)} units from {path}",
+                      flush=True)  # fmt: skip
+                return {u: dict(v) for u, v in saved["effects"].items()}
+            print(f"[clinical] {path} was written with other settings, units or probes; "
+                  "not used", flush=True)  # fmt: skip
+        return None
+
+    def _save_exact_effects(
+        self,
+        units: Sequence[PrunableUnit],
+        finding_probes: Sequence[Any],
+        effects: Mapping[str, Mapping[str, float]],
+    ) -> None:
+        """Write the exact effects at once (atomically), before the first-order pass starts."""
+        import os
+        from pathlib import Path
+
+        from medcompress.utils.io import write_json
+
+        if self.exact_resume is None or not units:
+            return
+        path = Path(self.exact_resume[0])
+        partial = path.with_name(path.name + ".partial")
+        write_json({"key": self._resume_key(units, finding_probes),
+                    "effects": {u: dict(e) for u, e in effects.items()}}, partial)  # fmt: skip
+        os.replace(partial, path)  # never a half-written file to resume from
+        print(f"[clinical] exact ablation: saved {len(effects)} units to {path}", flush=True)
 
     def ablate(self, model: VLMWrapper, unit: PrunableUnit) -> AbstractContextManager[None]:
         """Switch one unit off while the returned context is open (scoring only).

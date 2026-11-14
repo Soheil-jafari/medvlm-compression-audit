@@ -433,7 +433,7 @@ def measure_footprint(
     )
 
 
-QUANTIZED_ARMS: tuple[str, ...] = ("E3", "E4", "E8", "E9")
+QUANTIZED_ARMS: tuple[str, ...] = ("E3", "E4", "E8", "E9", "E10Q")
 
 
 def check_low_precision_kernels(model: VLMWrapper) -> bool:

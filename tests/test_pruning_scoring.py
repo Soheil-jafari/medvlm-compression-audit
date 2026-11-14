@@ -253,3 +253,63 @@ def test_probe_steps_add_up_to_the_weighted_log_probability_of_the_right_answer(
     assert total == pytest.approx(expected, rel=1e-4)
     assert math.isfinite(total)
     assert scoring.calibration_images([]) == []
+
+
+# ------------------------------------------------- memory of the first-order pass (2026-11-14)
+
+
+def _saved_bytes(wrapper: object, units: list[PrunableUnit], checkpoint: bool) -> int:
+    """Bytes of the tensors autograd keeps for the backward pass of one objective."""
+    total = 0
+
+    def pack(tensor: torch.Tensor) -> torch.Tensor:
+        nonlocal total
+        total += tensor.numel() * tensor.element_size()
+        return tensor
+
+    gates = scoring.UnitGates(wrapper, units)
+    layers = scoring.checkpointed_decoder_layers(wrapper) if checkpoint else None
+    with scoring.parameters_frozen(wrapper.module), gates.installed():
+        with torch.autograd.graph.saved_tensors_hooks(pack, lambda t: t):
+            if layers is None:
+                loss = _objective(wrapper)
+            else:
+                with layers:
+                    loss = _objective(wrapper)
+        loss.backward()
+    return total
+
+
+def test_checkpointed_layers_give_the_same_gate_gradients() -> None:
+    wrapper = _wrapper()
+    units = _units(wrapper)
+    plain = scoring.accumulate_gate_gradients(
+        wrapper, units, [lambda: _objective(wrapper)] * 2, loss_scale=1.0, checkpoint_layers=False
+    )
+    kept = scoring.accumulate_gate_gradients(
+        wrapper, units, [lambda: _objective(wrapper)] * 2, loss_scale=1.0, checkpoint_layers=True
+    )
+    assert kept == plain  # bit for bit: the same forward computation, run again
+    assert all("forward" not in vars(layer) for layer in wrapper.module.model.language_model.layers)
+
+
+def test_checkpointed_layers_keep_less_for_the_backward_pass() -> None:
+    wrapper = _wrapper()
+    units = [u for u in _units(wrapper) if u.unit_type is UnitType.MLP_CHANNEL_GROUP]
+    plain = _saved_bytes(wrapper, units, checkpoint=False)
+    kept = _saved_bytes(wrapper, units, checkpoint=True)
+    assert kept < 0.5 * plain, (kept, plain)
+
+
+def test_first_order_steps_log_memory_and_record_growth(capsys: pytest.CaptureFixture) -> None:
+    from medcompress.utils.memory import GrowthCheck
+
+    wrapper = _wrapper()
+    growth = GrowthCheck("gpu", warmup=0)
+    scoring.accumulate_gate_gradients(
+        wrapper, _units(wrapper), [lambda: _objective(wrapper)] * 3, loss_scale=1.0,
+        log_every=2, label="probe", growth=growth,
+    )  # fmt: skip
+    out = capsys.readouterr().out
+    assert "MEDCOMPRESS_MEM probe step 2/3" in out and "MEDCOMPRESS_MEM probe step 3/3" in out
+    assert not growth.grows()  # no GPU here: no readings, nothing grows

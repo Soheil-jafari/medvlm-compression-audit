@@ -226,6 +226,7 @@ def test_the_stage_meets_the_budget_recovers_and_saves_a_reloadable_model(tmp_pa
     assert metrics["parameters_before"] == total
     assert metrics["parameters_after"] == metrics["budget_footprint"] < total
     assert metrics["removed_units"] >= 1 and metrics["recovery_steps"] == 2
+    assert metrics["recovery_skipped_steps"] == 0 and metrics["recovery_nonfinite_steps"] == 0
     kinds = ("layers", "kv_groups", "channel_groups")
     assert sum(metrics[f"removed_{k}"] for k in kinds) == metrics["removed_units"]
     removal = json.loads((run_dir / "removal.json").read_text())

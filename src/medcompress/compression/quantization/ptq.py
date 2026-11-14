@@ -646,7 +646,8 @@ def _teacher_device_map(spec: Any, model_config: Mapping[str, Any], log: Any = p
 
 def parent_of(run: RunContext) -> dict[str, Any]:
     """The model a quantized run starts from: E3 <- E2, E8 <- E7 (same budget), E9 <- E0,
-    E4 <- the pretrained student (its codes come from quantization-aware training)."""
+    E10Q <- E10 (the merged 2B, 2026-11-14), E4 <- the pretrained student (its codes come from
+    quantization-aware training)."""
     if run.experiment_id == "E4":
         return {"experiment": "pretrained", "budget": None, "seed": run.seed}
     if run.experiment_id == "E3":
@@ -657,7 +658,16 @@ def parent_of(run: RunContext) -> dict[str, Any]:
         return {"experiment": "E7", "budget": run.budget, "seed": run.seed}
     if run.experiment_id == "E9":
         return {"experiment": "E0", "budget": None, "seed": 0}
+    if run.experiment_id == "E10Q":
+        return {"experiment": "E10", "budget": None, "seed": run.seed}
     raise ValueError(f"{run.experiment_id} is not a post-training quantization arm")
+
+
+def calibration_model(run: RunContext) -> str:
+    """Whose fp16 check cleans the calibration set of a quantized run: the teacher for E9, the
+    2B of E10 for E10Q (2026-11-14), the 3B student (E2 of the seed) for every other arm."""
+    parent = parent_of(run)["experiment"]
+    return {"E0": "teacher", "E10": "e10"}.get(parent, "student")
 
 
 def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:
@@ -690,6 +700,8 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
             + ", ".join(f"{d} {b / GIB:.2f} GiB" for d, b in sorted(placed.items()))
         )
         return model
+    if parent["experiment"] == "E10":  # the 2B of E10's own config (model.config), merged
+        return load_trained_student(config, "E10", run.seed, side)
     student = load_trained_student(config, "E2", run.seed, side)
     if parent["experiment"] == "E2":
         return student
@@ -768,7 +780,7 @@ def run_quantization(
         assert recipe.calibration_size is not None
         # the images the fp16 check replaced are left out (amendment of 2026-11-13); the
         # teacher's own check for E9, the student's for E3 and E8; refused without the check
-        model_name = "teacher" if parent_of(run)["experiment"] == "E0" else "student"
+        model_name = calibration_model(run)
         calibration = calibration_set(config, train, recipe.calibration_size, run.seed,
                                       model_name)  # fmt: skip
         if model is None:

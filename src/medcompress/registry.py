@@ -220,6 +220,17 @@ _SPECS: tuple[ExperimentSpec, ...] = (
         trains=True,
     ),
     ExperimentSpec(
+        id="E10Q",
+        title="E10 at 4 bit (exploratory)",
+        description="GPTQ w4 of the merged E10 (the E3 w4 recipe), seed 0; compared at 4 bit "
+        "with E8 (pre-registration section 11 item 14.3; code added 2026-11-14).",
+        kind="main",
+        parent="E10",
+        stages=("quantize", "evaluate", "benchmark"),
+        scripts=(QUANTIZE, EVALUATE, BENCHMARK),
+        outputs=_outputs("E10Q"),
+    ),
+    ExperimentSpec(
         id="A1",
         title="Ablation: unweighted criterion (w_c = 1)",
         description="Clinical criterion with uniform finding weights.",

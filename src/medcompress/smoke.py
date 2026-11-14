@@ -52,7 +52,7 @@ CAPPED_UNITS = 300
 GATED_CARDS: Mapping[str, str] = {
     "RC-G2": "RC-G2", "RC-E5": "RC-G2", "RC-E6": "RC-G2", "RC-E7": "RC-G2",
     "RC-E3": "RC-E3", "RC-E4": "RC-E4", "RC-E8": "RC-E8", "RC-E9": "RC-E9",
-    "RC-E10": "RC-E10", "RC-R1": "RC-R1",
+    "RC-E10": "RC-E10", "RC-E10Q": "RC-E10Q", "RC-R1": "RC-R1",
     **{f"RC-A{n}": f"RC-A{n}" for n in range(1, 7)},
 }  # fmt: skip
 """The cards that run only after RC-SMOKE passed for them (the E5 / E6 / E7 grid runs the
@@ -285,6 +285,19 @@ def smoke_jobs() -> list[SmokeJob]:
             ),
             ("RC-E10", None, (), ()),
         ),
+        SmokeJob(  # 2026-11-14: E10 at 4 bit, from the smoke's own E10 adapter (job "E10")
+            "RC-E10Q",
+            "E10Q",
+            "B",
+            (
+                SmokeStage(
+                    "calibration check (2B)", CAL_CHECK, (*_run_args("E10Q"), "--size", "2")
+                ),
+                *_quantized("E10Q", None, None),
+            ),  # fmt: skip
+            ("RC-E10", None, (), ()),
+            after="E10",
+        ),
         SmokeJob("RC-R1", "E2 test", "B", (_test("E2"),), ("RC-R1", None, (), ())),
         SmokeJob("RC-R1", "E1 test", "B", (_test("E1"),), ("RC-R1", None, (), ())),
         # both T4s: the teacher
@@ -374,6 +387,8 @@ class StageResult:
     note: str = ""
     disk_used: int | None = None  # bytes under the smoke's folder after the stage
     disk_free: int | None = None  # free bytes on its filesystem after the stage
+    host_peak_rss: int | None = None  # the stage process's highest resident memory (2026-11-14)
+    host_min_available: int | None = None  # the machine's lowest available memory meanwhile
 
 
 KEPT_EXPERIMENTS: tuple[str, ...] = ("E0", "E1", "E2", "E9")
@@ -404,17 +419,25 @@ def report_table(results: Sequence[StageResult]) -> str:
     """The PASS / WAIT / FAIL table per card and stage, with the peaks (GiB)."""
     lines = [
         "| Card | Job | Stage | Status | Minutes | Peak per load (GiB) | Stage peak (GiB) "
-        "| Disk used / free (GiB) | Note |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| Host RSS peak / lowest available (GiB) | Disk used / free (GiB) | Note |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         loads = "; ".join(f"{name}: {_gib(s)}" for name, s in r.loads) or "-"
         disk = (
             "-" if r.disk_used is None else f"{r.disk_used / 2**30:.1f} / {r.disk_free / 2**30:.1f}"
         )  # type: ignore[operator]
+        host = "-" if r.host_peak_rss is None else f"{r.host_peak_rss / 2**30:.1f}"
+        if r.host_min_available is not None:
+            host += f" / {r.host_min_available / 2**30:.1f}"
+        note = r.note
+        if r.code == -9:  # SIGKILL: on Kaggle almost always the kernel's out-of-memory killer
+            note = "; ".join(
+                n for n in (note, "killed (exit -9): host RAM, see the RSS column") if n
+            )
         lines.append(
             f"| {r.card} | {r.job} | {r.stage} | {stage_status(r.code)} | {r.seconds / 60:.1f} "
-            f"| {loads} | {_gib(r.peak)} | {disk} | {r.note} |"
+            f"| {loads} | {_gib(r.peak)} | {host} | {disk} | {note} |"
         )
     return "\n".join(lines)
 

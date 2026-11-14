@@ -252,12 +252,53 @@ def default_loss_scale(module: Any) -> float:
     return 1.0 if dtype == torch.float32 else 1024.0
 
 
+@contextlib.contextmanager
+def checkpointed_decoder_layers(model: VLMWrapper | Any) -> Iterator[None]:
+    """Recompute each decoder layer's activations in the backward pass instead of keeping them
+    (2026-11-14, RC-G2 session 3).
+
+    Without this, a backward pass to the gates keeps every layer's intermediate tensors (the
+    MLP's 11,008-wide activations among them) for all 36 layers at once; with a batch of four
+    672-px probes that ran one T4 out of memory (14.18 GiB allocated). With it, only each layer's
+    input is kept and one layer at a time is recomputed during the backward pass. The forward
+    computation is the same, run again, so the gradients are the same (checked on the tiny
+    model by ``tests/test_pruning_scoring.py``). The gate hooks of the attention and MLP
+    projections sit inside the layer and run again in the recomputation; the layer gate's hook
+    sits outside it.
+    """
+    from torch.utils.checkpoint import checkpoint
+
+    module = getattr(model, "module", model)
+    layers = surgery.find_decoder_stack(module).layers
+    originals = []
+    for layer in layers:
+        forward = layer.forward
+        originals.append((layer, "forward" in vars(layer), forward))
+
+        def wrapped(*args: Any, _forward: Callable[..., Any] = forward, **kwargs: Any) -> Any:
+            return checkpoint(_forward, *args, use_reentrant=False, **kwargs)
+
+        layer.forward = wrapped
+    try:
+        yield
+    finally:
+        for layer, had_own, forward in originals:
+            if had_own:
+                layer.forward = forward
+            else:
+                del layer.forward
+
+
 def accumulate_gate_gradients(
     model: VLMWrapper | Any,
     units: Sequence[PrunableUnit],
     steps: Sequence[Callable[[], Any]],
     *,
     loss_scale: float | None = None,
+    checkpoint_layers: bool = True,
+    log_every: int | None = 25,
+    label: str = "first-order",
+    growth: Any = None,
 ) -> dict[str, float]:
     """Sum the gate gradients of the objectives returned by ``steps``.
 
@@ -265,17 +306,41 @@ def accumulate_gate_gradients(
     scalar tensor (the objective, to be differentiated). Half-precision models use a loss
     scale that is lowered by a factor of 16 whenever a gradient is not finite.
 
+    Memory (2026-11-14): the weights collect no gradients (only the gates do; checked before
+    the first step), each step's graph is freed by its backward pass before the next step
+    starts, and ``checkpoint_layers`` recomputes each decoder layer in the backward pass
+    (:func:`checkpointed_decoder_layers`). Every ``log_every`` steps a ``MEDCOMPRESS_MEM`` line
+    gives the GPU memory; ``growth`` (a :class:`medcompress.utils.memory.GrowthCheck`) records
+    the allocated memory after every step for the scale check.
+
     Raises:
         ValueError: gradients stay non-finite or all zero at scale 1.
+        RuntimeError: a weight would collect a gradient.
     """
+    from medcompress.utils.memory import gpu_bytes, print_memory
+
     module = getattr(model, "module", model)
     scale = default_loss_scale(module) if loss_scale is None else float(loss_scale)
     while True:
         gates = UnitGates(model, units)
-        with parameters_frozen(module), gates.installed():
-            for step in steps:
-                (step() * scale).backward()
+        layers = (
+            checkpointed_decoder_layers(model) if checkpoint_layers else contextlib.nullcontext()
+        )
+        with parameters_frozen(module), gates.installed(), layers:
+            trainable = [n for n, p in module.named_parameters() if p.requires_grad]
+            if trainable:
+                raise RuntimeError(f"weights would collect gradients: {trainable[:3]}")
+            for number, step in enumerate(steps, 1):
+                loss = step() * scale
+                loss.backward()  # frees this step's graph
+                del loss
+                if growth is not None:
+                    reading = gpu_bytes()
+                    growth.add(None if reading is None else reading[0])
+                if log_every and (number % log_every == 0 or number == len(steps)):
+                    print_memory(f"{label} step {number}/{len(steps)}")
         grads = gates.gradients()
+        del gates
         if all(math.isfinite(g) for g in grads.values()):
             if scale > 1.0 and not any(grads.values()):
                 scale = max(1.0, scale / 16.0)  # nothing came through: try a smaller scale

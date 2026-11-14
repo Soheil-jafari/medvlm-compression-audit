@@ -95,6 +95,19 @@ disk used and free after every stage. The unit cap of A2, A4, A5 and A6 now keep
 (the cut through layer 3's channel groups failed A4 and A6 at 9113632); A5 `kl` scores its 108
 layers and KV groups. Estimate: about 1 h.
 
+**E7's stage 05 again (2026-11-14), after the host-RAM fix:** the same cell with its last line
+replaced by
+
+```bash
+python scripts/smoke_cards.py --card RC-G2 --card RC-A5 --sequential 2>&1 | tee /kaggle/working/smoke_cards_g2.txt
+```
+
+`--sequential` runs lane B after lane A (half the host RAM, about twice the time). Every stage
+now runs under a watcher that samples its resident memory and the machine's available memory
+from outside (a stage killed by the kernel still has a reading); the table has a column "Host
+RSS peak / lowest available (GiB)" and marks an exit -9 as a likely host-RAM kill. Each model
+load and release also prints a `MEDCOMPRESS_MEM` line (GPU and host). Estimate: about 1.5 h.
+
 ## 4. What to send back
 
 `/kaggle/working/smoke/smoke_report.md` (the table: card, job, stage, PASS / WAIT / FAIL,
@@ -115,3 +128,24 @@ larger; the weights and the GPTQ buffers are the same).
 - Run by / date:
 - Commit:
 - The table (`smoke_report.md`):
+
+**Reduced RC-SMOKE, reported by Soheil on 2026-11-14 (commit a237c5c):** PASS for RC-CAL0, RC-E3,
+RC-E4 (QAT peak 11.29 GiB), RC-A4, RC-A6 and A5's `kl` scoring; RC-E3, RC-E4, RC-A4 and RC-A6
+added to `smoke_passed.yaml`. RC-G2's E7 stage 05 (prune and recover) was killed with exit -9
+after 16.9 min (it passed at 9113632), so RC-A5 (whose `logprob_drop` run reads E7) and RC-A1
+did not pass. What the code shows (2026-11-14; the log itself was not attached): with the smoke's
+settings stage 05 loads the student 6 times, all before the recovery (stage 05's first load for
+the units, the search's two end points and its 2 bisection steps, then the model to recover);
+after the recovery stage 05 loads nothing: it merges the adapter and saves the pruned model,
+and `safetensors` builds the saved tensors in host memory first (about the model's size).
+Likely sequence (an inference, to be confirmed by the new RSS column): the other lane was loading
+the student at the same time (its own loads, with hub requests), the two processes together ran
+out of host RAM, and the kernel killed the larger one (E7's, during its save). A production
+stage 05 runs alone but loads the student about 16 times (the first load, about 14 measurements,
+the model to recover), so a per-load leak would hit it as well. Fixed in the loader regardless
+of the cause: the release now drops the processor, empties PyTorch's pinned-memory cache and
+returns freed heap pages to the system (`malloc_trim`); loads after the first of a pinned model
+make no hub requests (`local_files_only`); 15 loads in one process keep the RSS flat
+(`tests/test_host_memory.py`; the same test catches loads that are never freed). RC-SCALE
+measures it at full size (`budget_search`, and the save in `recovery`).
+

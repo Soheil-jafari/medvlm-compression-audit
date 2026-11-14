@@ -1446,3 +1446,20 @@ Append-only, newest at the bottom. One entry per iteration:
   re-attached scan files and committed (5 filtered-test, 8 unfiltered-test images; the teacher's
   list is empty; SHA-256 7486212f...).
 
+
+## Iteration 86: 2026-11-14 (interactive)
+- RC-E10 committed unchanged (account 3, c6c7cbd; four files byte-identical to the attached
+  ones); section 6 filled; the revision Qwen/Qwen3-VL-2B-Instruct @ 89644892... was already
+  pinned. Summaries regenerated, identical on pandas 2.3.3 and 3.1.1.
+- Reduced RC-SMOKE (a237c5c): RC-E3, RC-E4, RC-A4, RC-A6 added to `smoke_passed.yaml`; E7's
+  stage 05 killed with exit -9 (host RAM), so RC-A1 and RC-A5 wait.
+- RC-G2 session 3 OOM in E7's first-order pass: per-layer recomputation in the backward pass,
+  weights checked frozen, memory logged; exact effects saved and resumed. Host RAM: memory lines
+  at every load and release, the release frees host memory, no hub requests after the first
+  load, a 15-load test; the smoke samples each stage's RSS and has `--sequential`. Recovery
+  records its skipped updates. RC-SCALE (`scripts/scale_check.py`): six heavy steps at full size
+  for a few steps, failing on growth. Tests.
+- E10 at 4 bit: registry `E10Q` (GPTQ `w4` of the merged 2B, seed 0), its config, the 2B's own
+  calibration check (model `e10`), card RC-E10Q and a smoke job; the comparison step writes
+  `E10_vs_matched_pruned_seed0` and `E10Q_vs_E8_seed0` (nearest measured peak memory,
+  descriptive). The arm set and the E8 rule are flagged for the authors. Tests.

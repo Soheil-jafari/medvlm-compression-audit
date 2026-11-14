@@ -6,11 +6,13 @@ Walks the seeded, stratified calibration order and runs each leading image's cal
 fp16; an image with any non-finite value (vision tower output, a decoder layer's output, the
 logits) is replaced by the next eligible image, until the first ``--size`` images are finite.
 Writes ``results/calibration/seed<k>_replaced.csv`` (commit it). The student is E2 of the seed
-(``--exp E3``, the parent of every student arm); the teacher is E9's parent (``--exp E9``).
+(``--exp E3``, the parent of every student arm); the teacher is E9's parent (``--exp E9``); the
+2B of E10 is E10Q's parent (``--exp E10Q``, 2026-11-14).
 
 Examples (Kaggle):
     python scripts/check_calibration.py --exp E3 --seed 0 --size 256   # student, A4's largest
     python scripts/check_calibration.py --exp E9 --seed 0 --size 128   # teacher (T4 x2)
+    python scripts/check_calibration.py --exp E10Q --seed 0 --size 128 # the 2B of E10
 """
 
 from __future__ import annotations
@@ -27,17 +29,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser(__doc__.splitlines()[0])
     parser.add_argument("--size", type=int, required=True, help="images to check (A4: 256)")
     args = parser.parse_args(argv)
-    if args.exp not in ("E3", "E9"):
-        parser.error("use --exp E3 (the student, E2 of the seed) or --exp E9 (the teacher)")
+    if args.exp not in ("E3", "E9", "E10Q"):
+        parser.error("use --exp E3 (the student, E2 of the seed), --exp E9 (the teacher) or "
+                     "--exp E10Q (the 2B of E10)")  # fmt: skip
     from medcompress.compression.pruning.stage import load_train_samples
-    from medcompress.compression.quantization.ptq import calibration_batches, load_parent
+    from medcompress.compression.quantization.ptq import (
+        calibration_batches,
+        calibration_model,
+        load_parent,
+    )
     from medcompress.data.calibration import find_replacements, forward_is_finite, write_check
 
     args.variant = args.variant or ("w4" if args.exp == "E3" else None)
     run = run_context(args)
     assert run is not None
     config = resolve_config(args)
-    model_name = "teacher" if args.exp == "E9" else "student"
+    model_name = calibration_model(run)
     train = load_train_samples(config)
     model = load_parent(config, run, int(config["inputs"]["image_longest_side"]))
     data_root = Path(config["paths"]["data_root"])

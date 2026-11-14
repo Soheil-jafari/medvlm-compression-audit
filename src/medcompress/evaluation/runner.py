@@ -286,7 +286,7 @@ def _load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VL
     E0 is the teacher; E1 and E2 are the student with the adapter their training run
     saved (merged into the weights, as the compression arms start from it). The pruned
     arms (E5-E7, A1-A6) reload E2 of the same seed and replay the removal that stage 05
-    saved. The post-training quantized arms (E3, E8, E9) reload their parent and swap in the
+    saved. The post-training quantized arms (E3, E8, E9, E10Q) reload their parent and swap in the
     kernel modules of the saved codes (``compression/quantization/ptq.py``).
     """
     from medcompress.config import load_config
@@ -307,7 +307,7 @@ def _load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VL
 
         base = load_trained_student(config, "E2", run.seed, side)
         return load_pruned(base, pruned_dir(config, run))
-    if run.experiment_id in ("E3", "E4", "E8", "E9"):
+    if run.experiment_id in ("E3", "E4", "E8", "E9", "E10Q"):
         from medcompress.compression.quantization.ptq import load_run_quantized
 
         return load_run_quantized(config, run, side)

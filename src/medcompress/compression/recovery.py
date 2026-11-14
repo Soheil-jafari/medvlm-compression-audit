@@ -403,6 +403,12 @@ def _write_outputs(
         ("recovery_steps", result.steps),
         ("recovery_loss_final", result.final_loss()),
         ("recovery_seconds", result.seconds),
+        # updates the loss scaler skipped for inf / NaN gradients and steps with a non-finite
+        # loss, recorded the same way for every arm (2026-11-14: the smoke's E7 recovery
+        # skipped 2 of 2 updates with finite losses)
+        ("recovery_skipped_steps", len(result.skipped_steps)),
+        ("recovery_nonfinite_steps", len(result.nonfinite_steps)),
+        ("recovery_nonfinite_microbatches", result.nonfinite_microbatches),
     ]
     if result.peak_gpu_bytes is not None:
         numbers.append(("recovery_peak_gpu_bytes", result.peak_gpu_bytes))
