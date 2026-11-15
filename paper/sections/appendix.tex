@@ -98,6 +98,15 @@ fallback.
   \resizebox{\linewidth}{!}{\input{tables/appendix_compute}}
 \end{table}
 
+\subsection{Removed units inside the protected layers}
+\begin{table}[h]
+  \centering
+  \caption{Every pruning run: its removed units, how many lie inside the first two and the last
+  decoder layer (never removed as whole layers; their inner units stay removable for every arm)
+  and their share of the removed parameters.}
+  \resizebox{\linewidth}{!}{\input{tables/appendix_protected_layers}}
+\end{table}
+
 \subsection{Optimizer updates skipped by the loss scaler}
 \begin{table}[h]
   \centering

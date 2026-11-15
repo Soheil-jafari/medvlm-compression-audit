@@ -32,6 +32,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-root", type=Path, default=None, help="found by its manifest")
     parser.add_argument("--from", dest="handoffs", type=Path, action="append", default=[])
     parser.add_argument("--card", action="append", default=None, help="only these cards")
+    parser.add_argument("--job", action="append", default=None,
+                        help="only these jobs (e.g. E7), with what they read")  # fmt: skip
     parser.add_argument("--dry-run", action="store_true", help="print the commands only")
     parser.add_argument("--sequential", action="store_true",
                         help="run lane B after lane A instead of at the same time (half the host "
@@ -97,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         os.environ[f"MEDCOMPRESS_{key}_ROOT"] = env[f"MEDCOMPRESS_{key}_ROOT"]
     config = load_config("base.yaml")
 
-    jobs = with_dependencies(smoke_jobs(), args.card)  # --card keeps what its jobs read
+    jobs = with_dependencies(smoke_jobs(), args.card, args.job)  # keeps what the jobs read
     results: list[StageResult] = []
     failed: set[str] = set()
     lock = threading.Lock()

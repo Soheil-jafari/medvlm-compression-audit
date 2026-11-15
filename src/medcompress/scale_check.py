@@ -355,9 +355,40 @@ def check_budget_search(config: Mapping[str, Any], result: CheckResult, *, loads
         result.note(f"load {number}: {size} units removed, footprint {value:.4g}, allocated "
                     f"after the release {left:.2f} GiB")  # fmt: skip
     result.numbers["loads"] = float(len(sizes) + 1)
+    level_check(config, factory, settings, pool, result)  # after the loads: memory left behind
     if live.readings and max(live.readings) > 1 << 30:
         result.fail(f"{max(live.readings) / GIB:.2f} GiB of live tensors left after a release")
     judge(result, [host, live], _peak_gib())
+
+
+def level_check(config: Mapping[str, Any], factory: Callable[[], Any], settings: Any,
+                pool: Sequence[Any], result: CheckResult) -> None:  # fmt: skip
+    """The unpruned model measured with the reference's full protocol in this process, after the
+    earlier loads, must match E2's reference within 1 % (2026-11-15: the 0.59 GiB leftover lifted
+    every footprint by 0.63e9 bytes; stage 05 stops on the same rule)."""
+    from medcompress.budgets import (
+        BudgetLevelError,
+        check_level,
+        make_removal_measurer,
+        metric_value,
+        reference_report,
+    )
+    from medcompress.evaluation.efficiency import timing_samples
+
+    paths = config["paths"]
+    full = make_removal_measurer(factory, timing_samples(pool, settings.protocol),
+                                 settings.protocol, Path(paths["data_root"]),
+                                 settings.spec.metric)  # fmt: skip
+    unpruned = float(full([]))
+    expected = metric_value(reference_report(paths["results_root"], "E2"), settings.spec.metric)
+    result.numbers.update(unpruned_footprint=unpruned, reference_footprint=expected)
+    try:
+        gap = check_level(unpruned, expected)
+        result.note(f"level check: the unpruned model measures {unpruned:.6g} after "
+                    f"{int(result.numbers.get('loads', 0))} loads, E2's reference {expected:.6g} "
+                    f"({gap:+.2%}, within 1 %)")  # fmt: skip
+    except BudgetLevelError as exc:
+        result.fail(f"level check: {exc}")
 
 
 def check_recovery(config: Mapping[str, Any], result: CheckResult, *, updates: int) -> None:

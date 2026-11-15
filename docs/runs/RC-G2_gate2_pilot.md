@@ -140,6 +140,13 @@ The cause of the 0.59 GiB was not reproduced on the CPU (the same loads leave no
 the survivor print names it on the GPU. **Run RC-SCALE's `budget_search` (14 measurements)
 first** (RC-SCALE section 3), then session 1 again with the cell below.
 
+**Before session 1 (2026-11-15):** the budget search's footprints were offset by 0.59 GiB left
+by earlier loads (RC-SCALE section 6, third run). Fixed: the footprint excludes memory that is not
+the model's, and stage 05 measures the unpruned model first and stops unless it matches E2's
+reference within 1 % (a line "level check: ..." in the log). Run RC-SCALE's `budget_search`
+(fourth run, RC-SCALE section 3) first; when it passes, run session 1 with the cell below (Soheil,
+T4 x2, attach `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`; about 6.3 h, estimate).
+
 Session 1:
 
 ```bash

@@ -100,8 +100,17 @@ def test_the_decoder_is_quantized_saved_and_reloaded(tmp_path: Path) -> None:
         assert rec.codes.max() <= grid.max_code(4)
     rounded = _scores(wrapper)  # the weights now hold the rounded values (16-bit tensors)
     assert not np.allclose(rounded, original)
+    from medcompress.compression.quantization.kernels import decoder_targets
+    from medcompress.evaluation.efficiency import count_parameters
+
+    logical = count_parameters(wrapper)
+    replaced = [getattr(parent, attr) for _k, parent, attr in decoder_targets(wrapper)]
     install_quantized(wrapper, records, RECIPE, kernel_class=REFERENCE_KERNEL)
-    assert np.allclose(_scores(wrapper), rounded, atol=1e-4)
+    assert np.allclose(_scores(wrapper), rounded, atol=1e-4)  # shared biases kept alive
+    # a replaced 16-bit layer that something still holds no longer keeps its weights (2026-11-15)
+    assert all(m.weight.numel() == 0 for m in replaced)
+    # the packed codes count as the matrices they stand for: the parent's logical count
+    assert count_parameters(wrapper) == logical
     report = kernel_report(wrapper)
     assert report.n_targets == 3 * len(DECODER_TARGETS) and not report.ok  # reference only
     folder = save_quantized(records, RECIPE, tmp_path / "q", start_from={"experiment": "E2"})

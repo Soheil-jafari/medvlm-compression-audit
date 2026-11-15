@@ -79,6 +79,37 @@ python scripts/run_card.py --card RC-E9 2>&1 | tee /kaggle/working/run_card_RC-E
 Keep `outputs/` (the per-probe `outcomes*.npz` files) as a private dataset too: the paired
 comparisons (RC-C1) need the test-split ones. Write its name in section 6.
 
+**Benchmark only (2026-11-15), after the current run ends: re-measure `efficiency.csv` from the
+saved hand-off.** The account that holds `e9-seed0-quantized` (Amir's, where RC-E9 runs now), Kaggle
+**T4 x2**, Internet on. Attach `medcompress-data`, `e0-teacher-adapter` and `e9-seed0-quantized`.
+The validation and test metrics stand; only `efficiency.csv` is replaced (a dated re-measurement:
+record the old peak, 19.85 GiB from RC-SCALE, and the new one in section 6). Estimate: about 30
+min (one teacher load and one timing sweep).
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-E9 --only benchmark 2>&1 | tee /kaggle/working/run_card_RC-E9_benchmark.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
 ## 4. What to commit back
 
 - `results/E9/nobudget/seed0/metrics.csv`, `metrics_test.csv`, `efficiency.csv` and `efficiency_setup.json`

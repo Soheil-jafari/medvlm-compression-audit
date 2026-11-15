@@ -275,6 +275,8 @@ def run_prune_and_recover(
     target = target_value(spec, reference, decoder_bytes=decoder_bytes)
     if measure is None:
         measure = _default_measure(config, factory, settings, data_root)
+    if spec.metric == "peak_memory":
+        measure = _level_checked(measure, reference, spec, settings, paths, reference_value)
     smoke_steps = (config.get("smoke") or {}).get("budget_search_steps")  # RC-SMOKE only
     search = search_matched_budget(
         units, ordered, spec, target, measure, protected_layers=protected,
@@ -317,12 +319,48 @@ def run_prune_and_recover(
     from medcompress.compression.distillation.resume import ResumeStore
 
     ResumeStore(resume_dir, "").clear()
-    _write_outputs(config, run, settings, search, check, result, recovery)
+    _write_outputs(config, run, settings, search, check, result, recovery, protected)
     print(
         f"removed {len(search.removal)} units for {run.budget}: footprint {search.footprint:.4g} "
         f"vs target {search.target:.4g} "
         f"({'within' if search.within_tolerance else 'OUTSIDE'} tolerance); saved {directory}"
     )
+
+
+def _level_checked(
+    measure: Callable[[Sequence[PrunableUnit]], float],
+    reference: Any,
+    spec: Any,
+    settings: PruneSettings,
+    paths: Mapping[str, Any],
+    reference_value: float | None,
+) -> Callable[[Sequence[PrunableUnit]], float]:
+    """Measure the unpruned model first and stop unless it matches the reference within 1 %
+    (2026-11-15); the search then reuses that measurement for its 0-unit end point.
+
+    The check needs the reference's protocol: with a shortened one (RC-SMOKE) the levels differ
+    by design, so it is printed and skipped.
+    """
+    from medcompress.budgets import check_level, metric_value, reference_protocol, same_protocol
+
+    unpruned = float(measure([]))
+    expected = metric_value(reference, spec.metric)
+    protocol = settings.protocol.to_dict() if settings.protocol is not None else {}
+    recorded = None
+    if reference_value is None:
+        recorded = reference_protocol(paths["results_root"], spec.reference_experiment)
+    if same_protocol(protocol, recorded):
+        gap = check_level(unpruned, expected)
+        print(f"level check: the unpruned model measures {unpruned:.6g}, the reference "
+              f"{expected:.6g} ({gap:+.2%}, within 1 %)", flush=True)  # fmt: skip
+    else:
+        print(f"level check skipped: this search's protocol differs from the reference's "
+              f"(unpruned {unpruned:.6g}, reference {expected:.6g})", flush=True)  # fmt: skip
+
+    def checked(removal: Sequence[PrunableUnit]) -> float:
+        return unpruned if not removal else float(measure(removal))
+
+    return checked
 
 
 def _student_factory(config: Mapping[str, Any], run: RunContext) -> Callable[[], VLMWrapper]:
@@ -367,8 +405,13 @@ def _write_outputs(
     check: Mapping[str, Any],
     result: TrainResult,
     recovery: Mapping[str, Any],
+    protected: Sequence[int] = (),
 ) -> None:
-    """Write ``removal.json``, ``budget_search.csv`` and the metrics rows of the run."""
+    """Write ``removal.json``, ``budget_search.csv`` and the metrics rows of the run.
+
+    ``protected`` are the protected layers (removed only unit by unit, never whole; pre-
+    registration section 10, clarification of 2026-11-15): the rows say how many removed units
+    and parameters lie inside them."""
 
     from medcompress.compression.pruning.units import UnitType
     from medcompress.utils.io import upsert_results, write_json
@@ -393,6 +436,7 @@ def _write_outputs(
     write_csv(run_dir / "budget_search.csv", ["accepted_units_removed", "measured_footprint"],
               search.trace)  # fmt: skip
     kinds = {t: sum(1 for u in search.removal if u.unit_type is t) for t in UnitType}
+    inside = [u for u in search.removal if u.layer_index in set(protected)]
     numbers: list[tuple[str, float]] = [
         ("budget_target", search.target),
         ("budget_footprint", search.footprint),
@@ -403,6 +447,8 @@ def _write_outputs(
         ("removed_layers", kinds[UnitType.DECODER_LAYER]),
         ("removed_kv_groups", kinds[UnitType.ATTENTION_HEAD]),
         ("removed_channel_groups", kinds[UnitType.MLP_CHANNEL_GROUP]),
+        ("removed_units_in_protected_layers", sum(1 for u in inside)),
+        ("removed_params_in_protected_layers", sum(u.num_params for u in inside)),
         ("parameters_before", check["before"]),
         ("parameters_after", check["after"]),
         ("recovery_steps", result.steps),

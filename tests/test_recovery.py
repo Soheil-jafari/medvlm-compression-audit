@@ -227,6 +227,12 @@ def test_the_stage_meets_the_budget_recovers_and_saves_a_reloadable_model(tmp_pa
     assert metrics["parameters_after"] == metrics["budget_footprint"] < total
     assert metrics["removed_units"] >= 1 and metrics["recovery_steps"] == 2
     assert metrics["recovery_skipped_steps"] == 0 and metrics["recovery_nonfinite_steps"] == 0
+    # the protected layers (the tiny model's first and last) are never removed whole; their
+    # inner units count here (clarification of 2026-11-15)
+    removal_units = json.loads((run_dir / "removal.json").read_text())["units"]
+    inside = [u for u in removal_units if u.startswith(("lm.layer0.", "lm.layer2."))]
+    assert metrics["removed_units_in_protected_layers"] == len(inside)
+    assert "lm.layer0" not in removal_units and "lm.layer2" not in removal_units
     kinds = ("layers", "kv_groups", "channel_groups")
     assert sum(metrics[f"removed_{k}"] for k in kinds) == metrics["removed_units"]
     removal = json.loads((run_dir / "removal.json").read_text())
@@ -286,16 +292,41 @@ def test_the_stage_stops_without_scores_or_when_nothing_needs_removing(tmp_path:
         recovery.run_prune_and_recover(config, run, **kwargs)
     train = write_dataset(tmp_path)
     stage.run_scoring(config, RunContext("E5", seed=0), _factory(), train)
+    from medcompress.budgets import BudgetLevelError
+
+    # the unpruned model must measure like the reference before any search step (2026-11-15)
+    with pytest.raises(BudgetLevelError, match="search stops before its first step"):
+        recovery.run_prune_and_recover(
+            config, run, student_factory=_factory, train=train, records={},
+            measure=lambda removal: 1.0, reference_value=10.0,
+        )  # fmt: skip
+    near = _config(tmp_path, fraction=0.995)  # a target the unpruned model already meets
     with pytest.raises(ValueError, match="asks for no compression"):
         recovery.run_prune_and_recover(
-            config,
-            run,
-            student_factory=_factory,
-            train=train,
-            records={},
-            measure=lambda removal: 1.0,
-            reference_value=10.0,
-        )
+            near, run, student_factory=_factory, train=train, records={},
+            measure=lambda removal: 10.0, reference_value=10.0,
+        )  # fmt: skip
+
+
+def test_the_level_check_reuses_the_unpruned_measurement_and_skips_other_protocols() -> None:
+    from types import SimpleNamespace
+
+    from medcompress.budgets import report_for_metric, same_protocol
+
+    calls: list[int] = []
+
+    def measure(removal: Any) -> float:
+        calls.append(len(removal))
+        return 100.0 if not removal else 90.0
+
+    spec = SimpleNamespace(metric="peak_memory", reference_experiment="E2")
+    settings = SimpleNamespace(protocol=None)
+    checked = recovery._level_checked(measure, report_for_metric("peak_memory", 100.5), spec,
+                                      settings, {}, 100.5)  # fmt: skip
+    assert checked([]) == 100.0 and checked(["unit"]) == 90.0 and calls == [0, 1]
+    recorded = {"samples": 32, "repeats": 5, "warmup_runs": 3, "batch_size": 1}
+    assert same_protocol({**recorded, "hardware": "T4"}, recorded)
+    assert not same_protocol({**recorded, "samples": 1}, recorded)  # RC-SMOKE's protocol
 
 
 def test_a_budget_the_units_cannot_reach_is_an_error(tmp_path: Path) -> None:

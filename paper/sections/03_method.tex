@@ -93,7 +93,11 @@ it, so removing a group never leaves a query head without its key and value. MLP
 channel groups are contiguous blocks of intermediate channels of a pre-registered
 size. A removal set is valid when every remaining layer keeps at least one attention
 group and one channel group, no unit is counted twice, and layers that inject
-visual features (where the architecture has them) are protected.
+visual features (where the architecture has them) are protected. For every arm, the
+first two and the last decoder layer are never removed as whole layers; the
+attention groups and channel groups inside them remain removable like any other
+unit (pre-registered with the removal rules, before any score existed). Each run
+reports how many of its removed units lie inside these three layers.
 
 \subsection{Clinically weighted pruning criterion}
 Let $C$ be the pre-registered finding list and $X_{\mathrm{cal}}$ a calibration set

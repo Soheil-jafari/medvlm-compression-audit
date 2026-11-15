@@ -343,6 +343,18 @@ descriptive (differences with intervals on the test split, seed 0, no p-value) a
 comparison step (`E10_vs_matched_pruned_seed0`, `E10Q_vs_E8_seed0`); the chosen arms and their
 peak memories go to `results/comparisons/choices.json`.
 
+**Clarification of 2026-11-15 (research lead; agreed by Soheil and Amir; no setting changes;
+before any pruned model).** "First 2 and last 1 layers protected" (section 7, D07 section 2) means
+that decoder layers 0, 1 and the last are never removed **as whole layers**, for every arm. The
+units inside them (KV groups, MLP channel groups) stay removable like any other unit, as the code
+(`removal_order`, `validate_removal_set`), `configs/pruning.yaml` ("whole decoder layers that are
+never removed (same rule for every arm)") and D07 ("never removed, for every arm") already do.
+*Why:* this is what the configuration and D07 said before any scores existed; it treats every arm
+the same; changing it after seeing that a unit of the last layer leads E7's removal order would be
+a choice made on the results. *Reporting:* every pruning run records how many of its removed units
+lie inside the protected layers (`removed_units_in_protected_layers`), and the paper's methods
+text states that protection is of whole layers.
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result

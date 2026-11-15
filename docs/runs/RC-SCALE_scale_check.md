@@ -94,6 +94,36 @@ Every load prints this process's allocated, reserved and reusable memory and the
 it; the first release that leaves more than 256 MiB prints the largest live CUDA tensors and what
 holds them (`MEDCOMPRESS_LEFTOVER`). Estimate: about 20 min.
 
+**Fourth run (2026-11-15), `budget_search` with the level check, before RC-G2 session 1:** Soheil's
+account, Kaggle T4 x2, Internet on; attach `medcompress-data` and `e2-seed0-adapter`. After its
+15 loads it measures the unpruned model once more with the reference's full protocol (32 samples,
+3 warm-up passes, 5 timed) and fails unless that footprint matches E2's reference
+(7,618,471,936 bytes) within 1 %. Estimate: about 30 min.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/scale_check.py --check budget_search 2>&1 | tee /kaggle/working/scale_check_4.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
 ## 4. What to send back
 
 `/kaggle/working/scale/scale_report.md` (the table), `/kaggle/working/scale_check.txt` (the
@@ -175,3 +205,19 @@ and a refused load now says how much of the memory in use belongs to this proces
 another process or non-PyTorch memory). A production search has about 14 measurements (the smoke
 had 4), so if the next log shows memory left by the measurements, it matters for RC-G2 session 4
 and the agent will say so before that session.
+
+**Third run, reported by Soheil on 2026-11-15 (commit 74104b4; `budget_search` only):** PASS by
+its own criteria: 15 loads (the first and 14 measurements), live GPU memory after every release flat
+at 0.59 GiB, host RSS flat (2.63 to 2.71 GiB), peak 7.66 GiB. The leftover is a float16 tensor of
+shape (151,936, 2,048), the size of one embedding matrix (0.62e9 bytes), plus small float32 LoRA
+tensors (16 x 2,048). **But every footprint was offset:** with 0 units removed the search measured
+8.246e9 bytes against E2's fresh-process reference 7.618e9 (`results/E2/nobudget/seed0/
+efficiency.csv`); the difference, 0.628e9, is the 0.59 GiB still allocated. The removal itself was
+right (275 units: 1.669e9 below the unpruned measurement, the expected 30 % of the decoder's
+5.55e9). A search would have aimed at a shifted target and removed about 0.63e9 bytes too many.
+Fixed (2026-11-15): the timing sweep's memory meter now records the live bytes at its reset and
+subtracts what is not the model's own GPU tensors, so every footprint (stage 05's and stage 07's)
+is on a fresh process's footing; stage 05 measures the unpruned model first and stops unless it
+matches the reference within 1 %; this check now does the same. The holder of the leftover is not
+freed (not found); the measurement no longer depends on it.
+

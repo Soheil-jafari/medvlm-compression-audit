@@ -90,6 +90,8 @@ class EfficiencyReport:
     throughput_samples_per_s: float | None = None
     energy_joules_per_sample: float | None = None
     low_precision_kernels_ok: bool | None = None
+    benchmark_live_before_bytes: int | None = None
+    benchmark_excluded_bytes: int | None = None
     hardware: Mapping[str, Any] = field(default_factory=dict)
     protocol: Mapping[str, Any] = field(default_factory=dict)
 
@@ -185,10 +187,47 @@ def timing_samples(pool: Sequence[VQASample], protocol: EfficiencyProtocol) -> l
 
 
 def count_parameters(model: VLMWrapper | Any) -> int:
-    """Total parameters after physical pruning (shared tensors once). Used by: all experiments."""
+    """Total logical parameters (shared tensors once). Used by: all experiments.
+
+    A quantized module's packed codes are counted as the matrix they stand for (``in_features x
+    out_features``) and a bias kept as a buffer as its elements, so every quantization class
+    reports the same logical count as its parent (2026-11-15: GPTQ modules hold their weights as
+    buffers, which were not counted; LLM.int8 keeps them as parameters). The stored bytes are in
+    :func:`state_bytes`.
+    """
+    import torch
+
     from medcompress.compression.pruning import surgery
 
-    return surgery.count_parameters(getattr(model, "module", model))
+    module = getattr(model, "module", model)
+    total = surgery.count_parameters(module)
+    for sub in module.modules():
+        packed = getattr(sub, "qweight", None)
+        if not isinstance(packed, torch.Tensor) or isinstance(packed, torch.nn.Parameter):
+            continue
+        rows, cols = getattr(sub, "out_features", None), getattr(sub, "in_features", None)
+        if not isinstance(rows, int) or not isinstance(cols, int):
+            raise ValueError(f"{type(sub).__name__} holds packed codes but no matrix shape")
+        total += rows * cols
+        bias = getattr(sub, "bias", None)
+        if isinstance(bias, torch.Tensor) and not isinstance(bias, torch.nn.Parameter):
+            total += bias.numel()
+    return total
+
+
+def gpu_state_bytes(model: VLMWrapper | Any) -> int | None:
+    """Bytes of the parameters and buffers that are on a GPU (shared storages once); None for an
+    object that is not a torch module (test stand-ins)."""
+    module = getattr(model, "module", model)
+    if not hasattr(module, "parameters"):
+        return None
+    seen: set[int] = set()
+    total = 0
+    for tensor in [*module.parameters(), *module.buffers()]:
+        if tensor.device.type == "cuda" and id(tensor) not in seen:
+            seen.add(id(tensor))
+            total += tensor.numel() * tensor.element_size()
+    return total
 
 
 def state_bytes(model: VLMWrapper | Any) -> int:
@@ -246,19 +285,50 @@ def file_size_bytes(checkpoint_dir: Path) -> int:
 
 
 class MemoryMeter:
-    """Peak memory of the model's GPUs; reads nothing (None) when there is no CUDA device."""
+    """Peak memory of the model's GPUs; reads nothing (None) when there is no CUDA device.
 
-    def reset(self) -> None:
-        """Start a new peak."""
-        from medcompress.models.smoke import reset_peak
+    2026-11-15: a peak counter that is reset while tensors other than the model's are still
+    allocated counts them in the peak (RC-E3 seed 0: the replaced fp16 weights, 5.67 GB; the
+    budget search: 0.59 GiB left by the previous load). :meth:`reset` therefore first collects
+    garbage, synchronizes and empties the cache, records the live allocated bytes, and treats
+    whatever is live beyond ``keep_bytes`` (the model's own GPU tensors) as not the model's: it is
+    subtracted from the peak, so the peak is what a fresh process holding only the model would
+    show. The readers are injectable for tests.
+    """
 
-        reset_peak()
+    def __init__(
+        self,
+        *,
+        allocated: Callable[[], int | None] | None = None,
+        reset_peak: Callable[[], None] | None = None,
+        read_peak: Callable[[], int | None] | None = None,
+    ) -> None:
+        from medcompress.models import smoke
+
+        self._allocated = allocated or smoke.allocated_gpu_bytes
+        self._reset_peak = reset_peak or smoke.reset_peak
+        self._read_peak = read_peak or smoke.peak_gpu_bytes
+        self.live_before: int | None = None
+        self.excluded = 0
+
+    def reset(self, keep_bytes: int | None = None) -> None:
+        """Start a new peak; ``keep_bytes`` are the model's own bytes on the GPUs."""
+        self.live_before = self._allocated()
+        self.excluded = 0
+        if keep_bytes is not None and self.live_before is not None:
+            self.excluded = max(0, int(self.live_before) - int(keep_bytes))
+        if self.excluded > (256 << 20):
+            from medcompress.utils.memory import report_leftover_gpu
+
+            print(f"MEDCOMPRESS_BENCHMARK {self.excluded / 2**30:.2f} GiB allocated beyond the "
+                  "model before the timed passes; excluded from the peak", flush=True)  # fmt: skip
+            report_leftover_gpu("before the benchmark", limit_bytes=0)
+        self._reset_peak()
 
     def peak(self) -> int | None:
-        """Peak allocated bytes since :meth:`reset`."""
-        from medcompress.models.smoke import peak_gpu_bytes
-
-        return peak_gpu_bytes()
+        """Peak allocated bytes since :meth:`reset`, without the bytes it excluded."""
+        raw = self._read_peak()
+        return None if raw is None else int(raw) - self.excluded
 
 
 class PowerSampler:
@@ -322,6 +392,8 @@ class Sweep:
     energy_joules_per_sample: float | None
     n_samples: int
     mean_prompt_chars: float
+    live_before_bytes: int | None = None
+    excluded_bytes: int | None = None
 
 
 def run_sweep(
@@ -370,7 +442,7 @@ def run_sweep(
     if previous is not None:
         model.batch_size = size  # type: ignore[attr-defined]
     try:
-        meter.reset()
+        meter.reset(keep_bytes=gpu_state_bytes(model))  # type: ignore[call-arg]
         first = one_pass()
         cold = first[0] / len(chunks[0])
         for _ in range(protocol.warmup_runs):
@@ -401,6 +473,8 @@ def run_sweep(
         energy_joules_per_sample=None if energy is None else energy / runs,
         n_samples=len(samples),
         mean_prompt_chars=statistics.fmean(len(q) for q in questions),
+        live_before_bytes=meter.live_before,
+        excluded_bytes=meter.excluded if meter.live_before is not None else None,
     )
 
 
@@ -428,6 +502,8 @@ def measure_footprint(
         warm_latency_s=sweep.warm_latency_s,
         throughput_samples_per_s=sweep.throughput_samples_per_s,
         energy_joules_per_sample=sweep.energy_joules_per_sample,
+        benchmark_live_before_bytes=sweep.live_before_bytes,
+        benchmark_excluded_bytes=sweep.excluded_bytes,
         hardware=dict(hardware) if hardware is not None else describe_hardware().to_dict(),
         protocol={**protocol.to_dict(), "n_samples": sweep.n_samples},
     )
@@ -460,6 +536,8 @@ REPORT_METRICS: tuple[str, ...] = (
     "warm_latency_s",
     "throughput_samples_per_s",
     "energy_joules_per_sample",
+    "benchmark_live_before_bytes",  # live GPU bytes when the peak counter was reset (2026-11-15)
+    "benchmark_excluded_bytes",  # of them, not the model's: subtracted from the peak
 )
 
 

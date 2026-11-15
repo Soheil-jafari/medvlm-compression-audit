@@ -94,6 +94,42 @@ as a private dataset.
 Keep `outputs/` (the per-probe `outcomes*.npz` files) as a private dataset too: the paired
 comparisons (RC-C1) need the test-split ones. Write its name in section 6.
 
+**Benchmark only, seed 0 (2026-11-15): re-measure `efficiency.csv` from the saved hand-off.**
+Account 3 (where `e3-seed0-handoff` is), Kaggle T4 x2 (the card uses one T4), Internet on. Attach
+`medcompress-data`, `e2-seed0-adapter` (the parent is rebuilt from it) and `e3-seed0-handoff`.
+Nothing is quantized or evaluated again; the three `efficiency.csv` files are replaced (a dated
+re-measurement: record old and new in section 6). Estimate: about 40 min (three loads of E2 plus
+the swap, and three timing sweeps of about 8-12 min each).
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-E3 --seed 0 --only benchmark 2>&1 | tee /kaggle/working/run_card_RC-E3_benchmark.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Expected (estimate): `w4` peak near RC-Q0's 3.8 GB, `w8` near 5.2 GB, every peak minus
+`state_bytes` well under 1 GB at batch 1; `benchmark_excluded_bytes` near 0 (the replaced fp16
+weights are now freed during the swap); `num_parameters` 3,754,622,976 for all three (the logical
+count).
+
 ## 4. What to commit back
 
 For each variant `<v>` and seed `<k>`:
@@ -184,10 +220,28 @@ FP16 path for that batch. The full rerun checks the actual accumulated Hessians.
 Hessians require damping retries, report the retry count and maximum effective damping
 from the metrics, and the per-matrix entries from the checkpoint manifest.
 
-- Run by / date / seeds:
-- Commit actually used:
-- Hardware and `pip freeze | grep -E "torch|transformers|peft|gptqmodel|bitsandbytes"`:
-- Wall time per variant:
-- Pass criteria: all met / not met (list):
-- Anything unusual (errors, retries, changed settings):
-- Names of the private datasets with the checkpoints and `outcomes*.npz` files:
+**Seed 0, reported by Soheil on 2026-11-15 (account 3, commit 14f69c9): all steps ok, about 8 h
+in all** (`w4`, `w8`, `w8a8`: quantization, validation, benchmark, test and unfiltered test).
+
+- Files committed unchanged (SHA-256 of each checked against the attached `results_to_commit/`):
+  `results/E3/<w4|w8|w8a8>/nobudget/seed0/` `metrics.csv`, `metrics_test.csv`,
+  `metrics_test_unfiltered.csv`, `efficiency.csv`, `efficiency_setup.json`, `environment.json`
+  (18 files).
+- GPTQ: 0 damping retries for `w4` and `w8` (2,127 s and 2,140 s); 128 calibration images (the
+  cleaned set of seed 0).
+- Validation, op macro balanced accuracy: `w4` 0.808, `w8` 0.838, `w8a8` 0.850 (E2 seed 0: 0.836);
+  oesophagitis op sensitivity `w4` 0.757 (E2 0.892). The quantized weights ran: `w4` differs
+  clearly from E2.
+- Benchmark as committed: peak memory `w4` 9,075,524,096, `w8` 10,473,628,160, `w8a8`
+  10,397,130,240 bytes. **These peaks are wrong** (2026-11-15): peak minus `state_bytes` is the
+  same 5.67 GB for all three, about E2's fp16 decoder, so the replaced fp16 weights were still
+  allocated when the peak counter was reset before the benchmark. `num_parameters` is also
+  inconsistent (`w4`, `w8` 979,998,720: the packed GPTQ buffers were not counted; `w8a8`
+  3,754,622,976). Kernel: `gptqmodel.nn_modules.qlinear.torch.TorchLinear` (252 modules;
+  dequantizes in PyTorch), warm latency `w4` 1.49 s, `w8` 1.47 s, `w8a8` 2.35 s (development
+  timing). Fixed in code (2026-11-15); the benchmark is re-measured from the hand-off with
+  `--only benchmark` (section 3), and that `efficiency.csv` replaces this one as a dated
+  re-measurement. The validation and test files stay as committed.
+- Hand-off: private dataset `e3-seed0-handoff` (account 3, `alexbd79`), holding
+  `E3_seed0_quantized` (4.34 GB) and `E3_seed0_outcomes`.
+- Anything unusual: nothing else reported.

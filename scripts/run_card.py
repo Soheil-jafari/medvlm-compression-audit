@@ -58,7 +58,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--only", action="append", default=None,
         help="RC-G2: only these parts (E5:magnitude, E5:activation, E5:taylor, E6, E7:scores, "
-        "E7, E7:check), one session each",
+        "E7, E7:check), one session each; RC-E3 and RC-E9: 'benchmark' (the timing pass alone, "
+        "from the attached quantized hand-off)",
     )  # fmt: skip
     parser.add_argument("--kvasir-seg", type=Path, default=None, help="RC-D1: Kvasir-SEG input")
     parser.add_argument("--external-images", type=Path, default=None, help="RC-X1: EndoBench")

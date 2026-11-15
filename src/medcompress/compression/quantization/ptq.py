@@ -568,6 +568,36 @@ def install_quantized(
                 rec.codes, rec.scales, old.bias, kernel_class=kernel_class, **kwargs
             )
         setattr(parent, attr, new)
+        free_replaced(old, new)
+    release_cached_memory()
+
+
+def free_replaced(old: Any, new: Any) -> None:
+    """Free the tensors of a replaced module now (2026-11-15).
+
+    A replaced fp16 linear can stay referenced elsewhere (an uncollected adapter wrapper of the
+    merged E2 LoRA held the parent's projections), so its weights stayed on the GPU next to the
+    quantized model: RC-E3 seed 0's benchmark peaks were each about E2's fp16 decoder (5.67 GB)
+    above the model. Every tensor of ``old`` is pointed at an empty tensor on its device, which
+    frees its storage whoever still holds the module; a storage the new module shares (a bias
+    passed through) stays alive through the new module's own tensor.
+    """
+    import torch
+
+    for tensor in [*old.parameters(), *old.buffers()]:
+        tensor.data = torch.empty(0, dtype=tensor.dtype, device=tensor.device)
+
+
+def release_cached_memory() -> None:
+    """Collect garbage and give this process's free cached GPU memory back."""
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
 
 
 def apply_llm_int8(model: VLMWrapper | Any, recipe: PTQRecipe) -> None:
@@ -575,7 +605,11 @@ def apply_llm_int8(model: VLMWrapper | Any, recipe: PTQRecipe) -> None:
     from medcompress.compression.quantization.kernels import build_int8_linear, decoder_targets
 
     for _key, parent, attr in decoder_targets(model, recipe.targets):
-        setattr(parent, attr, build_int8_linear(getattr(parent, attr), recipe.llm_int8_threshold))
+        old = getattr(parent, attr)
+        new = build_int8_linear(old, recipe.llm_int8_threshold)
+        setattr(parent, attr, new)
+        free_replaced(old, new)
+    release_cached_memory()
 
 
 def load_quantized(model: VLMWrapper | Any, directory: Path | str, *, kernel_class: str) -> Any:

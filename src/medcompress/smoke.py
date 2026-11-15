@@ -324,13 +324,20 @@ def smoke_jobs() -> list[SmokeJob]:
     return jobs
 
 
-def with_dependencies(jobs: Sequence[SmokeJob], cards: Sequence[str] | None) -> list[SmokeJob]:
-    """The jobs of ``cards`` (all without), the jobs they read (``after``, recursively) and the
-    first phase (the calibration check every calibration set reads), in the list's order."""
-    if not cards:
+def with_dependencies(
+    jobs: Sequence[SmokeJob], cards: Sequence[str] | None, names: Sequence[str] | None = None
+) -> list[SmokeJob]:
+    """The jobs of ``cards`` and the jobs named ``names`` (all jobs without either), the jobs they
+    read (``after``, recursively) and the first phase (the calibration check every calibration
+    set reads), in the list's order. ``names`` picks single jobs (2026-11-15: E7's job alone)."""
+    if not cards and not names:
         return list(jobs)
     by_name = {j.name: j for j in jobs}
-    keep = {j.name for j in jobs if j.card in cards or j.lane == "pre"}
+    unknown = sorted(set(names or ()) - set(by_name))
+    if unknown:
+        raise ValueError(f"unknown smoke jobs {unknown}; known: {sorted(by_name)}")
+    keep = {j.name for j in jobs
+            if j.card in (cards or ()) or j.name in (names or ()) or j.lane == "pre"}  # fmt: skip
     frontier = list(keep)
     while frontier:
         after = by_name[frontier.pop()].after

@@ -108,6 +108,36 @@ from outside (a stage killed by the kernel still has a reading); the table has a
 RSS peak / lowest available (GiB)" and marks an exit -9 as a likely host-RAM kill. Each model
 load and release also prints a `MEDCOMPRESS_MEM` line (GPU and host). Estimate: about 1.5 h.
 
+**E7's stage 05 alone (2026-11-15), before RC-G2 session 4:** the smoke's E7 job (scoring with tiny
+settings, then stage 05, validation and benchmark) at the current code, with the calibration
+check it reads first. Soheil's account, Kaggle T4 x2, Internet on; attach `medcompress-data`,
+`e2-seed0-adapter`, `e0-teacher-cache`. The level check is printed and skipped in the smoke (its
+footprints use the shortened protocol). Estimate: about 40 min.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/smoke_cards.py --job E7 2>&1 | tee /kaggle/working/smoke_cards_e7.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
 ## 4. What to send back
 
 `/kaggle/working/smoke/smoke_report.md` (the table: card, job, stage, PASS / WAIT / FAIL,

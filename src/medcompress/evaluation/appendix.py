@@ -181,6 +181,40 @@ def updates_table(rows: pd.DataFrame) -> str:
     return tabular(header, table or [[MISSING] * len(header)])
 
 
+def protected_layers_table(rows: pd.DataFrame) -> str:
+    """Every pruning run: its removed units and how many of them lie inside the protected layers
+    (the first two and the last decoder layer, never removed whole; pre-registration section 10,
+    clarification of 2026-11-15), with their share of the removed parameters."""
+    header = ["Run", "Removed units", "Inside protected layers", "Share of removed parameters"]
+    table = []
+    if not rows.empty:
+        keyed = rows.assign(budget=rows["budget"].fillna("").astype(str))
+        wanted = (
+            "removed_units",
+            "removed_units_in_protected_layers",
+            "removed_params_in_protected_layers",
+            "parameters_before",
+            "parameters_after",
+        )
+        mine = keyed[keyed["metric"].isin(wanted)]
+        for (experiment, budget, seed), group in sorted(
+            mine.groupby(["experiment", "budget", "seed"]), key=lambda x: x[0]
+        ):
+            values = dict(zip(group["metric"], group["value"], strict=False))
+            if "removed_units_in_protected_layers" not in values:
+                continue
+            removed = values.get("parameters_before", math.nan) - values.get(
+                "parameters_after", math.nan
+            )
+            share = values.get("removed_params_in_protected_layers", math.nan) / removed
+            run = f"{experiment} @{budget}" if budget else str(experiment)
+            table.append([latex_escape(f"{run} seed {int(seed)}"),
+                          fmt_value(values.get("removed_units"), 0),
+                          fmt_value(values["removed_units_in_protected_layers"], 0),
+                          fmt_value(share, 3)])  # fmt: skip
+    return tabular(header, table or [[MISSING] * len(header)])
+
+
 def selection_table(rows: pd.DataFrame) -> str:
     """Round 0 student checks (D05 amendment): one row per candidate."""
     from medcompress.selection.driver import PEAK_MEMORY_METRIC
@@ -397,6 +431,7 @@ def write_appendix(
         "appendix_e9.tex": e9_table(summary),
         "appendix_compute.tex": compute_table(rows),
         "appendix_updates.tex": updates_table(rows),
+        "appendix_protected_layers.tex": protected_layers_table(rows),
         "appendix_student_selection.tex": selection_table(rows),
         "appendix_hyperparameters.tex": hyperparameter_table(),
     }

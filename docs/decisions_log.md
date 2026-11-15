@@ -725,6 +725,53 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-15 (agent; implementation, no setting changed): the efficiency measurement and the
+  budget search's level.** (1) RC-E3 seed 0 (account 3, 14f69c9) committed unchanged; its accuracy
+  stands (`w4` op macro BA 0.808 vs E2's 0.836), its peaks do not: each was about 5.67 GB above
+  `state_bytes`, E2's fp16 decoder, because the replaced fp16 projections stayed allocated (they
+  were still referenced, likely by uncollected wrappers of the merged E2 LoRA, which covers exactly
+  the GPTQ targets) when the peak counter was reset. E9's 19.85 GiB is the same effect. Fixed: the
+  swap frees every replaced module's tensors (`ptq.free_replaced`), and the timing sweep's meter
+  collects garbage, synchronizes and empties the cache, records the live bytes and subtracts what
+  is not the model's own GPU tensors from the peak (`MemoryMeter`; new rows
+  `benchmark_live_before_bytes`, `benchmark_excluded_bytes`). E2's reference (7,618,471,936) came
+  from a fresh load without a swap: its allocated memory after loading equalled its state (6.99
+  GiB, RC-SCALE), so it was measured cleanly. `num_parameters` is now the logical count for every
+  quantized class (packed codes as the matrices they stand for). RC-E3 and RC-E9 re-measure the
+  benchmark alone from their hand-offs (`--only benchmark`); the new `efficiency.csv` replaces the
+  old one as a dated re-measurement. (2) RC-SCALE at 74104b4: the budget search's footprints were
+  lifted by the 0.59 GiB left by earlier loads (unpruned 8.246e9 vs the reference 7.618e9); a
+  search would have removed about 0.63e9 bytes too many. The meter fix puts every footprint on a
+  fresh process's footing; stage 05 now measures the unpruned model first and stops unless it
+  matches the reference within 1 % (skipped, and printed, under a shortened protocol such as
+  RC-SMOKE's); RC-SCALE's `budget_search` checks the same with the full protocol. The holder of
+  the leftover (an embedding-sized float16 tensor and some LoRA tensors) was not found.
+- **2026-11-15 (agent): the GPTQ kernel for timing, options for Soheil (no change made).** The
+  pre-registration takes the kernel class from RC-Q0 (section 7); `quantization.kernel_class` is
+  `gptqmodel.nn_modules.qlinear.torch.TorchLinear`, the fastest class at w4 among those that passed
+  both w4 and w8 on a T4 (RC-Q0, per-layer 0.238 / 0.201 ms). It dequantizes in PyTorch, so whole-
+  model latency is slower than a fused low-bit kernel. GPTQModel 7.6.0's source on a T4 (sm 7.5):
+  `TorchLinear` 2-8 bits, any device (current); `TritonV2Linear` 2/4/8 bits on CUDA with Triton
+  (passed both widths in RC-Q0, 0.240 / 0.244 ms); `MarlinLinear` 4/8 bits, symmetric only, groups
+  of 128 allowed, minimum capability 7.5 with an fp16-only Turing path in the 7.6.0 source, while
+  RC-Q0 recorded "Marlin/Machete need a newer GPU than T4" (to verify on a T4: the compiled Marlin
+  extension may not include sm 7.5); `ExllamaV2Linear` 4-bit only, CUDA (it failed in RC-Q0 because
+  our builder calls `post_init()` without the scratch space it needs: our wiring, not the T4);
+  `MacheteLinear` needs sm 9.0, `QQQLinear` sm 8.0 (not on a T4); the BitBLAS classes need the
+  `bitblas` package (not installed); TorchFused / TorchInt8 / TorchAten are CPU or XPU kernels.
+  Options: keep TorchLinear (stated, slow); TritonV2 for w4 and w8; Marlin for w4 and w8 if it
+  loads and passes the code check on a T4; ExllamaV2 for w4 only after wiring its scratch space. A
+  change of the kernel class changes a setting taken from RC-Q0, so it needs Soheil's decision and
+  a section-10 note; the accuracy results do not depend on the kernel (the codes are the same).
+- **2026-11-15 (research lead; agreed by Soheil and Amir): protected layers, the current reading
+  stands.** "First 2 and last 1 layers protected" means those whole layers are never removed;
+  units inside them stay removable, as the code, `configs/pruning.yaml` and D07 already do, for
+  every arm. Reasons: it matches the configuration and D07, written before any scores existed; it
+  treats every arm the same; changing it after seeing that a layer-35 unit leads E7's order would
+  be a choice made on the results. Recorded as the clarification of 2026-11-15 (section 10, no
+  setting changes); the paper's methods text says protection is of whole layers; every pruning
+  run reports its removed units inside layers 0, 1 and 35 (`removed_units_in_protected_layers`,
+  and an appendix table).
 - **2026-11-15 (agent): RC-G2 session 3 rerun committed; a question on the protected layers
   before session 4.** E7 seed 0's scores (Amir, 9069603; 3,204 units, 5,908 s, peak 8.28 GB) are
   committed unchanged. The code protects layers 0, 1 and 35 from **whole-layer** removal only
@@ -734,10 +781,10 @@ must be logged here.
   `configs/pruning.yaml` ("whole decoder layers that are never removed") match this reading; the
   pre-registration's line "first 2 and last 1 layers protected" can also be read as protecting
   every unit inside them. With E7's scores a B2-sized removal (by parameter count, an estimate)
-  takes 41 of layer 35's 86 MLP groups, 21 of layer 0's and 2 of layer 1's. **Open: Soheil and
-  Amir decide before RC-G2 session 4** whether the current reading stands (then a clarification
-  in section 10) or the inner units of the protected layers are excluded too (an amendment; every
-  E5 / E7 / A-series arm, all of them not yet removed, would follow).
+  takes 41 of layer 35's 86 MLP groups, 21 of layer 0's and 2 of layer 1's. **Decided 2026-11-15 (research lead; agreed by Soheil and Amir): the current reading
+  stands** (pre-registration section 10, clarification of 2026-11-15): whole layers 0, 1 and 35
+  are never removed; their inner units stay removable, for every arm. Every pruning run now
+  records `removed_units_in_protected_layers`.
 - **2026-11-15 (agent; RC-G2 session 1 at 2846e81, implementation, no setting changed): the GPU
   guard and the release.** Stage 05's first budget-search load was refused: 7.12 GiB "in use", of
   which 0.59 GiB were live tensors and the rest this process's allocator cache (expandable
@@ -905,4 +952,5 @@ must be logged here.
 | E10 owner | **Soheil** (2026-11-08) | — | — |
 | E3 `w4` at seeds 1 and 2 | **decided 2026-11-08**: seed 0 only | — | — |
 | Budgets and timing hardware | budgets **decided 2026-11-08** (15 / 30 / 45 % of the decoder bytes; RC-B0 converts); the rented timing GPU (RC-T1) still open, does not block the freeze | team | before RC-T1 |
+| GPTQ kernel for timing | keep TorchLinear (RC-Q0's choice), or TritonV2 / Marlin / ExllamaV2 (options in the entry of 2026-11-15); a change needs a section-10 note | Soheil | before the final timing |
 | Venue | e.g. MICCAI (Springer LNCS template) | team | TODO |
