@@ -1483,3 +1483,7 @@ Append-only, newest at the bottom. One entry per iteration:
   process's allocator; the release clears hooks and loose tensors, synchronizes, empties the cache,
   prints allocated / reserved and the largest survivors once. The 15-load test checks live tensors
   too. RC-SCALE `budget_search` now runs 14 measurements and fails on live memory after a release.
+- RC-G2 session 3 rerun (Amir, 9069603): E7 seed 0's six score files committed unchanged
+  (SHA-256 checked); section 6 filled. Protected layers: the code protects whole-layer removal
+  only; a B2-sized removal would take 41 of layer 35's 86 MLP groups. Raised as an open question
+  before session 4.

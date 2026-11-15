@@ -1,0 +1,44 @@
+{
+  "calibration_size": 128,
+  "criterion": "clinical",
+  "criterion_settings": {
+    "findings": [
+      "polyp",
+      "ulcerative_colitis",
+      "oesophagitis"
+    ],
+    "probe": {
+      "answers": {
+        "negative": "no",
+        "positive": "yes"
+      },
+      "display_names": {
+        "oesophagitis": "oesophagitis",
+        "polyp": "a polyp",
+        "ulcerative_colitis": "ulcerative colitis"
+      },
+      "template": "Is there {finding} in this image? Answer yes or no."
+    },
+    "section": {
+      "ablation_method": {
+        "attention_head": "exact",
+        "decoder_layer": "exact",
+        "mlp_channel_group": "first_order"
+      },
+      "batch_size": 4,
+      "delta": "logprob_drop",
+      "negative_delta": "keep",
+      "negatives_per_positive": 1,
+      "probe_template": "from_domain",
+      "weights_table": "preregistration/finding_weights.yaml"
+    }
+  },
+  "mlp_channel_group_size": 128,
+  "parent_adapter": "7a69094038942039c2621d41c43b5a7408cd5cb50cefc46f520c8f051909fd14",
+  "seed": 0,
+  "unit_types": [
+    "decoder_layer",
+    "attention_head",
+    "mlp_channel_group"
+  ]
+}

@@ -703,6 +703,10 @@ E2,,0,hallucination_rate,0.02,,,E2/nobudget/seed0/metrics.csv,val
 E2,,0,omission_rate,0.036,,,E2/nobudget/seed0/metrics.csv,val
 E2,,0,negation_rate,0.043,,,E2/nobudget/seed0/metrics.csv,val
 E2,,0,evaluation_seconds,1905.523349523999,,,E2/nobudget/seed0/metrics.csv,val
+E7,,0,scoring_units,3204.0,,,E7/nobudget/seed0/metrics.csv,val
+E7,,0,scoring_calibration_images,128.0,,,E7/nobudget/seed0/metrics.csv,val
+E7,,0,scoring_seconds,5908.394637036,,,E7/nobudget/seed0/metrics.csv,val
+E7,,0,scoring_peak_gpu_bytes,8284429824.0,,,E7/nobudget/seed0/metrics.csv,val
 DATA,,0,calibration:images,6449.0,,,data/near_duplicate_calibration.csv,
 DATA,,0,calibration:always_join_bits,4.0,,,data/near_duplicate_calibration.csv,
 DATA,,0,calibration:candidate_bits,12.0,,,data/near_duplicate_calibration.csv,

@@ -2795,6 +2795,10 @@ E2,,val,train_steps,1,625.0,,625.0,625.0,,,1 seed
 E2,,val,yes_rate:oesophagitis,1,0.00881057268722467,,0.00881057268722467,0.00881057268722467,,,1 seed
 E2,,val,yes_rate:polyp,1,0.10572687224669604,,0.10572687224669604,0.10572687224669604,,,1 seed
 E2,,val,yes_rate:ulcerative_colitis,1,0.013215859030837005,,0.013215859030837005,0.013215859030837005,,,1 seed
+E7,,val,scoring_calibration_images,1,128.0,,128.0,128.0,,,1 seed
+E7,,val,scoring_peak_gpu_bytes,1,8284429824.0,,8284429824.0,8284429824.0,,,1 seed
+E7,,val,scoring_seconds,1,5908.394637036,,5908.394637036,5908.394637036,,,1 seed
+E7,,val,scoring_units,1,3204.0,,3204.0,3204.0,,,1 seed
 R0:qwen2_5_vl_3b,,val,advance,1,1.0,,1.0,1.0,,,
 R0:qwen2_5_vl_3b,,val,gate_g1_hardware,1,1.0,,1.0,1.0,,,
 R0:qwen2_5_vl_3b,,val,r0_allocated_gpu_bytes_after_load,1,7509268992.0,,7509268992.0,7509268992.0,,,

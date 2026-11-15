@@ -1,0 +1,101 @@
+{
+  "calibration_size": 128,
+  "criterion": "clinical",
+  "criterion_settings": {
+    "findings": [
+      "polyp",
+      "ulcerative_colitis",
+      "oesophagitis"
+    ],
+    "probe": {
+      "answers": {
+        "negative": "no",
+        "positive": "yes"
+      },
+      "display_names": {
+        "oesophagitis": "oesophagitis",
+        "polyp": "a polyp",
+        "ulcerative_colitis": "ulcerative colitis"
+      },
+      "template": "Is there {finding} in this image? Answer yes or no."
+    },
+    "section": {
+      "ablation_method": {
+        "attention_head": "exact",
+        "decoder_layer": "exact",
+        "mlp_channel_group": "first_order"
+      },
+      "batch_size": 4,
+      "delta": "logprob_drop",
+      "negative_delta": "keep",
+      "negatives_per_positive": 1,
+      "probe_template": "from_domain",
+      "weighting": "clinical",
+      "weights_table": "preregistration/finding_weights.yaml"
+    },
+    "weights": {
+      "findings": [
+        {
+          "cap": 20,
+          "final_weight": 11.143241,
+          "finding": "polyp",
+          "importance_tier": "action",
+          "prevalence": 0.179481
+        },
+        {
+          "cap": 20,
+          "final_weight": 9.796686,
+          "finding": "ulcerative_colitis",
+          "importance_tier": "follow_up",
+          "prevalence": 0.153113
+        },
+        {
+          "cap": 20,
+          "final_weight": 12.398334,
+          "finding": "oesophagitis",
+          "importance_tier": "follow_up",
+          "prevalence": 0.120984
+        }
+      ],
+      "preregistration": {
+        "commit": "18f1b47658eb188975dbbf3caa4b76e2e4d611fb",
+        "document": "docs/preregistration.md",
+        "domain": "endoscopy",
+        "frozen_by": "Soheil and Amir (Amir's written approval received)",
+        "frozen_on": "2026-11-08"
+      },
+      "weighting": {
+        "cap": 20,
+        "formula": "w_c = min(1 / prevalence_c, cap) * tier_multiplier(importance_tier_c)",
+        "normalisation": "none",
+        "prevalence_source": "results/data/summary.csv (RC-D1 run 4b, split_sha256 54dfa70a...): answer_count:abnormalities:<finding>:train / images:train (4,513)",
+        "tiers": [
+          {
+            "definition": "a treatment is performed during the same examination (e.g. resection)",
+            "multiplier": 2.0,
+            "tier": "action"
+          },
+          {
+            "definition": "changes treatment or follow-up but is not treated during the examination",
+            "multiplier": 1.5,
+            "tier": "follow_up"
+          },
+          {
+            "definition": "everything else",
+            "multiplier": 1.0,
+            "tier": "other"
+          }
+        ]
+      }
+    }
+  },
+  "mlp_channel_group_size": 128,
+  "parent_adapter": "7a69094038942039c2621d41c43b5a7408cd5cb50cefc46f520c8f051909fd14",
+  "seed": 0,
+  "unit_types": [
+    "decoder_layer",
+    "attention_head",
+    "mlp_channel_group"
+  ],
+  "variant": null
+}

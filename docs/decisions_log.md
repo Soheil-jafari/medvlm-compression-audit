@@ -725,6 +725,19 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-15 (agent): RC-G2 session 3 rerun committed; a question on the protected layers
+  before session 4.** E7 seed 0's scores (Amir, 9069603; 3,204 units, 5,908 s, peak 8.28 GB) are
+  committed unchanged. The code protects layers 0, 1 and 35 from **whole-layer** removal only
+  (`removal_order` and `validate_removal_set`); their KV groups and channel groups stay removable,
+  the same for every arm (E6 and A6 `layers_only` remove whole layers only, so they are not
+  affected). D07 ("the first 2 and last 1 decoder layers are never removed, for every arm") and
+  `configs/pruning.yaml` ("whole decoder layers that are never removed") match this reading; the
+  pre-registration's line "first 2 and last 1 layers protected" can also be read as protecting
+  every unit inside them. With E7's scores a B2-sized removal (by parameter count, an estimate)
+  takes 41 of layer 35's 86 MLP groups, 21 of layer 0's and 2 of layer 1's. **Open: Soheil and
+  Amir decide before RC-G2 session 4** whether the current reading stands (then a clarification
+  in section 10) or the inner units of the protected layers are excluded too (an amendment; every
+  E5 / E7 / A-series arm, all of them not yet removed, would follow).
 - **2026-11-15 (agent; RC-G2 session 1 at 2846e81, implementation, no setting changed): the GPU
   guard and the release.** Stage 05's first budget-search load was refused: 7.12 GiB "in use", of
   which 0.59 GiB were live tensors and the rest this process's allocator cache (expandable

@@ -331,3 +331,28 @@ settings are fixed before the run.
 - Name of the private datasets with the pruned models and `outcomes.npz` files:
 - The 30-group check: `first_order_check:spearman` and the step's wall time:
 - Anything unusual (errors, retries, changed settings):
+
+**Session 3 rerun (`--only E7:scores`), reported by Amir on 2026-11-14 (commit 9069603; T4 x2, the
+runner used one T4):** all steps ok.
+
+- Library versions: torch 2.11.0+cu130, transformers 5.19.0, peft 0.21.2, accelerate 1.15.0,
+  safetensors 0.8.0.
+- Inputs verified: the shared data (commit 4038a6b) and the E2 seed-0 adapter.
+- Scoring: 3,204 units (36 layers and 72 KV groups exactly, 3,096 MLP channel groups first-order)
+  on 128 calibration images in 5,908 s (100.2 min with loading); scoring peak 8,284,429,824 bytes
+  (8.28 GB); the exact effects were saved before the first-order pass; first-order memory flat at
+  7.01 GiB. Settings as frozen (`unit_scores.settings.json`: clinical weights, logprob_drop,
+  signed effects, 1 negative per positive, batch 4, parent adapter 7a690940...).
+- Files committed unchanged (SHA-256 checked against the attached files):
+  `results/E7/nobudget/seed0/` `environment.json`, `metrics.csv`, `unit_scores.csv`,
+  `unit_scores.settings.json`, `unit_effects.csv`, `unit_effects.settings.json`.
+- Hand-offs: none (the scores are results files).
+- Note (agent, 2026-11-15) on the protected layers: the code keeps layers 0, 1 and 35 from being
+  removed **as whole layers** (`plan_removal` drops them from the removal order and
+  `validate_removal_set` refuses them); their KV groups and MLP channel groups stay removable, for
+  every arm alike. With these scores the first unit of the order is `lm.layer35.mlp_group65`, and a
+  removal sized to B2 by parameter count (an estimate; the search measures memory) holds 64 units
+  inside the protected layers: 41 of layer 35's 86 MLP groups, 21 of layer 0's, 2 of layer 1's
+  (6.0 % of the removed parameters). Raised with Soheil and Amir before session 4 (decisions log,
+  2026-11-15).
+
