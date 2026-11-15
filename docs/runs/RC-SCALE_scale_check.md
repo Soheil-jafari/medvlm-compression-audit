@@ -79,6 +79,21 @@ Attach the same datasets, plus `e9-seed0-quantized` and `e0-teacher-adapter` for
 Each check now gets only the hand-offs its card reads (`run_card.py`'s selection). Estimate:
 about 35 min.
 
+**Third run (2026-11-15), `budget_search` only, before RC-G2 session 1:** the same cell with its
+last two lines replaced by
+
+```bash
+python scripts/scale_check.py --check budget_search 2>&1 | tee /kaggle/working/scale_check_3.txt
+echo "scale_check exit code: ${PIPESTATUS[0]}"
+```
+
+Attach `medcompress-data` and `e2-seed0-adapter`. It runs stage 05's first load and 14
+measurements (a production search's count), each a fresh load, a real removal set and a release,
+and fails if the live GPU memory after a release exceeds 1 GiB or grows, or if host RSS grows.
+Every load prints this process's allocated, reserved and reusable memory and the memory outside
+it; the first release that leaves more than 256 MiB prints the largest live CUDA tensors and what
+holds them (`MEDCOMPRESS_LEFTOVER`). Estimate: about 20 min.
+
 ## 4. What to send back
 
 `/kaggle/working/scale/scale_report.md` (the table), `/kaggle/working/scale_check.txt` (the

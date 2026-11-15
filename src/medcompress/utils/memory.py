@@ -48,6 +48,17 @@ def host_available_bytes() -> int | None:
     return _proc_value("/proc/meminfo", "MemAvailable")
 
 
+def gpu_reserved_bytes() -> int | None:
+    """This process's reserved GPU memory (its allocator's cache included), summed over GPUs."""
+    try:
+        import torch
+    except ImportError:  # pragma: no cover
+        return None
+    if not torch.cuda.is_available():
+        return None
+    return sum(int(torch.cuda.memory_reserved(d)) for d in range(torch.cuda.device_count()))
+
+
 def gpu_bytes() -> tuple[int, int] | None:
     """``(allocated, peak allocated)`` summed over the visible GPUs (``None`` without CUDA)."""
     try:
@@ -73,7 +84,8 @@ def memory_line(label: str) -> str:
     gpu = gpu_bytes()
     allocated, peak = (None, None) if gpu is None else gpu
     return (
-        f"MEDCOMPRESS_MEM {label}: gpu allocated {_gib(allocated)} GiB, peak {_gib(peak)} GiB; "
+        f"MEDCOMPRESS_MEM {label}: gpu allocated {_gib(allocated)} GiB, reserved "
+        f"{_gib(gpu_reserved_bytes())} GiB, peak {_gib(peak)} GiB; "
         f"host rss {_gib(host_rss_bytes())} GiB, peak {_gib(host_peak_rss_bytes())} GiB, "
         f"available {_gib(host_available_bytes())} GiB"
     )
@@ -255,3 +267,22 @@ def report_leftover_gpu(what: str, limit_bytes: int = 1 << 30) -> int:
         line += f"; largest live CUDA tensors {live_cuda_tensors()}"
     print(line, flush=True)
     return allocated
+
+
+def live_tensor_bytes(device_type: str = "cuda") -> int:
+    """Bytes of all live tensors of one device type that ``gc`` can see (the CPU stand-in for the
+    GPU's allocated memory in tests; storages shared by several tensors count once)."""
+    try:
+        import torch
+    except ImportError:  # pragma: no cover
+        return 0
+    gc.collect()
+    storages: dict[int, int] = {}
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) and obj.device.type == device_type:
+                storage = obj.untyped_storage()
+                storages[storage.data_ptr()] = storage.nbytes()
+        except Exception:  # noqa: BLE001 - some objects refuse attribute access
+            continue
+    return sum(storages.values())

@@ -725,6 +725,17 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-15 (agent; RC-G2 session 1 at 2846e81, implementation, no setting changed): the GPU
+  guard and the release.** Stage 05's first budget-search load was refused: 7.12 GiB "in use", of
+  which 0.59 GiB were live tensors and the rest this process's allocator cache (expandable
+  segments on: GPTQModel sets `PYTORCH_ALLOC_CONF`). The same failure as RC-SCALE's
+  `budget_search`, so a production bug. The guard now refuses only live tensors of this process
+  or memory outside its allocator (each above 1.5 GiB); the post-load check against any
+  cpu / meta / disk placement stays. The release removes accelerate hooks, clears tensors kept
+  outside parameters and buffers, synchronizes, empties the cache, prints allocated and reserved,
+  and prints the largest survivors once. The 0.59 GiB were not reproduced on the CPU; the 15-load
+  test now also requires the live tensors to return to their level after every release. RC-SCALE
+  `budget_search` (14 measurements) runs before session 1 again.
 - **2026-11-14 (agent, Soheil's request): RC-E3 `ready`; RC-SCALE second run recorded.** RC-E3
   seed 0 is `ready` (the seed-0 calibration check committed, RC-SMOKE passed at a237c5c, the test
   drop list committed). RC-SCALE at 2846e81: recovery (host RSS 2.7 GiB during the updates, 8.0

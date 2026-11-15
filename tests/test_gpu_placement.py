@@ -52,14 +52,30 @@ def test_a_gpu_that_still_holds_a_model_refuses_the_next_load() -> None:
     lines: list[str] = []
     clean = {0: (total - GIB, total)}  # this process's context only
     gpu_memory_check("E2 student", cuda=True, mem_info=clean.__getitem__, count=1, log=lines.append)
-    assert lines == ["[E2 student] GPU0: 14.00 of 15.00 GiB free before loading"]
-    held = {0: (total - 8 * GIB, total)}  # the scoring stage's student still there
-    with pytest.raises(GPUPlacementError, match="GPU0 has 8.00 GiB in use"):
+    assert lines[0].startswith("[E2 student] GPU0: 14.00 of 15.00 GiB free before loading;")
+    held = {0: (total - 8 * GIB, total)}  # another process (or a lost model) holds 8 GiB
+    with pytest.raises(GPUPlacementError, match="8.00 GiB in use outside this process"):
         gpu_memory_check("E2 student", cuda=True, mem_info=held.__getitem__, count=1,
                          log=lines.append)  # fmt: skip
     limit = {0: (total - GPU_CLEAN_LIMIT, total)}
     gpu_memory_check("E2 student", cuda=True, mem_info=limit.__getitem__, count=1, log=lines.append)
     gpu_memory_check("no GPU", cuda=False, mem_info=held.__getitem__, count=1)  # CPU: no check
+
+
+def test_this_processs_reusable_cache_does_not_refuse_a_load_but_live_tensors_do() -> None:
+    """RC-G2 session 1 at 2846e81: 7.12 GiB in use, of which 0.59 GiB live tensors and the rest
+    this process's own allocator cache, which the new load reuses (2026-11-15)."""
+    total = int(14.56 * GIB)
+    used = {0: (total - int(7.12 * GIB), total)}
+    lines: list[str] = []
+    gpu_memory_check("E2 student", cuda=True, mem_info=used.__getitem__, count=1,
+                     log=lines.append, allocated=lambda _i: int(0.59 * GIB),
+                     reserved=lambda _i: int(6.7 * GIB))  # fmt: skip
+    assert "(6.11 GiB reusable)" in lines[-1]
+    with pytest.raises(GPUPlacementError, match="still holds 7.00 GiB of live tensors"):
+        gpu_memory_check("E2 student", cuda=True, mem_info=used.__getitem__, count=1,
+                         log=lines.append, allocated=lambda _i: 7 * GIB,
+                         reserved=lambda _i: int(7.1 * GIB))  # fmt: skip
 
 
 def test_loads_use_an_explicit_map_on_the_gpus_never_auto() -> None:

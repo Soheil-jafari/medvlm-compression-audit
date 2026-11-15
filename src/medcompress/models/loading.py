@@ -191,9 +191,20 @@ def gpu_memory_check(
     mem_info: Callable[[int], tuple[int, int]] | None = None,
     count: int | None = None,
     log: Callable[[str], None] = print,
+    allocated: Callable[[int], int] | None = None,
+    reserved: Callable[[int], int] | None = None,
 ) -> None:
-    """Free this process's cached GPU memory, print every GPU's free memory, and refuse to load
-    ``what`` when a GPU already has more than :data:`GPU_CLEAN_LIMIT` in use."""
+    """Free this process's cached GPU memory, print every GPU's memory, and refuse to load
+    ``what`` when memory the load cannot reuse is in the way (2026-11-15).
+
+    Two things are refused, each above :data:`GPU_CLEAN_LIMIT`: live tensors of this process
+    (``allocated``: a model that was not released), and memory outside this process's PyTorch
+    allocator (device memory in use minus this process's ``reserved``: another process, or a
+    model of an earlier stage in one). Memory this process has reserved but not allocated is
+    its own cache, which the new model reuses: RC-G2 session 1 (2846e81) was refused with 7.12
+    GiB "in use" of which 0.59 GiB were live tensors and the rest this cache. Offload itself is
+    prevented by the explicit device map and :func:`require_on_gpu` after the load.
+    """
     if cuda is None or mem_info is None or count is None:
         try:
             import torch
@@ -205,29 +216,41 @@ def gpu_memory_check(
         import gc
 
         gc.collect()
+        torch.cuda.synchronize()
         torch.cuda.empty_cache()
         mem_info = mem_info or torch.cuda.mem_get_info
         count = torch.cuda.device_count() if count is None else count
+        allocated = allocated or (lambda i: int(torch.cuda.memory_allocated(i)))
+        reserved = reserved or (lambda i: int(torch.cuda.memory_reserved(i)))
     if not cuda:
         return
+    allocated = allocated or (lambda _i: 0)
+    reserved = reserved or (lambda _i: 0)
+    gib = 2**30
     dirty = []
     for index in range(count):
         free, total = mem_info(index)
-        gib = (free / 2**30, total / 2**30)
-        log(f"[{what}] GPU{index}: {gib[0]:.2f} of {gib[1]:.2f} GiB free before loading")
-        if total - free > GPU_CLEAN_LIMIT:
-            dirty.append(f"GPU{index} has {(total - free) / 2**30:.2f} GiB in use")
+        live, cache = allocated(index), reserved(index)
+        outside = max(0, total - free - cache)
+        reusable = max(0, cache - live)
+        log(f"[{what}] GPU{index}: {free / gib:.2f} of {total / gib:.2f} GiB free before "
+            f"loading; this process: {live / gib:.2f} GiB allocated, {cache / gib:.2f} GiB "
+            f"reserved ({reusable / gib:.2f} GiB reusable); outside it: "
+            f"{outside / gib:.2f} GiB")  # fmt: skip
+        if live > GPU_CLEAN_LIMIT:
+            dirty.append(f"GPU{index}: this process still holds {live / gib:.2f} GiB of live "
+                         "tensors")  # fmt: skip
+        if outside > GPU_CLEAN_LIMIT:
+            dirty.append(f"GPU{index}: {outside / gib:.2f} GiB in use outside this process's "
+                         "allocator (another process, or a model that was not freed)")  # fmt: skip
     if dirty:
-        own = ""
-        if mem_info is torch_mem_info():  # a real GPU: say whose memory it is (2026-11-14)
+        if allocated(0) > GPU_CLEAN_LIMIT:
             from medcompress.utils.memory import report_leftover_gpu
 
-            allocated = report_leftover_gpu(f"refused load of {what}")
-            own = (f"; this process holds {allocated / 2**30:.2f} GiB of it (the rest belongs "
-                   "to another process or to non-PyTorch allocations)")  # fmt: skip
+            report_leftover_gpu(f"refused load of {what}", limit_bytes=0)
         raise GPUPlacementError(
-            f"{what}: {', '.join(dirty)} before the load (a model of an earlier stage or another "
-            f"process is still there){own}; refusing to load, the model would be offloaded"
+            f"{what}: {'; '.join(dirty)}; refusing to load, the model would not fit or would be "
+            "offloaded"
         )
 
 
@@ -375,6 +398,7 @@ def release_model(model: Any) -> None:
         import torch
     except ImportError:  # pragma: no cover - a model implies torch
         return
+    _drop_hooks_and_loose_tensors(module, torch)
     with torch.no_grad():
         module.to("meta")
     for name in ("processor", "tokenizer"):  # host-side objects of the wrapper (2026-11-14)
@@ -382,11 +406,39 @@ def release_model(model: Any) -> None:
             setattr(model, name, None)
     gc.collect()
     if torch.cuda.is_available():
+        torch.cuda.synchronize()
         torch.cuda.empty_cache()
-    from medcompress.utils.memory import print_memory, trim_host_memory
+        torch.cuda.ipc_collect()
+    from medcompress.utils.memory import print_memory, report_leftover_gpu, trim_host_memory
 
     trim_host_memory()  # freed heap back to the system: RSS must not climb load after load
-    print_memory("after release")
+    print_memory("after release")  # allocated and reserved (2026-11-15)
+    global _SURVIVORS_REPORTED
+    if not _SURVIVORS_REPORTED and report_leftover_gpu("after release", limit_bytes=1 << 28) > (
+        1 << 28
+    ):
+        _SURVIVORS_REPORTED = True  # the largest survivors are printed once per process
+
+
+_SURVIVORS_REPORTED = False
+
+
+def _drop_hooks_and_loose_tensors(module: Any, torch: Any) -> None:
+    """Before a release: remove accelerate's hooks (they can hold tensors of tied weights) and
+    clear every tensor a submodule keeps as a plain attribute rather than a parameter or buffer
+    (``to("meta")`` does not move those; e.g. a rotary embedding's ``original_inv_freq``).
+    2026-11-15: 0.59 GiB of live tensors survived ``release_model`` on the GPU."""
+    try:
+        from accelerate.hooks import remove_hook_from_submodules
+
+        if any(hasattr(sub, "_hf_hook") for sub in module.modules()):
+            remove_hook_from_submodules(module)
+    except ImportError:  # accelerate is a dependency of transformers; nothing to remove without
+        pass
+    for sub in module.modules():
+        for name, value in list(vars(sub).items()):
+            if isinstance(value, torch.Tensor) and not isinstance(value, torch.nn.Parameter):
+                setattr(sub, name, None)
 
 
 def load_model(

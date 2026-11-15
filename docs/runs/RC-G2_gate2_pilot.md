@@ -128,6 +128,18 @@ B2` with them attached, and RC-E8 at B2; `docs/schedule.md` section 7, "Datasets
 on. If the first 25 units take more than about 2.5 h, the 108 will not fit in 12 h: stop the
 session and tell the agent (the 640 probes are the schedule's assumption, not a measurement).
 
+**Session 1, attempt at 2846e81 (2026-11-15): stopped in stage 05 at the first budget-search
+load (exit 6), 2 min in.** After stage 05's first load was released, the process held 0.59 GiB of
+live tensors and about 6.5 GiB of its own allocator cache; the guard counted all 7.12 GiB as "in
+use" and refused, although the new load reuses that cache. Fixed (2026-11-15): the guard refuses
+only this process's live tensors or memory outside its allocator (above 1.5 GiB each); offload is
+still prevented by the explicit device map and the check after every load. The release now also
+removes accelerate hooks, clears tensors kept outside parameters and buffers, synchronizes and
+empties the cache, prints allocated and reserved memory, and prints the largest survivors once.
+The cause of the 0.59 GiB was not reproduced on the CPU (the same loads leave nothing there);
+the survivor print names it on the GPU. **Run RC-SCALE's `budget_search` (14 measurements)
+first** (RC-SCALE section 3), then session 1 again with the cell below.
+
 Session 1:
 
 ```bash
