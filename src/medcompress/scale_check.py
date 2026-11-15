@@ -340,15 +340,24 @@ def check_budget_search(config: Mapping[str, Any], result: CheckResult, *, loads
     measure = make_removal_measurer(factory, timing_samples(pool, protocol), protocol,
                                     Path(paths["data_root"]), settings.spec.metric)  # fmt: skip
     host = GrowthCheck("host rss after each release", warmup=2, tolerance_bytes=512 << 20)
+    live = GrowthCheck("gpu allocated after each release", warmup=0, tolerance_bytes=256 << 20)
     host.add(host_rss_bytes())
-    sizes = [len(removal) * k // 8 for k in (8, 0, 4, 6, 5, 7, 3, 2, 1)][: max(loads - 1, 1)]
+    live.add(_gpu_allocated())
+    # a production search's order of sizes: the two end points, then bisection (14 in all)
+    steps = (16, 0, 8, 12, 10, 11, 9, 4, 6, 5, 7, 2, 3, 1)
+    sizes = [len(removal) * k // 16 for k in steps][: max(loads - 1, 1)]
     _reset_peak()
     for number, size in enumerate(sizes, 2):
         value = measure(removal[:size]) if size else measure([])
         host.add(host_rss_bytes())
-        result.note(f"load {number}: {size} units removed, footprint {value:.4g}")
+        live.add(_gpu_allocated())
+        left = (live.readings[-1] if live.readings else 0) / GIB
+        result.note(f"load {number}: {size} units removed, footprint {value:.4g}, allocated "
+                    f"after the release {left:.2f} GiB")  # fmt: skip
     result.numbers["loads"] = float(len(sizes) + 1)
-    judge(result, [host], _peak_gib())
+    if live.readings and max(live.readings) > 1 << 30:
+        result.fail(f"{max(live.readings) / GIB:.2f} GiB of live tensors left after a release")
+    judge(result, [host, live], _peak_gib())
 
 
 def check_recovery(config: Mapping[str, Any], result: CheckResult, *, updates: int) -> None:

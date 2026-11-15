@@ -79,6 +79,21 @@ Attach the same datasets, plus `e9-seed0-quantized` and `e0-teacher-adapter` for
 Each check now gets only the hand-offs its card reads (`run_card.py`'s selection). Estimate:
 about 35 min.
 
+**Third run (2026-11-15), `budget_search` only, before RC-G2 session 1:** the same cell with its
+last two lines replaced by
+
+```bash
+python scripts/scale_check.py --check budget_search 2>&1 | tee /kaggle/working/scale_check_3.txt
+echo "scale_check exit code: ${PIPESTATUS[0]}"
+```
+
+Attach `medcompress-data` and `e2-seed0-adapter`. It runs stage 05's first load and 14
+measurements (a production search's count), each a fresh load, a real removal set and a release,
+and fails if the live GPU memory after a release exceeds 1 GiB or grows, or if host RSS grows.
+Every load prints this process's allocated, reserved and reusable memory and the memory outside
+it; the first release that leaves more than 256 MiB prints the largest live CUDA tensors and what
+holds them (`MEDCOMPRESS_LEFTOVER`). Estimate: about 20 min.
+
 ## 4. What to send back
 
 `/kaggle/working/scale/scale_report.md` (the table), `/kaggle/working/scale_check.txt` (the
@@ -134,3 +149,29 @@ What the agent changed (2026-11-14):
   its 6 loads in one process each loaded at 9113632 (GPU peak 8.14 GB each).
 - `e4_training`: CUDA is initialised before the peak counters are reset.
 - `e9_eval` and every other check: only the hand-offs of its card (`select_handoffs`).
+
+**Second run, reported by Soheil on 2026-11-14 (commit 2846e81; the four checks above):**
+
+- PASS `recovery`: host RSS 2.7 GiB during the updates (was 23.6) and 8.0 GiB peak at the save
+  (was 27.53); GPU flat, peak 11.43 GiB.
+- PASS `e4_training`: GPU flat, peak 11.69 GiB; 7 of 10 updates skipped by the loss scaler at the
+  start (recorded, as decided).
+- PASS `e9_eval`: two T4s, GPU flat, peak 19.85 GiB.
+- FAIL `budget_search` again: 7.12 GiB in use on GPU 0 before a measurement's load, 10.7 min in;
+  the live-tensor list was not printed. Production stage 05 did its 6 loads in one process in
+  both smokes, so Soheil treats it as the check's own path: **it does not block any card**; the
+  agent investigates it (section 6, note below).
+
+Verdict: every heavy production step is flat at full size; the recovery's host memory is far
+below the limit. Cards are not gated on `budget_search`.
+
+Agent note on `budget_search` (2026-11-14): the first-load check passed (no tensor list was
+printed), so the memory stayed after one of the later measurements, not after the check's own
+load. The cause is not found yet: the measurement releases its model in a `finally` block, and on
+the CPU the same sequence frees everything. Diagnostics added so the next run names it: after
+every measurement's release a `MEDCOMPRESS_LEFTOVER` line gives this process's allocated and
+reserved GPU memory (with the largest live CUDA tensors and the types that hold them above 1 GiB),
+and a refused load now says how much of the memory in use belongs to this process (the rest is
+another process or non-PyTorch memory). A production search has about 14 measurements (the smoke
+had 4), so if the next log shows memory left by the measurements, it matters for RC-G2 session 4
+and the agent will say so before that session.

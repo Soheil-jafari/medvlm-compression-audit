@@ -99,12 +99,19 @@ def test_fifteen_loads_in_one_process_keep_host_memory_flat(tmp_path: Path) -> N
     spec = _spec(_saved_model(tmp_path / "model"))
     size = sum(p.stat().st_size for p in (tmp_path / "model").glob("*.safetensors"))
     assert size > 20 << 20  # large enough that a copy kept per load would show
+    from medcompress.utils.memory import live_tensor_bytes
+
     growth = GrowthCheck("host rss", warmup=3, tolerance_bytes=size)
+    tensors = GrowthCheck("live tensors (the CPU's 'allocated')", warmup=0, tolerance_bytes=1 << 20)
+    before = live_tensor_bytes("cpu")
     for _ in range(15):
         model = load_model(spec, device_map=None, allow_candidate=True)
         release_model(model)
         del model
         growth.add(host_rss_bytes())
+        tensors.add(live_tensor_bytes("cpu") - before)
+    # allocated memory returns to where it was after every release (2026-11-15), not only RSS
+    assert max(tensors.readings) < 1 << 20, tensors.summary()
     # a model's worth of host memory kept per load would add about 5 x size by the end (fp16)
     assert growth.growth_bytes() < 2 * size, growth.summary()
     growth.require_flat()
@@ -169,3 +176,27 @@ def test_a_watched_child_reports_its_peak_and_a_kill() -> None:
         interval=0.1,
     )
     assert killed.returncode == -9
+
+
+def test_the_leftover_report_is_quiet_without_a_gpu(capsys: pytest.CaptureFixture) -> None:
+    from medcompress.utils.memory import live_cuda_tensors, report_leftover_gpu
+
+    if torch.cuda.is_available():
+        pytest.skip("checks the CPU path")
+    assert report_leftover_gpu("probe") == 0 and live_cuda_tensors() == []
+    assert capsys.readouterr().out == ""
+
+
+def test_release_clears_tensors_kept_outside_parameters_and_buffers(tmp_path: Path) -> None:
+    """A tensor kept as a plain attribute (like a rotary embedding's ``original_inv_freq``) is
+    not moved by ``to("meta")``; the release clears it (2026-11-15)."""
+    from medcompress.models.loading import load_model, release_model
+
+    model = load_model(_spec(_saved_model(tmp_path / "m")), device_map=None, allow_candidate=True)
+    loose = [(sub, n) for sub in model.module.modules() for n, v in vars(sub).items()
+             if isinstance(v, torch.Tensor) and not isinstance(v, torch.nn.Parameter)]  # fmt: skip
+    model.module.extra_copy = torch.ones(1000)
+    release_model(model)
+    assert model.module.extra_copy is None
+    assert all(getattr(sub, n) is None for sub, n in loose)
+    assert all(p.device.type == "meta" for p in model.module.parameters())

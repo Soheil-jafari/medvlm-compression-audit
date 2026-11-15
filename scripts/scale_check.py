@@ -46,7 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--from", dest="handoffs", type=Path, action="append", default=[])
     parser.add_argument("--check", action="append", default=None, help="only these checks")
     parser.add_argument("--steps", type=int, default=40, help="E7 first-order steps (+3 largest)")
-    parser.add_argument("--loads", type=int, default=8, help="model loads of the budget search")
+    parser.add_argument(
+        "--loads",
+        type=int,
+        default=15,
+        help="model loads of the budget search (the first + 14 measurements)",
+    )
     parser.add_argument("--updates", type=int, default=20, help="recovery updates")
     parser.add_argument("--e4-updates", type=int, default=10, help="E4 training updates")
     parser.add_argument("--layers", type=int, default=4, help="GPTQ decoder layers")

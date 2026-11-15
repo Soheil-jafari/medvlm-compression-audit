@@ -1472,3 +1472,14 @@ Append-only, newest at the bottom. One entry per iteration:
   fixes for budget_search, e4_training, e9_eval. Skipped updates (8 of 20, updates 1-7 and 11)
   kept per the authors' decision; E4 records them; appendix table `appendix_updates`. The drop
   list rebuilt from the re-sent scans is identical to the committed one. Tests.
+- RC-SCALE second run (2846e81): recovery host RSS 2.7 GiB (8.0 at the save), E4 and E9 flat;
+  budget_search failed again in the check's measurement loop (not blocking, per Soheil);
+  `MEDCOMPRESS_LEFTOVER` diagnostics after each measurement and in a refused load. RC-E3 seed 0 set
+  to `ready`.
+
+## Iteration 87: 2026-11-15 (interactive)
+- RC-G2 session 1 at 2846e81 refused at stage 05's first budget-search load: 0.59 GiB live, the rest
+  this process's own allocator cache. The guard now judges live tensors and memory outside the
+  process's allocator; the release clears hooks and loose tensors, synchronizes, empties the cache,
+  prints allocated / reserved and the largest survivors once. The 15-load test checks live tensors
+  too. RC-SCALE `budget_search` now runs 14 measurements and fails on live memory after a release.
