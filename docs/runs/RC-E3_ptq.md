@@ -244,4 +244,14 @@ in all** (`w4`, `w8`, `w8a8`: quantization, validation, benchmark, test and unfi
   re-measurement. The validation and test files stay as committed.
 - Hand-off: private dataset `e3-seed0-handoff` (account 3, `alexbd79`), holding
   `E3_seed0_quantized` (4.34 GB) and `E3_seed0_outcomes`.
+- **Re-measurement of the benchmark, reported by Soheil on 2026-11-16 (account 3, commit
+  4f54655, `--only benchmark` from `e3-seed0-handoff`):** the three `efficiency.csv` files were
+  replaced (SHA-256 checked against the attached files). Peak memory, new (old):
+  `w4` 3,517,358,496 (9,075,524,096), `w8` 4,915,454,496 (10,473,628,160), `w8a8` 4,834,948,768
+  (10,397,130,240) bytes; each peak is about 0.11 GB above its `state_bytes` (3,405,009,312;
+  4,803,105,312; 4,734,714,528), as E2's is. `num_parameters` 3,754,622,976 for all three (the
+  logical count; old `w4` / `w8` 979,998,720). `benchmark_excluded_bytes` 8,917,088,
+  8,925,152 and 12,932,960 (under 13 MB: a fresh process, nothing left by the swap).
+  Warm latency `w4` 1.52 s, `w8` 1.59 s, `w8a8` 2.47 s (TorchLinear for `w4` / `w8`, kept by
+  decision of 2026-11-16). The validation and test files stay as committed.
 - Anything unusual: nothing else reported.

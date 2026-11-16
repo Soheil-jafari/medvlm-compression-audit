@@ -115,12 +115,18 @@ two readings took 6.5 and 5.4 min, model load included): **S about 1.4 h (E5, E7
 
 | Session | `--only` | Attach (Add Input) | Estimate | Save as private datasets afterwards | Send to the agent |
 |---|---|---|---|---|---|
-| 1 | `E5:magnitude`, `E5:activation` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` | about 6.3 h (2 x (1.4 + 1.2 + 0.53)) | `g2-b2-seed0-pruned-e5-magnitude`, `g2-b2-seed0-pruned-e5-activation` (folders `G2_B2_seed0_pruned_E5_magnitude`, `..._E5_activation`) | `results_to_commit/`, the run report |
-| 2 | `E5:taylor`, `E6` | the same three | about 5.6 h (3.1 + 0.8 + 1.2 + 0.53) | `g2-b2-seed0-pruned-e5-taylor`, `g2-b2-seed0-pruned-e6` | the same |
+| 1 | `E5:magnitude`, `E5:activation` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` | about 6.3 h (2 x (1.4 + 1.2 + 0.53)) | **one** dataset `g2-b2-seed0-pruned-s1` (saved as `g2-b2-seed0-pruned-e5` before the rename of 2026-11-16) holding both folders `G2_B2_seed0_pruned_E5_magnitude` and `G2_B2_seed0_pruned_E5_activation` | `results_to_commit/`, the run report |
+| 2 | `E5:taylor`, `E6` | the same three | about 5.6 h (3.1 + 0.8 + 1.2 + 0.53) | **one** dataset `g2-b2-seed0-pruned-s2` holding `G2_B2_seed0_pruned_E5_taylor` and `G2_B2_seed0_pruned_E6` | the same |
 | 3 | `E7:scores` | `medcompress-data`, `e2-seed0-adapter` | about 8 h (108 layers and KV groups scored exactly, 640 probes x 0.414 s each, plus loading) | none (the scores are results files) | `results_to_commit/` (E7's `unit_scores.csv`, `unit_effects.csv`, their settings files and `metrics.csv`), the run report: **commit before session 4** |
-| 4 | `E7`, `E7:check` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` | about 5.3 h (1.4 + 1.2 + 0.53 + 2.2 for the check; the scores are reused) | `g2-b2-seed0-pruned-e7` | `results_to_commit/` (with `first_order_check.csv`), the run report |
+| 4 | `E7`, `E7:check` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` | about 5.3 h (1.4 + 1.2 + 0.53 + 2.2 for the check; the scores are reused) | **one** dataset `g2-b2-seed0-pruned-s4` holding `G2_B2_seed0_pruned_E7` | `results_to_commit/` (with `first_order_check.csv`), the run report |
 
-In all about 25 GPU h (estimate). Keep the five datasets on Soheil's account: the cards that
+**One dataset per session (2026-11-16):** Kaggle makes one dataset from a notebook's output, so a
+session's pruned models are saved together: save the whole `/kaggle/working/handoff/` folder as
+`g2-b2-seed0-pruned-s<k>`. When that dataset is attached, the runner finds each model folder by its
+own manifest and a card reads only the folders it needs (`tests/test_inputs.py`). Session 1's
+dataset was saved as `g2-b2-seed0-pruned-e5`; either name works, the manifests decide.
+
+In all about 25 GPU h (estimate). Keep the three datasets (`-s1`, `-s2`, `-s4`) on Soheil's account: the cards that
 read them run there (the B2 test evaluations, `--card RC-E5 / RC-E6 / RC-E7 --seed 0 --budget
 B2` with them attached, and RC-E8 at B2; `docs/schedule.md` section 7, "Datasets").
 
@@ -362,4 +368,34 @@ runner used one T4):** all steps ok.
   inside the protected layers: 41 of layer 35's 86 MLP groups, 21 of layer 0's, 2 of layer 1's
   (6.0 % of the removed parameters). Raised with Soheil and Amir before session 4 (decisions log,
   2026-11-15).
+
+**Session 1 (`--only E5:magnitude --only E5:activation`), reported by Soheil on 2026-11-16
+(commit 4f54655; T4 x2, one T4 used):** all steps ok (magnitude 206.3 min, activation 181.8 min).
+18 files committed unchanged (SHA-256 checked against the attached files) under
+`results/E5/{magnitude,activation}/{nobudget,B2}/seed0/`, and the run report as
+`docs/runs/reports/run_report_RC-G2_s1.md` (the same file as the attached
+`run_report_RC-G2.md`, renamed so later sessions do not overwrite it).
+
+- Level check (stage 05, both runs): the unpruned model measured 7.61257e9 against E2's
+  reference 7.61847e9 (-0.08 %, within 1 %).
+- Budget search (B2 target 5.954e9; the smallest removal at or below target x 1.03):
+  magnitude 220 units (7 layers, 19 KV groups, 194 channel groups), footprint 6.041e9 (+1.47 %),
+  13 measurements; activation 281 units (6 layers, 15 KV groups, 260 channel groups), 6.131e9
+  (+2.98 %), 12 measurements. Both within the 3 % tolerance. Benchmark peaks: magnitude
+  6,041,026,208, activation 6,129,130,144 bytes (about 0.095 GB above their state bytes).
+- Units inside the protected layers 0, 1, 35 (removable unit by unit): magnitude 171 of 220
+  (138.4 M parameters), activation 172 of 281 (143.1 M).
+- Recovery (157 updates): 5 steps with a non-finite loss in each run, 13 (magnitude) and 15
+  (activation) updates skipped by the loss scaler (the non-finite steps among them; the rest
+  in the first updates while the scale settles); peaks 10.18 and 10.42 GB; 3,281 s and 3,362 s.
+  The non-finite steps came at the same points in both runs (one by step 25, two by 50, three by
+  75, five by 125): both runs visit the pool in the same order (seed 0). Whether they are the
+  steps that hold the 24 training images with a non-finite fp16 vision output (RC-CAL0) is
+  checked by `scripts/check_nonfinite_steps.py` (decisions log, 2026-11-16).
+- Validation: op macro balanced accuracy magnitude 0.598, activation 0.572 (E2 seed 0: 0.836);
+  op small-finding recall 0.692 and 0.538; small-finding recall at the default threshold 0.0 and
+  lesion-mask effect 0.0 for both.
+- Hand-off: both pruned models in **one** private dataset, `g2-b2-seed0-pruned-e5` (Soheil's
+  account), holding `G2_B2_seed0_pruned_E5_magnitude` (5.95 GB) and
+  `G2_B2_seed0_pruned_E5_activation` (6.03 GB); the runner finds each by its manifest.
 

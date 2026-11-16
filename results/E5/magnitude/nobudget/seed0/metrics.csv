@@ -1,0 +1,5 @@
+experiment,budget,seed,metric,value,ci_low,ci_high
+E5:magnitude,,0,scoring_units,3204,,
+E5:magnitude,,0,scoring_calibration_images,0,,
+E5:magnitude,,0,scoring_seconds,3.9511948159999974,,
+E5:magnitude,,0,scoring_peak_gpu_bytes,7653317120.0,,

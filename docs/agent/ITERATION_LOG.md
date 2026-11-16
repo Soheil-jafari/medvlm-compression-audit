@@ -1498,3 +1498,12 @@ Append-only, newest at the bottom. One entry per iteration:
   Kernel options from the GPTQModel 7.6.0 source written for Soheil (no change).
 - Budget search: footprints on a fresh process's footing; stage 05's 1 % level check against E2's
   reference; the same in RC-SCALE. The smoke can run one job (`--job E7`). Tests.
+
+## Iteration 89: 2026-11-16 (interactive)
+- Committed unchanged: RC-E3 seed 0's re-measured benchmark (3 files), RC-G2 session 1 (18
+  files and the run report), RC-E9 (6 files; its peak flagged until re-measured). Sections 6.
+- One hand-off dataset per RC-G2 session; a test that a combined dataset's folders are found by
+  manifest. Kernel kept; budget rule stated in the methods; `budget_match.tex`.
+- Non-finite recovery steps: `scripts/check_nonfinite_steps.py` (CPU) and `recovery_steps.json`.
+  Footprint jump: the scale check's slicing of a removal set; B1 not at risk; the check now
+  measures prefixes of the order. Tests.

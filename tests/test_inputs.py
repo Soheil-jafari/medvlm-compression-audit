@@ -196,3 +196,31 @@ def test_an_input_or_environment_failure_is_reported_as_failed(
     text = capsys.readouterr().out
     assert code == runner.INPUT_CHECK_FAILED and "Outcome: FAILED: input check failed" in text
     assert "all steps ok" not in text
+
+
+def test_two_pruned_models_in_one_dataset_are_found_and_picked_by_manifest(tmp_path: Path) -> None:
+    """Kaggle saves one dataset per notebook output (2026-11-16): RC-G2 session 1's two pruned
+    models are one dataset, ``g2-b2-seed0-pruned-s1``. Each folder is found by its manifest, and
+    a card reads only the one it needs."""
+    from medcompress.card_runner import select_handoffs
+    from medcompress.cards import build_plan
+    from medcompress.config import RunContext, load_config
+    from medcompress.handoffs import handoff_items
+    from medcompress.inputs import classify_bundles
+
+    config = load_config("base.yaml")
+    dataset = tmp_path / "datasets" / "owner" / "g2-b2-seed0-pruned-s1" / "handoff"
+    folders = {}
+    for criterion in ("magnitude", "activation"):
+        run = RunContext("E5", seed=0, budget="B2", variant=criterion)
+        items = handoff_items("pruned", config, run)
+        folders[criterion] = _real_bundle(
+            dataset / f"G2_B2_seed0_pruned_E5_{criterion}", "pruned", items,
+            experiment="E5", seed=0, budget="B2", variant=criterion,
+        )  # fmt: skip
+    found, _notes = classify_bundles(tmp_path)
+    assert sorted(found) == sorted(folders.values())
+    plan = build_plan("RC-E5", 0, variants=["magnitude"], budgets=["B2"])
+    needed, ignored = select_handoffs(plan, config, found)
+    assert needed == [folders["magnitude"]]
+    assert len(ignored) == 1 and "activation" in ignored[0]

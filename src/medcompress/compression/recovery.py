@@ -435,6 +435,12 @@ def _write_outputs(
 
     write_csv(run_dir / "budget_search.csv", ["accepted_units_removed", "measured_footprint"],
               search.trace)  # fmt: skip
+    # which updates had a non-finite loss and which the loss scaler skipped (step indices only,
+    # 1-based; 2026-11-16): checked against the images RC-CAL0 lists by
+    # scripts/check_nonfinite_steps.py
+    write_json({"nonfinite_steps": list(result.nonfinite_steps),
+                "skipped_steps": list(result.skipped_steps)},
+               run_dir / "recovery_steps.json")  # fmt: skip
     kinds = {t: sum(1 for u in search.removal if u.unit_type is t) for t in UnitType}
     inside = [u for u in search.removal if u.layer_index in set(protected)]
     numbers: list[tuple[str, float]] = [

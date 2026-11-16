@@ -251,3 +251,18 @@ cleaned set, so `e9-seed0-quantized` stands; no re-quantization.
 - Pass criteria: all met / not met (list):
 - Anything unusual:
 - Names of the private datasets with the checkpoints and `outcomes*.npz` files:
+
+**Resumed run (evaluate and benchmark; quantization skipped from `e9-seed0-quantized`), reported
+by Amir on 2026-11-16 (commit 74104b4):** all steps ok. Six files committed unchanged (SHA-256
+checked against the attached files): `results/E9/nobudget/seed0/` `metrics.csv`,
+`metrics_test.csv`, `metrics_test_unfiltered.csv`, `efficiency.csv`, `efficiency_setup.json`,
+`environment.json`. The run report was not among the attached files.
+
+- Validation (681 probes, 3,385 s): op macro balanced accuracy 0.911, op small-finding recall
+  1.000, lesion-mask effect 0.221; test op macro balanced accuracy 0.883.
+- Kernel: TorchLinear on all 196 decoder matrices (`low_precision_kernels_ok` 1).
+- **The peak in `efficiency.csv` (20,420,121,088 bytes) is wrong:** it was measured before the fix
+  of 2026-11-15 (the replaced fp16 teacher weights were still allocated when the peak counter was
+  reset; `num_parameters` 1,766,749,184 also misses the packed codes). It stands until the
+  benchmark-only re-run (section 3) replaces this `efficiency.csv`; the accuracy files stand.
+

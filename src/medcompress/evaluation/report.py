@@ -275,6 +275,43 @@ def numbers_tex(summary: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def write_budget_match(everything: pd.DataFrame, tables_dir: Path) -> Path:
+    """Write ``budget_match.tex`` from every committed row: stage 05 writes its budget rows to
+    the run's ``metrics.csv``, which the loader files under the validation split."""
+    path = Path(tables_dir) / "budget_match.tex"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(budget_match_table(everything), encoding="utf-8")
+    return path
+
+
+def budget_match_table(rows: pd.DataFrame) -> str:
+    """Every budget-matched run: its budget, the target, the footprint the search measured for the
+    chosen removal, the gap to the target and whether it is within the tolerance (2026-11-16).
+
+    The search keeps the smallest removal whose measured footprint is at or below the target
+    times 1.03 (``budgets.smallest_prefix_meeting_target``), so an arm lands between 0 and +3 %
+    above the target (below it when the last unit crosses the target)."""
+    header = ["Run", "Budget", "Target (GB)", "Measured (GB)", "Gap", "Within tolerance"]
+    table = []
+    if not rows.empty:
+        keyed = rows.assign(budget=rows["budget"].fillna("").astype(str))
+        wanted = ("budget_target", "budget_footprint", "budget_relative_gap",
+                  "budget_within_tolerance")  # fmt: skip
+        mine = keyed[keyed["metric"].isin(wanted) & (keyed["budget"] != "")]
+        for (experiment, budget, seed), group in sorted(
+            mine.groupby(["experiment", "budget", "seed"]), key=lambda x: x[0]
+        ):
+            v = dict(zip(group["metric"], group["value"], strict=False))
+            gap = v.get("budget_relative_gap")
+            within = {1.0: "yes", 0.0: "no"}
+            table.append([latex_escape(f"{experiment} seed {int(seed)}"), str(budget),
+                          fmt_value(v.get("budget_target", float("nan")) / 1e9, 3),
+                          fmt_value(v.get("budget_footprint", float("nan")) / 1e9, 3),
+                          MISSING if gap is None else f"{100 * gap:+.2f}\\%",
+                          within.get(v.get("budget_within_tolerance"), MISSING)])  # fmt: skip
+    return tabular(header, table or [[MISSING] * len(header)])
+
+
 TABLE_WRITERS = {
     "main.tex": main_table,
     "primary.tex": primary_table,
@@ -296,6 +333,7 @@ def write_tables(rows: pd.DataFrame, summary: pd.DataFrame, tables_dir: Path) ->
         written.append(path)
     setup = tables_dir / "setup_data.tex"
     setup.write_text(setup_data_table(rows), encoding="utf-8")
+
     numbers = tables_dir / "numbers.tex"
     numbers.write_text(numbers_tex(summary), encoding="utf-8")
     return [*written, setup, numbers]

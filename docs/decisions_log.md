@@ -725,6 +725,43 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-16 (Soheil): GPTQ kernel kept.** `TorchLinear` stays (chosen by RC-Q0 under the frozen
+  plan); no change. The paper states that the latency of E3 `w4` / `w8`, E8, E9 and E10Q is with
+  this pure-PyTorch kernel and that a fused kernel would be faster; memory and accuracy do not
+  depend on it (`paper/sections/05_results.tex`). The open row is closed.
+- **2026-11-16 (Soheil): the budget selection rule, stated.** The search keeps the smallest
+  removal whose measured footprint is at or below target x 1.03
+  (`budgets.smallest_prefix_meeting_target`), so arms land from 0 to +3 % above the target (below
+  it when the last unit crosses it). No change to the rule. The methods text states it, and the
+  results report each arm's measured footprint and its gap to the target
+  (`paper/tables/budget_match.tex`, from every budget-matched run's rows).
+- **2026-11-16 (Soheil): one hand-off dataset per RC-G2 session.** Kaggle makes one dataset per
+  notebook output: `g2-b2-seed0-pruned-s1` (E5 magnitude and activation; saved as
+  `g2-b2-seed0-pruned-e5`), `-s2` (E5 taylor and E6), `-s4` (E7). Each model folder is found by
+  its own manifest when the dataset is attached and a card reads only the folders it needs
+  (`tests/test_inputs.py`); RC-G2's table and the later cards' inputs follow this pattern.
+- **2026-11-16 (agent): the recoveries' non-finite steps (open, a CPU check to run).** Both
+  session 1 recoveries had 5 steps with a non-finite loss, at the same points (one by step 25,
+  two by 50, three by 75, five by 125): both runs visit the pool in the same order (seed 0) while
+  their models differ, which points to the data. Whether those are exactly the steps holding one
+  of the 24 training images with a non-finite fp16 vision output (RC-CAL0) cannot be decided
+  here: the training split's order is in the private shared data. `scripts/check_nonfinite_steps.py`
+  (CPU, about 2 min on Kaggle) rebuilds each run's batch order and lists the steps that hold a
+  listed image, with the cumulative counts the log prints. From now on each recovery also writes
+  the indices of its non-finite and skipped steps (`recovery_steps.json`, indices only), so later
+  runs can be compared step by step. If they match, nothing changes (the frozen recipe skips the
+  step; the paper reports the count).
+- **2026-11-16 (agent): the footprint jump of the scale checks is the check's own selection, not
+  the model.** The check measured slices of one finished removal set, and a removal set lists
+  whole layers after the inner units they absorb: units 86-103 of the 275-unit set were six
+  whole layers (2-7), 1.02e9 bytes, matching the measured drop (7.477e9 to 6.450e9 at 4f54655).
+  The real search measures prefixes of the removal order, one accepted unit at a time; with E5
+  magnitude's committed order the largest single step removes 0.116e9 bytes (a layer absorbing
+  its last inner units), and every benchmark peak sits about 0.1 GB above the state bytes (no
+  transient that a unit's removal shrinks). B1's band is 6.583e9 to 6.990e9; the search keeps the
+  first prefix at or below 6.990e9, at most 0.116e9 lower, so at or above 6.87e9, inside the band:
+  no B1 run is at risk on this evidence. A run outside the band would still be reported and
+  marked (`budget_within_tolerance` 0, D07). The check now measures prefixes of the order.
 - **2026-11-15 (agent; implementation, no setting changed): the efficiency measurement and the
   budget search's level.** (1) RC-E3 seed 0 (account 3, 14f69c9) committed unchanged; its accuracy
   stands (`w4` op macro BA 0.808 vs E2's 0.836), its peaks do not: each was about 5.67 GB above
@@ -952,5 +989,5 @@ must be logged here.
 | E10 owner | **Soheil** (2026-11-08) | — | — |
 | E3 `w4` at seeds 1 and 2 | **decided 2026-11-08**: seed 0 only | — | — |
 | Budgets and timing hardware | budgets **decided 2026-11-08** (15 / 30 / 45 % of the decoder bytes; RC-B0 converts); the rented timing GPU (RC-T1) still open, does not block the freeze | team | before RC-T1 |
-| GPTQ kernel for timing | keep TorchLinear (RC-Q0's choice), or TritonV2 / Marlin / ExllamaV2 (options in the entry of 2026-11-15); a change needs a section-10 note | Soheil | before the final timing |
+| GPTQ kernel for timing | **decided 2026-11-16**: TorchLinear kept (RC-Q0's choice); the paper states the latency is with it | — | — |
 | Venue | e.g. MICCAI (Springer LNCS template) | team | TODO |

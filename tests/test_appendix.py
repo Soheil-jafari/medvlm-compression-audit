@@ -163,3 +163,14 @@ def test_the_protected_layers_table_lists_each_pruning_run() -> None:
     assert "E7 @B2 seed 0 & 994 & 64 & 0.060" in table
     assert "--" in protected_layers_table(pd.DataFrame(columns=rows.columns))
     assert "--" in updates_table(rows)  # no training rows: the placeholder row
+
+
+def test_the_budget_match_table_shows_each_run_and_its_gap() -> None:
+    from medcompress.evaluation.report import budget_match_table
+
+    rows = pd.DataFrame([
+        {"experiment": "E5:magnitude", "budget": "B2", "seed": 0, "metric": m, "value": v}
+        for m, v in (("budget_target", 5.9536e9), ("budget_footprint", 6.0412e9),
+                     ("budget_relative_gap", 0.0147), ("budget_within_tolerance", 1.0))
+    ])  # fmt: skip
+    assert "E5:magnitude seed 0 & B2 & 5.954 & 6.041 & +1.47\\% & yes" in budget_match_table(rows)

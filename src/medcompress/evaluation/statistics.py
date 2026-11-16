@@ -332,6 +332,9 @@ def aggregate_results(
     tables = Path(tables_dir or root / "paper" / "tables")
     figures = Path(figures_dir or root / "paper" / "figures")
     written += write_tables(rows, summary, tables)
+    from medcompress.evaluation.report import write_budget_match
+
+    written.append(write_budget_match(everything, tables))  # the search's rows (2026-11-16)
     primary = primary_rows(summary)  # without the sensitivity analyses (strict, unfiltered)
     written += write_figures(primary, figures, headline=headline)
     # compute used and the student checks are bookkeeping of every run, tied to no split

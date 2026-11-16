@@ -229,6 +229,8 @@ def test_the_stage_meets_the_budget_recovers_and_saves_a_reloadable_model(tmp_pa
     assert metrics["recovery_skipped_steps"] == 0 and metrics["recovery_nonfinite_steps"] == 0
     # the protected layers (the tiny model's first and last) are never removed whole; their
     # inner units count here (clarification of 2026-11-15)
+    steps = json.loads((run_dir / "recovery_steps.json").read_text())
+    assert steps == {"nonfinite_steps": [], "skipped_steps": []}  # indices only (2026-11-16)
     removal_units = json.loads((run_dir / "removal.json").read_text())["units"]
     inside = [u for u in removal_units if u.startswith(("lm.layer0.", "lm.layer2."))]
     assert metrics["removed_units_in_protected_layers"] == len(inside)

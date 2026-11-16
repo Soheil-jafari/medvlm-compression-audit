@@ -120,7 +120,7 @@ every hand-off is shared to Soheil's account). The hours are in section 7.
 
 | Phase | Soheil (account 1) | Amir (account 2) | Account 3 (lent; Soheil starts it) |
 |---|---|---|---|
-| A0. now (2026-11-15) | RC-SCALE `budget_search` with the level check (fourth run, about 30 min); then RC-G2 session 1; the smoke of E7's stage 05 (`smoke_cards.py --job E7`, about 40 min) before session 4 | RC-E3 seed 0 benchmark only (`--only benchmark`, about 40 min, account 3) | RC-E9 benchmark only after its current run (Amir's account, about 30 min) |
+| A0. now (2026-11-16) | RC-G2 session 2 (E5 taylor, E6; Soheil); the smoke of E7's stage 05 (`smoke_cards.py --job E7`), then RC-G2 session 4; `check_nonfinite_steps.py` on session 1's two recoveries (CPU, minutes) | RC-E3 seed 0 benchmark re-measured (done 2026-11-16) | RC-E9 benchmark only (Amir's account, about 30 min) |
 | A. after the freeze | RC-G2 in four sessions (the five B2 runs of seed 0: E5 x 3, E6, E7, and the 30-group check; RC-G2 section 3); RC-E10 step 1 (the tokenizer check); then `scripts/choose_comparator.py` (CPU): the comparator and the futility decision | RC-B0 (done 2026-11-11); RC-E3 seed 0 (`w4`, `w8`, `w8a8`; reassigned 2026-11-11); the PolypGen download and `scripts/polypgen.py describe` / `overlap` (CPU) | RC-E9, then RC-E4 seed 0 (reassigned 2026-11-11) |
 | B. seed 0 of the rest (exploratory) | RC-E8 seed 0 at B2; RC-E10Q (E10 at 4 bit, code in 2026-11-14; after RC-SMOKE passes for it); RC-A4 `n32` | the E5 trend (B1, B3); RC-A4 `n64`, `n256` | the E6, E7 and E8 trend (B1, B3); RC-A1, RC-A2, RC-A3, RC-A5, RC-A6 seed 0 |
 | C. seeds 1 and 2 (only without a futility stop) | | seed 2: RC-E2, then E7 and the comparator at B2, A1 at B2, E3 `w8` | seed 1: the same |
@@ -177,7 +177,7 @@ Seeds 1 and 2 also need the committed comparator choice and their own E2 adapter
 
 | Account | Runs | Card commands (`scripts/run_card.py`, inputs found by their manifests) | Attach | Hands back |
 |---|---|---|---|---|
-| Soheil (1) | RC-G2 (four sessions); RC-E10 (step 1 first); seed 0 at B2: E8; RC-A4 `n32`; E0's validation again; RC-R1; RC-C1; RC-L1 E2@30k | `--card RC-G2 --only <part>` (RC-G2 section 3); `python scripts/choose_comparator.py`; `--card RC-E10`; `--card RC-E8 --seed 0 --budget B2`; `--card RC-A4 --seed 0 --variant n32` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`, `g2-b2-seed0-pruned-e7` (E8); for RC-R1 `e0-teacher-adapter`, `e1-seed0-adapter` and the E2 adapters; for RC-C1 every `*_outcomes` | results (git), including seed 0's scores and effects and `results/seed_plan/comparator_B2.json` |
+| Soheil (1) | RC-G2 (four sessions); RC-E10 (step 1 first); seed 0 at B2: E8; RC-A4 `n32`; E0's validation again; RC-R1; RC-C1; RC-L1 E2@30k | `--card RC-G2 --only <part>` (RC-G2 section 3); `python scripts/choose_comparator.py`; `--card RC-E10`; `--card RC-E8 --seed 0 --budget B2`; `--card RC-A4 --seed 0 --variant n32` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`, `g2-b2-seed0-pruned-s4` (E8; RC-G2 session 4's dataset, holding E7); for RC-R1 `e0-teacher-adapter`, `e1-seed0-adapter` and the E2 adapters; for RC-C1 every `*_outcomes` | results (git), including seed 0's scores and effects and `results/seed_plan/comparator_B2.json` |
 | Amir (2) | RC-B0 (done); RC-E3 seed 0 (reassigned 2026-11-11); the E5 trend (B1, B3); RC-A4 `n64`, `n256`; seed 2 of the 3-seed tier: E2, then E7 and the comparator at B2, A1 at B2, E3 `w8`; RC-L1 E7@30k; the PolypGen download | `--card RC-E3 --seed 0`; `--card RC-E5 --seed 0 --budget B1 --budget B3`; `--card RC-A4 --seed 0 --variant n64 --variant n256`; `--card RC-E2 --seed 2`; `--card RC-E7 --seed 2`; the comparator's card `--seed 2`; `--card RC-A1 --seed 2`; `--card RC-E3 --seed 2` | `medcompress-data`, `e2-seed0-adapter`, `e2-seed2-adapter`, `e0-teacher-cache` | results (git); the outcomes and `e2-seed2-adapter`, shared to Soheil |
 | Account 3 (Soheil) | RC-E9, then RC-E4 seed 0 (reassigned 2026-11-11); the E6, E7 and E8 trend (B1, B3); RC-A1, A2, A3, A5, A6 seed 0; seed 1 of the 3-seed tier (as seed 2) | `--card RC-E9`; `--card RC-E4 --seed 0`; `--card RC-E6 --seed 0 --budget B1 --budget B3`; `--card RC-E7 --seed 0 --budget B1 --budget B3`; `--card RC-E8 --seed 0 --budget B1 --budget B3`; `--card RC-A<n> --seed 0`; seed 1 as Amir's seed 2 | as above, with `e2-seed1-adapter`; `e0-teacher-adapter` (E9) | results (git); outcomes and adapters shared to Soheil |
 
@@ -208,7 +208,8 @@ about 1.4 GB, `w8` about 2.8 GB, `w8a8` none (applied at load); E9's quantized h
 **Datasets: what each account needs shared (2026-11-11).** Kaggle shares a private dataset
 from its owner's account (dataset settings, Sharing). Made on Soheil's account: `medcompress-data`
 (RC-D1), `e0-teacher-adapter` (RC-TT1), `e0-teacher-cache` (RC-E0b), `e2-seed0-adapter`
-(RC-E2 seed 0), and from RC-G2 the five `g2-b2-seed0-pruned-<run>` datasets. Every hand-off
+(RC-E2 seed 0), and from RC-G2 one dataset per session, `g2-b2-seed0-pruned-s1` (E5 magnitude and activation; saved
+as `g2-b2-seed0-pruned-e5`), `-s2` (E5 taylor, E6) and `-s4` (E7). Every hand-off
 made on another account is shared to Soheil's (for RC-R1 and RC-C1).
 
 | Account | Cards it runs next | Datasets it attaches | To be shared to it (from Soheil's account unless named) |
