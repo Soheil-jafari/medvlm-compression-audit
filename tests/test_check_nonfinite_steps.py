@@ -34,3 +34,26 @@ def test_the_order_is_the_training_loops() -> None:
     ids = [f"s{i}" for i in range(40)]
     assert select_subset(ids, None, 0) == select_subset(list(ids), None, 0)
     assert select_subset(ids, None, 0) != select_subset(ids, None, 1)
+
+
+def test_the_script_runs_end_to_end_on_a_fake_split(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,  # noqa: ANN001
+) -> None:
+    """``main`` with the real E5 recovery settings, a fake training split and a scan file."""
+    from medcompress.compression.pruning import stage
+    from medcompress.data.base import VQASample
+
+    train = [VQASample(f"s{i:03d}", "d", f"images/{i % 40}.jpg", "q", "a") for i in range(100)]
+    monkeypatch.setattr(stage, "load_train_samples", lambda config: train)
+    scan = tmp_path / "vision_scan_student.csv"
+    scan.write_text("split,sample_id,first_non_finite\ntrain,s007,block 31\nval,x,block 31\n"
+                    "train,unknown,block 31\n")  # fmt: skip
+    m = _module()
+    assert m.main(["--exp", "E5", "--variant", "magnitude", "--budget", "B2", "--seed", "0",
+                   "--scan", str(scan)]) == 0  # fmt: skip
+    out = capsys.readouterr().out
+    assert "157 steps of 16" in out and "1 listed training images (1 not in the split)" in out
+    assert "3 pool rows show one of them" in out  # images/7.jpg: rows 7, 47, 87
+    assert "cumulative, as the log prints it: step 25:" in out and "step 157:" in out

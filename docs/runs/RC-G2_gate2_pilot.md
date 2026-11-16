@@ -399,3 +399,40 @@ runner used one T4):** all steps ok.
   account), holding `G2_B2_seed0_pruned_E5_magnitude` (5.95 GB) and
   `G2_B2_seed0_pruned_E5_activation` (6.03 GB); the runner finds each by its manifest.
 
+**The non-finite recovery steps, a CPU check (2026-11-16).** Soheil's account, Kaggle CPU (no
+GPU needed), Internet on; attach `medcompress-data` and a private dataset holding RC-CAL0's
+`vision_scan_student.csv` (for example `rc-cal0-scan`; not in the repository, it lists image ids).
+Prints, per session 1 run, the steps that hold one of the 24 listed training images and the
+cumulative counts at every 25th step, to compare with the log (1, 2, 3, 3, 5, 5, 5 for both runs).
+Estimate: about 5 min.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+SCAN=$(find /kaggle/input -name vision_scan_student.csv | head -1); echo "scan: $SCAN"
+DATA=$(python scripts/find_inputs.py data)
+for v in magnitude activation; do
+  python scripts/check_nonfinite_steps.py --exp E5 --variant $v --budget B2 --seed 0 \
+    --data-root "$DATA" --scan "$SCAN" 2>&1 | tee -a /kaggle/working/nonfinite_steps.txt
+done
+```
+
+Note (2026-11-16): of the 231.2 M parameters of the protected layers 0, 1 and 35 (3 x 77.1 M),
+session 1 removed 138.4 M (magnitude, 59.9 %) and 143.1 M (activation, 61.9 %) unit by unit.

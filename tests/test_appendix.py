@@ -173,4 +173,5 @@ def test_the_budget_match_table_shows_each_run_and_its_gap() -> None:
         for m, v in (("budget_target", 5.9536e9), ("budget_footprint", 6.0412e9),
                      ("budget_relative_gap", 0.0147), ("budget_within_tolerance", 1.0))
     ])  # fmt: skip
-    assert "E5:magnitude seed 0 & B2 & 5.954 & 6.041 & +1.47\\% & yes" in budget_match_table(rows)
+    table = budget_match_table(rows)
+    assert "E5:magnitude seed 0 & B2 & 5.954 & 6.041 & +1.47\\% & yes & --" in table

@@ -750,7 +750,15 @@ must be logged here.
   listed image, with the cumulative counts the log prints. From now on each recovery also writes
   the indices of its non-finite and skipped steps (`recovery_steps.json`, indices only), so later
   runs can be compared step by step. If they match, nothing changes (the frozen recipe skips the
-  step; the paper reports the count).
+  step; the paper reports the count). Expected outcome (an estimate): a **subset**, not an exact
+  match. Each run had exactly 5 non-finite micro-batches (one example per step), while 24 listed
+  images of 4,513 predict about 13 listed rows in a 2,500-example pool (E2 showed the same ratio:
+  16 non-finite steps against about 50 listed rows). Decision rule: the steps are explained by
+  the listed images if every 25-step window in which the log shows a new non-finite step holds at
+  least one step with a listed image; `rows_in_pool` against 5 tells a subset from an exact match.
+  Session 2's recoveries use the same pool and order (seed 0), so their `recovery_steps.json`
+  gives the exact step indices for session 1 as well. The scan file is not in the repository
+  (it holds image ids); it is attached as a private dataset for the check.
 - **2026-11-16 (agent): the footprint jump of the scale checks is the check's own selection, not
   the model.** The check measured slices of one finished removal set, and a removal set lists
   whole layers after the inner units they absorb: units 86-103 of the 275-unit set were six
