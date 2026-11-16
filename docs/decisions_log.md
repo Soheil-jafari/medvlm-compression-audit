@@ -725,6 +725,30 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-16 (research lead; agreed by Soheil and Amir; pre-registration section 10, amendment
+  of 2026-11-16, post hoc and disclosed): every unit of the protected layers is protected.** No
+  unit inside decoder layers 0, 1 and 35 is removed (whole layer, KV group or channel group), for
+  every arm (E5 all criteria, E6, E7, E8, A1-A6); it supersedes the clarification of 2026-11-15.
+  Prompted by RC-G2 session 1 (171 of 220 and 172 of 281 removed units inside those layers;
+  validation op macro BA 0.598 and 0.572, E2 0.836; small-finding recall 0), after the baselines'
+  validation results, before any E7 pruned model and any pruned model's test result. It changes
+  no score, weight, budget or recovery setting and makes the comparison arms stronger. Code:
+  `removal_order` leaves the units out, `validate_removal_set` refuses them, stage 05 stops on a
+  removal set that touches them, every pruning run writes `removal_by_layer.csv` (36 rows: the
+  share of its removed parameters per decoder layer) and keeps `removed_units_in_protected_layers`
+  (now 0). Found while checking the capacity: `plan_removal` counted the decoder's layers from the
+  whole-layer units only, so an arm without them (A6 `heads_channels`) protected no layer at all,
+  even under the old rule; it now counts layers from every unit type (test). E7's committed
+  scores stay (per-parameter normalisation is per unit, so the rest keeps its order; test); E6
+  (whole layers only) never removed layers 0, 1 and 35, so its order is unchanged. Capacity of
+  layers 2-34 (E7's unit list, the real removal rules; bytes of removed parameters, an estimate of
+  the footprint change): with whole layers (E5, E6, E7, A1-A5, A6 `layers_only`) at most 5.087e9
+  bytes, 91.7 % of the decoder; A6 `heads_channels` (keeps one KV group and one channel group per
+  layer) at most 4.72e9, 85.1 %. Every arm reaches B1 (0.832e9), B2 (1.665e9) and B3 (2.497e9).
+  Session 1's B2 files moved unchanged to `results/superseded/inner_units_removable/` (the
+  aggregator skips it; `appendix_without_full_protection.tex` reports them); its unit scores stay
+  (scores do not depend on the rule). Reruns: session 1 (Soheil), session 2 (account 3), session 4
+  (Amir), after a stage-05 smoke of E5 magnitude at the new code.
 - **2026-11-16 (Soheil): GPTQ kernel kept.** `TorchLinear` stays (chosen by RC-Q0 under the frozen
   plan); no change. The paper states that the latency of E3 `w4` / `w8`, E8, E9 and E10Q is with
   this pure-PyTorch kernel and that a fused kernel would be faster; memory and accuracy do not

@@ -95,9 +95,16 @@ def test_removal_order_sorts_normalises_and_protects() -> None:
     values = [scores[u.unit_id] / u.num_params for u in per_param]
     assert values == sorted(values)
     assert per_param != order
-    layer0 = next(u for u in units if u.unit_type is UnitType.DECODER_LAYER and u.layer_index == 0)
+    # no unit of a protected layer appears: the layer, its KV groups, its channel groups
+    # (amendment of 2026-11-16; before, only the whole layer was left out)
     kept = common.removal_order(scores, units, protected_layers=[0])
-    assert layer0 not in kept and len(kept) == len(units) - 1
+    assert all(u.layer_index != 0 for u in kept)
+    assert len(kept) == len(units) - sum(1 for u in units if u.layer_index == 0)
+    without = [u for u in per_param if u.layer_index != 0]
+    assert (
+        common.removal_order(scores, units, normalisation="per_parameter", protected_layers=[0])
+        == without
+    )  # the rest keeps its order
     with pytest.raises(ValueError, match="NaN"):
         common.removal_order({**scores, units[0].unit_id: math.nan}, units)
     with pytest.raises(ValueError, match="no score"):
@@ -463,3 +470,18 @@ def test_clinical_ablate_is_a_reversible_context(tmp_path: Path) -> None:
         inside = wrapper.score_yes_no([tiny_vlm.tiny_image(0)], [tiny_vlm.PROBE])[0].logp_yes
     after = wrapper.score_yes_no([tiny_vlm.tiny_image(0)], [tiny_vlm.PROBE])[0].logp_yes
     assert inside != pytest.approx(before, abs=1e-6) and after == pytest.approx(before)
+
+
+def test_no_unit_of_a_protected_layer_can_be_removed() -> None:
+    """Amendment of 2026-11-16: a removal set touching any unit of a protected layer is refused,
+    whatever its type."""
+    from medcompress.compression.pruning.units import validate_removal_set
+
+    units = _units(_wrapper())
+    for unit in (u for u in units if u.layer_index == 0):
+        problems = validate_removal_set(units, [unit], protected_layers=[0, 2])
+        assert problems and "protected" in problems[0], unit.unit_id
+    inner = next(
+        u for u in units if u.layer_index == 1 and u.unit_type is not UnitType.DECODER_LAYER
+    )
+    assert validate_removal_set(units, [inner], protected_layers=[0, 2]) == []

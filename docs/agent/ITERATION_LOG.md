@@ -1507,3 +1507,11 @@ Append-only, newest at the bottom. One entry per iteration:
 - Non-finite recovery steps: `scripts/check_nonfinite_steps.py` (CPU) and `recovery_steps.json`.
   Footprint jump: the scale check's slicing of a removal set; B1 not at risk; the check now
   measures prefixes of the order. Tests.
+
+## Iteration 90: 2026-11-16 (interactive)
+- Amendment of 2026-11-16: no unit of layers 0, 1 and 35 is removed, for every arm (section 10).
+  `removal_order`, `validate_removal_set`, stage 05's guard, `removal_by_layer.csv`; protected
+  layers now found from every unit type (A6 `heads_channels` protected nothing before). Capacity
+  of layers 2-34: every arm reaches B3. Session 1's B2 files moved unchanged to
+  `results/superseded/inner_units_removable/`; appendix table. Reruns planned on three accounts.
+- RC-E9's benchmark re-measured (7,351,677,856 bytes) committed unchanged. Tests.

@@ -310,6 +310,110 @@ agent through the inbox. Each pruned model goes to `checkpoints/` (never committ
 hand-off folder under `/kaggle/working/handoff/`, which becomes the private dataset named in
 the table (lower case, dashes).
 
+**Reruns under the amendment of 2026-11-16 (no unit of layers 0, 1, 35 is removed).** Session 1's
+two runs (and session 2, stopped partway at d9039dc) were made while the units inside the
+protected layers were removable; they are superseded (`results/superseded/inner_units_removable/`)
+and run again at the new code. E7's scores (session 3) stay: the protected layers' units are left
+out of the order, nothing is rescored. Do **not** attach `g2-b2-seed0-pruned-e5` (session 1's old
+models, kept for the appendix) to a rerun.
+
+Order and accounts (suggested; the three sessions do not depend on each other and can run at the
+same time on three accounts):
+
+1. First, once: the stage-05 smoke of E5 magnitude at the new code (RC-SMOKE section 3,
+   `--job "E5 magnitude"`, about 20 min; Soheil). Then, at the same time:
+2. Session 1 again (E5 magnitude, activation): **Soheil (account 1)**, about 6.3 h; save the
+   handoff folder as `g2-b2-seed0-pruned-s1`.
+3. Session 2 again (E5 taylor, E6): **account 3**, about 5.6 h; save as `g2-b2-seed0-pruned-s2`.
+4. Session 4 (E7, the 30-group check): **Amir**, about 5.3 h, after the smoke of E7's stage 05
+   (RC-SMOKE, `--job E7`) has passed; save as `g2-b2-seed0-pruned-s4`.
+
+Share the three datasets with Soheil's account (the B2 test evaluations and RC-E8 read them
+there). Each session attaches `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` (shared
+with accounts 3 and Amir's).
+
+Session 1 again (Soheil):
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E5:magnitude --only E5:activation 2>&1 | tee /kaggle/working/run_card_RC-G2_s1_rerun.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Session 2 again (account 3):
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E5:taylor --only E6 2>&1 | tee /kaggle/working/run_card_RC-G2_s2_rerun.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Session 4 (Amir; after the E7 stage-05 smoke has passed):
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E7 --only E7:check 2>&1 | tee /kaggle/working/run_card_RC-G2_s4.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Each stage-05 log now shows "level check: ..." and each run writes `removal_by_layer.csv` (the
+share of its removed parameters per decoder layer: layers 0, 1 and 35 must read 0) and
+`recovery_steps.json`.
+
 ## 4. What to commit back
 
 For each of the five runs (`<run>` is `E5/<variant>`, `E6` or `E7`):
@@ -436,3 +540,9 @@ done
 
 Note (2026-11-16): of the 231.2 M parameters of the protected layers 0, 1 and 35 (3 x 77.1 M),
 session 1 removed 138.4 M (magnitude, 59.9 %) and 143.1 M (activation, 61.9 %) unit by unit.
+
+Note (2026-11-16): session 1 above is **superseded** by the amendment of 2026-11-16 (units of
+protected layers removable, exploratory, outside H1-H4); its files were moved unchanged to
+`results/superseded/inner_units_removable/` and its run report stays here. Session 2 was stopped
+partway at d9039dc (nothing committed). Both run again at the new code (section 3).
+

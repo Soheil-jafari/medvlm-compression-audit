@@ -107,6 +107,17 @@ fallback.
   \resizebox{\linewidth}{!}{\input{tables/appendix_protected_layers}}
 \end{table}
 
+\subsection{Pruning without full protection of the first and last layers}
+\begin{table}[h]
+  \centering
+  \caption{The first two generic pruning runs (\expid{E5} magnitude and activation at
+  \expid{B2}, seed 0) were made while the attention groups and channel groups inside the
+  first two and the last decoder layer were removable. Most of their removed units fell
+  inside those three layers, which led to the amendment that protects every unit of them
+  (pre-registration section 10, 2026-11-16). Superseded, exploratory, outside H1--H4.}
+  \resizebox{\linewidth}{!}{\input{tables/appendix_without_full_protection}}
+\end{table}
+
 \subsection{Optimizer updates skipped by the loss scaler}
 \begin{table}[h]
   \centering

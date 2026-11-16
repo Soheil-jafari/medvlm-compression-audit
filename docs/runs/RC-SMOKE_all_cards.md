@@ -138,6 +138,37 @@ python scripts/smoke_cards.py --job E7 2>&1 | tee /kaggle/working/smoke_cards_e7
 echo "exit code: ${PIPESTATUS[0]}"
 ```
 
+**E5 magnitude's stage 05 at the new code (2026-11-16), before the RC-G2 reruns:** the smoke's E5
+magnitude job (scoring, stage 05, validation, benchmark with tiny settings) with the calibration
+check it reads first. Soheil's account, Kaggle T4 x2, Internet on; attach `medcompress-data`,
+`e2-seed0-adapter`, `e0-teacher-cache`. It checks the amendment of 2026-11-16 in the real stage:
+`removal_by_layer.csv` must show 0 for layers 0, 1 and 35 and the metrics
+`removed_units_in_protected_layers` 0. Estimate: about 20 min.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/smoke_cards.py --job "E5 magnitude" 2>&1 | tee /kaggle/working/smoke_cards_e5_magnitude.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
 ## 4. What to send back
 
 `/kaggle/working/smoke/smoke_report.md` (the table: card, job, stage, PASS / WAIT / FAIL,

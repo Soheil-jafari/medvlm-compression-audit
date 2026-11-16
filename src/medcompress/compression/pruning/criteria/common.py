@@ -125,7 +125,9 @@ def removal_order(
     normalisation: str = "none",
     protected_layers: Sequence[int] = (),
 ) -> list[PrunableUnit]:
-    """Units from least to most important. Whole layers in ``protected_layers`` never appear.
+    """Units from least to most important. No unit of a layer in ``protected_layers`` appears:
+    not the layer, not its KV groups, not its channel groups (amendment of 2026-11-16; before,
+    only whole protected layers were left out).
 
     Ties are broken by unit id and a NaN score is an error, so the order is deterministic.
     """
@@ -139,11 +141,7 @@ def removal_order(
         raise ValueError(f"NaN importance for units: {bad[:3]}")
     protected = set(protected_layers)
     ordered = sorted(known.values(), key=lambda u: (values[u.unit_id], u.unit_id))
-    return [
-        u
-        for u in ordered
-        if not (u.unit_type is UnitType.DECODER_LAYER and u.layer_index in protected)
-    ]
+    return [u for u in ordered if u.layer_index not in protected]
 
 
 def _with_unit(removed: list[PrunableUnit], unit: PrunableUnit) -> list[PrunableUnit]:

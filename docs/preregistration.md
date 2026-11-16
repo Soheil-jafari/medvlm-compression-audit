@@ -355,6 +355,31 @@ a choice made on the results. *Reporting:* every pruning run records how many of
 lie inside the protected layers (`removed_units_in_protected_layers`), and the paper's methods
 text states that protection is of whole layers.
 
+**Amendment of 2026-11-16 (research lead; agreed by Soheil and Amir; post hoc, disclosed;
+supersedes the clarification of 2026-11-15).** "First 2 and last 1 layers protected" (section 7,
+D07 section 2) now means that **no unit inside decoder layers 0, 1 and 35 is ever removed**: not the
+whole layer, not a KV group, not an MLP channel group, for every arm: E5 (all criteria), E6, E7,
+E8 and A1-A6. *What prompted it:* RC-G2 session 1 (E5 at B2, seed 0) under the clarification of
+2026-11-15: magnitude put 171 of its 220 removed units inside layers 0, 1 and 35 (59.9 % of those
+layers' 231.2 M parameters), activation 172 of its 281 (61.9 %); validation op macro balanced
+accuracy fell to 0.598 and 0.572 (E2 0.836) and small-finding recall to 0. Per-parameter scores of
+the first and last layers are on another scale than the rest, so a global ranking empties them,
+which defeats the purpose of protecting them; for channel pruning the usual practice is to leave
+the first and last layers out entirely (LLM-Pruner, Ma et al., NeurIPS 2023). It came after the
+baselines' validation results but before any E7 pruned model and before any pruned model's test
+result. *Why it is not a choice made on our method's results:* it applies identically to every
+arm; it changes no score, weight, budget or recovery setting; it makes the comparison arms
+stronger, which works against H1, not for it. *Reporting:* session 1's results stay committed,
+moved unchanged to `results/superseded/inner_units_removable/` and marked superseded ("units of
+protected layers removable, exploratory, outside H1-H4"); the paper reports them in an appendix
+as what happens without full protection. *How:* `removal_order` leaves out every unit of a
+protected layer, `validate_removal_set` refuses a removal set that touches one, stage 05 stops on
+such a set, the protected layers are found from every unit type (an arm without whole-layer units,
+A6 `heads_channels`, protected nothing before), and every pruning run writes the share of its
+removed parameters per decoder layer (`removal_by_layer.csv`). E7's committed scores stay: the
+units of protected layers are left out of the order, the rest keeps its order (per-parameter
+normalisation is per unit).
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result

@@ -215,6 +215,16 @@ def protected_layers_table(rows: pd.DataFrame) -> str:
     return tabular(header, table or [[MISSING] * len(header)])
 
 
+def write_without_full_protection(rows: pd.DataFrame, tables_dir: Path) -> Path:
+    """``appendix_without_full_protection.tex``: the runs made while the units inside the
+    protected layers were removable (RC-G2 session 1; superseded by the amendment of
+    2026-11-16), as :func:`protected_layers_table` shows them. Exploratory, outside H1-H4."""
+    path = Path(tables_dir) / "appendix_without_full_protection.tex"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(protected_layers_table(rows), encoding="utf-8")
+    return path
+
+
 def selection_table(rows: pd.DataFrame) -> str:
     """Round 0 student checks (D05 amendment): one row per candidate."""
     from medcompress.selection.driver import PEAK_MEMORY_METRIC

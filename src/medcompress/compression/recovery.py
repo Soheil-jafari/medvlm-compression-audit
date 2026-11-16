@@ -94,9 +94,10 @@ def plan_removal(
     """
     from medcompress.compression.pruning.criteria.common import removal_order
     from medcompress.compression.pruning.criteria.output_similarity import protected_layer_indices
-    from medcompress.compression.pruning.units import UnitType
 
-    n_layers = len({u.layer_index for u in units if u.unit_type is UnitType.DECODER_LAYER})
+    # the decoder's layers from every unit type: an arm without whole-layer units (A6
+    # heads_channels) protected nothing when only layer units were counted (2026-11-16)
+    n_layers = len({u.layer_index for u in units})
     protected = (
         protected_layer_indices(n_layers, settings.protected_first, settings.protected_last)
         if n_layers
@@ -252,6 +253,12 @@ def run_prune_and_recover(
         mlp_channel_group_size=scoring.mlp_channel_group_size,
     )
     parameters_before = count_parameters(base)
+    from medcompress.compression.pruning.surgery import find_decoder_stack
+
+    layer_sizes = {i: sum(p.numel() for p in layer.parameters())
+                   for i, layer in enumerate(find_decoder_stack(base.module
+                                                                if hasattr(base, "module")
+                                                                else base).layers)}  # fmt: skip
     from medcompress.models.loading import release_model
 
     release_model(base)  # its GPU memory is freed before the search loads its own copies
@@ -284,6 +291,12 @@ def run_prune_and_recover(
     )  # fmt: skip
     if search.count == 0:
         raise ValueError(f"{run.budget} asks for no compression: E2 already meets the target")
+    touching = sorted(u.unit_id for u in search.removal if u.layer_index in set(protected))
+    if touching:  # never reached through the order; refused all the same (2026-11-16)
+        raise ValueError(
+            f"the removal set touches the protected layers {sorted(protected)}: {touching[:5]} "
+            "(amendment of 2026-11-16: no unit of them is removed)"
+        )
 
     model = factory()
     remove_units(model, list(search.removal))
@@ -319,7 +332,8 @@ def run_prune_and_recover(
     from medcompress.compression.distillation.resume import ResumeStore
 
     ResumeStore(resume_dir, "").clear()
-    _write_outputs(config, run, settings, search, check, result, recovery, protected)
+    _write_outputs(config, run, settings, search, check, result, recovery, protected,
+                   layer_sizes)  # fmt: skip
     print(
         f"removed {len(search.removal)} units for {run.budget}: footprint {search.footprint:.4g} "
         f"vs target {search.target:.4g} "
@@ -397,6 +411,24 @@ def _default_measure(
     )
 
 
+def removal_by_layer(
+    layer_sizes: Mapping[int, int], removal: Sequence[PrunableUnit]
+) -> list[tuple[int, int, int, float, float]]:
+    """One row per decoder layer: its parameters, the parameters removed from it, their share of
+    everything removed and of the layer (2026-11-16: session 1 removed most of its units inside
+    the first and last layers; this table shows such a concentration at once). A removed layer
+    counts whole; its inner units are absorbed. The removed parameters sum to the total."""
+    removed: dict[int, int] = {}
+    for unit in removal:
+        removed[unit.layer_index] = removed.get(unit.layer_index, 0) + unit.num_params
+    total = sum(removed.values())
+    return [
+        (index, params, removed.get(index, 0), removed.get(index, 0) / total if total else 0.0,
+         removed.get(index, 0) / params if params else 0.0)
+        for index, params in sorted(layer_sizes.items())
+    ]  # fmt: skip
+
+
 def _write_outputs(
     config: Mapping[str, Any],
     run: RunContext,
@@ -406,6 +438,7 @@ def _write_outputs(
     result: TrainResult,
     recovery: Mapping[str, Any],
     protected: Sequence[int] = (),
+    layer_sizes: Mapping[int, int] | None = None,
 ) -> None:
     """Write ``removal.json``, ``budget_search.csv`` and the metrics rows of the run.
 
@@ -441,6 +474,10 @@ def _write_outputs(
     write_json({"nonfinite_steps": list(result.nonfinite_steps),
                 "skipped_steps": list(result.skipped_steps)},
                run_dir / "recovery_steps.json")  # fmt: skip
+    if layer_sizes:
+        write_csv(run_dir / "removal_by_layer.csv",
+                  ["layer_index", "layer_params", "removed_params", "share_of_removed",
+                   "share_of_layer"], removal_by_layer(layer_sizes, search.removal))  # fmt: skip
     kinds = {t: sum(1 for u in search.removal if u.unit_type is t) for t in UnitType}
     inside = [u for u in search.removal if u.layer_index in set(protected)]
     numbers: list[tuple[str, float]] = [
