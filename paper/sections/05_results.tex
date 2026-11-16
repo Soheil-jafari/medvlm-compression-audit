@@ -94,6 +94,19 @@
 \subsection{Efficiency and external test}
 % TODO: measured footprints; low-precision kernel check; external test.
 \todo{efficiency}
+The latency of the GPTQ arms (\expid{E3} \texttt{w4}/\texttt{w8}, \expid{E8}, \expid{E9},
+\expid{E10Q}) is measured with GPTQModel's pure-PyTorch \texttt{TorchLinear} kernel, the
+class a pre-registered smoke test chose on the T4; a fused low-bit kernel would be faster.
+Their memory and accuracy do not depend on the kernel.
+
+\begin{table}[t]
+  \centering
+  \caption{Budget matching: each budget-matched run's target, the footprint its search
+  measured for the chosen removal (the gap and the tolerance refer to it), and the
+  benchmark peak of the saved model.}
+  \label{tab:budget-match}
+  \resizebox{\linewidth}{!}{\input{tables/budget_match}}
+\end{table}
 
 \begin{table}[t]
   \centering

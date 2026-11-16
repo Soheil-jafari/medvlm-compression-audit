@@ -148,6 +148,49 @@ def metric_value(report: EfficiencyReport, metric: str) -> float:
     return float(value)
 
 
+LEVEL_TOLERANCE = 0.01
+"""The unpruned model's first footprint in a budget search must match the reference within 1 %
+(2026-11-15: a 0.59 GiB leftover lifted every footprint of the search by 0.63e9 bytes)."""
+
+
+class BudgetLevelError(ValueError):
+    """The search's measurement of the unpruned model is not on the reference's footing."""
+
+
+def reference_protocol(results_root: Path | str, reference_experiment: str,
+                       seed: int = 0) -> dict[str, Any] | None:  # fmt: skip
+    """The measurement protocol recorded with the reference's footprint (None if not recorded)."""
+    import json
+
+    path = (Path(results_root) / reference_experiment / "nobudget" / f"seed{seed}"
+            / "efficiency_setup.json")  # fmt: skip
+    if not path.is_file():
+        return None
+    return dict(json.loads(path.read_text(encoding="utf-8")).get("protocol") or {})
+
+
+def same_protocol(protocol: Mapping[str, Any], recorded: Mapping[str, Any] | None) -> bool:
+    """True when a measurement uses the reference's protocol (or the reference recorded none)."""
+    if recorded is None:
+        return True
+    keys = ("batch_size", "max_new_tokens", "warmup_runs", "repeats", "samples")
+    return all(str(protocol.get(k)) == str(recorded.get(k)) for k in keys if k in recorded)
+
+
+def check_level(unpruned: float, reference: float, *, tolerance: float = LEVEL_TOLERANCE) -> float:
+    """The relative gap of the unpruned model's measured footprint from the reference; raise
+    :class:`BudgetLevelError` above ``tolerance`` (the search would aim at a shifted target)."""
+    gap = (unpruned - reference) / reference
+    if abs(gap) > tolerance:
+        raise BudgetLevelError(
+            f"the unpruned model measures {unpruned:.6g} in this process, the reference "
+            f"{reference:.6g} ({gap:+.2%}, more than {tolerance:.0%}): every footprint of the "
+            "search would be shifted by the same amount, so the search stops before its first "
+            "step (memory left by an earlier load, or another protocol)"
+        )
+    return gap
+
+
 def report_for_metric(metric: str, value: float) -> EfficiencyReport:
     """A report that holds only ``value`` as the budget metric (for a stored reference number)."""
     if metric not in _REPORT_FIELD:

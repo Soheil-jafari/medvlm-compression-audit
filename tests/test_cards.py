@@ -398,7 +398,7 @@ def test_rc_g2_runs_in_sessions_with_only_and_one_handoff_per_run(
     assert [h.name for h in last.handoffs] == ["G2_B2_seed0_pruned_E7"]
     with pytest.raises(CardError, match="unknown choice"):
         build_plan("RC-G2", only=["E8"])
-    with pytest.raises(CardError, match="--only is for RC-G2"):
+    with pytest.raises(CardError, match="--only takes 'benchmark'"):
         build_plan("RC-E3", 0, only=["E6"])
     done = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "run_card.py"), "--card", "RC-G2", "--only",
@@ -455,3 +455,23 @@ def test_e9_reuses_the_quantized_handoff(tmp_path: Path, attached: bool) -> None
     expected = ["scripts/06_evaluate.py", "scripts/07_benchmark_efficiency.py"]
     expected.extend(["scripts/06_evaluate.py"] * 2)
     assert calls == (expected if attached else ["scripts/03_quantize.py", *expected])
+
+
+def test_the_benchmark_alone_runs_again_from_the_saved_hand_off() -> None:
+    """2026-11-15: RC-E3 seed 0's and E9's peaks included the replaced fp16 weights; the timing
+    pass alone runs again from the quantized hand-off, without quantizing or evaluating."""
+    e3 = build_plan("RC-E3", 0, only=["benchmark"])
+    assert [s.argv[0] for s in e3.steps] == ["scripts/07_benchmark_efficiency.py"] * 3
+    assert [s.argv[s.argv.index("--variant") + 1] for s in e3.steps] == ["w4", "w8", "w8a8"]
+    assert {(n.kind, n.run.label if n.run else None) for n in e3.needs} == {
+        ("adapter", "E2 seed0"), ("quantized", "E3 w8 seed0"), ("quantized", "E3 w4 seed0"),
+        ("quantized", "E3 w8a8 seed0"),
+    }  # fmt: skip
+    assert not e3.handoffs and e3.quantization and e3.tag == "RC-E3_seed0"
+    e9 = build_plan("RC-E9", only=["benchmark"])
+    assert [s.label for s in e9.steps] == ["benchmark E9 seed0"] and e9.gpus == 2
+    assert {n.kind for n in e9.needs} == {"teacher_adapter", "quantized"} and e9.tag == "RC-E9"
+    with pytest.raises(CardError, match="takes 'benchmark'"):
+        build_plan("RC-E3", 0, only=["validation"])
+    with pytest.raises(CardError, match="--only is for RC-G2"):
+        build_plan("RC-E4", 0, only=["benchmark"])

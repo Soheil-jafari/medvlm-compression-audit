@@ -162,13 +162,15 @@ def release_and_verify(model: Any, what: str, limit_bytes: int = 1 << 30) -> Non
                        f"largest live CUDA tensors (bytes, shape, dtype): {live}")  # fmt: skip
 
 
-def removal_from_a_fresh_load(factory: Callable[[], Any], config: Mapping[str, Any]) -> list[Any]:
-    """Load the student, take the B2-level magnitude removal set, release the model and check
-    the GPU is empty again before anything else loads."""
+def removal_from_a_fresh_load(
+    factory: Callable[[], Any], config: Mapping[str, Any]
+) -> tuple[list[Any], int]:
+    """Load the student, take the magnitude sequence and the B2-level prefix length, release the
+    model and check the GPU is empty again before anything else loads."""
     model = factory()
-    removal = magnitude_removal(model, config, b2_fraction(config))
+    accepted, count = magnitude_sequence(model, config, b2_fraction(config))
     release_and_verify(model, "the budget-search check's first load")
-    return removal
+    return accepted, count
 
 
 def magnitude_removal(model: Any, config: Mapping[str, Any], fraction: float) -> list[Any]:
@@ -176,6 +178,19 @@ def magnitude_removal(model: Any, config: Mapping[str, Any], fraction: float) ->
     removal rules, the shortest
     prefix that removes at least ``fraction`` of the decoder's parameters (a parameter count,
     an estimate of the level: the stages measure the footprint instead)."""
+    from medcompress.compression.pruning.criteria.common import removal_set
+
+    accepted, count = magnitude_sequence(model, config, fraction)
+    return removal_set(accepted, count)
+
+
+def magnitude_sequence(
+    model: Any, config: Mapping[str, Any], fraction: float
+) -> tuple[list[Any], int]:
+    """``(the feasible removal sequence, the prefix length that reaches ``fraction``)``: what a
+    budget search walks along. Its prefixes, not slices of a removal set, are what the search
+    measures (2026-11-16: a removal set lists whole layers after the inner units they absorb, so
+    a slice of it jumped by six layers at once, 1.02e9 bytes)."""
     from medcompress.compression.pruning.criteria import CRITERIA
     from medcompress.compression.pruning.criteria.common import feasible_sequence, removal_set
     from medcompress.compression.pruning.units import UnitType, enumerate_units
@@ -198,7 +213,7 @@ def magnitude_removal(model: Any, config: Mapping[str, Any], fraction: float) ->
             high = mid
         else:
             low = mid
-    return removal_set(accepted, high)
+    return accepted, high
 
 
 def b2_fraction(config: Mapping[str, Any]) -> float:
@@ -324,6 +339,7 @@ def check_budget_search(config: Mapping[str, Any], result: CheckResult, *, loads
     from dataclasses import replace
 
     from medcompress.budgets import make_removal_measurer
+    from medcompress.compression.pruning.criteria.common import removal_set
     from medcompress.compression.recovery import _student_factory, read_prune_settings
     from medcompress.config import RunContext, load_config
     from medcompress.data.prepared import load_prepared
@@ -333,7 +349,7 @@ def check_budget_search(config: Mapping[str, Any], result: CheckResult, *, loads
     settings = read_prune_settings(config, run, need_protocol=True)
     factory = _student_factory(config, run)
     paths = config["paths"]
-    removal = removal_from_a_fresh_load(factory, config)  # like stage 05's first load
+    accepted, count = removal_from_a_fresh_load(factory, config)  # like stage 05's first load
     protocol = replace(settings.protocol, samples=2, warmup_runs=0, repeats=1)
     dataset = load_config(config["components"]["datasets"]["train_qa"])["dataset"]
     pool = load_prepared(Path(paths["data_root"]), dataset, Path(paths["private_root"]))["val"]
@@ -345,19 +361,52 @@ def check_budget_search(config: Mapping[str, Any], result: CheckResult, *, loads
     live.add(_gpu_allocated())
     # a production search's order of sizes: the two end points, then bisection (14 in all)
     steps = (16, 0, 8, 12, 10, 11, 9, 4, 6, 5, 7, 2, 3, 1)
-    sizes = [len(removal) * k // 16 for k in steps][: max(loads - 1, 1)]
+    sizes = [count * k // 16 for k in steps][: max(loads - 1, 1)]
     _reset_peak()
     for number, size in enumerate(sizes, 2):
-        value = measure(removal[:size]) if size else measure([])
+        removal = removal_set(accepted, size)  # a prefix of the order, as the search measures
+        value = measure(removal) if removal else measure([])
         host.add(host_rss_bytes())
         live.add(_gpu_allocated())
         left = (live.readings[-1] if live.readings else 0) / GIB
-        result.note(f"load {number}: {size} units removed, footprint {value:.4g}, allocated "
+        result.note(f"load {number}: {size} units of the order ({len(removal)} after layers "
+                    f"absorb), footprint {value:.4g}, allocated "
                     f"after the release {left:.2f} GiB")  # fmt: skip
     result.numbers["loads"] = float(len(sizes) + 1)
+    level_check(config, factory, settings, pool, result)  # after the loads: memory left behind
     if live.readings and max(live.readings) > 1 << 30:
         result.fail(f"{max(live.readings) / GIB:.2f} GiB of live tensors left after a release")
     judge(result, [host, live], _peak_gib())
+
+
+def level_check(config: Mapping[str, Any], factory: Callable[[], Any], settings: Any,
+                pool: Sequence[Any], result: CheckResult) -> None:  # fmt: skip
+    """The unpruned model measured with the reference's full protocol in this process, after the
+    earlier loads, must match E2's reference within 1 % (2026-11-15: the 0.59 GiB leftover lifted
+    every footprint by 0.63e9 bytes; stage 05 stops on the same rule)."""
+    from medcompress.budgets import (
+        BudgetLevelError,
+        check_level,
+        make_removal_measurer,
+        metric_value,
+        reference_report,
+    )
+    from medcompress.evaluation.efficiency import timing_samples
+
+    paths = config["paths"]
+    full = make_removal_measurer(factory, timing_samples(pool, settings.protocol),
+                                 settings.protocol, Path(paths["data_root"]),
+                                 settings.spec.metric)  # fmt: skip
+    unpruned = float(full([]))
+    expected = metric_value(reference_report(paths["results_root"], "E2"), settings.spec.metric)
+    result.numbers.update(unpruned_footprint=unpruned, reference_footprint=expected)
+    try:
+        gap = check_level(unpruned, expected)
+        result.note(f"level check: the unpruned model measures {unpruned:.6g} after "
+                    f"{int(result.numbers.get('loads', 0))} loads, E2's reference {expected:.6g} "
+                    f"({gap:+.2%}, within 1 %)")  # fmt: skip
+    except BudgetLevelError as exc:
+        result.fail(f"level check: {exc}")
 
 
 def check_recovery(config: Mapping[str, Any], result: CheckResult, *, updates: int) -> None:

@@ -172,5 +172,7 @@ Reported by Soheil on 2026-11-14 (run on account 3). All steps ok.
   hallucination rate 0.029.
 - Benchmark (development timing, one T4): 2,127,532,032 parameters; state 4.26 GB; peak memory
   4.38 GB; warm latency 0.668 s, cold 1.974 s.
-- Hand-off: private dataset `e10-seed0-adapter`.
+- Hand-off: private dataset `e10-seed0-adapter` on Soheil's account, holding `E10_seed0_adapter`
+  (uploaded on 2026-11-15 from the RC-E10 version's output: Kaggle attaches only a notebook's
+  latest version).
 - Anything unusual: nothing reported.

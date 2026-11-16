@@ -10,9 +10,14 @@ trained on the ground-truth answers alone (\expid{E1}) or with offline distillat
 from the cached teacher outputs (\expid{E2}). \expid{E2} is the starting point of every
 compression arm, and its measured peak inference memory defines the budgets: B1, B2
 and B3 are fixed fractions of it, set in the pre-registration before any
-compression run. Budget-matched arms must land within a pre-registered tolerance of
-the target on both sides, measured on the same hardware with the same protocol;
-parameter counts are reported but never used for matching. Every training arm is
+compression run. A pruning arm's budget search removes units in its criterion's order
+and keeps the smallest removal whose measured footprint is at or below the target
+times $1.03$ (the pre-registered tolerance of 3\%), so an arm lands between $0$ and
+$+3\%$ above the target, or below it when the last unit crosses the target; a run
+outside $\pm3\%$ is reported and marked. Footprints are measured on the same hardware
+with the same protocol, and each arm's measured footprint and its gap to the target are
+reported (Table~\ref{tab:budget-match}); parameter counts are reported but never used
+for matching. Every training arm is
 run with three seeds. All decisions that could favour one arm (finding list, finding
 weights, lesion-size strata, budgets, statistical tests, the rule that picks the
 best generic pruning arm) are frozen before the first compression run.
@@ -93,7 +98,11 @@ it, so removing a group never leaves a query head without its key and value. MLP
 channel groups are contiguous blocks of intermediate channels of a pre-registered
 size. A removal set is valid when every remaining layer keeps at least one attention
 group and one channel group, no unit is counted twice, and layers that inject
-visual features (where the architecture has them) are protected.
+visual features (where the architecture has them) are protected. For every arm, the
+first two and the last decoder layer are never removed as whole layers; the
+attention groups and channel groups inside them remain removable like any other
+unit (pre-registered with the removal rules, before any score existed). Each run
+reports how many of its removed units lie inside these three layers.
 
 \subsection{Clinically weighted pruning criterion}
 Let $C$ be the pre-registered finding list and $X_{\mathrm{cal}}$ a calibration set

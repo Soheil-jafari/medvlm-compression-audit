@@ -142,3 +142,12 @@ def test_the_peaks_are_printed_only_for_rc_smoke(
     loading.peak_after_load("x")
     loading.print_stage_peak("s")
     assert capsys.readouterr().out == ""
+
+
+def test_a_single_job_runs_with_what_it_reads() -> None:
+    jobs = smoke.smoke_jobs()
+    picked = smoke.with_dependencies(jobs, None, ["E7"])
+    assert [j.name for j in picked if j.lane != "pre"] == ["E7"]
+    assert all(j.lane == "pre" or j.name == "E7" for j in picked)
+    with pytest.raises(ValueError, match="unknown smoke jobs"):
+        smoke.with_dependencies(jobs, None, ["E77"])

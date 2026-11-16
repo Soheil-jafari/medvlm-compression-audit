@@ -148,3 +148,30 @@ def test_session_seconds_add_up_over_sessions(tmp_path: Path) -> None:
     with (tmp_path / "E0/nobudget/seed0/metrics.csv").open() as handle:
         rows = [r for r in csv.DictReader(handle) if r["metric"] == "teacher_cache_seconds"]
     assert len(rows) == 1 and float(rows[0]["value"]) == 150.0
+
+
+def test_the_protected_layers_table_lists_each_pruning_run() -> None:
+    from medcompress.evaluation.appendix import protected_layers_table, updates_table
+
+    rows = pd.DataFrame([
+        {"experiment": "E7", "budget": "B2", "seed": 0, "metric": m, "value": v}
+        for m, v in (("removed_units", 994), ("removed_units_in_protected_layers", 64),
+                     ("removed_params_in_protected_layers", 60), ("parameters_before", 1000),
+                     ("parameters_after", 0))
+    ])  # fmt: skip
+    table = protected_layers_table(rows)
+    assert "E7 @B2 seed 0 & 994 & 64 & 0.060" in table
+    assert "--" in protected_layers_table(pd.DataFrame(columns=rows.columns))
+    assert "--" in updates_table(rows)  # no training rows: the placeholder row
+
+
+def test_the_budget_match_table_shows_each_run_and_its_gap() -> None:
+    from medcompress.evaluation.report import budget_match_table
+
+    rows = pd.DataFrame([
+        {"experiment": "E5:magnitude", "budget": "B2", "seed": 0, "metric": m, "value": v}
+        for m, v in (("budget_target", 5.9536e9), ("budget_footprint", 6.0412e9),
+                     ("budget_relative_gap", 0.0147), ("budget_within_tolerance", 1.0))
+    ])  # fmt: skip
+    table = budget_match_table(rows)
+    assert "E5:magnitude seed 0 & B2 & 5.954 & 6.041 & +1.47\\% & yes & --" in table

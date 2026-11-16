@@ -404,7 +404,10 @@ def report_text(session: Session) -> str:
     ]
     lines.append("- Peak GPU memory (from the results files):")
     lines += [f"  - {p}" for p in session.peaks] or ["  - none recorded"]
-    lines.append("- Hand-offs (each folder = ONE private Kaggle dataset; write its name here):")
+    lines.append(
+        "- Hand-offs (save the whole handoff folder of this session as ONE private Kaggle "
+        "dataset; each folder inside is found by its manifest; write its name here):"
+    )
     lines += [f"  - {h}" for h in session.handoffs] or ["  - none"]
     lines.append(
         f"- Results files to commit ({len(session.results)}; copies in "

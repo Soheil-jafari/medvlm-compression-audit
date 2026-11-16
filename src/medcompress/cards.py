@@ -230,6 +230,35 @@ def _g2_scores_committed() -> bool:
     ).is_file()
 
 
+BENCHMARK_ONLY_CARDS: tuple[str, ...] = ("RC-E3", "RC-E9")
+"""Cards whose benchmark can run again alone from their saved quantized hand-off (2026-11-15:
+RC-E3 seed 0's and E9's peaks included the replaced fp16 weights; re-measured with the fix)."""
+
+
+def benchmark_only_plan(card: str, seed: int | None, variants: Sequence[str] | None) -> CardPlan:
+    """Stage 07 alone for the runs of ``card``, from the attached quantized hand-off and the
+    parent's adapter: no quantization, no evaluation. Its ``efficiency.csv`` replaces the earlier
+    one as a dated re-measurement; the metrics files stay as committed."""
+    if card == "RC-E3":
+        s = _seed(card, seed, SEEDS)
+        runs = [Run("E3", s, variant=v) for v in (_pick(E3_VARIANTS, variants) if s == 0
+                                                  else ("w8",))]  # fmt: skip
+        parent: tuple[Need, ...] = (Need("adapter", Run("E2", s)),)
+        gpus, title, plan_seed = 1, f"E3 benchmark only, seed {s}", s
+    else:
+        _no_seed(card, seed)
+        runs, parent = [Run("E9")], (Need("teacher_adapter"),)
+        gpus, title, plan_seed = 2, "E9 benchmark only", None
+    steps = tuple(
+        Step(f"benchmark {run.label}", _script("07_benchmark_efficiency.py", *run.args()))
+        for run in runs
+    )
+    needs = (*parent, *(Need("quantized", run) for run in runs))
+    note = "re-measures efficiency.csv from the saved hand-off (2026-11-15)"
+    return CardPlan(card, title, gpus, steps, needs=needs, seed=plan_seed, quantization=True,
+                    internet=True, notes=(note,))  # fmt: skip
+
+
 def g2_plan_parts(only: Sequence[str] | None) -> tuple[tuple[str, ...], tuple[Step, ...],
                                                          tuple[Handoff, ...]]:  # fmt: skip
     """The parts, steps and hand-offs of an RC-G2 session (``--only``; see :data:`G2_PARTS`).
@@ -332,8 +361,13 @@ def build_plan(
     """The plan of ``card`` (for ``seed`` where the card is split by seed). ``only``: the parts
     of RC-G2 to run in this session (:data:`G2_PARTS`)."""
     card = card.upper()
+    if only and card in BENCHMARK_ONLY_CARDS:
+        if list(only) != ["benchmark"]:
+            raise CardError(f"{card}: --only takes 'benchmark' (the timing pass alone)")
+        return benchmark_only_plan(card, seed, variants)
     if only and card != "RC-G2":
-        raise CardError("--only is for RC-G2 (use --variant / --budget for the other cards)")
+        raise CardError("--only is for RC-G2 and, with 'benchmark', for "
+                        f"{', '.join(BENCHMARK_ONLY_CARDS)}")  # fmt: skip
     picked_budgets = _pick(BUDGETS, budgets)
     if card == "RC-D1":
         _no_seed(card, seed)

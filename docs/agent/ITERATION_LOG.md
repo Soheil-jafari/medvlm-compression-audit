@@ -1483,3 +1483,27 @@ Append-only, newest at the bottom. One entry per iteration:
   process's allocator; the release clears hooks and loose tensors, synchronizes, empties the cache,
   prints allocated / reserved and the largest survivors once. The 15-load test checks live tensors
   too. RC-SCALE `budget_search` now runs 14 measurements and fails on live memory after a release.
+- RC-G2 session 3 rerun (Amir, 9069603): E7 seed 0's six score files committed unchanged
+  (SHA-256 checked); section 6 filled. Protected layers: the code protects whole-layer removal
+  only; a B2-sized removal would take 41 of layer 35's 86 MLP groups. Raised as an open question
+  before session 4.
+
+## Iteration 88: 2026-11-15 (interactive)
+- RC-E3 seed 0 (account 3, 14f69c9): 18 files committed unchanged; section 6; hand-offs
+  `e3-seed0-handoff` and `e10-seed0-adapter` recorded.
+- Protected layers: the current reading stands (clarification of 2026-11-15); methods text; every
+  pruning run records `removed_units_in_protected_layers` (appendix table).
+- Efficiency: replaced fp16 modules freed during the swap; the meter subtracts memory that is not
+  the model's from the peak; logical `num_parameters`; `--only benchmark` for RC-E3 and RC-E9.
+  Kernel options from the GPTQModel 7.6.0 source written for Soheil (no change).
+- Budget search: footprints on a fresh process's footing; stage 05's 1 % level check against E2's
+  reference; the same in RC-SCALE. The smoke can run one job (`--job E7`). Tests.
+
+## Iteration 89: 2026-11-16 (interactive)
+- Committed unchanged: RC-E3 seed 0's re-measured benchmark (3 files), RC-G2 session 1 (18
+  files and the run report), RC-E9 (6 files; its peak flagged until re-measured). Sections 6.
+- One hand-off dataset per RC-G2 session; a test that a combined dataset's folders are found by
+  manifest. Kernel kept; budget rule stated in the methods; `budget_match.tex`.
+- Non-finite recovery steps: `scripts/check_nonfinite_steps.py` (CPU) and `recovery_steps.json`.
+  Footprint jump: the scale check's slicing of a removal set; B1 not at risk; the check now
+  measures prefixes of the order. Tests.

@@ -115,12 +115,18 @@ two readings took 6.5 and 5.4 min, model load included): **S about 1.4 h (E5, E7
 
 | Session | `--only` | Attach (Add Input) | Estimate | Save as private datasets afterwards | Send to the agent |
 |---|---|---|---|---|---|
-| 1 | `E5:magnitude`, `E5:activation` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` | about 6.3 h (2 x (1.4 + 1.2 + 0.53)) | `g2-b2-seed0-pruned-e5-magnitude`, `g2-b2-seed0-pruned-e5-activation` (folders `G2_B2_seed0_pruned_E5_magnitude`, `..._E5_activation`) | `results_to_commit/`, the run report |
-| 2 | `E5:taylor`, `E6` | the same three | about 5.6 h (3.1 + 0.8 + 1.2 + 0.53) | `g2-b2-seed0-pruned-e5-taylor`, `g2-b2-seed0-pruned-e6` | the same |
+| 1 | `E5:magnitude`, `E5:activation` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` | about 6.3 h (2 x (1.4 + 1.2 + 0.53)) | **one** dataset `g2-b2-seed0-pruned-s1` (saved as `g2-b2-seed0-pruned-e5` before the rename of 2026-11-16) holding both folders `G2_B2_seed0_pruned_E5_magnitude` and `G2_B2_seed0_pruned_E5_activation` | `results_to_commit/`, the run report |
+| 2 | `E5:taylor`, `E6` | the same three | about 5.6 h (3.1 + 0.8 + 1.2 + 0.53) | **one** dataset `g2-b2-seed0-pruned-s2` holding `G2_B2_seed0_pruned_E5_taylor` and `G2_B2_seed0_pruned_E6` | the same |
 | 3 | `E7:scores` | `medcompress-data`, `e2-seed0-adapter` | about 8 h (108 layers and KV groups scored exactly, 640 probes x 0.414 s each, plus loading) | none (the scores are results files) | `results_to_commit/` (E7's `unit_scores.csv`, `unit_effects.csv`, their settings files and `metrics.csv`), the run report: **commit before session 4** |
-| 4 | `E7`, `E7:check` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` | about 5.3 h (1.4 + 1.2 + 0.53 + 2.2 for the check; the scores are reused) | `g2-b2-seed0-pruned-e7` | `results_to_commit/` (with `first_order_check.csv`), the run report |
+| 4 | `E7`, `E7:check` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` | about 5.3 h (1.4 + 1.2 + 0.53 + 2.2 for the check; the scores are reused) | **one** dataset `g2-b2-seed0-pruned-s4` holding `G2_B2_seed0_pruned_E7` | `results_to_commit/` (with `first_order_check.csv`), the run report |
 
-In all about 25 GPU h (estimate). Keep the five datasets on Soheil's account: the cards that
+**One dataset per session (2026-11-16):** Kaggle makes one dataset from a notebook's output, so a
+session's pruned models are saved together: save the whole `/kaggle/working/handoff/` folder as
+`g2-b2-seed0-pruned-s<k>`. When that dataset is attached, the runner finds each model folder by its
+own manifest and a card reads only the folders it needs (`tests/test_inputs.py`). Session 1's
+dataset was saved as `g2-b2-seed0-pruned-e5`; either name works, the manifests decide.
+
+In all about 25 GPU h (estimate). Keep the three datasets (`-s1`, `-s2`, `-s4`) on Soheil's account: the cards that
 read them run there (the B2 test evaluations, `--card RC-E5 / RC-E6 / RC-E7 --seed 0 --budget
 B2` with them attached, and RC-E8 at B2; `docs/schedule.md` section 7, "Datasets").
 
@@ -139,6 +145,13 @@ empties the cache, prints allocated and reserved memory, and prints the largest 
 The cause of the 0.59 GiB was not reproduced on the CPU (the same loads leave nothing there);
 the survivor print names it on the GPU. **Run RC-SCALE's `budget_search` (14 measurements)
 first** (RC-SCALE section 3), then session 1 again with the cell below.
+
+**Before session 1 (2026-11-15):** the budget search's footprints were offset by 0.59 GiB left
+by earlier loads (RC-SCALE section 6, third run). Fixed: the footprint excludes memory that is not
+the model's, and stage 05 measures the unpruned model first and stops unless it matches E2's
+reference within 1 % (a line "level check: ..." in the log). Run RC-SCALE's `budget_search`
+(fourth run, RC-SCALE section 3) first; when it passes, run session 1 with the cell below (Soheil,
+T4 x2, attach `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`; about 6.3 h, estimate).
 
 Session 1:
 
@@ -331,3 +344,95 @@ settings are fixed before the run.
 - Name of the private datasets with the pruned models and `outcomes.npz` files:
 - The 30-group check: `first_order_check:spearman` and the step's wall time:
 - Anything unusual (errors, retries, changed settings):
+
+**Session 3 rerun (`--only E7:scores`), reported by Amir on 2026-11-14 (commit 9069603; T4 x2, the
+runner used one T4):** all steps ok.
+
+- Library versions: torch 2.11.0+cu130, transformers 5.19.0, peft 0.21.2, accelerate 1.15.0,
+  safetensors 0.8.0.
+- Inputs verified: the shared data (commit 4038a6b) and the E2 seed-0 adapter.
+- Scoring: 3,204 units (36 layers and 72 KV groups exactly, 3,096 MLP channel groups first-order)
+  on 128 calibration images in 5,908 s (100.2 min with loading); scoring peak 8,284,429,824 bytes
+  (8.28 GB); the exact effects were saved before the first-order pass; first-order memory flat at
+  7.01 GiB. Settings as frozen (`unit_scores.settings.json`: clinical weights, logprob_drop,
+  signed effects, 1 negative per positive, batch 4, parent adapter 7a690940...).
+- Files committed unchanged (SHA-256 checked against the attached files):
+  `results/E7/nobudget/seed0/` `environment.json`, `metrics.csv`, `unit_scores.csv`,
+  `unit_scores.settings.json`, `unit_effects.csv`, `unit_effects.settings.json`.
+- Hand-offs: none (the scores are results files).
+- Note (agent, 2026-11-15) on the protected layers: the code keeps layers 0, 1 and 35 from being
+  removed **as whole layers** (`plan_removal` drops them from the removal order and
+  `validate_removal_set` refuses them); their KV groups and MLP channel groups stay removable, for
+  every arm alike. With these scores the first unit of the order is `lm.layer35.mlp_group65`, and a
+  removal sized to B2 by parameter count (an estimate; the search measures memory) holds 64 units
+  inside the protected layers: 41 of layer 35's 86 MLP groups, 21 of layer 0's, 2 of layer 1's
+  (6.0 % of the removed parameters). Raised with Soheil and Amir before session 4 (decisions log,
+  2026-11-15).
+
+**Session 1 (`--only E5:magnitude --only E5:activation`), reported by Soheil on 2026-11-16
+(commit 4f54655; T4 x2, one T4 used):** all steps ok (magnitude 206.3 min, activation 181.8 min).
+18 files committed unchanged (SHA-256 checked against the attached files) under
+`results/E5/{magnitude,activation}/{nobudget,B2}/seed0/`, and the run report as
+`docs/runs/reports/run_report_RC-G2_s1.md` (the same file as the attached
+`run_report_RC-G2.md`, renamed so later sessions do not overwrite it).
+
+- Level check (stage 05, both runs): the unpruned model measured 7.61257e9 against E2's
+  reference 7.61847e9 (-0.08 %, within 1 %).
+- Budget search (B2 target 5.954e9; the smallest removal at or below target x 1.03):
+  magnitude 220 units (7 layers, 19 KV groups, 194 channel groups), footprint 6.041e9 (+1.47 %),
+  13 measurements; activation 281 units (6 layers, 15 KV groups, 260 channel groups), 6.131e9
+  (+2.98 %), 12 measurements. Both within the 3 % tolerance. Benchmark peaks: magnitude
+  6,041,026,208, activation 6,129,130,144 bytes (about 0.095 GB above their state bytes).
+- Units inside the protected layers 0, 1, 35 (removable unit by unit): magnitude 171 of 220
+  (138.4 M parameters), activation 172 of 281 (143.1 M).
+- Recovery (157 updates): 5 steps with a non-finite loss in each run, 13 (magnitude) and 15
+  (activation) updates skipped by the loss scaler (the non-finite steps among them; the rest
+  in the first updates while the scale settles); peaks 10.18 and 10.42 GB; 3,281 s and 3,362 s.
+  The non-finite steps came at the same points in both runs (one by step 25, two by 50, three by
+  75, five by 125): both runs visit the pool in the same order (seed 0). Whether they are the
+  steps that hold the 24 training images with a non-finite fp16 vision output (RC-CAL0) is
+  checked by `scripts/check_nonfinite_steps.py` (decisions log, 2026-11-16).
+- Validation: op macro balanced accuracy magnitude 0.598, activation 0.572 (E2 seed 0: 0.836);
+  op small-finding recall 0.692 and 0.538; small-finding recall at the default threshold 0.0 and
+  lesion-mask effect 0.0 for both.
+- Hand-off: both pruned models in **one** private dataset, `g2-b2-seed0-pruned-e5` (Soheil's
+  account), holding `G2_B2_seed0_pruned_E5_magnitude` (5.95 GB) and
+  `G2_B2_seed0_pruned_E5_activation` (6.03 GB); the runner finds each by its manifest.
+
+**The non-finite recovery steps, a CPU check (2026-11-16).** Soheil's account, Kaggle CPU (no
+GPU needed), Internet on; attach `medcompress-data` and a private dataset holding RC-CAL0's
+`vision_scan_student.csv` (for example `rc-cal0-scan`; not in the repository, it lists image ids).
+Prints, per session 1 run, the steps that hold one of the 24 listed training images and the
+cumulative counts at every 25th step, to compare with the log (1, 2, 3, 3, 5, 5, 5 for both runs).
+Estimate: about 5 min.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+SCAN=$(find /kaggle/input -name vision_scan_student.csv | head -1); echo "scan: $SCAN"
+DATA=$(python scripts/find_inputs.py data)
+for v in magnitude activation; do
+  python scripts/check_nonfinite_steps.py --exp E5 --variant $v --budget B2 --seed 0 \
+    --data-root "$DATA" --scan "$SCAN" 2>&1 | tee -a /kaggle/working/nonfinite_steps.txt
+done
+```
+
+Note (2026-11-16): of the 231.2 M parameters of the protected layers 0, 1 and 35 (3 x 77.1 M),
+session 1 removed 138.4 M (magnitude, 59.9 %) and 143.1 M (activation, 61.9 %) unit by unit.

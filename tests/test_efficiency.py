@@ -109,7 +109,10 @@ class _Meter:
     def __init__(self) -> None:
         self.events: list[str] = []
 
-    def reset(self) -> None:
+    live_before: int | None = None
+    excluded = 0
+
+    def reset(self, keep_bytes: int | None = None) -> None:
         self.events.append("reset")
 
     def peak(self) -> int:
@@ -380,3 +383,26 @@ def test_the_efficiency_table_reads_only_the_final_timing() -> None:
     final = pd.DataFrame([row("peak_memory_bytes", 111.0), row("final:peak_memory_bytes", 222.0)])
     line = next(r for r in efficiency_table(final).splitlines() if r.startswith("E2 "))
     assert "222.000" in line and "111" not in line
+
+
+def test_the_peak_excludes_what_was_allocated_beyond_the_model_before_the_reset() -> None:
+    """2026-11-15: a counter reset while other tensors are still allocated counts them (RC-E3:
+    the replaced fp16 weights; the budget search: 0.59 GiB left by the previous load). The same
+    model must read the same peak as in a clean process."""
+    from medcompress.evaluation.efficiency import MemoryMeter
+
+    model, activations, leftover = 7_000, 100, 600
+
+    def meter(live: int) -> MemoryMeter:
+        return MemoryMeter(allocated=lambda: live, reset_peak=lambda: None,
+                           read_peak=lambda: live + activations)  # fmt: skip
+
+    clean, dirty = meter(model), meter(model + leftover)
+    clean.reset(keep_bytes=model)
+    dirty.reset(keep_bytes=model)
+    assert clean.peak() == dirty.peak() == model + activations
+    assert (clean.excluded, dirty.excluded) == (0, leftover)
+    assert dirty.live_before == model + leftover
+    unknown = meter(model + leftover)
+    unknown.reset()  # nothing known about the model: nothing is excluded
+    assert unknown.peak() == model + leftover + activations
