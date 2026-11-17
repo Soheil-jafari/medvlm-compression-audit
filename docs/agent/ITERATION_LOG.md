@@ -1527,4 +1527,6 @@ Append-only, newest at the bottom. One entry per iteration:
   every arm reaches B3; k = 13 / 29 / 46 at B1 / B2 / B3.
 - E7U reads E7's scores (`pruning.scores_from`); stage 04 never scores for it. A recovery resume
   state of another removal set is refused. E7's check adds the fit of the exact effect on the
-  estimate and the B2 substitution (`--followup-only` on CPU). Tests.
+  estimate and the B2 substitution (`--followup-only` on CPU). An attached pruned model whose
+  recorded units differ from the committed `removal.json` (an earlier design's hand-off) stops the
+  card and the evaluation instead of being reused. Tests.

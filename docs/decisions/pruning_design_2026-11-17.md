@@ -45,7 +45,9 @@ allocation)."
 
 The figures from the literature below are as the research lead supplied them on 2026-11-17;
 they were not re-checked against the papers in this session (`TODO: verify` page or table
-numbers before they go into the paper).
+numbers before they go into the paper). The one-line readings of each source (what it shows for
+this study, why B3 sits at the edge of Huang et al.'s range, why SliceGPT, Sheared LLaMA and
+Minitron were not chosen) are the agent's wording, to be checked by the team with the figures.
 
 1. **Global rankings across layers are unreliable.** Scores of different layers are on different
    scales. Molchanov et al. (ICLR 2017) report a cross-layer rank correlation of 0.14 for raw

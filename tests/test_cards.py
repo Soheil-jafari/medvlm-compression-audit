@@ -260,6 +260,15 @@ def test_a_grid_run_made_by_rc_g2_is_skipped_when_its_model_is_attached(tmp_path
     assert not runner_mod.made_by_g2(run, config, tmp_path)  # no pruned model attached yet
     pruned_dir(config, run.context).mkdir(parents=True)
     assert runner_mod.made_by_g2(run, config, tmp_path)
+    # a model of another removal (an earlier design's hand-off) stops it (2026-11-17)
+    (pruned_dir(config, run.context) / "pruning_manifest.json").write_text(
+        json.dumps({"format_version": 1, "steps": [["lm.layer5.mlp_group0"]]})
+    )
+    (metrics.parent / "removal.json").write_text(json.dumps({"units": ["lm.layer5.mlp_group1"]}))
+    with pytest.raises(ValueError, match="earlier design"):
+        runner_mod.made_by_g2(run, config, tmp_path)
+    (metrics.parent / "removal.json").write_text(json.dumps({"units": ["lm.layer5.mlp_group0"]}))
+    assert runner_mod.made_by_g2(run, config, tmp_path)
     plan = build_plan("RC-E7", 0, budgets=["B2"])
     session = runner_mod.Session(plan, tmp_path / "work", "now")
     calls: list[str] = []

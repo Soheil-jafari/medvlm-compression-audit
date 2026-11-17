@@ -194,6 +194,27 @@ def claim_resume_dir(folder: Path, digest: str) -> None:
     marker.write_text(digest + "\n", encoding="utf-8")
 
 
+def require_pruned_matches_removal(directory: Path | str, removal_json: Path | str) -> None:
+    """Stop when a pruned model's recorded units differ from the run's committed
+    ``removal.json`` (2026-11-17): an attached hand-off of an earlier design (for example
+    ``g2-b2-seed0-pruned-e5``, the original E5) has the same folder names as the new one.
+    Nothing to compare (no manifest or no committed ``removal.json``): no check."""
+    from medcompress.compression.pruning.checkpoint import MANIFEST_NAME
+
+    manifest_path, removal_path = Path(directory) / MANIFEST_NAME, Path(removal_json)
+    if not manifest_path.is_file() or not removal_path.is_file():
+        return
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    saved = {unit for step in manifest.get("steps") or [] for unit in step}
+    committed = set(json.loads(removal_path.read_text(encoding="utf-8")).get("units") or [])
+    if saved != committed:
+        raise ValueError(
+            f"the pruned model at {directory} removed {len(saved)} units, the committed "
+            f"{removal_path} lists {len(committed)} ({len(saved ^ committed)} differ): it is from "
+            "another run or an earlier design; detach that hand-off"
+        )
+
+
 def pruned_dir(config: Mapping[str, Any], run: RunContext) -> Path:
     """Where the pruned and recovered model of ``run`` is saved (not committed)."""
     if run.budget is None:

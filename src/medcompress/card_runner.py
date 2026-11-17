@@ -185,12 +185,17 @@ def missing_needs(plan: CardPlan, config: Mapping[str, Any]) -> list[str]:
 
 def made_by_g2(run: Any, config: Mapping[str, Any], repo: Path) -> bool:
     """True when the run's pruned model is attached and its results are committed (RC-G2)."""
-    from medcompress.compression.recovery import pruned_dir
+    from medcompress.compression.recovery import pruned_dir, require_pruned_matches_removal
 
     metrics = Path(repo) / run.context.run_dir(config["paths"]["results_root"]) / "metrics.csv"
     if not pruned_dir(config, run.context).exists() or not metrics.is_file():
         return False
-    return "budget_within_tolerance" in metrics.read_text(encoding="utf-8")
+    if "budget_within_tolerance" not in metrics.read_text(encoding="utf-8"):
+        return False
+    # an attached model of an earlier design stops the card instead of being reused (2026-11-17)
+    require_pruned_matches_removal(pruned_dir(config, run.context),
+                                   metrics.with_name("removal.json"))  # fmt: skip
+    return True
 
 
 def step_command(step: Any, data_root: Path | None, handoffs: Sequence[Path]) -> list[str]:

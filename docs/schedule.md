@@ -199,7 +199,7 @@ about 1.4 GB, `w8` about 2.8 GB, `w8a8` none (applied at load); E9's quantized h
 |---|---|---|
 | RC-G2 session 1 or 2 (two pruned runs at B2) | about 12 GB | yes |
 | RC-G2 session 4 (E7 at B2), RC-A1, RC-A2, RC-A3, RC-A5 | about 6 GB | yes |
-| RC-G2 session 5 (E5R and E7U at B2; 2026-11-17) | about 12 GB | yes |
+| RC-G2 session 5 (E5R and E7U at B2; 2026-11-17; about 5.5 GPU h, an estimate, not yet in the hour totals below) | about 12 GB | yes |
 | RC-E3 seed 0 (three variants) | about 4.5 GB | yes |
 | RC-E8 at one budget, RC-E9 (resume), RC-E4, RC-E10, RC-R1 | under 4 GB | yes |
 | RC-A6 (two variants at B2) | about 12 GB | yes |
