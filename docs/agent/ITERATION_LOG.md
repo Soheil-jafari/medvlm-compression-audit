@@ -1515,3 +1515,16 @@ Append-only, newest at the bottom. One entry per iteration:
   of layers 2-34: every arm reaches B3. Session 1's B2 files moved unchanged to
   `results/superseded/inner_units_removable/`; appendix table. Reruns planned on three accounts.
 - RC-E9's benchmark re-measured (7,351,677,856 bytes) committed unchanged. Tests.
+
+## Iteration 91: 2026-11-17 (interactive)
+- Amendment of 2026-11-17 (section 10): the pruning design locked. E5 removes only 128-channel
+  MLP groups, the same k from every unprotected layer (`pruning.removal.allocation: uniform_mlp`),
+  with a search over k; E5R (random scores) and E7U (E7's scores) added, exploratory, B2 seed 0,
+  RC-G2 session 5; E7, E6 and A1-A6 stay global. Decision file
+  `docs/decisions/pruning_design_2026-11-17.md`.
+- `recovery.search_budget` serves stage 05 and the offline replay (`scripts/replay_removal.py`,
+  committed output in `results/replay/`; estimate within 0.5 % of session 1's measured drops):
+  every arm reaches B3; k = 13 / 29 / 46 at B1 / B2 / B3.
+- E7U reads E7's scores (`pruning.scores_from`); stage 04 never scores for it. A recovery resume
+  state of another removal set is refused. E7's check adds the fit of the exact effect on the
+  estimate and the B2 substitution (`--followup-only` on CPU). Tests.

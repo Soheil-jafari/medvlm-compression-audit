@@ -212,11 +212,13 @@ script's experiment is E7 by default: it is not a registered stage of every E7 r
 
 G2_PARTS: tuple[str, ...] = (
     "E5:magnitude", "E5:activation", "E5:taylor", "E6", "E7:scores", "E7", "E7:check",
+    "E5R", "E7U",
 )  # fmt: skip
 """The parts of RC-G2 that ``--only`` picks (2026-11-11): one run each, or E7's scoring alone
 (``E7:scores``) and the 30-group check alone (``E7:check``), so that no session comes near
 Kaggle's session limit. Without ``--only`` every part but ``E7:scores`` runs (the E7 run scores
-its units itself)."""
+its units itself). ``E5R`` and ``E7U`` (exploratory, amendment of 2026-11-17) are session 5;
+``E7U`` reads E7's committed scores."""
 G2_DEFAULT: tuple[str, ...] = tuple(p for p in G2_PARTS if p != "E7:scores")
 
 
@@ -268,12 +270,15 @@ def g2_plan_parts(only: Sequence[str] | None) -> tuple[tuple[str, ...], tuple[St
     ``--only``, ``E7`` and ``E7:check`` need E7's committed scores (the ``E7:scores`` session
     first, its results committed), or the E7 run would score again for hours."""
     parts = _pick(G2_PARTS, only) if only else G2_DEFAULT
-    if only and ("E7" in parts or "E7:check" in parts) and "E7:scores" not in parts:
+    needs_scores = {"E7", "E7:check", "E7U"} & set(parts)
+    if only and needs_scores and "E7:scores" not in parts:
         if not _g2_scores_committed():
             raise CardError(
-                "RC-G2 --only E7 / E7:check: E7 seed 0's unit_scores.csv is not committed; "
-                "run --only E7:scores first and commit its results"
+                f"RC-G2 --only {' / '.join(sorted(needs_scores))}: E7 seed 0's unit_scores.csv "
+                "is not committed; run --only E7:scores first and commit its results"
             )
+    if "E7U" in parts and not _g2_scores_committed():  # E7U never scores (2026-11-17)
+        raise CardError("RC-G2 E7U: E7 seed 0's unit_scores.csv is not committed")
     steps: list[Step] = []
     handoffs: list[Handoff] = []
     for part in parts:

@@ -377,7 +377,10 @@ def test_rc_g2_runs_in_sessions_with_only_and_one_handoff_per_run(
     assert [h.name for h in full.handoffs] == [
         "G2_B2_seed0_pruned_E5_magnitude", "G2_B2_seed0_pruned_E5_activation",
         "G2_B2_seed0_pruned_E5_taylor", "G2_B2_seed0_pruned_E6", "G2_B2_seed0_pruned_E7",
+        "G2_B2_seed0_pruned_E5R", "G2_B2_seed0_pruned_E7U",
     ]  # fmt: skip
+    five = build_plan("RC-G2", only=["E7U", "E5R"])  # session 5 (amendment of 2026-11-17)
+    assert [s.label for s in five.steps] == ["run E5R B2 seed0", "run E7U B2 seed0"]
     one = build_plan("RC-G2", only=["E5:activation", "E5:magnitude"])  # the card's order
     assert [s.label for s in one.steps] == [
         "run E5 magnitude B2 seed0",
@@ -392,6 +395,8 @@ def test_rc_g2_runs_in_sessions_with_only_and_one_handoff_per_run(
     monkeypatch.setattr(cards_mod, "_g2_scores_committed", lambda: False)
     with pytest.raises(CardError, match="run --only E7:scores first"):
         build_plan("RC-G2", only=["E7", "E7:check"])
+    with pytest.raises(CardError, match="run --only E7:scores first"):
+        build_plan("RC-G2", only=["E7U"])
     monkeypatch.setattr(cards_mod, "_g2_scores_committed", lambda: True)
     last = build_plan("RC-G2", only=["E7:check", "E7"])
     assert [s.label for s in last.steps] == ["run E7 B2 seed0", "first-order check E7 seed0"]

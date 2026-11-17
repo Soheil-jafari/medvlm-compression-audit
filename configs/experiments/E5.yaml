@@ -25,6 +25,11 @@ experiment:
   status: planned
 
 pruning:
+  removal:
+    allocation: uniform_mlp               # amendment of 2026-11-17: the same k 128-channel MLP
+                                          # groups from every unprotected layer (LLM-Pruner's
+                                          # allocation). Scoring still covers every unit type,
+                                          # so the committed scores of session 1 stay valid.
   criterion: by_variant
   criterion_by_variant:
     magnitude: magnitude

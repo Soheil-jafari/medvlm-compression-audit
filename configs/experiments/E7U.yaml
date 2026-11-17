@@ -1,0 +1,28 @@
+# Exploratory arm (amendment of 2026-11-17): E7's scores with E5's design.
+_base_: E7.yaml
+
+experiment:
+  id: E7U
+  name: clinical_scores_uniform_channel_groups
+  description: >-
+    E2 + E7's committed clinical scores on E5's units (128-channel MLP groups), the same k
+    groups removed from every unprotected layer (lowest E7 importance per parameter first
+    within each layer), E5's budget search and the shared recovery. B2, seed 0. Separates
+    E7's criterion from E7's allocation.
+  kind: main
+  parent: E2
+  variant_of: E7
+  requires: [E0]
+  budgets: [B2]
+  seeds: [0]                              # exploratory
+  variants: []
+  outputs:
+    - results/E7U/B2/seed0/metrics.csv
+    - results/E7U/B2/seed0/removal.json
+  status: planned
+
+pruning:
+  scores_from: E7                         # stage 04 only checks and reuses results/E7/nobudget/
+                                          # seed<s>/unit_scores.csv; it never scores
+  removal:
+    allocation: uniform_mlp               # E5's design (amendment of 2026-11-17)

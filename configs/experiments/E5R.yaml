@@ -1,0 +1,34 @@
+# Exploratory arm (amendment of 2026-11-17): random scores with E5's design.
+_base_: [../base.yaml, ../pruning.yaml, ../recovery.yaml]
+
+experiment:
+  id: E5R
+  name: random_uniform_channel_groups
+  description: >-
+    E2 + seeded random scores on E5's units (128-channel MLP groups), the same k groups
+    removed from every unprotected layer, E5's budget search and the shared recovery. B2,
+    seed 0. Not a comparator candidate.
+  kind: main
+  parent: E2
+  variant_of: E5
+  requires: [E0]
+  budgets: [B2]
+  seeds: [0]                              # exploratory
+  variants: []
+  scripts:
+    - scripts/04_score_pruning_units.py
+    - scripts/05_prune_and_recover.py
+    - scripts/06_evaluate.py
+    - scripts/07_benchmark_efficiency.py
+  outputs:
+    - results/E5R/nobudget/seed0/unit_scores.csv
+    - results/E5R/B2/seed0/metrics.csv
+    - results/E5R/B2/seed0/removal.json
+  status: planned
+
+pruning:
+  criterion: random                       # criteria/random.py, as A3 (seeded by the run's seed)
+  removal:
+    allocation: uniform_mlp               # E5's design (amendment of 2026-11-17)
+    score_normalisation: none             # a random score has no per-weight meaning (as A3); in a
+                                          # layer every channel group has the same size anyway

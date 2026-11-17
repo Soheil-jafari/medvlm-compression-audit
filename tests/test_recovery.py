@@ -258,6 +258,35 @@ def test_the_stage_meets_the_budget_recovers_and_saves_a_reloadable_model(tmp_pa
     assert removal["units"] and set(removal["units"]) & ids <= {"lm.layer1"}  # layers 0 and 2 kept
 
 
+def test_the_stage_with_the_uniform_allocation_removes_k_groups_per_unprotected_layer(
+    tmp_path: Path,
+) -> None:
+    """``uniform_mlp`` (amendment of 2026-11-17) on the tiny model: layer 1 is its only
+    unprotected layer, so the run removes k of its channel groups and nothing else."""
+    config, train, total = _prepare(tmp_path)
+    config["pruning"]["removal"]["allocation"] = "uniform_mlp"
+    run = RunContext("E5", seed=0, budget="B2", variant=None)
+    recovery.run_prune_and_recover(
+        config, run, student_factory=_factory, train=train,
+        records=teacher_records(train, tmp_path), measure=_footprint, reference_value=total,
+    )  # fmt: skip
+    run_dir = tmp_path / "results/E5/B2/seed0"
+    metrics = {r["metric"]: float(r["value"])
+               for r in csv.DictReader((run_dir / "metrics.csv").open())}  # fmt: skip
+    removal = json.loads((run_dir / "removal.json").read_text())
+    assert removal["removal_settings"]["allocation"] == "uniform_mlp"
+    assert removal["uniform_k"] == metrics["uniform_k"] >= 1
+    assert metrics["removed_channel_groups"] == metrics["removed_units"] == metrics["uniform_k"]
+    assert metrics["removed_layers"] == metrics["removed_kv_groups"] == 0
+    assert all(u.startswith("lm.layer1.") for u in removal["units"])
+    assert metrics["removed_units_in_protected_layers"] == 0
+    header = (run_dir / "budget_search.csv").read_text().splitlines()[0]
+    assert header == "uniform_k,measured_footprint"
+    by_layer = list(csv.DictReader((run_dir / "removal_by_layer.csv").open()))
+    assert [float(r["removed_params"]) > 0 for r in by_layer] == [False, True, False]
+    assert (tmp_path / "checkpoints/E5/B2/seed0/resume").exists() is False  # cleared when saved
+
+
 def test_the_runner_reloads_the_pruned_arm_through_the_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

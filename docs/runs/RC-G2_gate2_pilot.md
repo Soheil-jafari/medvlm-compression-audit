@@ -1,10 +1,11 @@
-# Run card RC-G2: Gate 2 pilot, E5 (three criteria), E6 and E7 at B2, seed 0
+# Run card RC-G2: Gate 2 pilot, E5 (three criteria), E6 and E7 at B2, seed 0; E5R and E7U (exploratory)
 
 ## 1. What and why
 
 - Stage: S09
 - Experiments: E5 (`magnitude`, `activation`, `taylor`), E6 and E7, budget B2, seed 0, scored on
-  the **validation** split only
+  the **validation** split only; since 2026-11-17 also the exploratory E5R (random scores) and E7U
+  (E7's scores), both with E5's design (session 5; not comparator candidates)
 - Purpose: before the full grid, find out whether the clinical criterion (E7) keeps more of the
   small findings than the best of the generic criteria (E5) and the output-similarity criterion
   (E6) at the primary budget. The answer says which paper shape applies (see
@@ -67,6 +68,15 @@ first-order score, exact score; no images) and the rows `first_order_check:spear
 It is a report, not a gate (pre-registration section 11 item 13, correction 1): the step does
 not stop the card. **Below 0.7 the agent stops and asks the team** before any other E7 run
 (the trend at B1 and B3, seeds 1 and 2, the ablations that use E7's scores).
+
+Added 2026-11-17 (amendment of that date; reports, not gates): the slope and intercept of the
+exact effect on the first-order estimate over the 30 groups, with 95 % intervals
+(`first_order_check:slope`, `:slope_ci_low`, `:slope_ci_high`, `:intercept`, ...), and E7's B2
+selection again with the 30 exact effects in place of their estimates, both selections with the
+same offline footprint estimate (`first_order_check_b2.csv`; rows `:b2_switched`,
+`:b2_switched_to_removed`, `:b2_switched_to_kept`, `:b2_kv_or_layer_changes`). It runs on CPU
+after the exact scoring; `python scripts/check_first_order.py --seed 0 --followup-only` reruns it
+from the committed files.
 
 ## 2b. Shared data, hand-offs and the unattended run (2026-10-17)
 
@@ -414,6 +424,164 @@ Each stage-05 log now shows "level check: ..." and each run writes `removal_by_l
 share of its removed parameters per decoder layer: layers 0, 1 and 35 must read 0) and
 `recovery_steps.json`.
 
+**Sessions under the amendment of 2026-11-17 (the locked pruning design; replaces the rerun plan
+above).** E5 now removes only MLP channel groups, the same number k from every unprotected layer
+(2-34), and its search runs over k; two exploratory arms join at B2, seed 0: E5R (random scores,
+E5's design) and E7U (E7's committed scores, E5's design); E7 is unchanged (global, fully
+protected). `docs/decisions/pruning_design_2026-11-17.md` has the design. Do **not** attach
+`g2-b2-seed0-pruned-e5` or any earlier `-s2` output to these sessions: they hold models of the old
+design (a recovery resume state of another removal set is now refused anyway).
+
+Estimates per run (from session 1's measured times: a footprint measurement about 6 min, the
+recovery 55-56 min, the validation pass 0.53 h): the k search needs about 9 measurements
+(bisection over 0-85, plus the level check), about 0.9 h, against about 14 for a global search.
+
+| Cell | Account | `--only` / job | Attach (Add Input) | Estimate | Save afterwards |
+|---|---|---|---|---|---|
+| (a) smoke | Soheil | `--job "E5 magnitude" --job E5R --job E7U` | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` | about 30-40 min (two T4 lanes) | nothing; send `smoke_report.md` |
+| (b) session 1 | Soheil (account 1) | `E5:magnitude`, `E5:activation` | the same three | about 5.5-6 h | `/kaggle/working/handoff/` as `g2-b2-seed0-pruned-s1` |
+| (c) session 2 | account 3 | `E5:taylor`, `E6` | the same three | about 5.5 h (Taylor scoring included) | `g2-b2-seed0-pruned-s2` |
+| (d) session 4 | Amir | `E7`, `E7:check` | the same three | about 5.3 h | `g2-b2-seed0-pruned-s4` |
+| (e) session 5 | any account, after (a) | `E5R`, `E7U` | the same three | about 5.5 h | `g2-b2-seed0-pruned-s5` |
+
+Order: (a) first; when it passes, (b), (c) and (d) at the same time on the three accounts; (e)
+after (a) on whichever account is free. Every session sends `results_to_commit/` and its run
+report. Each stage-05 log of a `uniform_mlp` arm prints "uniform_mlp allocation: k = ..."; its
+`removal_by_layer.csv` must show 0 for layers 0, 1 and 35 and the same removed parameters in every
+layer from 2 to 34. The offline estimate is k = 29 at B2 (`results/replay/removal_replay.md`); the
+measured search may land a step away. Session 4's check also prints the fit of the exact effects
+on the estimates and how many of the 30 groups switch at B2.
+
+(a) The stage-05 smoke of the new design (Soheil, T4 x2):
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/smoke_cards.py --job "E5 magnitude" --job E5R --job E7U 2>&1 | tee /kaggle/working/smoke_cards_uniform.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+(b) Session 1 (Soheil):
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E5:magnitude --only E5:activation 2>&1 | tee /kaggle/working/run_card_RC-G2_s1_uniform.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+(c) Session 2 (account 3):
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E5:taylor --only E6 2>&1 | tee /kaggle/working/run_card_RC-G2_s2_uniform.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+(d) Session 4 (Amir):
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E7 --only E7:check 2>&1 | tee /kaggle/working/run_card_RC-G2_s4.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+(e) Session 5 (any account, after the smoke):
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E5R --only E7U 2>&1 | tee /kaggle/working/run_card_RC-G2_s5.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
 ## 4. What to commit back
 
 For each of the five runs (`<run>` is `E5/<variant>`, `E6` or `E7`):
@@ -423,8 +591,10 @@ For each of the five runs (`<run>` is `E5/<variant>`, `E6` or `E7`):
 - `results/<run>/nobudget/seed0/unit_scores.csv`, `unit_scores.settings.json` and
   `metrics.csv` (numbers per unit and the scoring settings, no images; a later run reuses the
   scores only when the settings file matches)
-- `results/E7/nobudget/seed0/first_order_check.csv` and the `first_order_check:*` rows of
-  that folder's `metrics.csv` (section 2c)
+- `results/E7/nobudget/seed0/first_order_check.csv`, `first_order_check_b2.csv` (2026-11-17)
+  and the `first_order_check:*` rows of that folder's `metrics.csv` (section 2c)
+- Session 5: `results/E5R/nobudget/seed0/` (its random scores) and `results/E5R/B2/seed0/`,
+  `results/E7U/B2/seed0/` (E7U has no scores of its own)
 - This card with section 6 filled.
 
 Check before committing: `git status` shows no images, adapters, caches or `outcomes.npz`.

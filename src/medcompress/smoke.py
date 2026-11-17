@@ -208,6 +208,17 @@ def smoke_jobs() -> list[SmokeJob]:
             g2,
             after="E7",
         ),
+        # the uniform_mlp allocation (amendment of 2026-11-17): E5R scores at random; E7U's stage
+        # 04 only reuses E7's scores, so its 05-07 run from the committed E7 scores
+        SmokeJob("RC-G2", "E5R", "B", _pruning("E5R", None), g2),
+        SmokeJob(
+            "RC-G2",
+            "E7U",
+            "B",
+            _pruning("E7U", None, score=False),
+            g2,
+            note="05-07 from the committed E7 scores (stage 04 never scores for E7U)",
+        ),
         SmokeJob(
             "RC-E8",
             "E8 B2",

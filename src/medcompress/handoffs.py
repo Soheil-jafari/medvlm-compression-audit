@@ -28,7 +28,7 @@ from medcompress.utils.bundles import HANDOFF_KINDS
 ADAPTER_EXPERIMENTS: tuple[str, ...] = ("E1", "E2", "E10")
 QUANTIZED_EXPERIMENTS: tuple[str, ...] = ("E3", "E4", "E8", "E9", "E10Q")
 PRUNED_EXPERIMENTS: tuple[str, ...] = (
-    "E5", "E6", "E7", "E8", "A1", "A2", "A3", "A4", "A5", "A6",
+    "E5", "E5R", "E6", "E7", "E7U", "E8", "A1", "A2", "A3", "A4", "A5", "A6",
 )  # fmt: skip
 RESUME_SUBDIR = "resume"
 

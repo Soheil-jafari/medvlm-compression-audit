@@ -159,6 +159,22 @@ _SPECS: tuple[ExperimentSpec, ...] = (
         trains=True,
     ),
     ExperimentSpec(
+        id="E5R",
+        title="Random channel groups, E5's design (exploratory)",
+        description="Seeded random scores with E5's units and allocation: the same k MLP channel "
+        "groups from every unprotected layer, same budget search and recovery; B2, seed 0 "
+        "(amendment of 2026-11-17). Not a comparator candidate.",
+        kind="main",
+        parent="E2",
+        variant_of="E5",
+        requires=("E0",),
+        budgets=(PRIMARY_BUDGET,),
+        stages=_PRUNE_STAGES,
+        scripts=_PRUNE_PIPELINE,
+        outputs=_outputs("E5R", "results/E5R/nobudget/seed0/unit_scores.csv"),
+        trains=True,
+    ),
+    ExperimentSpec(
         id="E6",
         title="E2 + output-similarity layer pruning + recovery",
         description="Layer pruning by output similarity (Khan et al. style).",
@@ -182,6 +198,22 @@ _SPECS: tuple[ExperimentSpec, ...] = (
         stages=_PRUNE_STAGES,
         scripts=_PRUNE_PIPELINE,
         outputs=_outputs("E7", "results/E7/.../unit_scores.csv"),
+        trains=True,
+    ),
+    ExperimentSpec(
+        id="E7U",
+        title="E7's scores, E5's design (exploratory)",
+        description="E7's committed clinical scores with E5's units and allocation: the same k "
+        "MLP channel groups from every unprotected layer, lowest E7 importance first; B2, seed "
+        "0 (amendment of 2026-11-17). Stage 04 only reuses E7's scores.",
+        kind="main",
+        parent="E2",
+        variant_of="E7",
+        requires=("E0",),
+        budgets=(PRIMARY_BUDGET,),
+        stages=_PRUNE_STAGES,
+        scripts=_PRUNE_PIPELINE,
+        outputs=_outputs("E7U"),
         trains=True,
     ),
     ExperimentSpec(
