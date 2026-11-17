@@ -335,6 +335,10 @@ def aggregate_results(
     from medcompress.evaluation.report import write_budget_match
 
     written.append(write_budget_match(everything, tables))  # the search's rows (2026-11-16)
+    from medcompress.evaluation.appendix import write_without_full_protection
+
+    superseded = Path(results_root) / "superseded" / "inner_units_removable"
+    written.append(write_without_full_protection(load_results(superseded), tables))
     primary = primary_rows(summary)  # without the sensitivity analyses (strict, unfiltered)
     written += write_figures(primary, figures, headline=headline)
     # compute used and the student checks are bookkeeping of every run, tied to no split

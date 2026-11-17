@@ -303,10 +303,13 @@ def _load_run_model(config: Mapping[str, Any], run: RunContext, side: int) -> VL
 
     if SCORE_UNITS in get_experiment(run.experiment_id).scripts:  # E5-E7, A1-A6
         from medcompress.compression.pruning.checkpoint import load_pruned
-        from medcompress.compression.recovery import pruned_dir
+        from medcompress.compression.recovery import pruned_dir, require_pruned_matches_removal
 
+        directory = pruned_dir(config, run)
+        removal = run.run_dir(config["paths"]["results_root"]) / "removal.json"
+        require_pruned_matches_removal(directory, removal)  # not an earlier design's (2026-11-17)
         base = load_trained_student(config, "E2", run.seed, side)
-        return load_pruned(base, pruned_dir(config, run))
+        return load_pruned(base, directory)
     if run.experiment_id in ("E3", "E4", "E8", "E9", "E10Q"):
         from medcompress.compression.quantization.ptq import load_run_quantized
 

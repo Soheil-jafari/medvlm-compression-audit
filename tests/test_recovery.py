@@ -140,9 +140,11 @@ def test_the_removal_plan_follows_the_scores_and_spares_the_protected_layers() -
     assert protected == [0, 2]
     assert [u.unit_id for u in ordered if u.unit_type is UnitType.DECODER_LAYER] == ["lm.layer1"]
     assert [scores[u.unit_id] for u in ordered] == sorted(scores[u.unit_id] for u in ordered)
+    assert all(u.layer_index == 1 for u in ordered)  # no unit of layers 0, 2 (2026-11-16)
     heads_only = [u for u in units if u.unit_type is not UnitType.DECODER_LAYER]
-    plan, none_protected = recovery.plan_removal(heads_only, scores, settings)
-    assert none_protected == [] and len(plan) == len(heads_only)
+    plan, same = recovery.plan_removal(heads_only, scores, settings)
+    # without whole-layer units the same layers are protected (they were not before 2026-11-16)
+    assert same == [0, 2] and all(u.layer_index == 1 for u in plan)
 
 
 def test_the_prune_stage_lists_every_open_setting_at_once(tmp_path: Path) -> None:
@@ -229,6 +231,11 @@ def test_the_stage_meets_the_budget_recovers_and_saves_a_reloadable_model(tmp_pa
     assert metrics["recovery_skipped_steps"] == 0 and metrics["recovery_nonfinite_steps"] == 0
     # the protected layers (the tiny model's first and last) are never removed whole; their
     # inner units count here (clarification of 2026-11-15)
+    by_layer = list(csv.DictReader((run_dir / "removal_by_layer.csv").open()))
+    assert len(by_layer) == 3 and sum(float(r["share_of_removed"]) for r in by_layer) == (
+        pytest.approx(1.0)
+    )
+    assert metrics["removed_units_in_protected_layers"] == 0  # amendment of 2026-11-16
     steps = json.loads((run_dir / "recovery_steps.json").read_text())
     assert steps == {"nonfinite_steps": [], "skipped_steps": []}  # indices only (2026-11-16)
     removal_units = json.loads((run_dir / "removal.json").read_text())["units"]
@@ -249,6 +256,35 @@ def test_the_stage_meets_the_budget_recovers_and_saves_a_reloadable_model(tmp_pa
     assert count_parameters(reloaded) == metrics["parameters_after"]
     ids = {u.unit_id for u in enumerate_units(_factory(), [UnitType.DECODER_LAYER])}
     assert removal["units"] and set(removal["units"]) & ids <= {"lm.layer1"}  # layers 0 and 2 kept
+
+
+def test_the_stage_with_the_uniform_allocation_removes_k_groups_per_unprotected_layer(
+    tmp_path: Path,
+) -> None:
+    """``uniform_mlp`` (amendment of 2026-11-17) on the tiny model: layer 1 is its only
+    unprotected layer, so the run removes k of its channel groups and nothing else."""
+    config, train, total = _prepare(tmp_path)
+    config["pruning"]["removal"]["allocation"] = "uniform_mlp"
+    run = RunContext("E5", seed=0, budget="B2", variant=None)
+    recovery.run_prune_and_recover(
+        config, run, student_factory=_factory, train=train,
+        records=teacher_records(train, tmp_path), measure=_footprint, reference_value=total,
+    )  # fmt: skip
+    run_dir = tmp_path / "results/E5/B2/seed0"
+    metrics = {r["metric"]: float(r["value"])
+               for r in csv.DictReader((run_dir / "metrics.csv").open())}  # fmt: skip
+    removal = json.loads((run_dir / "removal.json").read_text())
+    assert removal["removal_settings"]["allocation"] == "uniform_mlp"
+    assert removal["uniform_k"] == metrics["uniform_k"] >= 1
+    assert metrics["removed_channel_groups"] == metrics["removed_units"] == metrics["uniform_k"]
+    assert metrics["removed_layers"] == metrics["removed_kv_groups"] == 0
+    assert all(u.startswith("lm.layer1.") for u in removal["units"])
+    assert metrics["removed_units_in_protected_layers"] == 0
+    header = (run_dir / "budget_search.csv").read_text().splitlines()[0]
+    assert header == "uniform_k,measured_footprint"
+    by_layer = list(csv.DictReader((run_dir / "removal_by_layer.csv").open()))
+    assert [float(r["removed_params"]) > 0 for r in by_layer] == [False, True, False]
+    assert (tmp_path / "checkpoints/E5/B2/seed0/resume").exists() is False  # cleared when saved
 
 
 def test_the_runner_reloads_the_pruned_arm_through_the_manifest(
@@ -423,3 +459,35 @@ def test_each_footprint_measurement_loads_a_fresh_copy_and_frees_it(
     measure = budgets.make_removal_measurer(fresh, [], object(), Path("."), "peak_memory")
     assert [measure([]), measure([1]), measure([1, 2])] == [101.0, 102.0, 103.0]
     assert removed == [0, 1, 2] and len(made) == 3 and not any(_alive(m) for m in made)
+
+
+def test_the_removal_by_layer_rows_sum_to_the_total_removed() -> None:
+    from medcompress.compression.pruning.units import PrunableUnit, UnitType
+
+    sizes = {0: 100, 1: 100, 2: 100}
+    removal = [
+        PrunableUnit("lm.layer1", UnitType.DECODER_LAYER, 1, None, 100),
+        PrunableUnit("lm.layer2.mlp_group0", UnitType.MLP_CHANNEL_GROUP, 2, 0, 20),
+    ]
+    rows = recovery.removal_by_layer(sizes, removal)
+    assert [r[0] for r in rows] == [0, 1, 2]  # every decoder layer, removed from or not
+    assert sum(r[2] for r in rows) == 120 and sum(r[3] for r in rows) == pytest.approx(1.0)
+    assert rows[1][4] == 1.0 and rows[2][4] == 0.2 and rows[0][2] == 0
+
+
+def test_an_arm_without_whole_layers_protects_the_same_layers() -> None:
+    """A6 heads_channels scores no whole layers; its protected layers are still the first and
+    the last, and none of their units enters the order (2026-11-16)."""
+    from medcompress.config import load_experiment
+
+    model = _factory()
+    units = [u for u in enumerate_units(model, [UnitType.ATTENTION_HEAD,
+                                                UnitType.MLP_CHANNEL_GROUP],
+                                        mlp_channel_group_size=16)]  # fmt: skip
+    config, _ = load_experiment("E7")
+    real = recovery.RemovalSettings.from_config(config)
+    settings = recovery.RemovalSettings(real.schedule, real.score_normalisation, 1, 1)
+    scores = {u.unit_id: 1.0 for u in units}
+    ordered, protected = recovery.plan_removal(units, scores, settings)
+    assert protected == [0, 2]  # the tiny model's first and last of 3 layers
+    assert ordered and all(u.layer_index == 1 for u in ordered)

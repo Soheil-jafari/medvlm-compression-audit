@@ -2,6 +2,11 @@
 
 ## 1. What and why
 
+- **Design (amendment of 2026-11-17):** E7 is unchanged: one global ranking over whole layers, KV
+  groups and MLP channel groups (`pruning.removal.allocation: global`), now with no unit of layers
+  0, 1 and 35 removable (amendment of 2026-11-16). The exploratory E7U (E7's scores with E5's
+  `uniform_mlp` design, B2 seed 0, RC-G2 session 5) separates E7's criterion from its allocation.
+  `docs/decisions/pruning_design_2026-11-17.md`.
 - **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** E7 at B2 is in the main-claim tier: seeds 0, 1 and 2. B1 and B3: seed 0 only (exploratory). Seeds 1 and 2 run only after seed 0's futility check (`scripts/choose_comparator.py`, after RC-G2): if E7 at B2 ranks below the comparator on validation, seed 0, the study stops and seed 0 is reported as exploratory. The plan refuses a seed 1 or 2 session before `results/seed_plan/comparator_B2.json` is committed, or when it says stop.
 - **Per-finding effects (2026-11-08):** the scoring also writes `results/E7/nobudget/seed<k>/unit_effects.csv` (unit, finding, effect) and its settings file; commit them with `unit_scores.csv`: A1 and A2 of the same seed re-weight them instead of scoring again.
 - Stage: S09

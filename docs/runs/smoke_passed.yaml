@@ -7,7 +7,7 @@ passed:
   RC-G2:
     commit: 9113632
     date: 2026-11-13
-    note: "also gates RC-E5 / RC-E6 / RC-E7; the stages still wait for RC-CAL0's committed calibration file (amendment of 2026-11-13). E7 05 prune+recover was killed by host RAM in the reduced smoke at a237c5c (fixed 2026-11-14); it smokes again before any E7 05 production run"
+    note: "also gates RC-E5 / RC-E6 / RC-E7; the stages still wait for RC-CAL0's committed calibration file (amendment of 2026-11-13). E7 05 prune+recover was killed by host RAM in the reduced smoke at a237c5c (fixed 2026-11-14); it smokes again before any E7 05 production run. 2026-11-17: the uniform_mlp allocation (E5, E5R, E7U) smokes before any of their production runs (RC-G2 section 3, cell (a))"
   RC-E8:
     commit: 9113632
     date: 2026-11-13

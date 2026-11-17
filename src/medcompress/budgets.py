@@ -363,6 +363,87 @@ def search_matched_budget(
     )
 
 
+def uniform_groups(
+    units: Sequence[PrunableUnit],
+    scores: Mapping[str, float],
+    protected_layers: Sequence[int],
+    normalisation: str = "none",
+) -> dict[int, list[PrunableUnit]]:
+    """``{layer: its MLP channel groups, lowest score first}`` for every unprotected layer
+    (``uniform_mlp`` allocation, amendment of 2026-11-17). Ties are broken by unit id. A layer's
+    groups all have the same size, so dividing by the parameter count changes no order."""
+    from medcompress.compression.pruning.criteria.common import normalised_scores
+    from medcompress.compression.pruning.units import UnitType
+
+    groups = [u for u in units if u.unit_type is UnitType.MLP_CHANNEL_GROUP
+              and u.layer_index not in set(protected_layers)]  # fmt: skip
+    if not groups:
+        raise ValueError(
+            "uniform_mlp allocation: no MLP channel group outside the protected layers"
+        )
+    missing = sorted(u.unit_id for u in groups if u.unit_id not in scores)
+    if missing:
+        raise ValueError(f"no score for {len(missing)} channel groups, e.g. {missing[:3]}")
+    values = normalised_scores({u.unit_id: scores[u.unit_id] for u in groups}, groups,
+                               normalisation)  # fmt: skip
+    by_layer: dict[int, list[PrunableUnit]] = {}
+    for unit in groups:
+        by_layer.setdefault(unit.layer_index, []).append(unit)
+    return {
+        layer: sorted(members, key=lambda u: (values[u.unit_id], u.unit_id))
+        for layer, members in sorted(by_layer.items())
+    }
+
+
+def uniform_removal(groups: Mapping[int, Sequence[PrunableUnit]], k: int) -> list[PrunableUnit]:
+    """The ``k`` lowest-scored channel groups of every unprotected layer."""
+    return [unit for layer in sorted(groups) for unit in groups[layer][:k]]
+
+
+def uniform_max_k(groups: Mapping[int, Sequence[PrunableUnit]]) -> int:
+    """The largest k that leaves every layer at least one channel group."""
+    return min(len(members) for members in groups.values()) - 1
+
+
+def search_uniform_budget(
+    units: Sequence[PrunableUnit],
+    scores: Mapping[str, float],
+    spec: BudgetSpec,
+    target: float,
+    measure_removal: Callable[[Sequence[PrunableUnit]], float],
+    *,
+    protected_layers: Sequence[int],
+    normalisation: str = "none",
+    max_steps: int | None = None,
+) -> BudgetSearch:
+    """The budget search of the ``uniform_mlp`` allocation: the smallest k whose measured
+    footprint is at or below ``target * (1 + tolerance)`` (the same rule as the global search,
+    over k = 0 .. 85 instead of a prefix of one ranking). ``count`` is k."""
+    if spec.tolerance is None:
+        raise ConfigError(f"budget {spec.id} has no tolerance yet")
+    groups = uniform_groups(units, scores, protected_layers, normalisation)
+    trace: dict[int, float] = {}
+
+    def measure_k(k: int) -> float:
+        value = float(measure_removal(uniform_removal(groups, k)))
+        trace[k] = value
+        return value
+
+    k, footprint = smallest_prefix_meeting_target(
+        uniform_max_k(groups), measure_k, target, spec.tolerance, max_steps=max_steps
+    )
+    return BudgetSearch(
+        budget=spec.id,
+        target=target,
+        tolerance=spec.tolerance,
+        count=k,
+        removal=tuple(uniform_removal(groups, k)),
+        footprint=footprint,
+        within_tolerance=abs(footprint - target) <= spec.tolerance * target,
+        trace=tuple(sorted(trace.items())),
+    )
+
+
 def budget_spec_for_run(config: Mapping[str, Any], budget: str) -> BudgetSpec:
     """The frozen spec of ``budget`` (metric, target fraction and tolerance all set).
 

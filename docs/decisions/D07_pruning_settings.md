@@ -2,6 +2,8 @@
 
 **Status:** partly answered 2026-10-12 (Soheil): sections 2 and 3 accepted as proposed (score per parameter; first 2 and last 1 layers protected for every arm; group 128, 128 calibration images, one shot, 1 negative per positive, signed effects, probe batch 4). In section 4 the metric (peak GPU memory), the tolerance (3 %) and the protocol (batch 1, 3 warm-up and 5 timed passes, 32 validation images drawn by a fixed seed) are accepted. Open: section 1 (how a unit is switched off while scored; RC-M1 measured the T4 speed on 2026-10-15, so the cost table below is updated, and nothing needs the answer before E2 exists), the timing hardware, and B1 to B3 (set by the rule after RC-B0). **Stage:** S09, S10.
 **Depends on:** D02 (data and findings), D05 (student), D06 (recovery recipe).
+**Later (2026-11-17):** the protection of every unit of layers 0, 1 and 35 and E5's `uniform_mlp`
+allocation are in `docs/decisions/pruning_design_2026-11-17.md` (pre-registration section 10).
 Every number below is fixed **before** the first pruning result, so none of it can be tuned
 to a result. After the team answers, the values go into `configs/pruning.yaml`,
 `configs/experiments/E6.yaml`, `E7.yaml` and `configs/budgets.yaml`, and are frozen with the

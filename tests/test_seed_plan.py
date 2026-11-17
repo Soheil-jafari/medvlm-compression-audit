@@ -190,7 +190,10 @@ def test_the_first_order_check_draws_a_fixed_sample_and_runs_after_e7_in_rc_g2()
     assert stage.check_sample(ids[:5], 30, 0) == sorted(ids[:5])
     assert math.isnan(stage.rank_correlation([1.0, 2.0, 3.0], [5.0, 5.0, 5.0]))
     assert stage.rank_correlation([1.0, 2.0, 3.0], [10.0, 30.0, 20.0]) == pytest.approx(0.5)
-    labels = [s.label for s in build_plan("RC-G2").steps]
-    assert labels[-2:] == ["run E7 B2 seed0", "first-order check E7 seed0"]
-    step = build_plan("RC-G2").steps[-1]
+    steps = build_plan("RC-G2").steps
+    labels = [s.label for s in steps]
+    at = labels.index("first-order check E7 seed0")  # right after E7's run; E5R, E7U follow
+    assert labels[at - 1] == "run E7 B2 seed0"
+    assert labels[at + 1 :] == ["run E5R B2 seed0", "run E7U B2 seed0"]  # session 5, 2026-11-17
+    step = steps[at]
     assert step.argv == ("scripts/check_first_order.py", "--seed", "0")  # E7 by default

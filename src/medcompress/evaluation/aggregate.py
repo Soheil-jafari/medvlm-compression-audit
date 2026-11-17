@@ -89,11 +89,16 @@ DATA_LISTS: tuple[str, ...] = ("nonfinite_drop.csv",)
 amendment of 2026-11-13 (``data/nonfinite.py``)."""
 
 
+SUPERSEDED_DIR = "superseded"
+"""Runs kept for the record but replaced under a later rule (2026-11-16: RC-G2 session 1, made
+while the units inside the protected layers were removable); never read as current rows."""
+
+
 def classify_path(path: Path, root: Path) -> ResultFile | None:
     """Return what a CSV path under ``root`` encodes, or None if it is not a results file."""
     rel = path.relative_to(root)
     parts = rel.parts
-    if not parts or parts[0] == "summary" or path.suffix != ".csv":
+    if not parts or parts[0] in ("summary", SUPERSEDED_DIR) or path.suffix != ".csv":
         return None
     if parts[0] in COMPARISON_DIRS:  # strict: D02 amendment 3; unfiltered: amendment 6
         budget = parts[2] if len(parts) == 4 else None

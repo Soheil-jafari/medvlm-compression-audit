@@ -266,3 +266,13 @@ checked against the attached files): `results/E9/nobudget/seed0/` `metrics.csv`,
   reset; `num_parameters` 1,766,749,184 also misses the packed codes). It stands until the
   benchmark-only re-run (section 3) replaces this `efficiency.csv`; the accuracy files stand.
 
+**Benchmark re-measured, reported by Amir on 2026-11-16 (commit 4f54655, `--only benchmark`, 24.2
+min):** three files committed unchanged (SHA-256 checked): `efficiency.csv`,
+`efficiency_setup.json` (identical to the one before), `environment.json`; the run report is
+`docs/runs/reports/run_report_RC-E9_benchmark.md` (taken from the run's log). Peak memory
+7,351,677,856 bytes (replaces the flagged 20,420,121,088), 0.42 GB above its `state_bytes`
+6,928,391,072 (two T4s); `benchmark_excluded_bytes` 17,608,288 (a fresh process);
+`num_parameters` 8,292,166,656 (the logical count); warm latency 2.60 s (TorchLinear, 196
+matrices). The new `environment.json` holds only the benchmark stage: the evaluation stage's
+record of the resumed run is in git history (commit 867d213).
+

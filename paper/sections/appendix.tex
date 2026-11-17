@@ -102,9 +102,21 @@ fallback.
 \begin{table}[h]
   \centering
   \caption{Every pruning run: its removed units, how many lie inside the first two and the last
-  decoder layer (never removed as whole layers; their inner units stay removable for every arm)
-  and their share of the removed parameters.}
+  decoder layer and their share of the removed parameters. Since the amendment of 2026-11-16 no
+  unit of these layers is removed, so every current run reads 0.}
   \resizebox{\linewidth}{!}{\input{tables/appendix_protected_layers}}
+\end{table}
+
+\subsection{Pruning without full protection of the first and last layers}
+\begin{table}[h]
+  \centering
+  \caption{The original pre-registered \expid{E5} (magnitude and activation at \expid{B2},
+  seed 0): one global per-parameter ranking over layers, attention groups and channel groups,
+  with the units inside the first two and the last decoder layer removable. Most of their
+  removed units fell inside those three layers, which led to the amendments that protect every
+  unit of them (2026-11-16) and remove an equal number of channel groups per layer
+  (2026-11-17; pre-registration section 10). Superseded, exploratory, outside H1--H4.}
+  \resizebox{\linewidth}{!}{\input{tables/appendix_without_full_protection}}
 \end{table}
 
 \subsection{Optimizer updates skipped by the loss scaler}

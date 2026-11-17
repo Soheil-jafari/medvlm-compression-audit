@@ -1507,3 +1507,26 @@ Append-only, newest at the bottom. One entry per iteration:
 - Non-finite recovery steps: `scripts/check_nonfinite_steps.py` (CPU) and `recovery_steps.json`.
   Footprint jump: the scale check's slicing of a removal set; B1 not at risk; the check now
   measures prefixes of the order. Tests.
+
+## Iteration 90: 2026-11-16 (interactive)
+- Amendment of 2026-11-16: no unit of layers 0, 1 and 35 is removed, for every arm (section 10).
+  `removal_order`, `validate_removal_set`, stage 05's guard, `removal_by_layer.csv`; protected
+  layers now found from every unit type (A6 `heads_channels` protected nothing before). Capacity
+  of layers 2-34: every arm reaches B3. Session 1's B2 files moved unchanged to
+  `results/superseded/inner_units_removable/`; appendix table. Reruns planned on three accounts.
+- RC-E9's benchmark re-measured (7,351,677,856 bytes) committed unchanged. Tests.
+
+## Iteration 91: 2026-11-17 (interactive)
+- Amendment of 2026-11-17 (section 10): the pruning design locked. E5 removes only 128-channel
+  MLP groups, the same k from every unprotected layer (`pruning.removal.allocation: uniform_mlp`),
+  with a search over k; E5R (random scores) and E7U (E7's scores) added, exploratory, B2 seed 0,
+  RC-G2 session 5; E7, E6 and A1-A6 stay global. Decision file
+  `docs/decisions/pruning_design_2026-11-17.md`.
+- `recovery.search_budget` serves stage 05 and the offline replay (`scripts/replay_removal.py`,
+  committed output in `results/replay/`; estimate within 0.5 % of session 1's measured drops):
+  every arm reaches B3; k = 13 / 29 / 46 at B1 / B2 / B3.
+- E7U reads E7's scores (`pruning.scores_from`); stage 04 never scores for it. A recovery resume
+  state of another removal set is refused. E7's check adds the fit of the exact effect on the
+  estimate and the B2 substitution (`--followup-only` on CPU). An attached pruned model whose
+  recorded units differ from the committed `removal.json` (an earlier design's hand-off) stops the
+  card and the evaluation instead of being reused. Tests.

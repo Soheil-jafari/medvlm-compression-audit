@@ -67,9 +67,9 @@ def test_the_removal_set_follows_the_magnitude_order_to_the_level(tmp_path: Path
     removal = scale_check.magnitude_removal(model, config, 0.3)
     assert sum(u.num_params for u in removal) >= 0.3 * decoder
     shorter = scale_check.magnitude_removal(model, config, 0.1)
-    assert len(shorter) <= len(removal)
-    assert all(u.layer_index not in (0, 2) or u.unit_type is not UnitType.DECODER_LAYER
-               for u in removal)  # the protected first and last layers stay  # fmt: skip
+    assert sum(u.num_params for u in shorter) <= sum(u.num_params for u in removal)
+    # no unit of the protected first and last layers (amendment of 2026-11-16)
+    assert all(u.layer_index not in (0, 2) for u in [*removal, *shorter])
 
 
 def test_a_production_training_loop_stops_after_the_updates_the_check_needs(

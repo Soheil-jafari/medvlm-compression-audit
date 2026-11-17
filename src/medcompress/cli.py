@@ -281,7 +281,8 @@ def report_todos(config: dict[str, Any], limit: int = 10) -> None:
 
 
 COMPRESSION_ARMS: tuple[str, ...] = (
-    "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10Q", "A1", "A2", "A3", "A4", "A5", "A6",
+    "E3", "E4", "E5", "E5R", "E6", "E7", "E7U", "E8", "E9", "E10Q",
+    "A1", "A2", "A3", "A4", "A5", "A6",
 )  # fmt: skip
 """Experiments that compress the student or the teacher: they run only after the freeze."""
 

@@ -2,6 +2,15 @@
 
 ## 1. What and why
 
+- **Design (amendment of 2026-11-17; `docs/decisions/pruning_design_2026-11-17.md`):** E5 removes
+  only MLP channel groups of 128, the same number k from every unprotected layer (2-34; LLM-Pruner's
+  allocation), the k lowest-scoring groups within each layer; the budget search runs over k (0-85,
+  the smallest k at or below target x 1.03). No unit of layers 0, 1 and 35 is removed. The earlier
+  global per-parameter ranking (RC-G2 session 1) is superseded and kept in the appendix only. Every
+  run writes `uniform_k`, `removal_by_layer.csv` and the units removed by type. Methods text:
+  "magnitude, activation (Wanda-sp) and first-order Taylor importance of 128-channel MLP groups,
+  removed in equal number from every unprotected layer (LLM-Pruner's allocation)". The exploratory
+  E5R (random scores, the same design, B2 seed 0) runs in RC-G2 session 5.
 - **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** every run is seed 0 (exploratory), except the **comparator**: if it is an E5 criterion, that criterion at B2 also runs seeds 1 and 2 (main tier). The comparator is chosen on validation, seed 0, at B2 by the ordering of pre-registration section 5 (`scripts/choose_comparator.py`, after RC-G2); seeds 1 and 2 run only if the futility rule does not stop the study. The plan refuses a seed 1 or 2 session until `results/seed_plan/comparator_B2.json` is committed, and when the comparator is not an E5 criterion. This replaces the seed counts written below.
 - Stage: S09
 - Experiments: E5 with the criteria `magnitude`, `activation` (Wanda-style) and `taylor`, budget B2 with seeds 0, 1, 2, and B1 and B3 with seed 0 only (the trend, pre-registration section 11 item 11; decided 2026-11-06). The cell of a seed 1 or 2 session runs B2 only

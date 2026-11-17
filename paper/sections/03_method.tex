@@ -57,12 +57,18 @@ LoRA settings once fixed}
 Table~\ref{tab:ladder} lists the arms. Post-training quantization (\expid{E3}) is
 applied to \expid{E2} at 8-bit and 4-bit weights and, where supported, 8-bit weights
 and activations; quantization-aware distillation (\expid{E4}) follows
-GRACE~\cite{chen_grace}. Generic structured pruning (\expid{E5}) ranks units by
-weight magnitude, activation-weighted magnitude~\cite{sun_wanda} or a first-order
-Taylor estimate; output-similarity pruning (\expid{E6}) removes the decoder layers
-whose removal changes the output least~\cite{khan_compression_medical_mllm}. \expid{E7} is our
-criterion, \expid{E8} adds 4-bit quantization to \expid{E7}, and \expid{E9} is the
-teacher at 4-bit (supplementary). \todo{quantization backends and settings once
+GRACE~\cite{chen_grace}. Generic structured pruning (\expid{E5}) uses
+magnitude, activation (Wanda-sp)~\cite{sun_wanda} and first-order Taylor importance of
+128-channel MLP groups, removed in equal number from every unprotected layer
+(LLM-Pruner's allocation~\cite{ma2023llmpruner}); output-similarity pruning (\expid{E6})
+removes the decoder layers whose removal changes the output
+least~\cite{khan_compression_medical_mllm}. \expid{E7} is our criterion, ranking whole
+layers, attention groups and channel groups together; \expid{E8} adds 4-bit quantization
+to \expid{E7}, and \expid{E9} is the teacher at 4-bit (supplementary). Two exploratory
+arms at the primary budget use \expid{E5}'s units and allocation: \expid{E5R} with
+random scores, and \expid{E7U} with \expid{E7}'s scores, which separates our criterion
+from its allocation. Every arm meets the budget with the same rule: the smallest removal
+whose measured footprint is at or below the target plus 3\,\%. \todo{quantization backends and settings once
 fixed}
 
 \begin{table}[t]
@@ -79,9 +85,11 @@ fixed}
     \expid{E2} & Student + offline KD & -- & reference \\
     \expid{E3} & PTQ (W8/W4/W8A8) & \expid{E2} & measured \\
     \expid{E4} & QAKD & -- & measured \\
-    \expid{E5} & Generic structured pruning + recovery & \expid{E2} & B1--B3 \\
+    \expid{E5} & Generic MLP-channel pruning + recovery & \expid{E2} & B1--B3 \\
+    \expid{E5R} & \expid{E5}'s design, random scores (expl.) & \expid{E2} & B2 \\
     \expid{E6} & Output-similarity layer pruning + recovery & \expid{E2} & B1--B3 \\
     \expid{E7} & Clinical pruning (ours) + recovery & \expid{E2} & B1--B3 \\
+    \expid{E7U} & \expid{E7}'s scores, \expid{E5}'s design (expl.) & \expid{E2} & B2 \\
     \expid{E8} & \expid{E7} + 4-bit PTQ & \expid{E7} & B1--B3 \\
     \expid{E9} & Teacher 4-bit (suppl.) & \expid{E0} & measured \\
     \expid{A1}--\expid{A6} & Criterion ablations & \expid{E2} & B2 \\
@@ -98,11 +106,17 @@ it, so removing a group never leaves a query head without its key and value. MLP
 channel groups are contiguous blocks of intermediate channels of a pre-registered
 size. A removal set is valid when every remaining layer keeps at least one attention
 group and one channel group, no unit is counted twice, and layers that inject
-visual features (where the architecture has them) are protected. For every arm, the
-first two and the last decoder layer are never removed as whole layers; the
-attention groups and channel groups inside them remain removable like any other
-unit (pre-registered with the removal rules, before any score existed). Each run
-reports how many of its removed units lie inside these three layers.
+visual features (where the architecture has them) are protected. For every arm, no
+unit of the first two and the last decoder layer is removed: not the layer, not its
+attention groups, not its channel groups, as is usual for channel pruning of language
+models~\cite{ma2023llmpruner}. This full protection is an amendment made after the
+first two generic arms had been run with only the whole layers protected (most of
+their removed units then fell inside these three layers; Appendix); it applies to
+every arm alike and makes the comparison arms stronger. At the same point, and for the
+same reason, \expid{E5}'s allocation was changed from one global per-parameter ranking
+over all units to an equal number of channel groups per unprotected layer; the original
+\expid{E5} runs are reported in the Appendix, outside the hypotheses. Each run reports
+the share of its removed parameters per decoder layer.
 
 \subsection{Clinically weighted pruning criterion}
 Let $C$ be the pre-registered finding list and $X_{\mathrm{cal}}$ a calibration set

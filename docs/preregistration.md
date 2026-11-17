@@ -355,6 +355,93 @@ a choice made on the results. *Reporting:* every pruning run records how many of
 lie inside the protected layers (`removed_units_in_protected_layers`), and the paper's methods
 text states that protection is of whole layers.
 
+**Amendment of 2026-11-16 (research lead; agreed by Soheil and Amir; post hoc, disclosed;
+supersedes the clarification of 2026-11-15).** "First 2 and last 1 layers protected" (section 7,
+D07 section 2) now means that **no unit inside decoder layers 0, 1 and 35 is ever removed**: not the
+whole layer, not a KV group, not an MLP channel group, for every arm: E5 (all criteria), E6, E7,
+E8 and A1-A6. *What prompted it:* RC-G2 session 1 (E5 at B2, seed 0) under the clarification of
+2026-11-15: magnitude put 171 of its 220 removed units inside layers 0, 1 and 35 (59.9 % of those
+layers' 231.2 M parameters), activation 172 of its 281 (61.9 %); validation op macro balanced
+accuracy fell to 0.598 and 0.572 (E2 0.836) and small-finding recall to 0. Per-parameter scores of
+the first and last layers are on another scale than the rest, so a global ranking empties them,
+which defeats the purpose of protecting them; for channel pruning the usual practice is to leave
+the first and last layers out entirely (LLM-Pruner, Ma et al., NeurIPS 2023). It came after the
+baselines' validation results but before any E7 pruned model and before any pruned model's test
+result. *Why it is not a choice made on our method's results:* it applies identically to every
+arm; it changes no score, weight, budget or recovery setting; it makes the comparison arms
+stronger, which works against H1, not for it. *Reporting:* session 1's results stay committed,
+moved unchanged to `results/superseded/inner_units_removable/` and marked superseded ("units of
+protected layers removable, exploratory, outside H1-H4"); the paper reports them in an appendix
+as what happens without full protection. *How:* `removal_order` leaves out every unit of a
+protected layer, `validate_removal_set` refuses a removal set that touches one, stage 05 stops on
+such a set, the protected layers are found from every unit type (an arm without whole-layer units,
+A6 `heads_channels`, protected nothing before), and every pruning run writes the share of its
+removed parameters per decoder layer (`removal_by_layer.csv`). E7's committed scores stay: the
+units of protected layers are left out of the order, the rest keeps its order (per-parameter
+normalisation is per unit).
+
+**Amendment of 2026-11-17 (research lead; agreed by Soheil and Amir; post hoc, disclosed;
+keeps the protection rule of 2026-11-16).** The pruning
+design is locked as follows. Full reasons and sources: `docs/decisions/pruning_design_2026-11-17.md`.
+
+1. *Protection, every arm.* No unit in decoder layers 0, 1 and 35 is ever removed: not the
+   layer, not a KV group, not an MLP channel group. This keeps the amendment of 2026-11-16 and
+   supersedes the clarification of 2026-11-15.
+2. *E5 redesigned (magnitude, activation, Taylor).* Units: MLP channel groups of 128 only (no KV
+   groups, no whole layers). Allocation: the same number k of groups is removed from every
+   unprotected layer (2-34), the same-ratio scheme of LLM-Pruner. Within a layer the k
+   lowest-scoring groups go. The scores are the committed ones for magnitude and activation;
+   Taylor is scored in session 2. Budget: a search over k (0-85) keeps the smallest k whose
+   measured footprint is at or below target x 1.03 (the band of +-3 % and the selection rule of
+   2026-11-16, unchanged). One step of k removes 33 groups, about 52 MB.
+3. *New arm E5R ("Random"; exploratory; B2, seed 0).* E5's design with seeded random scores (the
+   existing `random` criterion, as A3), the same k search and the same recovery.
+4. *New arm E7U ("E7-U"; exploratory; B2, seed 0).* E7's committed scores (session 3) with E5's
+   design: the same units, the same k per layer, the lowest E7 importance per parameter within
+   each layer first. It separates E7's criterion from E7's allocation.
+5. *Unchanged.* E7 (global ranking over layers, KV groups and channel groups, now fully
+   protected), E6, A1-A6 (global), the recovery, the budgets, the comparator rule. The comparator
+   pool stays E5 magnitude, E5 activation, E5 Taylor and E6; E5R and E7U are not candidates.
+6. *Session 1 stays committed, relabelled.* Its results in
+   `results/superseded/inner_units_removable/` are "the original pre-registered E5 (global
+   per-parameter ranking, inner units of protected layers removable); appendix; outside H1-H4".
+7. *Session 2* (stopped at commit `d9039dc`) produced nothing to keep.
+
+*Disclosure.* The change was made after E5 session 1's validation results (op macro balanced
+accuracy 0.598 and 0.572 against E2's 0.836; small-finding recall 0), before any pruned E7 model
+and before any test result. It applies to every generic arm alike and makes the comparison arms
+stronger, which works against H1, not for it. E5R and E7U are additions fixed before any of their
+results.
+
+*Why.* A global per-parameter ranking compares scores across layers that are on different scales;
+session 1 showed it emptying the first and last layers, and the literature reports the same
+failure for global magnitude ranking (Molchanov et al., ICLR 2017; FLAP, An et al., AAAI 2024;
+ECoFLaP, Sung et al., ICLR 2024). LLM-Pruner (Ma et al., NeurIPS 2023), the method E5's channel
+criteria follow, removes the same ratio from every layer and protects the first and last layers.
+Without protection, Taylor pruning collapses (Kim et al. 2024). E5R gives the random baseline that
+Blalock et al. (MLSys 2020) ask for, on the same units and allocation. E7U shows how much of any
+E7 effect comes from the clinical scores and how much from E7's global allocation.
+
+*Offline estimate (not a result).* `scripts/replay_removal.py` runs stage 05's search on the
+committed scores with an estimated footprint (E2's measured peak minus 2 bytes per removed
+parameter; within 0.5 % of session 1's measured drops). E5 magnitude, E5 activation, E5R and E7U
+reach B1, B2 and B3 at k = 13, 29 and 46 of 86 groups per layer (15.1 %, 33.7 % and 53.5 % of
+each unprotected layer's MLP width). E7 reaches all three with no protected unit. Because the
+search keeps the smallest k in the band, k lands at the band's upper edge (about +2 to +3 % above
+the target); k = 33 would be the first at or below the target itself. The measured search can
+differ by a step. `results/replay/removal_replay.md` has the per-layer table.
+
+*How.* `pruning.removal.allocation` (`global` | `uniform_mlp`; `configs/pruning.yaml`), set to
+`uniform_mlp` in `configs/experiments/E5.yaml`, `E5R.yaml` and `E7U.yaml`;
+`budgets.search_uniform_budget` (the k search, reusing the measurer and the 1 % level check);
+`recovery.search_budget` (both allocations, used by stage 05 and by the replay); `pruning.scores_from:
+E7` for E7U (stage 04 only checks and reuses E7's file and never writes it); RC-G2 parts `E5R`
+and `E7U` (session 5); every pruning run writes `removal_by_layer.csv` (36 rows), the units removed
+by type and, for `uniform_mlp`, `uniform_k`. A recovery resume state saved for another removal set
+is refused. E7's 30-group check also fits the exact effect on the first-order estimate (slope and
+intercept with 95 % intervals) and re-runs E7's B2 selection with the 30 exact effects in place,
+reporting how many of the 30 switch and whether a KV-group or layer decision changes.
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result

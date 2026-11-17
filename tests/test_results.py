@@ -155,3 +155,13 @@ def test_the_summary_names_sources_relative_to_the_results_folder(tmp_path: Path
     rows = load_results(tmp_path / "results")
     assert sorted(rows["source"]) == ["data/summary.csv", "smoke/RC-M1.csv"]
     assert "images" in setup_data_table(rows) and "RC-M1" not in setup_data_table(rows)
+
+
+def test_superseded_runs_are_never_read_as_current_rows(tmp_path: Path) -> None:
+    """2026-11-16: RC-G2 session 1's first runs are kept under results/superseded/."""
+    from medcompress.evaluation.aggregate import classify_path
+
+    path = tmp_path / "superseded" / "inner_units_removable" / "E5" / "magnitude" / "B2" / "seed0"
+    path.mkdir(parents=True)
+    (path / "metrics.csv").write_text("experiment,budget,seed,metric,value\n")
+    assert classify_path(path / "metrics.csv", tmp_path) is None

@@ -170,8 +170,10 @@ def validate_removal_set(
     Constraints: every removed unit is a candidate; no unit removed twice; a head or
     channel group inside a removed layer is not removed separately; at least one
     layer remains; every remaining layer keeps at least one head group and one
-    channel group; protected layers (e.g. Qwen3-VL DeepStack injection layers) are
-    never removed. Embeddings, LM head and projector are never candidates.
+    channel group; no unit of a protected layer is removed (the whole layer, a KV group or a
+    channel group: amendment of 2026-11-16; the first two and the last decoder layer for the
+    pruning arms, e.g. also Qwen3-VL's DeepStack injection layers). Embeddings, LM head and
+    projector are never candidates.
 
     Used by: E5, E6, E7, A1-A6 and the budget search.
     """
@@ -182,7 +184,13 @@ def validate_removal_set(
     problems += [f"{u} removed twice" for u in sorted({u for u in ids if ids.count(u) > 1})]
     layers = {u.layer_index for u in units if u.unit_type is UnitType.DECODER_LAYER}
     removed_layers = {u.layer_index for u in removed if u.unit_type is UnitType.DECODER_LAYER}
-    problems += [f"layer {i} is protected" for i in sorted(removed_layers & set(protected_layers))]
+    protected = set(protected_layers)
+    problems += [f"layer {i} is protected" for i in sorted(removed_layers & protected)]
+    problems += [
+        f"{u.unit_id} lies inside protected layer {u.layer_index}"
+        for u in removed
+        if u.unit_type is not UnitType.DECODER_LAYER and u.layer_index in protected
+    ]
     if layers and removed_layers >= layers:
         problems.append("every decoder layer would be removed")
     for unit in removed:

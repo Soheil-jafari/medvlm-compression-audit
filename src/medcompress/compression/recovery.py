@@ -42,6 +42,13 @@ def recovery_fingerprint(recovery_config: Mapping[str, Any]) -> str:
     return hashlib.sha256(payload).hexdigest()[:16]
 
 
+ALLOCATIONS: tuple[str, ...] = ("global", "uniform_mlp")
+"""How a removal is spread over the decoder (amendment of 2026-11-17): ``global`` ranks every
+candidate unit together (E6, E7, A1-A6); ``uniform_mlp`` removes the same number k of MLP channel
+groups from every unprotected layer, the lowest-scored first within each layer (LLM-Pruner's
+same-ratio allocation; E5, E5R, E7U)."""
+
+
 @dataclass(frozen=True)
 class RemovalSettings:
     """How the scores become a removal order (``pruning.removal`` of ``configs/pruning.yaml``)."""
@@ -50,6 +57,7 @@ class RemovalSettings:
     score_normalisation: str
     protected_first: int
     protected_last: int
+    allocation: str = "global"
 
     @classmethod
     def from_config(cls, config: Mapping[str, Any]) -> RemovalSettings:
@@ -81,7 +89,12 @@ class RemovalSettings:
         first, last = protected["first"], protected["last"]
         if any(not isinstance(v, int) or isinstance(v, bool) or v < 0 for v in (first, last)):
             raise ConfigError("pruning.removal.protected_layers values must be integers >= 0")
-        return cls(str(removal["schedule"]), str(removal["score_normalisation"]), first, last)
+        allocation = str(removal.get("allocation", "global"))
+        if allocation not in ALLOCATIONS:
+            raise ConfigError(f"pruning.removal.allocation must be one of {ALLOCATIONS}, got "
+                              f"{allocation!r}")  # fmt: skip
+        return cls(str(removal["schedule"]), str(removal["score_normalisation"]), first, last,
+                   allocation)  # fmt: skip
 
 
 def plan_removal(
@@ -94,9 +107,10 @@ def plan_removal(
     """
     from medcompress.compression.pruning.criteria.common import removal_order
     from medcompress.compression.pruning.criteria.output_similarity import protected_layer_indices
-    from medcompress.compression.pruning.units import UnitType
 
-    n_layers = len({u.layer_index for u in units if u.unit_type is UnitType.DECODER_LAYER})
+    # the decoder's layers from every unit type: an arm without whole-layer units (A6
+    # heads_channels) protected nothing when only layer units were counted (2026-11-16)
+    n_layers = len({u.layer_index for u in units})
     protected = (
         protected_layer_indices(n_layers, settings.protected_first, settings.protected_last)
         if n_layers
@@ -106,6 +120,99 @@ def plan_removal(
         scores, units, normalisation=settings.score_normalisation, protected_layers=protected
     )
     return ordered, protected
+
+
+def search_budget(
+    units: Sequence[PrunableUnit],
+    scores: Mapping[str, float],
+    removal: RemovalSettings,
+    spec: Any,
+    target: float,
+    measure: Callable[[Sequence[PrunableUnit]], float],
+    *,
+    max_steps: int | None = None,
+) -> tuple[Any, list[int]]:
+    """The budget search of one run under its allocation: ``(search, protected layers)``.
+
+    ``global``: one removal order over every candidate unit, the shortest feasible prefix that
+    meets the budget (:func:`medcompress.budgets.search_matched_budget`). ``uniform_mlp``
+    (amendment of 2026-11-17): the smallest k such that removing the k lowest-scored channel
+    groups of every unprotected layer meets the budget
+    (:func:`medcompress.budgets.search_uniform_budget`). Stage 05 and the offline replay
+    (``scripts/replay_removal.py``) both call this."""
+    from medcompress.budgets import search_matched_budget, search_uniform_budget
+
+    ordered, protected = plan_removal(units, scores, removal)
+    if removal.allocation == "uniform_mlp":
+        search = search_uniform_budget(
+            units, scores, spec, target, measure, protected_layers=protected,
+            normalisation=removal.score_normalisation, max_steps=max_steps,
+        )  # fmt: skip
+        print(f"uniform_mlp allocation: k = {search.count} channel groups from each "
+              f"unprotected layer", flush=True)  # fmt: skip
+    else:
+        search = search_matched_budget(
+            units, ordered, spec, target, measure, protected_layers=protected,
+            max_steps=max_steps,
+        )  # fmt: skip
+    return search, protected
+
+
+RESUME_REMOVAL_FILE = "removal_digest.txt"
+
+
+def removal_digest(removal: Sequence[PrunableUnit], settings: RemovalSettings) -> str:
+    """SHA-256 over the removal set and the removal settings (2026-11-17)."""
+    payload = json.dumps({"units": sorted(u.unit_id for u in removal),
+                          "settings": settings.__dict__}, sort_keys=True)  # fmt: skip
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def claim_resume_dir(folder: Path, digest: str) -> None:
+    """Refuse a recovery resume state saved for another removal set (2026-11-17).
+
+    The training resume fingerprint covers the settings, the seed and the examples, not the
+    removal: an attached state of the design before the amendment of 2026-11-17 (or of another
+    arm) would otherwise be resumed onto a differently pruned model. A folder with saved state
+    and no digest, or with another digest, stops the stage; an empty or new folder is claimed."""
+    folder = Path(folder)
+    marker = folder / RESUME_REMOVAL_FILE
+    if marker.is_file():
+        found = marker.read_text(encoding="utf-8").strip()
+        if found != digest:
+            raise ValueError(f"the recovery resume state at {folder} was saved for another "
+                             f"removal set ({found[:12]} vs {digest[:12]}); detach it or use a "
+                             "fresh session")  # fmt: skip
+        return
+    from medcompress.compression.distillation.resume import PROGRESS_FILE
+
+    if any((folder / name / PROGRESS_FILE).is_file() for name in ("current", "old")):
+        raise ValueError(f"the recovery resume state at {folder} has no removal digest (saved "
+                         "before 2026-11-17, or by another removal); detach it or use a fresh "
+                         "session")  # fmt: skip
+    folder.mkdir(parents=True, exist_ok=True)
+    marker.write_text(digest + "\n", encoding="utf-8")
+
+
+def require_pruned_matches_removal(directory: Path | str, removal_json: Path | str) -> None:
+    """Stop when a pruned model's recorded units differ from the run's committed
+    ``removal.json`` (2026-11-17): an attached hand-off of an earlier design (for example
+    ``g2-b2-seed0-pruned-e5``, the original E5) has the same folder names as the new one.
+    Nothing to compare (no manifest or no committed ``removal.json``): no check."""
+    from medcompress.compression.pruning.checkpoint import MANIFEST_NAME
+
+    manifest_path, removal_path = Path(directory) / MANIFEST_NAME, Path(removal_json)
+    if not manifest_path.is_file() or not removal_path.is_file():
+        return
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    saved = {unit for step in manifest.get("steps") or [] for unit in step}
+    committed = set(json.loads(removal_path.read_text(encoding="utf-8")).get("units") or [])
+    if saved != committed:
+        raise ValueError(
+            f"the pruned model at {directory} removed {len(saved)} units, the committed "
+            f"{removal_path} lists {len(committed)} ({len(saved ^ committed)} differ): it is from "
+            "another run or an earlier design; detach that hand-off"
+        )
 
 
 def pruned_dir(config: Mapping[str, Any], run: RunContext) -> Path:
@@ -218,7 +325,7 @@ def run_prune_and_recover(
 
     Used by: E5, E6, E7, A1-A6.
     """
-    from medcompress.budgets import report_for_metric, search_matched_budget, target_value
+    from medcompress.budgets import report_for_metric, target_value
     from medcompress.compression.distillation.offline_kd import (
         data_seed,
         examples_from_samples,
@@ -252,6 +359,12 @@ def run_prune_and_recover(
         mlp_channel_group_size=scoring.mlp_channel_group_size,
     )
     parameters_before = count_parameters(base)
+    from medcompress.compression.pruning.surgery import find_decoder_stack
+
+    layer_sizes = {i: sum(p.numel() for p in layer.parameters())
+                   for i, layer in enumerate(find_decoder_stack(base.module
+                                                                if hasattr(base, "module")
+                                                                else base).layers)}  # fmt: skip
     from medcompress.models.loading import release_model
 
     release_model(base)  # its GPU memory is freed before the search loads its own copies
@@ -259,8 +372,6 @@ def run_prune_and_recover(
     unknown = sorted({u.unit_id for u in units} - set(scores))
     if unknown:
         raise ValueError(f"unit scores lack {len(unknown)} of the units, e.g. {unknown[:3]}")
-    ordered, protected = plan_removal(units, scores, settings.removal)
-
     from medcompress.budgets import reference_decoder_bytes as read_decoder_bytes
 
     if reference_value is None:
@@ -278,12 +389,18 @@ def run_prune_and_recover(
     if spec.metric == "peak_memory":
         measure = _level_checked(measure, reference, spec, settings, paths, reference_value)
     smoke_steps = (config.get("smoke") or {}).get("budget_search_steps")  # RC-SMOKE only
-    search = search_matched_budget(
-        units, ordered, spec, target, measure, protected_layers=protected,
+    search, protected = search_budget(
+        units, scores, settings.removal, spec, target, measure,
         max_steps=None if smoke_steps is None else int(smoke_steps),
     )  # fmt: skip
     if search.count == 0:
         raise ValueError(f"{run.budget} asks for no compression: E2 already meets the target")
+    touching = sorted(u.unit_id for u in search.removal if u.layer_index in set(protected))
+    if touching:  # never reached through the order; refused all the same (2026-11-16)
+        raise ValueError(
+            f"the removal set touches the protected layers {sorted(protected)}: {touching[:5]} "
+            "(amendment of 2026-11-16: no unit of them is removed)"
+        )
 
     model = factory()
     remove_units(model, list(search.removal))
@@ -307,6 +424,7 @@ def run_prune_and_recover(
 
     print_memory("stage 05: teacher records and examples ready")  # host RAM (2026-11-14)
     resume_dir = pruned_dir(config, run).parent / "resume"  # removed once the model is saved
+    claim_resume_dir(resume_dir, removal_digest(search.removal, settings.removal))
     result = run_recovery(model, examples, recovery, seed=run.seed, resume_dir=resume_dir)  # type: ignore[arg-type]
     print_memory("stage 05: recovery done")
     directory = save_pruned(
@@ -319,7 +437,8 @@ def run_prune_and_recover(
     from medcompress.compression.distillation.resume import ResumeStore
 
     ResumeStore(resume_dir, "").clear()
-    _write_outputs(config, run, settings, search, check, result, recovery, protected)
+    _write_outputs(config, run, settings, search, check, result, recovery, protected,
+                   layer_sizes)  # fmt: skip
     print(
         f"removed {len(search.removal)} units for {run.budget}: footprint {search.footprint:.4g} "
         f"vs target {search.target:.4g} "
@@ -397,6 +516,24 @@ def _default_measure(
     )
 
 
+def removal_by_layer(
+    layer_sizes: Mapping[int, int], removal: Sequence[PrunableUnit]
+) -> list[tuple[int, int, int, float, float]]:
+    """One row per decoder layer: its parameters, the parameters removed from it, their share of
+    everything removed and of the layer (2026-11-16: session 1 removed most of its units inside
+    the first and last layers; this table shows such a concentration at once). A removed layer
+    counts whole; its inner units are absorbed. The removed parameters sum to the total."""
+    removed: dict[int, int] = {}
+    for unit in removal:
+        removed[unit.layer_index] = removed.get(unit.layer_index, 0) + unit.num_params
+    total = sum(removed.values())
+    return [
+        (index, params, removed.get(index, 0), removed.get(index, 0) / total if total else 0.0,
+         removed.get(index, 0) / params if params else 0.0)
+        for index, params in sorted(layer_sizes.items())
+    ]  # fmt: skip
+
+
 def _write_outputs(
     config: Mapping[str, Any],
     run: RunContext,
@@ -406,6 +543,7 @@ def _write_outputs(
     result: TrainResult,
     recovery: Mapping[str, Any],
     protected: Sequence[int] = (),
+    layer_sizes: Mapping[int, int] | None = None,
 ) -> None:
     """Write ``removal.json``, ``budget_search.csv`` and the metrics rows of the run.
 
@@ -417,6 +555,7 @@ def _write_outputs(
     from medcompress.utils.io import upsert_results, write_json
 
     run_dir = run.run_dir(config["paths"]["results_root"])
+    uniform = settings.removal.allocation == "uniform_mlp"  # search.count is k (2026-11-17)
     write_json(
         {
             "units": [u.unit_id for u in search.removal],
@@ -427,13 +566,16 @@ def _write_outputs(
                 "score_normalisation": settings.removal.score_normalisation,
                 "protected_first": settings.removal.protected_first,
                 "protected_last": settings.removal.protected_last,
+                "allocation": settings.removal.allocation,
             },
+            **({"uniform_k": search.count} if uniform else {}),
         },
         run_dir / "removal.json",
     )
     from medcompress.utils.io import write_csv
 
-    write_csv(run_dir / "budget_search.csv", ["accepted_units_removed", "measured_footprint"],
+    write_csv(run_dir / "budget_search.csv",
+              ["uniform_k" if uniform else "accepted_units_removed", "measured_footprint"],
               search.trace)  # fmt: skip
     # which updates had a non-finite loss and which the loss scaler skipped (step indices only,
     # 1-based; 2026-11-16): checked against the images RC-CAL0 lists by
@@ -441,6 +583,10 @@ def _write_outputs(
     write_json({"nonfinite_steps": list(result.nonfinite_steps),
                 "skipped_steps": list(result.skipped_steps)},
                run_dir / "recovery_steps.json")  # fmt: skip
+    if layer_sizes:
+        write_csv(run_dir / "removal_by_layer.csv",
+                  ["layer_index", "layer_params", "removed_params", "share_of_removed",
+                   "share_of_layer"], removal_by_layer(layer_sizes, search.removal))  # fmt: skip
     kinds = {t: sum(1 for u in search.removal if u.unit_type is t) for t in UnitType}
     inside = [u for u in search.removal if u.layer_index in set(protected)]
     numbers: list[tuple[str, float]] = [
@@ -467,6 +613,8 @@ def _write_outputs(
         ("recovery_nonfinite_steps", len(result.nonfinite_steps)),
         ("recovery_nonfinite_microbatches", result.nonfinite_microbatches),
     ]
+    if uniform:  # channel groups removed from each unprotected layer (amendment of 2026-11-17)
+        numbers.append(("uniform_k", search.count))
     if result.peak_gpu_bytes is not None:
         numbers.append(("recovery_peak_gpu_bytes", result.peak_gpu_bytes))
     upsert_results(

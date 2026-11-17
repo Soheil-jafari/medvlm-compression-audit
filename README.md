@@ -97,9 +97,11 @@ tests/                   import, config, registry, script and utility tests
 | E2 | Student + offline distillation, full precision (start of all compression arms) | pretrained (+E0 cache) | - | 3 |
 | E3 | E2 + post-training quantization (GPTQ `w8` / `w4`; LLM.int8 `w8a8`) | E2 | measured | `w8`: 3 (H2); `w4`, `w8a8`: 1 |
 | E4 | Student trained with quantization-aware distillation (GRACE-style) | pretrained (+E0 cache) | measured | 1 (seed 0) |
-| E5 | E2 + generic structured pruning (magnitude, activation/Wanda-style, Taylor) + recovery | E2 | B1-B3 | 1; 3 for the comparator at B2 |
-| E6 | E2 + output-similarity layer pruning (Khan et al. style) + recovery | E2 | B1-B3 | 1; 3 if it is the comparator (B2) |
-| E7 | E2 + clinical pruning criterion (ours) + recovery | E2 | B1-B3 | 3 at B2; 1 at B1, B3 |
+| E5 | E2 + generic structured pruning (magnitude, activation/Wanda-sp, Taylor) of 128-channel MLP groups, the same number from every unprotected layer (LLM-Pruner's allocation) + recovery; comparator candidate | E2 | B1-B3 | 1; 3 for the comparator at B2 |
+| E5R | *Exploratory (2026-11-17):* E5's design with seeded random scores (the random baseline on E5's units) | E2 | B2 | 1 (seed 0) |
+| E6 | E2 + output-similarity layer pruning (Khan et al. style) + recovery; comparator candidate | E2 | B1-B3 | 1; 3 if it is the comparator (B2) |
+| E7 | E2 + clinical pruning criterion (ours): one global ranking over layers, KV groups and channel groups + recovery | E2 | B1-B3 | 3 at B2; 1 at B1, B3 |
+| E7U | *Exploratory (2026-11-17):* E7's scores with E5's design (separates E7's criterion from its allocation) | E2 | B2 | 1 (seed 0) |
 | E8 | E7 + 4-bit post-training quantization | E7 | B1-B3 | 1 (seed 0) |
 | E9 | Teacher quantized to 4-bit (supplementary, matched memory) | E0 | measured | 1 |
 | E10 | Native Qwen3-VL-2B (the D05 fallback), E2 recipe (E1 if its tokenizer does not match the cache); exploratory, at matched memory and at 4 bit | pretrained (+E0 cache) | measured | 1 (seed 0) |
@@ -113,6 +115,17 @@ tests/                   import, config, registry, script and utility tests
 | A6 | Layers only vs heads + channel groups | E2 | B2 | 1 (seed 0) |
 
 "measured" = not budget-matched; the footprint is measured and placed relative to B1-B3.
+
+### Pruning design (pre-registration section 10, amendment of 2026-11-17)
+
+Seven pruning arms: E5 magnitude, E5 activation, E5 Taylor and E6 (the comparator candidates),
+E7 (ours), and the exploratory E5R and E7U. No unit of decoder layers 0, 1 and 35 is ever removed,
+in any arm. E5, E5R and E7U remove the same number k of 128-channel MLP groups from every
+unprotected layer (`pruning.removal.allocation: uniform_mlp`); E7, E6 and the ablations A1-A6 rank
+all their units globally (`global`). Every arm meets the same measured budgets with the same rule
+(the smallest removal at or below target x 1.03) and the same recovery. An offline replay of the
+removal sets from the committed scores (an estimate): `results/replay/removal_replay.md`.
+Reasons and sources: `docs/decisions/pruning_design_2026-11-17.md`.
 Run `python scripts/run_experiment.py --list` for the live registry.
 
 ### Seeds (pre-registration section 11 item 12, 2026-11-08)

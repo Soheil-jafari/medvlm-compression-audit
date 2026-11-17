@@ -2,6 +2,8 @@
 
 ## 1. What and why
 
+- **Design (amendment of 2026-11-17):** as E7: the global allocation (`pruning.removal.allocation:
+  global`), and no unit of layers 0, 1 and 35 is removed (amendment of 2026-11-16).
 - **Seeds (seed plan, pre-registration section 11 item 12, Soheil and Amir, 2026-11-08):** seed 0 only, reported as exploratory / descriptive (no confirmatory test); the plan (`scripts/run_card.py`) refuses seeds 1 and 2. This replaces the seed counts written below. A single-seed difference is read against E7's spread over its 3 seeds at B2: smaller than that spread = within run-to-run noise.
 - Stage: S10
 - Experiment: A4: the clinical criterion scored on 32, 64, 128 or 256 calibration images

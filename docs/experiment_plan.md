@@ -13,9 +13,11 @@ The registry (`src/medcompress/registry.py`) is the source of truth;
 | E2 | Student + offline distillation | pretrained | E0 cache | - | 3 | 02 (offline_kd), 06, 07 | adapters, metrics, **budget reference** |
 | E3 | E2 + PTQ: `w8`, `w4` (GPTQ/AWQ), `w8a8` where supported | E2 | - | measured | 1 (seed 0; [team]: `w4` seeds 1, 2 only if 4-bit enters a headline claim) | 03, 06, 07 | quantized models, metrics |
 | E4 | Quantization-aware distillation (GRACE-style) | pretrained | E0 cache | measured | 1 (seed 0) | 02 (qakd), 06, 07 | adapters, metrics |
-| E5 | Generic structured pruning: `magnitude`, `activation`, `taylor` + recovery | E2 | E0 cache | B1-B3 | 1 (seed 0); 3 for the comparator at B2 | 04, 05, 06, 07 | unit scores, metrics |
+| E5 | Generic structured pruning: `magnitude`, `activation`, `taylor` of 128-channel MLP groups, the same number k from every unprotected layer (`uniform_mlp`, amendment of 2026-11-17) + recovery | E2 | E0 cache | B1-B3 | 1 (seed 0); 3 for the comparator at B2 | 04, 05, 06, 07 | unit scores, metrics |
+| E5R | Exploratory (2026-11-17): E5's design with seeded random scores; not a comparator candidate | E2 | E0 cache | B2 | 1 (seed 0) | 04, 05, 06, 07 | unit scores, metrics |
 | E6 | Output-similarity layer pruning (Khan et al. style) + recovery | E2 | E0 cache | B1-B3 | 1 (seed 0); 3 if it is the comparator (B2) | 04, 05, 06, 07 | unit scores, metrics |
-| E7 | **Clinical pruning criterion (ours)** + recovery | E2 | E0 cache | B1-B3 | 3 at B2; 1 (seed 0) at B1, B3 | 04, 05, 06, 07 | unit scores, metrics, mask audit |
+| E7 | **Clinical pruning criterion (ours)**, one global ranking (`global`) + recovery | E2 | E0 cache | B1-B3 | 3 at B2; 1 (seed 0) at B1, B3 | 04, 05, 06, 07 | unit scores, metrics, mask audit |
+| E7U | Exploratory (2026-11-17): E7's committed scores with E5's design; stage 04 only reuses E7's scores | E2 | E0 cache | B2 | 1 (seed 0) | 04 (reuse), 05, 06, 07 | metrics |
 | E8 | E7 + 4-bit PTQ | E7 | - | B1-B3 | 1 (seed 0) | 03, 06, 07 | metrics |
 | E9 | Teacher at 4-bit (supplementary, matched memory) | E0 | - | measured | 1 | 03, 06, 07 | metrics |
 | E10 | Native Qwen3-VL-2B (D05 fallback), E2 recipe, or E1 if its tokenizer does not match the cache (RC-E10 step 1); exploratory, compared at matched memory with the nearest pruned 3B arm and at 4 bit with E8 | pretrained | E0 cache | measured | 1 (seed 0) | 02, 06, 07 | adapter, metrics |

@@ -120,7 +120,8 @@ every hand-off is shared to Soheil's account). The hours are in section 7.
 
 | Phase | Soheil (account 1) | Amir (account 2) | Account 3 (lent; Soheil starts it) |
 |---|---|---|---|
-| A0. now (2026-11-16) | RC-G2 session 2 (E5 taylor, E6; Soheil); the smoke of E7's stage 05 (`smoke_cards.py --job E7`), then RC-G2 session 4; `check_nonfinite_steps.py` on session 1's two recoveries (CPU, minutes) | RC-E3 seed 0 benchmark re-measured (done 2026-11-16) | RC-E9 benchmark only (Amir's account, about 30 min) |
+| A0'. now (2026-11-17, the locked pruning design: E5 `uniform_mlp`, E5R and E7U added) | the stage-05 smoke of the new design (`--job "E5 magnitude" --job E5R --job E7U`, about 30-40 min), then RC-G2 session 1 (E5 magnitude, activation; about 5.5-6 h); afterwards RC-G2 session 5 (E5R, E7U; about 5.5 h) on whichever account is free | RC-G2 session 2 (E5 taylor, E6; account 3, about 5.5 h) | RC-G2 session 4 (E7 and the check; Amir, about 5.3 h) |
+| A0. superseded on 2026-11-17 (amendment of 2026-11-16: every unit of layers 0, 1, 35 protected) | the stage-05 smoke of E5 magnitude (`--job "E5 magnitude"`, 20 min), then RC-G2 session 1 again (E5 magnitude, activation; about 6.3 h); the smoke of E7's stage 05 (`--job E7`) | RC-G2 session 2 again (E5 taylor, E6; account 3, about 5.6 h) | RC-G2 session 4 (E7 and the check; Amir, about 5.3 h, after the E7 smoke) |
 | A. after the freeze | RC-G2 in four sessions (the five B2 runs of seed 0: E5 x 3, E6, E7, and the 30-group check; RC-G2 section 3); RC-E10 step 1 (the tokenizer check); then `scripts/choose_comparator.py` (CPU): the comparator and the futility decision | RC-B0 (done 2026-11-11); RC-E3 seed 0 (`w4`, `w8`, `w8a8`; reassigned 2026-11-11); the PolypGen download and `scripts/polypgen.py describe` / `overlap` (CPU) | RC-E9, then RC-E4 seed 0 (reassigned 2026-11-11) |
 | B. seed 0 of the rest (exploratory) | RC-E8 seed 0 at B2; RC-E10Q (E10 at 4 bit, code in 2026-11-14; after RC-SMOKE passes for it); RC-A4 `n32` | the E5 trend (B1, B3); RC-A4 `n64`, `n256` | the E6, E7 and E8 trend (B1, B3); RC-A1, RC-A2, RC-A3, RC-A5, RC-A6 seed 0 |
 | C. seeds 1 and 2 (only without a futility stop) | | seed 2: RC-E2, then E7 and the comparator at B2, A1 at B2, E3 `w8` | seed 1: the same |
@@ -198,6 +199,7 @@ about 1.4 GB, `w8` about 2.8 GB, `w8a8` none (applied at load); E9's quantized h
 |---|---|---|
 | RC-G2 session 1 or 2 (two pruned runs at B2) | about 12 GB | yes |
 | RC-G2 session 4 (E7 at B2), RC-A1, RC-A2, RC-A3, RC-A5 | about 6 GB | yes |
+| RC-G2 session 5 (E5R and E7U at B2; 2026-11-17; about 5.5 GPU h, an estimate, not yet in the hour totals below) | about 12 GB | yes |
 | RC-E3 seed 0 (three variants) | about 4.5 GB | yes |
 | RC-E8 at one budget, RC-E9 (resume), RC-E4, RC-E10, RC-R1 | under 4 GB | yes |
 | RC-A6 (two variants at B2) | about 12 GB | yes |
@@ -209,7 +211,8 @@ about 1.4 GB, `w8` about 2.8 GB, `w8a8` none (applied at load); E9's quantized h
 from its owner's account (dataset settings, Sharing). Made on Soheil's account: `medcompress-data`
 (RC-D1), `e0-teacher-adapter` (RC-TT1), `e0-teacher-cache` (RC-E0b), `e2-seed0-adapter`
 (RC-E2 seed 0), and from RC-G2 one dataset per session, `g2-b2-seed0-pruned-s1` (E5 magnitude and activation; saved
-as `g2-b2-seed0-pruned-e5`), `-s2` (E5 taylor, E6) and `-s4` (E7). Every hand-off
+as `g2-b2-seed0-pruned-e5`), `-s2` (E5 taylor, E6), `-s4` (E7) and, from 2026-11-17, `-s5`
+(E5R and E7U). Every hand-off
 made on another account is shared to Soheil's (for RC-R1 and RC-C1).
 
 | Account | Cards it runs next | Datasets it attaches | To be shared to it (from Soheil's account unless named) |

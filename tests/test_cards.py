@@ -260,6 +260,15 @@ def test_a_grid_run_made_by_rc_g2_is_skipped_when_its_model_is_attached(tmp_path
     assert not runner_mod.made_by_g2(run, config, tmp_path)  # no pruned model attached yet
     pruned_dir(config, run.context).mkdir(parents=True)
     assert runner_mod.made_by_g2(run, config, tmp_path)
+    # a model of another removal (an earlier design's hand-off) stops it (2026-11-17)
+    (pruned_dir(config, run.context) / "pruning_manifest.json").write_text(
+        json.dumps({"format_version": 1, "steps": [["lm.layer5.mlp_group0"]]})
+    )
+    (metrics.parent / "removal.json").write_text(json.dumps({"units": ["lm.layer5.mlp_group1"]}))
+    with pytest.raises(ValueError, match="earlier design"):
+        runner_mod.made_by_g2(run, config, tmp_path)
+    (metrics.parent / "removal.json").write_text(json.dumps({"units": ["lm.layer5.mlp_group0"]}))
+    assert runner_mod.made_by_g2(run, config, tmp_path)
     plan = build_plan("RC-E7", 0, budgets=["B2"])
     session = runner_mod.Session(plan, tmp_path / "work", "now")
     calls: list[str] = []
@@ -377,7 +386,10 @@ def test_rc_g2_runs_in_sessions_with_only_and_one_handoff_per_run(
     assert [h.name for h in full.handoffs] == [
         "G2_B2_seed0_pruned_E5_magnitude", "G2_B2_seed0_pruned_E5_activation",
         "G2_B2_seed0_pruned_E5_taylor", "G2_B2_seed0_pruned_E6", "G2_B2_seed0_pruned_E7",
+        "G2_B2_seed0_pruned_E5R", "G2_B2_seed0_pruned_E7U",
     ]  # fmt: skip
+    five = build_plan("RC-G2", only=["E7U", "E5R"])  # session 5 (amendment of 2026-11-17)
+    assert [s.label for s in five.steps] == ["run E5R B2 seed0", "run E7U B2 seed0"]
     one = build_plan("RC-G2", only=["E5:activation", "E5:magnitude"])  # the card's order
     assert [s.label for s in one.steps] == [
         "run E5 magnitude B2 seed0",
@@ -392,6 +404,8 @@ def test_rc_g2_runs_in_sessions_with_only_and_one_handoff_per_run(
     monkeypatch.setattr(cards_mod, "_g2_scores_committed", lambda: False)
     with pytest.raises(CardError, match="run --only E7:scores first"):
         build_plan("RC-G2", only=["E7", "E7:check"])
+    with pytest.raises(CardError, match="run --only E7:scores first"):
+        build_plan("RC-G2", only=["E7U"])
     monkeypatch.setattr(cards_mod, "_g2_scores_committed", lambda: True)
     last = build_plan("RC-G2", only=["E7:check", "E7"])
     assert [s.label for s in last.steps] == ["run E7 B2 seed0", "first-order check E7 seed0"]

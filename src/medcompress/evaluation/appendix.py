@@ -70,6 +70,8 @@ def appendix_arms() -> list[tuple[str, str]]:
     """Every arm the appendix tables list: unmatched arms, and B2 for budget-matched ones."""
     arms = [(a, "") for e in ("E0", "E1", "E2", "E3", "E4") for a in arm_labels(e)]
     arms += [(a, PRIMARY_BUDGET) for e in ("E5", "E6", "E7", "E8") for a in arm_labels(e)]
+    # the exploratory arms of the amendment of 2026-11-17 (B2, seed 0; not comparators)
+    arms += [("E5R", PRIMARY_BUDGET), ("E7U", PRIMARY_BUDGET)]
     return [*arms, ("E9", "")]
 
 
@@ -128,8 +130,8 @@ def compute_table(rows: pd.DataFrame) -> str:
     """
     table = []
     totals = {m: 0.0 for m, _ in TIME_METRICS}
-    for experiment in ("E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10",
-                       "E10Q", "A1", "A2", "A3", "A4", "A5", "A6"):  # fmt: skip
+    for experiment in ("E0", "E1", "E2", "E3", "E4", "E5", "E5R", "E6", "E7", "E7U", "E8", "E9",
+                       "E10", "E10Q", "A1", "A2", "A3", "A4", "A5", "A6"):  # fmt: skip
         if rows.empty:
             break
         mine = rows[rows["experiment"].astype(str).str.split(":").str[0] == experiment]
@@ -213,6 +215,16 @@ def protected_layers_table(rows: pd.DataFrame) -> str:
                           fmt_value(values["removed_units_in_protected_layers"], 0),
                           fmt_value(share, 3)])  # fmt: skip
     return tabular(header, table or [[MISSING] * len(header)])
+
+
+def write_without_full_protection(rows: pd.DataFrame, tables_dir: Path) -> Path:
+    """``appendix_without_full_protection.tex``: the runs made while the units inside the
+    protected layers were removable (RC-G2 session 1; superseded by the amendment of
+    2026-11-16), as :func:`protected_layers_table` shows them. Exploratory, outside H1-H4."""
+    path = Path(tables_dir) / "appendix_without_full_protection.tex"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(protected_layers_table(rows), encoding="utf-8")
+    return path
 
 
 def selection_table(rows: pd.DataFrame) -> str:

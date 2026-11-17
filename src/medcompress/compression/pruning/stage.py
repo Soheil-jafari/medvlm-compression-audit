@@ -123,9 +123,19 @@ def scores_run(run: RunContext) -> RunContext:
     return RunContext(run.experiment_id, seed=run.seed, budget=None, variant=run.variant)
 
 
+def scores_source(config: Mapping[str, Any]) -> str | None:
+    """The experiment whose scores this one reuses (``pruning.scores_from``; E7U reads E7's,
+    amendment of 2026-11-17), or None."""
+    value = (config.get("pruning") or {}).get("scores_from")
+    return None if value is None else str(value)
+
+
 def scores_path(config: Mapping[str, Any], run: RunContext) -> Path:
-    """Where ``unit_scores.csv`` of ``run`` lives (shared by all budgets)."""
-    return scores_run(run).run_dir(config["paths"]["results_root"]) / SCORES_FILE
+    """Where ``unit_scores.csv`` of ``run`` lives (shared by all budgets; another experiment's
+    file when ``pruning.scores_from`` names one)."""
+    source = scores_source(config)
+    holder = scores_run(run) if source is None else RunContext(source, seed=run.seed)
+    return holder.run_dir(config["paths"]["results_root"]) / SCORES_FILE
 
 
 PARENT = "E2"
@@ -559,6 +569,13 @@ def score_units_for_experiment(
     if reusable():
         print(f"reusing {target} (same settings)")
         return  # nothing to load: the scores of these settings exist already
+    source = scores_source(config)
+    if source is not None:  # E7U (2026-11-17): never scores, never writes another arm's file
+        raise ConfigError(
+            f"{run.experiment_tag} reuses the scores of {source}, but {target} is missing or was "
+            f"made with other settings (or the E2 adapter of seed {run.seed} is not attached); "
+            f"this stage never writes {source}'s scores"
+        )
     if reweighted() and reweight_from_source(config, run, settings) is not None:
         return  # A1 / A2: E7's per-finding effects re-weighted, no model loaded
     if subset() and subset_from_source(config, run, settings) is not None:
@@ -664,6 +681,134 @@ def run_first_order_check(
     if not rho >= CHECK_MIN_RANK_CORRELATION:
         print("first-order check: below the rule of D07: the agent stops and asks the team "
               "before E7's other runs")  # fmt: skip
+    reference = Path(config["paths"]["results_root"]) / "E2" / "nobudget" / "seed0"
+    if not (reference / "efficiency.csv").is_file():  # committed in the repository (RC-B0)
+        print(f"first-order check: follow-up NOT run: no E2 reference footprint at {reference}; "
+              "run it later with --followup-only")  # fmt: skip
+        return values
+    return {**values, **first_order_followup(config, run)}
+
+
+CHECK_B2_FILE = "first_order_check_b2.csv"
+"""The 30 checked groups at B2: removed with the first-order scores, removed with the exact ones
+(amendment of 2026-11-17)."""
+
+
+def exact_on_estimate_fit(pairs: Sequence[tuple[str, float, float]]) -> dict[str, float]:
+    """Least squares of the exact effect on the first-order estimate over the checked groups:
+    slope and intercept with 95 % confidence intervals (t with n - 2 degrees of freedom).
+    A slope of 1 and an intercept of 0 mean the estimate is on the exact scale; the rank
+    correlation alone does not show a scale or an offset (amendment of 2026-11-17)."""
+    from scipy import stats
+
+    x = [p[1] for p in pairs]
+    y = [p[2] for p in pairs]
+    nan = float("nan")
+    if len(pairs) < 3 or len(set(x)) < 2:
+        return {k: nan for k in ("slope", "slope_ci_low", "slope_ci_high", "intercept",
+                                 "intercept_ci_low", "intercept_ci_high")}  # fmt: skip
+    fit = stats.linregress(x, y)
+    t = float(stats.t.ppf(0.975, len(pairs) - 2))
+    return {
+        "slope": float(fit.slope),
+        "slope_ci_low": float(fit.slope - t * fit.stderr),
+        "slope_ci_high": float(fit.slope + t * fit.stderr),
+        "intercept": float(fit.intercept),
+        "intercept_ci_low": float(fit.intercept - t * fit.intercept_stderr),
+        "intercept_ci_high": float(fit.intercept + t * fit.intercept_stderr),
+    }
+
+
+def substituted_selection(
+    units: Sequence[PrunableUnit],
+    scores: Mapping[str, float],
+    exact: Mapping[str, float],
+    removal: Any,
+    spec: Any,
+    target: float,
+    measure: Any,
+) -> tuple[dict[str, float], list[tuple[str, int, int]]]:
+    """The B2 selection with the first-order scores and again with the checked groups' exact
+    effects put in their place (same search, same measurer; amendment of 2026-11-17).
+
+    Returns the counts (checked groups that switch, each way; KV groups and layers whose
+    decision changes; units in the two sets) and one row per checked group: ``(unit id,
+    removed with the estimate, removed with the exact effect)``."""
+    from medcompress.compression.recovery import search_budget
+
+    before, _ = search_budget(units, scores, removal, spec, target, measure)
+    after, _ = search_budget(units, {**scores, **exact}, removal, spec, target, measure)
+    old = {u.unit_id for u in before.removal}
+    new = {u.unit_id for u in after.removal}
+    rows = [(c, int(c in old), int(c in new)) for c in sorted(exact)]
+    coarse = {u.unit_id for u in units
+              if u.unit_type in (UnitType.ATTENTION_HEAD, UnitType.DECODER_LAYER)}  # fmt: skip
+    counts = {
+        "b2_switched": float(sum(1 for _, a, b in rows if a != b)),
+        "b2_switched_to_removed": float(sum(1 for _, a, b in rows if not a and b)),
+        "b2_switched_to_kept": float(sum(1 for _, a, b in rows if a and not b)),
+        "b2_checked_removed_with_estimate": float(sum(a for _, a, _ in rows)),
+        "b2_kv_or_layer_changes": float(len((old ^ new) & coarse)),
+        "b2_units_with_estimate": float(len(old)),
+        "b2_units_with_exact": float(len(new)),
+        "b2_units_changed": float(len(old ^ new)),
+    }
+    return counts, rows
+
+
+def first_order_followup(config: Mapping[str, Any], run: RunContext) -> dict[str, float]:
+    """From the committed files alone (CPU): the fit of the exact effect on the estimate and the
+    B2 selection with the exact effects substituted (amendment of 2026-11-17). Reads
+    ``unit_scores.csv`` and ``first_order_check.csv``; the B2 search uses the offline estimate
+    of :mod:`medcompress.compression.pruning.replay` (E2's measured peak minus 2 bytes per
+    removed parameter) for both selections. Writes ``first_order_check_b2.csv`` and the rows."""
+    import csv
+
+    from medcompress.budgets import (
+        budget_spec_for_run,
+        metric_value,
+        reference_decoder_bytes,
+        reference_report,
+        target_value,
+    )
+    from medcompress.compression.pruning.replay import parameter_measurer, units_from_scores
+    from medcompress.compression.recovery import RemovalSettings
+    from medcompress.utils.io import upsert_results, write_csv
+
+    target_file = scores_path(config, run)
+    check = target_file.with_name(CHECK_FILE)
+    if not check.is_file():
+        raise FileNotFoundError(f"no {check}: run the first-order check first")
+    with check.open(encoding="utf-8", newline="") as handle:
+        pairs = [(r["unit_id"], float(r["first_order"]), float(r["exact"]))
+                 for r in csv.DictReader(handle)]  # fmt: skip
+    fit = exact_on_estimate_fit(pairs)
+    units, scores = units_from_scores(target_file, ScoringSettings.from_config(
+        config, run.variant).mlp_channel_group_size or 128)  # fmt: skip
+    results = config["paths"]["results_root"]
+    reference = reference_report(results, "E2")
+    spec = budget_spec_for_run(config, "B2")
+    target = target_value(spec, reference, decoder_bytes=reference_decoder_bytes(results, "E2"))
+    counts, rows = substituted_selection(
+        units, scores, {c: e for c, _, e in pairs}, RemovalSettings.from_config(config), spec,
+        target, parameter_measurer(metric_value(reference, "peak_memory")),
+    )  # fmt: skip
+    write_csv(target_file.with_name(CHECK_B2_FILE),
+              ("unit_id", "removed_with_estimate", "removed_with_exact"), rows)  # fmt: skip
+    values = {f"first_order_check:{k}": v for k, v in {**fit, **counts}.items()}
+    upsert_results([{"experiment": run.experiment_tag, "budget": "", "seed": run.seed,
+                     "metric": m, "value": v} for m, v in values.items()],
+                   target_file.with_name("metrics.csv"))  # fmt: skip
+    print(
+        f"first-order check, exact on estimate: slope {fit['slope']:.4g} "
+        f"[{fit['slope_ci_low']:.4g}, {fit['slope_ci_high']:.4g}], intercept "
+        f"{fit['intercept']:.4g} [{fit['intercept_ci_low']:.4g}, {fit['intercept_ci_high']:.4g}]"
+    )
+    print(f"first-order check, B2 with the exact effects (estimated footprints): "
+          f"{counts['b2_switched']:.0f} of {len(rows)} checked groups switch "
+          f"({counts['b2_switched_to_removed']:.0f} to removed, "
+          f"{counts['b2_switched_to_kept']:.0f} to kept); KV-group or layer decisions changed: "
+          f"{counts['b2_kv_or_layer_changes']:.0f}")  # fmt: skip
     return values
 
 

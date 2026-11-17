@@ -24,8 +24,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_experiment_ids_are_exactly_the_planned_ladder() -> None:
-    # E10: 2026-11-08; E10Q (E10 at 4 bit): 2026-11-14
-    assert experiment_ids("main") == (*(f"E{i}" for i in range(11)), "E10Q")
+    # E10: 2026-11-08; E10Q (E10 at 4 bit): 2026-11-14; E5R, E7U: 2026-11-17
+    assert experiment_ids("main") == (
+        "E0", "E1", "E2", "E3", "E4", "E5", "E5R", "E6", "E7", "E7U", "E8", "E9", "E10", "E10Q"
+    )  # fmt: skip
     assert experiment_ids("ablation") == tuple(f"A{i}" for i in range(1, 7))
 
 
@@ -46,7 +48,7 @@ def test_parent_chains_have_no_cycles() -> None:
 
 
 def test_compression_arms_start_from_e2() -> None:
-    for exp_id in ("E3", "E5", "E6", "E7"):
+    for exp_id in ("E3", "E5", "E5R", "E6", "E7", "E7U"):
         assert REGISTRY[exp_id].parent == "E2"
     assert REGISTRY["E8"].parent == "E7"
     assert REGISTRY["E9"].parent == "E0"
