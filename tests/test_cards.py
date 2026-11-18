@@ -259,6 +259,11 @@ def test_a_grid_run_made_by_rc_g2_is_skipped_when_its_model_is_attached(tmp_path
     metrics.write_text("experiment,budget,seed,metric,value\nE7,B2,0,budget_within_tolerance,1\n")
     assert not runner_mod.made_by_g2(run, config, tmp_path)  # no pruned model attached yet
     pruned_dir(config, run.context).mkdir(parents=True)
+    assert not runner_mod.made_by_g2(run, config, tmp_path)  # stage 05 only (2026-11-18)
+    with metrics.open("a") as handle:
+        handle.write("E7,B2,0,op_small_finding_recall,0.5\n")
+    assert not runner_mod.made_by_g2(run, config, tmp_path)  # no benchmark yet
+    (metrics.parent / "efficiency.csv").write_text("experiment,metric,value\n")
     assert runner_mod.made_by_g2(run, config, tmp_path)
     # a model of another removal (an earlier design's hand-off) stops it (2026-11-17)
     (pruned_dir(config, run.context) / "pruning_manifest.json").write_text(

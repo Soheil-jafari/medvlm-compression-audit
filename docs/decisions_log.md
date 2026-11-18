@@ -749,8 +749,11 @@ must be logged here.
   Also: the hand-off link tolerates a second lane creating the same link at the same instant
   (RC-SMOKE's `FileExistsError`). Resume: with a part's pruned hand-off attached and its stage-05
   results committed (the hand-off holds the model only), `run_experiment.py` runs only 06 and 07;
-  a model without its results or of another removal set stops the run. Next: the full-size check
-  on E5R, then the resume sessions (RC-G2 section 3).
+  a model without its results or of another removal set stops the run. A grid card skips a run
+  only when stages 05, 06 (validation rows) and 07 (`efficiency.csv`) are all committed. Not yet
+  run on a GPU: stage 05 with the changed surgery (search, recovery, save); the full-size check
+  exercises the surgery itself. Next: the full-size check on E5R, then the resume sessions (RC-G2
+  section 3).
 - **2026-11-17 (research lead; agreed by Soheil and Amir; pre-registration section 10, amendment
   of 2026-11-17, post hoc and disclosed): the pruning design is locked.** Protection of layers 0,
   1 and 35 for every unit type and every arm stays. E5 (magnitude, activation, Taylor) removes

@@ -598,9 +598,10 @@ slices the MLP of all 33 unprotected layers). Fixed: the surgery frees what it r
 the GPU cache is released before the weights are read, and the weights are streamed one tensor at
 a time with the strict checks (keys, shapes, dtypes, parameter count); the log shows "load_pruned:
 rebuilt, before the weights" and "load_pruned: weights loaded" with the allocated memory and the
-model's own bytes. Expected stage-06 peak now (an estimate): about the unpruned E2's load, 7.1 to
-7.6 GiB, for B2 and for B1 alike (the model is loaded unpruned before the surgery; E2's measured
-benchmark peak is 7.618e9 bytes, 7.10 GiB; B1's footprint is 6.79e9).
+model's own bytes. Expected stage-06 peak now (an estimate): about the unpruned E2's load,
+about 7.1 GiB, for B2 and for B1 alike (the model is loaded unpruned before the surgery; E2's
+measured benchmark peak is 7.618e9 bytes = 7.10 GiB; B1's footprint, 6.79e9 bytes = 6.32 GiB,
+stays below it).
 
 **Resume from the saved pruned models (no re-pruning).** When a part's pruned hand-off is attached
 and its stage-05 results are in the repository (`removal.json`, `budget_search.csv`,
@@ -614,7 +615,11 @@ in full.
 (a) Full-size check of the fix on the real E5R model: stage 06 (validation, the full set: about
 0.53 h by E2's measured pass) with `g2-b2-seed0-pruned-s5` attached. Any account, T4 x2 (one is
 used); attach `medcompress-data`, `e2-seed0-adapter`, `g2-b2-seed0-pruned-s5`. About 40 min. It
-must print a stage-06 peak well under 13.5 GiB ("PASS"). Send the last 40 lines of the log.
+needs no committed results. It must print a stage-06 peak well under 13.5 GiB ("PASS"). Send the
+"load_pruned:" lines, the peak lines and the last 40 lines of the log. What it shows: about
+7.1 GiB (the unpruned E2's load, before the surgery) means both parts of the fix work; about
+9.8 GiB with "other allocated" near 4 GiB in the "load_pruned:" lines would mean the replaced
+weights are still held (the streaming alone keeps it under the limit), and the agent looks again.
 
 ```bash
 %%bash
@@ -639,7 +644,8 @@ python scripts/find_inputs.py handoffs                          # the hand-offs 
 DATA=$(python scripts/find_inputs.py data) || exit 1
 E2A=$(python scripts/find_inputs.py handoff E2_seed0_adapter) || exit 1
 E5R=$(python scripts/find_inputs.py handoff G2_B2_seed0_pruned_E5R) || exit 1
-export MEDCOMPRESS_REPORT_PEAKS=1 CUDA_VISIBLE_DEVICES=0      # one T4, as the card; print the peaks
+export HF_HOME=/kaggle/temp/hf CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1  # as the card runner sets
+export MEDCOMPRESS_REPORT_PEAKS=1                                        # print the peaks
 python scripts/06_evaluate.py --exp E5R --seed 0 --budget B2 --data-root "$DATA" \
   --from "$E2A" --from "$E5R" 2>&1 | tee /kaggle/working/check_e5r_06.txt
 echo "exit code: ${PIPESTATUS[0]}"
@@ -655,43 +661,18 @@ print(f"stage-06 peak {peak:.2f} GiB: {'PASS' if peak < 13.5 else 'FAIL'} (limit
 PY
 ```
 
-After (a) passes and the four sessions' `results_to_commit/` are committed: (b) the resume of each
-saved first arm (06 and 07 only) and (c) the second arms that never ran, one cell per session.
-Sessions 1, 2 and 4 at the same time on three accounts; session 5 after, on any. Each attaches
-`medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` and that session's own dataset.
-Estimates: a resume about 0.75 h (load, validation 0.53 h, benchmark); a full E5 / E7U run about
-2.9 h, E6 about 2.5 h, the 30-group check about 2.2 h.
+After (a) passes and the four sessions' `results_to_commit/` are committed (the agent pushes
+them): (b) the resume of each saved first arm (06 and 07 only) and (c) the second arm that never
+ran. Each session is one notebook with two cells, each with its own output folder, so a resume
+that stops cannot block the new arm. Sessions 1, 2 and 4 at the same time on three accounts;
+session 5 after, on any. Each attaches `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`
+and that session's own dataset. Estimates: a resume about 0.75 h (load, validation 0.53 h,
+benchmark); a full E5 / E7U run about 2.9 h, E6 about 2.5 h, the 30-group check about 2.2 h. A
+resume's stage-07 peak should equal its search footprint (session 1: 6,041,026,208 against
+6,041,150,112; E5R: 6.105e9); a gap means the old and the new surgery do not measure alike.
 
-Session 1 again (Soheil; attach also `g2-b2-seed0-pruned-s1`): (b) E5 magnitude resumes, (c) E5
-activation runs in full. About 3.7 h. Save `/kaggle/working/handoff/` (E5 activation) as
-`g2-b2-seed0-pruned-s1b`.
-
-```bash
-%%bash
-cd /kaggle/working && rm -rf medvlm-compression-audit
-git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
-cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
-export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
-export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
-export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
-python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
-import sys
-from importlib import metadata
-try:
-    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
-except metadata.PackageNotFoundError:
-    sys.exit(0)
-sys.exit(0 if version >= (0, 16) else 1)
-PY
-pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
-python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
-python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
-python scripts/run_card.py --card RC-G2 --only E5:magnitude --only E5:activation 2>&1 | tee /kaggle/working/run_card_RC-G2_s1_resume.txt
-echo "exit code: ${PIPESTATUS[0]}"
-```
-
-Session 2 again (account 3; attach also `g2-b2-seed0-pruned-s2`): (b) E5 Taylor resumes, (c) E6
-runs in full. About 3.3 h. Save the hand-off folder (E6) as `g2-b2-seed0-pruned-s2b`.
+Session 1 again (Soheil; attach also `g2-b2-seed0-pruned-s1`); about 3.7 h in all.
+(b) E5 magnitude resumes:
 
 ```bash
 %%bash
@@ -713,12 +694,24 @@ PY
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
 python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
 python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
-python scripts/run_card.py --card RC-G2 --only E5:taylor --only E6 2>&1 | tee /kaggle/working/run_card_RC-G2_s2_resume.txt
+python scripts/run_card.py --card RC-G2 --only E5:magnitude --out /kaggle/working/resume 2>&1 | tee /kaggle/working/run_card_RC-G2_s1_resume.txt
 echo "exit code: ${PIPESTATUS[0]}"
 ```
 
-Session 4 again (Amir; attach also `g2-b2-seed0-pruned-s4`): (b) E7 resumes, (c) the 30-group
-check runs. About 3.0 h. No new dataset (E7's model is the attached one).
+(c) E5 activation in full; save `/kaggle/working/new/handoff/` as `g2-b2-seed0-pruned-s1b`:
+
+```bash
+%%bash
+cd /kaggle/working/medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
+python scripts/run_card.py --card RC-G2 --only E5:activation --out /kaggle/working/new 2>&1 | tee /kaggle/working/run_card_RC-G2_s1_new.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Session 2 again (account 3; attach also `g2-b2-seed0-pruned-s2`); about 3.3 h in all.
+(b) E5 Taylor resumes:
 
 ```bash
 %%bash
@@ -740,12 +733,24 @@ PY
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
 python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
 python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
-python scripts/run_card.py --card RC-G2 --only E7 --only E7:check 2>&1 | tee /kaggle/working/run_card_RC-G2_s4_resume.txt
+python scripts/run_card.py --card RC-G2 --only E5:taylor --out /kaggle/working/resume 2>&1 | tee /kaggle/working/run_card_RC-G2_s2_resume.txt
 echo "exit code: ${PIPESTATUS[0]}"
 ```
 
-Session 5 again (any account; attach also `g2-b2-seed0-pruned-s5`): (b) E5R resumes, (c) E7U runs
-in full. About 3.5 h. Save the hand-off folder (E7U) as `g2-b2-seed0-pruned-s5b`.
+(c) E6 in full; save `/kaggle/working/new/handoff/` as `g2-b2-seed0-pruned-s2b`:
+
+```bash
+%%bash
+cd /kaggle/working/medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
+python scripts/run_card.py --card RC-G2 --only E6 --out /kaggle/working/new 2>&1 | tee /kaggle/working/run_card_RC-G2_s2_new.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Session 4 again (Amir; attach also `g2-b2-seed0-pruned-s4`); about 3.0 h in all.
+(b) E7 resumes:
 
 ```bash
 %%bash
@@ -767,12 +772,65 @@ PY
 pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
 python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
 python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
-python scripts/run_card.py --card RC-G2 --only E5R --only E7U 2>&1 | tee /kaggle/working/run_card_RC-G2_s5_resume.txt
+python scripts/run_card.py --card RC-G2 --only E7 --out /kaggle/working/resume 2>&1 | tee /kaggle/working/run_card_RC-G2_s4_resume.txt
 echo "exit code: ${PIPESTATUS[0]}"
 ```
 
-The later cards read both datasets of a session (`-s1` and `-s1b`, and so on); each model folder
-is found by its own manifest.
+(c) the 30-group check (no hand-off):
+
+```bash
+%%bash
+cd /kaggle/working/medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
+python scripts/run_card.py --card RC-G2 --only E7:check --out /kaggle/working/new 2>&1 | tee /kaggle/working/run_card_RC-G2_s4_new.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Session 5 again (any account; attach also `g2-b2-seed0-pruned-s5`); about 3.5 h in all.
+(b) E5R resumes:
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E5R --out /kaggle/working/resume 2>&1 | tee /kaggle/working/run_card_RC-G2_s5_resume.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+(c) E7U in full; save `/kaggle/working/new/handoff/` as `g2-b2-seed0-pruned-s5b`:
+
+```bash
+%%bash
+cd /kaggle/working/medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
+python scripts/run_card.py --card RC-G2 --only E7U --out /kaggle/working/new 2>&1 | tee /kaggle/working/run_card_RC-G2_s5_new.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Send both `results_to_commit/` folders (`/kaggle/working/resume/` and `/kaggle/working/new/`) and
+both run reports. The later cards read both datasets of a session (`-s1` and `-s1b`, and so on);
+each model folder is found by its own manifest. A grid card (RC-E5, RC-E6, RC-E7) skips a run
+only once its stages 05, 06 and 07 are all committed, so run the resumes before the grid.
 
 ## 4. What to commit back
 
