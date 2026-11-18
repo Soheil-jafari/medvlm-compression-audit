@@ -93,18 +93,26 @@ def layer_shape(layer: Any, config: Any) -> dict[str, int]:
 
 
 def _slice_linear(linear: Any, keep: Any, dim: int) -> Any:
-    """Return a new Linear keeping rows (dim=0, outputs) or columns (dim=1, inputs)."""
+    """Return a new Linear keeping rows (dim=0, outputs) or columns (dim=1, inputs).
+
+    The new module takes the sliced tensors directly (built on the meta device, so no second
+    random-initialised copy is allocated), and the old module's tensors are freed at once
+    (2026-11-18): an uncollected wrapper of the merged E2 LoRA can still hold the old
+    projection, which then stayed allocated on the GPU through the pruned model's load
+    (RC-G2 session 5: stage 06 out of memory)."""
     import torch
+
+    from medcompress.utils.memory import free_module_tensors
 
     weight = linear.weight.data.index_select(dim, keep)
     out_f, in_f = weight.shape
-    new = torch.nn.Linear(
-        in_f, out_f, bias=linear.bias is not None, device=weight.device, dtype=weight.dtype
-    )
-    new.weight.data.copy_(weight)
+    new = torch.nn.Linear(in_f, out_f, bias=linear.bias is not None, device="meta",
+                          dtype=weight.dtype)  # fmt: skip
+    new.weight = torch.nn.Parameter(weight, requires_grad=linear.weight.requires_grad)
     if linear.bias is not None:
-        bias = linear.bias.data if dim == 1 else linear.bias.data.index_select(0, keep)
-        new.bias.data.copy_(bias)
+        bias = linear.bias.data.clone() if dim == 1 else linear.bias.data.index_select(0, keep)
+        new.bias = torch.nn.Parameter(bias, requires_grad=linear.bias.requires_grad)
+    free_module_tensors(linear)
     return new
 
 
@@ -122,7 +130,12 @@ def remove_layers(model: Any, indices: Sequence[int]) -> None:
     if len(drop) >= len(layers):
         raise ValueError("Cannot remove every decoder layer.")
     kept = [layer for i, layer in enumerate(layers) if i not in drop]
+    dropped = [layer for i, layer in enumerate(layers) if i in drop]
     setattr(stack.parent, stack.attr, torch.nn.ModuleList(kept))
+    from medcompress.utils.memory import free_module_tensors
+
+    for layer in dropped:  # freed now, whoever still holds the layer (2026-11-18)
+        free_module_tensors(layer)
     for new_index, layer in enumerate(kept):
         if hasattr(layer.self_attn, "layer_idx"):
             layer.self_attn.layer_idx = new_index

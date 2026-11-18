@@ -1530,3 +1530,15 @@ Append-only, newest at the bottom. One entry per iteration:
   estimate and the B2 substitution (`--followup-only` on CPU). An attached pruned model whose
   recorded units differ from the committed `removal.json` (an earlier design's hand-off) stops the
   card and the evaluation instead of being reused. Tests.
+
+## Iteration 92: 2026-11-18 (interactive)
+- Stage 06 out of GPU memory loading a pruned model (RC-G2 session 5, E5R at 5aa8c69; the smoke's
+  stage-06 peaks 14.09 GiB): replaced projections stayed allocated and the whole state dict was
+  built on the GPU. The surgery frees what it replaces or drops; `load_pruned` streams the weights
+  one tensor at a time with strict checks and logs the memory. Why session 1 passed: an estimate
+  of 13.80 and 13.12 GiB against E5R's 15.34 GiB. Tests (a streamed-load memory bound, strictness,
+  freeing).
+- Hand-off links tolerate a concurrent creator. RC-G2 resumes from saved pruned models: stages 04
+  and 05 skipped when the model and its committed stage-05 results match. Cells for the full-size
+  check and the resume sessions (RC-G2 section 3).
+

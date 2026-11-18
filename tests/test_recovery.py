@@ -491,3 +491,48 @@ def test_an_arm_without_whole_layers_protects_the_same_layers() -> None:
     ordered, protected = recovery.plan_removal(units, scores, settings)
     assert protected == [0, 2]  # the tiny model's first and last of 3 layers
     assert ordered and all(u.layer_index == 1 for u in ordered)
+
+
+def test_a_saved_pruned_model_with_its_results_skips_stages_04_and_05(tmp_path: Path) -> None:
+    """2026-11-18 (RC-G2 session 5: the pruned model was saved, then stage 06 ran out of
+    memory): with the saved model attached and its stage-05 results committed, a run does only
+    06 and 07; a model without its results, or of another removal set, stops the run."""
+    import importlib.util
+
+    from medcompress.compression.pruning.checkpoint import MANIFEST_NAME, WEIGHTS_NAME
+    from medcompress.registry import get_experiment
+
+    spec = importlib.util.spec_from_file_location(
+        "run_experiment", Path(__file__).resolve().parents[1] / "scripts" / "run_experiment.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    config = {"paths": {"results_root": str(tmp_path / "results"),
+                        "checkpoint_root": str(tmp_path / "checkpoints")}}  # fmt: skip
+    run = RunContext("E5R", seed=0, budget="B2")
+    scripts = get_experiment("E5R").scripts
+    assert not recovery.saved_pruned_run(config, run)  # nothing saved: every stage runs
+    assert module.stages_to_run(scripts, config, run) == scripts
+    model = recovery.pruned_dir(config, run)
+    model.mkdir(parents=True)
+    manifest = {"format_version": 1, "steps": [["lm.layer5.mlp_group0"]]}
+    (model / MANIFEST_NAME).write_text(json.dumps(manifest))
+    (model / WEIGHTS_NAME).write_bytes(b"x")
+    with pytest.raises(ConfigError, match="commit them"):
+        recovery.saved_pruned_run(config, run)
+    run_dir = run.run_dir(config["paths"]["results_root"])
+    run_dir.mkdir(parents=True)
+    for name in recovery.STAGE05_FILES:
+        (run_dir / name).write_text("{}")
+    (run_dir / "metrics.csv").write_text(
+        "experiment,budget,seed,metric,value\nE5R,B2,0,budget_within_tolerance,1\n"
+    )
+    (run_dir / "removal.json").write_text(json.dumps({"units": ["lm.layer5.mlp_group0"]}))
+    assert recovery.saved_pruned_run(config, run)
+    assert [Path(s).name for s in module.stages_to_run(scripts, config, run)] == [
+        "06_evaluate.py", "07_benchmark_efficiency.py",
+    ]  # fmt: skip
+    (run_dir / "removal.json").write_text(json.dumps({"units": ["lm.layer5.mlp_group1"]}))
+    with pytest.raises(ValueError, match="earlier design"):
+        recovery.saved_pruned_run(config, run)

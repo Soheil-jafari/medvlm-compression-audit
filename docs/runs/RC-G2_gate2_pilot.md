@@ -425,7 +425,8 @@ share of its removed parameters per decoder layer: layers 0, 1 and 35 must read 
 `recovery_steps.json`.
 
 **Sessions under the amendment of 2026-11-17 (the locked pruning design; replaces the rerun plan
-above).** E5 now removes only MLP channel groups, the same number k from every unprotected layer
+above).** *2026-11-18: these sessions ran at 5aa8c69 and stopped in stage 06 (out of GPU memory);
+run the cells of "Fix of 2026-11-18" below instead, which resume from the saved models.* E5 now removes only MLP channel groups, the same number k from every unprotected layer
 (2-34), and its search runs over k; two exploratory arms join at B2, seed 0: E5R (random scores,
 E5's design) and E7U (E7's committed scores, E5's design); E7 is unchanged (global, fully
 protected). `docs/decisions/pruning_design_2026-11-17.md` has the design. Do **not** attach
@@ -582,6 +583,197 @@ python scripts/run_card.py --card RC-G2 --only E5R --only E7U 2>&1 | tee /kaggle
 echo "exit code: ${PIPESTATUS[0]}"
 ```
 
+**Fix of 2026-11-18 (stage 06 out of GPU memory) and the resume runs.** Session 5 (account 3,
+5aa8c69) pruned, recovered and saved E5R (hand-off `G2_B2_seed0_pruned_E5R`, 6.00 GB), then
+`06_evaluate` ran out of memory loading it (14.01 GiB allocated on a 14.56 GiB T4); E7U never ran.
+The smoke at 5aa8c69 showed the same (stage-06 peaks 14.09 GiB, E7's 14.40 and died). Cause:
+`load_pruned` rebuilt the pruned shapes on the unpruned E2, and the projections the surgery
+replaced (or the layers it dropped) stayed allocated, most likely held by an uncollected wrapper
+of the merged E2 LoRA (as in RC-E3's benchmark on 2026-11-15; inferred from the GPU numbers, not
+reproduced on CPU); then `safetensors` built the whole state
+dict on the GPU before copying it. Estimate of the old load's peak (all replaced tensors kept,
+plus the new ones, plus a full state dict): session 1's runs 13.80 and 13.12 GiB (they passed;
+they sliced the MLP of 11 and 6 layers and dropped 7 and 6 whole), E5R at k = 29 15.34 GiB (it
+slices the MLP of all 33 unprotected layers). Fixed: the surgery frees what it replaces or drops,
+the GPU cache is released before the weights are read, and the weights are streamed one tensor at
+a time with the strict checks (keys, shapes, dtypes, parameter count); the log shows "load_pruned:
+rebuilt, before the weights" and "load_pruned: weights loaded" with the allocated memory and the
+model's own bytes. Expected stage-06 peak now (an estimate): about the unpruned E2's load, 7.1 to
+7.6 GiB, for B2 and for B1 alike (the model is loaded unpruned before the surgery; E2's measured
+benchmark peak is 7.618e9 bytes, 7.10 GiB; B1's footprint is 6.79e9).
+
+**Resume from the saved pruned models (no re-pruning).** When a part's pruned hand-off is attached
+and its stage-05 results are in the repository (`removal.json`, `budget_search.csv`,
+`metrics.csv`, `recovery_steps.json`, `removal_by_layer.csv`, with the same removal set as the
+model's manifest), `run_experiment.py` skips stages 04 and 05 and runs only 06 and 07. The
+hand-off holds the model only, so **commit each session's `results_to_commit/` first** (the failed
+sessions wrote it: the stage-04 scores and the stage-05 files). A model attached without its
+results, or of another removal set, stops the run. A part whose model was not saved simply runs
+in full.
+
+(a) Full-size check of the fix on the real E5R model: stage 06 (validation, the full set: about
+0.53 h by E2's measured pass) with `g2-b2-seed0-pruned-s5` attached. Any account, T4 x2 (one is
+used); attach `medcompress-data`, `e2-seed0-adapter`, `g2-b2-seed0-pruned-s5`. About 40 min. It
+must print a stage-06 peak well under 13.5 GiB ("PASS"). Send the last 40 lines of the log.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+DATA=$(python scripts/find_inputs.py data) || exit 1
+E2A=$(python scripts/find_inputs.py handoff E2_seed0_adapter) || exit 1
+E5R=$(python scripts/find_inputs.py handoff G2_B2_seed0_pruned_E5R) || exit 1
+export MEDCOMPRESS_REPORT_PEAKS=1 CUDA_VISIBLE_DEVICES=0      # one T4, as the card; print the peaks
+python scripts/06_evaluate.py --exp E5R --seed 0 --budget B2 --data-root "$DATA" \
+  --from "$E2A" --from "$E5R" 2>&1 | tee /kaggle/working/check_e5r_06.txt
+echo "exit code: ${PIPESTATUS[0]}"
+grep -E "MEDCOMPRESS_LOAD_PEAK|MEDCOMPRESS_STAGE_PEAK|load_pruned:" /kaggle/working/check_e5r_06.txt
+python - <<'PY'
+import re
+text = open("/kaggle/working/check_e5r_06.txt").read()
+found = re.findall(r"MEDCOMPRESS_STAGE_PEAK \S+ gpu0=(\d+)", text)
+if not found:
+    raise SystemExit("no stage peak printed")
+peak = int(found[-1]) / 2**30
+print(f"stage-06 peak {peak:.2f} GiB: {'PASS' if peak < 13.5 else 'FAIL'} (limit 13.5 GiB)")
+PY
+```
+
+After (a) passes and the four sessions' `results_to_commit/` are committed: (b) the resume of each
+saved first arm (06 and 07 only) and (c) the second arms that never ran, one cell per session.
+Sessions 1, 2 and 4 at the same time on three accounts; session 5 after, on any. Each attaches
+`medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` and that session's own dataset.
+Estimates: a resume about 0.75 h (load, validation 0.53 h, benchmark); a full E5 / E7U run about
+2.9 h, E6 about 2.5 h, the 30-group check about 2.2 h.
+
+Session 1 again (Soheil; attach also `g2-b2-seed0-pruned-s1`): (b) E5 magnitude resumes, (c) E5
+activation runs in full. About 3.7 h. Save `/kaggle/working/handoff/` (E5 activation) as
+`g2-b2-seed0-pruned-s1b`.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E5:magnitude --only E5:activation 2>&1 | tee /kaggle/working/run_card_RC-G2_s1_resume.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Session 2 again (account 3; attach also `g2-b2-seed0-pruned-s2`): (b) E5 Taylor resumes, (c) E6
+runs in full. About 3.3 h. Save the hand-off folder (E6) as `g2-b2-seed0-pruned-s2b`.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E5:taylor --only E6 2>&1 | tee /kaggle/working/run_card_RC-G2_s2_resume.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Session 4 again (Amir; attach also `g2-b2-seed0-pruned-s4`): (b) E7 resumes, (c) the 30-group
+check runs. About 3.0 h. No new dataset (E7's model is the attached one).
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E7 --only E7:check 2>&1 | tee /kaggle/working/run_card_RC-G2_s4_resume.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+Session 5 again (any account; attach also `g2-b2-seed0-pruned-s5`): (b) E5R resumes, (c) E7U runs
+in full. About 3.5 h. Save the hand-off folder (E7U) as `g2-b2-seed0-pruned-s5b`.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-G2 --only E5R --only E7U 2>&1 | tee /kaggle/working/run_card_RC-G2_s5_resume.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
+The later cards read both datasets of a session (`-s1` and `-s1b`, and so on); each model folder
+is found by its own manifest.
+
 ## 4. What to commit back
 
 For each of the five runs (`<run>` is `E5/<variant>`, `E6` or `E7`):
@@ -715,4 +907,14 @@ Note (2026-11-16): session 1 above is **superseded** by the amendment of 2026-11
 protected layers removable, exploratory, outside H1-H4); its files were moved unchanged to
 `results/superseded/inner_units_removable/` and its run report stays here. Session 2 was stopped
 partway at d9039dc (nothing committed). Both run again at the new code (section 3).
+
+**Session 5 (`--only E5R --only E7U`), reported on 2026-11-18 (account 3, commit 5aa8c69):**
+failed in E5R's stage 06. Stage 04 (random scores), the budget search (k = 29, footprint 6.105e9
+against the B2 target 5.954e9, level check -0.08 %), the recovery and the save worked, and the
+hand-off `G2_B2_seed0_pruned_E5R` (6.00 GB) was written and saved as `g2-b2-seed0-pruned-s5`.
+Then `06_evaluate` died loading the pruned model (`load_run_model` -> `load_pruned` ->
+`safetensors` `load_model(..., device=cuda)`: `torch.OutOfMemoryError`, 14.01 GiB allocated by
+PyTorch of 14.56 GiB). The card stopped there; E7U did not run. The measured footprint agrees with
+the offline estimate (6.113e9 for k = 29). Fixed on 2026-11-18 (section 3); E5R resumes from the
+saved model (06 and 07 only) once its `results_to_commit/` is committed.
 

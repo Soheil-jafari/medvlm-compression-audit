@@ -120,7 +120,8 @@ every hand-off is shared to Soheil's account). The hours are in section 7.
 
 | Phase | Soheil (account 1) | Amir (account 2) | Account 3 (lent; Soheil starts it) |
 |---|---|---|---|
-| A0'. now (2026-11-17, the locked pruning design: E5 `uniform_mlp`, E5R and E7U added) | the stage-05 smoke of the new design (`--job "E5 magnitude" --job E5R --job E7U`, about 30-40 min), then RC-G2 session 1 (E5 magnitude, activation; about 5.5-6 h); afterwards RC-G2 session 5 (E5R, E7U; about 5.5 h) on whichever account is free | RC-G2 session 2 (E5 taylor, E6; account 3, about 5.5 h) | RC-G2 session 4 (E7 and the check; Amir, about 5.3 h) |
+| A0''. now (2026-11-18, stage 06 out of GPU memory fixed; resume from the saved pruned models) | first the full-size stage-06 check on E5R (about 40 min, any account; RC-G2 section 3 cell (a)); then, after each session's `results_to_commit/` is committed, RC-G2 session 1 again (E5 magnitude resumes, E5 activation in full; about 3.7 h); later session 5 again (E5R resumes, E7U in full; about 3.5 h) on any account | RC-G2 session 2 again (E5 Taylor resumes, E6 in full; account 3, about 3.3 h) | RC-G2 session 4 again (E7 resumes, the 30-group check; Amir, about 3.0 h) |
+| A0'. ran at 5aa8c69 on 2026-11-17 and stopped in stage 06 (the locked pruning design: E5 `uniform_mlp`, E5R and E7U added) | the stage-05 smoke of the new design (`--job "E5 magnitude" --job E5R --job E7U`, about 30-40 min), then RC-G2 session 1 (E5 magnitude, activation; about 5.5-6 h); afterwards RC-G2 session 5 (E5R, E7U; about 5.5 h) on whichever account is free | RC-G2 session 2 (E5 taylor, E6; account 3, about 5.5 h) | RC-G2 session 4 (E7 and the check; Amir, about 5.3 h) |
 | A0. superseded on 2026-11-17 (amendment of 2026-11-16: every unit of layers 0, 1, 35 protected) | the stage-05 smoke of E5 magnitude (`--job "E5 magnitude"`, 20 min), then RC-G2 session 1 again (E5 magnitude, activation; about 6.3 h); the smoke of E7's stage 05 (`--job E7`) | RC-G2 session 2 again (E5 taylor, E6; account 3, about 5.6 h) | RC-G2 session 4 (E7 and the check; Amir, about 5.3 h, after the E7 smoke) |
 | A. after the freeze | RC-G2 in four sessions (the five B2 runs of seed 0: E5 x 3, E6, E7, and the 30-group check; RC-G2 section 3); RC-E10 step 1 (the tokenizer check); then `scripts/choose_comparator.py` (CPU): the comparator and the futility decision | RC-B0 (done 2026-11-11); RC-E3 seed 0 (`w4`, `w8`, `w8a8`; reassigned 2026-11-11); the PolypGen download and `scripts/polypgen.py describe` / `overlap` (CPU) | RC-E9, then RC-E4 seed 0 (reassigned 2026-11-11) |
 | B. seed 0 of the rest (exploratory) | RC-E8 seed 0 at B2; RC-E10Q (E10 at 4 bit, code in 2026-11-14; after RC-SMOKE passes for it); RC-A4 `n32` | the E5 trend (B1, B3); RC-A4 `n64`, `n256` | the E6, E7 and E8 trend (B1, B3); RC-A1, RC-A2, RC-A3, RC-A5, RC-A6 seed 0 |
@@ -200,6 +201,7 @@ about 1.4 GB, `w8` about 2.8 GB, `w8a8` none (applied at load); E9's quantized h
 | RC-G2 session 1 or 2 (two pruned runs at B2) | about 12 GB | yes |
 | RC-G2 session 4 (E7 at B2), RC-A1, RC-A2, RC-A3, RC-A5 | about 6 GB | yes |
 | RC-G2 session 5 (E5R and E7U at B2; 2026-11-17; about 5.5 GPU h, an estimate, not yet in the hour totals below) | about 12 GB | yes |
+| RC-G2 resume sessions (2026-11-18: one saved model attached, read in place; one new run) | about 6 GB | yes |
 | RC-E3 seed 0 (three variants) | about 4.5 GB | yes |
 | RC-E8 at one budget, RC-E9 (resume), RC-E4, RC-E10, RC-R1 | under 4 GB | yes |
 | RC-A6 (two variants at B2) | about 12 GB | yes |

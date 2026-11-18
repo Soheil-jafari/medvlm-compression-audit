@@ -582,22 +582,16 @@ def free_replaced(old: Any, new: Any) -> None:
     frees its storage whoever still holds the module; a storage the new module shares (a bias
     passed through) stays alive through the new module's own tensor.
     """
-    import torch
+    from medcompress.utils.memory import free_module_tensors
 
-    for tensor in [*old.parameters(), *old.buffers()]:
-        tensor.data = torch.empty(0, dtype=tensor.dtype, device=tensor.device)
+    free_module_tensors(old)
 
 
 def release_cached_memory() -> None:
     """Collect garbage and give this process's free cached GPU memory back."""
-    import gc
+    from medcompress.utils.memory import release_gpu_cache
 
-    import torch
-
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-        torch.cuda.empty_cache()
+    release_gpu_cache()
 
 
 def apply_llm_int8(model: VLMWrapper | Any, recipe: PTQRecipe) -> None:

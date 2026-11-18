@@ -390,12 +390,19 @@ def test_rc_g2_runs_in_sessions_with_only_and_one_handoff_per_run(
     ]  # fmt: skip
     five = build_plan("RC-G2", only=["E7U", "E5R"])  # session 5 (amendment of 2026-11-17)
     assert [s.label for s in five.steps] == ["run E5R B2 seed0", "run E7U B2 seed0"]
+    # a saved pruned model of a part is read (2026-11-18: resume runs do 06 and 07 only)
+    items, _ = runner_mod.wanted_items(build_plan("RC-G2", only=["E5R"]), _config(tmp_path))
+    assert ("checkpoint_root", "E5R/B2/seed0/pruned") in items
+    assert ("checkpoint_root", "E7U/B2/seed0/pruned") not in items
     one = build_plan("RC-G2", only=["E5:activation", "E5:magnitude"])  # the card's order
     assert [s.label for s in one.steps] == [
         "run E5 magnitude B2 seed0",
         "run E5 activation B2 seed0",
     ]
-    assert [n.label for n in one.needs] == ["E2 seed0 adapter", "teacher cache"]
+    assert [n.label for n in one.needs] == [
+        "E2 seed0 adapter", "teacher cache",  # a saved pruned model is read when attached
+        "E5 magnitude B2 seed0 pruned (optional)", "E5 activation B2 seed0 pruned (optional)",
+    ]  # fmt: skip
     scores = build_plan("RC-G2", only=["E7:scores"])
     assert [s.argv for s in scores.steps] == [
         ("scripts/04_score_pruning_units.py", "--exp", "E7", "--seed", "0")

@@ -122,6 +122,29 @@ def trim_host_memory() -> None:
             pass
 
 
+def free_module_tensors(module: object) -> None:
+    """Point every parameter and buffer of ``module`` at an empty tensor on its device, which
+    frees their storage whoever still holds the module (2026-11-15, RC-E3: an uncollected wrapper
+    of the merged E2 LoRA kept replaced projections allocated; 2026-11-18: the same for the
+    projections and layers that pruning replaces or drops)."""
+    import torch
+
+    for tensor in [*module.parameters(), *module.buffers()]:  # type: ignore[attr-defined]
+        tensor.data = torch.empty(0, dtype=tensor.dtype, device=tensor.device)
+
+
+def release_gpu_cache() -> None:
+    """Collect garbage, wait for the GPU and give its free cached memory back (no-op on CPU)."""
+    gc.collect()
+    try:
+        import torch
+    except ImportError:  # pragma: no cover
+        return
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+
+
 class MemoryGrowthError(RuntimeError):
     """Memory grew step over step (the scale check fails on it)."""
 

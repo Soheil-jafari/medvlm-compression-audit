@@ -210,3 +210,13 @@ make no hub requests (`local_files_only`); 15 loads in one process keep the RSS 
 (`tests/test_host_memory.py`; the same test catches loads that are never freed). RC-SCALE
 measures it at full size (`budget_search`, and the save in `recovery`).
 
+**RC-SMOKE at 5aa8c69 (cell (a) of RC-G2, 2026-11-17), reported 2026-11-18:** every stage-06
+peak was 14.09 GiB and E7's reached 14.40 GiB and died: loading a pruned model kept the replaced
+projections allocated and built the whole state dict on the GPU (fixed 2026-11-18: the surgery
+frees what it replaces, the weights are streamed one tensor at a time; RC-G2 section 3, "Fix of
+2026-11-18"). In the first attempt E7's stage 04 died with `FileExistsError`: the two lanes
+attached the teacher cache at the same instant (check, then `symlink_to`); the link creation now
+accepts a link made at the same moment by the other lane when it points at the same source. The
+full-size check of RC-G2 section 3, cell (a), replaces a new smoke of stage 06: it loads the real
+E5R model through the fixed path.
+

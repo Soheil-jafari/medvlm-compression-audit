@@ -261,6 +261,27 @@ def test_an_e2_adapter_travels_to_another_account_and_is_checked(tmp_path: Path)
     with pytest.raises(bundles.BundleError, match="already exists here"):
         bundles.attach_handoff(local, out)
 
+    # two processes attach at the same instant (2026-11-18, RC-SMOKE's two lanes): the other one
+    # creates the link between the check and our symlink; the same link is accepted
+    real = Path.symlink_to
+
+    def raced(target: str):  # noqa: ANN202
+        def symlink_to(self: Path, source: Path, target_is_directory: bool = False) -> None:
+            real(self, target or source, target_is_directory=target_is_directory)
+            raise FileExistsError(str(self))
+
+        return symlink_to
+
+    from unittest import mock
+
+    with mock.patch.object(Path, "symlink_to", raced("")):
+        bundles.attach_handoff(_config(tmp_path / "account5"), out)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    with mock.patch.object(Path, "symlink_to", raced(str(elsewhere))):
+        with pytest.raises(bundles.BundleError, match="appeared while linking"):
+            bundles.attach_handoff(_config(tmp_path / "account6"), out)
+
     (out / "checkpoint_root" / "E2" / "seed1" / "adapter" / "adapter_config.json").write_text("{}")
     stage = _run("02_train_student.py", "--exp", "E2", "--seed", "1", "--from", str(out))
     assert stage.returncode == 5 and "hash differs" in stage.stderr

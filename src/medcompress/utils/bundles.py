@@ -547,5 +547,11 @@ def attach_handoff(
 
             shutil.copytree(source, link)
         else:
-            link.symlink_to(source, target_is_directory=source.is_dir())
+            try:
+                link.symlink_to(source, target_is_directory=source.is_dir())
+            except FileExistsError:  # another process linked it between the check and here
+                # (2026-11-18: two smoke lanes attached the teacher cache at the same instant)
+                if not (link.is_symlink() and Path(os.readlink(link)) == source):
+                    raise BundleError(f"{link} appeared while linking and is not a link to "
+                                      f"{source}; run in a fresh session") from None  # fmt: skip
     return bundle

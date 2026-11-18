@@ -215,6 +215,45 @@ def require_pruned_matches_removal(directory: Path | str, removal_json: Path | s
         )
 
 
+STAGE05_FILES: tuple[str, ...] = (
+    "removal.json", "budget_search.csv", "metrics.csv", "recovery_steps.json",
+    "removal_by_layer.csv",
+)  # fmt: skip
+"""The results files stage 05 writes; a saved pruned model is reused only next to them."""
+
+
+def saved_pruned_run(config: Mapping[str, Any], run: RunContext) -> bool:
+    """True when stages 04 and 05 of ``run`` are done and need not run again (2026-11-18): the
+    pruned model is there (made in this session or attached as a hand-off) and its stage-05
+    results files are in the results root, with the same removal set.
+
+    The pruned hand-off holds the model only, so for an attached model the results files must
+    be committed first. A model without them, or with another removal set, stops the run
+    instead of being pruned again into a read-only dataset or reused wrongly.
+    """
+    from medcompress.compression.pruning.checkpoint import MANIFEST_NAME, WEIGHTS_NAME
+
+    directory = pruned_dir(config, run)
+    if not (directory / MANIFEST_NAME).is_file():
+        return False
+    run_dir = run.run_dir(config["paths"]["results_root"])
+    missing = [name for name in STAGE05_FILES if not (run_dir / name).is_file()]
+    if not missing and "budget_within_tolerance" not in (run_dir / "metrics.csv").read_text(
+        encoding="utf-8"
+    ):
+        missing.append("metrics.csv rows of stage 05 (budget_within_tolerance)")
+    if missing:
+        raise ConfigError(
+            f"the pruned model of {run.experiment_tag} {run.budget} seed {run.seed} is at "
+            f"{directory}, but its stage-05 results are not in {run_dir}: {missing}; commit them "
+            "from that session's results_to_commit/ first, or detach the hand-off to prune again"
+        )
+    if not (directory / WEIGHTS_NAME).is_file():
+        raise ConfigError(f"{directory} has a manifest but no {WEIGHTS_NAME}")
+    require_pruned_matches_removal(directory, run_dir / "removal.json")
+    return True
+
+
 def pruned_dir(config: Mapping[str, Any], run: RunContext) -> Path:
     """Where the pruned and recovered model of ``run`` is saved (not committed)."""
     if run.budget is None:

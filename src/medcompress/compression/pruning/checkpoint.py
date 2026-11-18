@@ -124,14 +124,82 @@ def read_manifest(directory: Path | str) -> dict[str, Any]:
     return manifest
 
 
+def stream_load(module: Any, path: Path | str) -> int:
+    """Copy the weights of a safetensors file into ``module`` one tensor at a time (2026-11-18).
+
+    ``safetensors.torch.load_model(..., device="cuda")`` first builds the whole state dict on the
+    GPU and then copies it into the parameters, so a second full copy of the model sits next to
+    it (RC-G2 session 5: stage 06 out of memory at 14.01 GiB allocated on a 14.56 GiB T4). Here
+    each tensor is read into host memory (the file is memory-mapped), checked and copied into
+    its parameter or buffer on the model's device, then dropped: the GPU holds the model plus at
+    most one tensor in flight.
+
+    Strict, like ``load_model(strict=True)``: the file holds exactly the module's state-dict keys
+    (a tied tensor stored once is accepted when the module really shares it), with the same
+    shapes and dtypes. Returns the number of tensors copied.
+    """
+    import torch
+    from safetensors import safe_open
+
+    state = module.state_dict(keep_vars=True)
+    with safe_open(str(path), framework="pt", device="cpu") as handle:
+        keys = set(handle.keys())
+        aliases = dict(handle.metadata() or {})  # dropped name -> kept name (stream_save)
+        unexpected = sorted(keys - set(state))
+        missing = sorted(set(state) - keys - set(aliases))
+        if missing or unexpected:
+            raise ValueError(
+                f"{path}: the weights do not match the model: missing {missing[:5]} "
+                f"({len(missing)}), unexpected {unexpected[:5]} ({len(unexpected)})"
+            )
+        for dropped, kept in aliases.items():
+            if dropped in state and (
+                kept not in state
+                or kept not in keys
+                or state[dropped].data_ptr() != state[kept].data_ptr()
+            ):
+                raise ValueError(f"{path}: {dropped} is stored as {kept}, but the model does not "
+                                 "share the two tensors")  # fmt: skip
+        for name in sorted(keys):
+            target = state[name]
+            tensor = handle.get_tensor(name)
+            if tuple(tensor.shape) != tuple(target.shape) or tensor.dtype != target.dtype:
+                raise ValueError(
+                    f"{path}: {name} is {tuple(tensor.shape)} {tensor.dtype} in the "
+                    f"file, {tuple(target.shape)} {target.dtype} in the model"
+                )
+            with torch.no_grad():
+                target.copy_(tensor)
+            del tensor
+    return len(keys)
+
+
+def _gpu_note(label: str, module: Any) -> None:
+    """``MEDCOMPRESS_MEM`` line plus the model's own parameter bytes, so the log shows the margin;
+    above 0.5 GiB of other allocated memory, the largest live CUDA tensors are named."""
+    from medcompress.utils.memory import gpu_bytes, live_cuda_tensors, memory_line
+
+    params = sum(p.numel() * p.element_size() for p in module.parameters())
+    line = f"{memory_line(label)}; model parameters {params / 2**30:.2f} GiB"
+    reading = gpu_bytes()
+    if reading is not None and reading[0] - params > 2**29:
+        line += f"; other allocated {(reading[0] - params) / 2**30:.2f} GiB: {live_cuda_tensors()}"
+    print(line, flush=True)
+
+
 def load_pruned(base_model: Any, directory: Path | str) -> Any:
     """Replay the recorded removal steps on the unpruned ``base_model`` and load the weights.
 
     ``base_model`` must be the same architecture and weights source as the model
     that was pruned (a wrapper or a torch model). Raises ``ValueError`` if a recorded
-    unit does not exist in it or the parameter count differs from the manifest.
+    unit does not exist in it, the weights file does not match the rebuilt model (keys, shapes,
+    dtypes) or the parameter count differs from the manifest.
+
+    Memory (2026-11-18): the removed and replaced tensors are freed during the surgery, the GPU
+    cache is released before the weights are read, and the weights are streamed one tensor at a
+    time (:func:`stream_load`); the allocated and reserved memory are logged before and after.
     """
-    from safetensors.torch import load_model
+    from medcompress.utils.memory import release_gpu_cache
 
     manifest = read_manifest(directory)
     module = _module(base_model)
@@ -144,8 +212,10 @@ def load_pruned(base_model: Any, directory: Path | str) -> Any:
         if missing:
             raise ValueError(f"step {number}: units not in the base model: {missing[:3]}")
         remove_units(module, [by_id[unit_id] for unit_id in step])
-    device = str(next(module.parameters()).device)  # straight to the GPU: no host copy
-    load_model(module, str(Path(directory) / WEIGHTS_NAME), strict=True, device=device)
+    release_gpu_cache()
+    _gpu_note("load_pruned: rebuilt, before the weights", module)
+    stream_load(module, Path(directory) / WEIGHTS_NAME)
+    _gpu_note("load_pruned: weights loaded", module)
     count = surgery.count_parameters(module)
     if count != manifest["parameters_after"]:
         raise ValueError(f"parameter count {count} != manifest {manifest['parameters_after']}")

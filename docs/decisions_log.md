@@ -725,6 +725,32 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-18 (agent; implementation, no setting changed): the pruned-model load no longer runs
+  out of GPU memory, and RC-G2 resumes from saved pruned models.** RC-G2 session 5 (account 3,
+  5aa8c69) saved E5R (k = 29, footprint 6.105e9, level check -0.08 %) and then ran out of memory in
+  stage 06 loading it (14.01 GiB allocated on a 14.56 GiB T4); the smoke at 5aa8c69 had stage-06
+  peaks of 14.09 GiB and E7's died at 14.40. Cause: the projections the surgery replaced and the
+  layers it dropped stayed allocated (most likely held by an uncollected wrapper of the merged E2
+  LoRA, as in RC-E3's benchmark on 2026-11-15; a CPU test here frees them at once, so this is
+  inferred from the GPU numbers, not reproduced), and `safetensors.load_model(..., device=cuda)` built the
+  whole state dict on the GPU before copying it. Why session 1 passed at 4f54655 with the same
+  code (an estimate from the committed removal sets, all replaced tensors kept plus the new ones
+  plus a full state dict): 13.80 GiB (magnitude: MLP of 11 layers sliced, 7 layers dropped) and
+  13.12 GiB (activation: 6 and 6), under 14.56; E5R slices the MLP of all 33 unprotected layers:
+  15.34 GiB. Fix: the surgery frees every tensor it replaces or drops; `load_pruned` releases the
+  GPU cache and streams the weights one tensor at a time (`stream_load`: same keys, shapes and
+  dtypes, tied tensors checked, parameter count against the manifest), logging allocated and
+  reserved memory before and after. Other whole-checkpoint loads checked: stage 07, E8's parent
+  and the A-series load through `load_pruned` (fixed with it); the quantized checkpoints (E3, E8,
+  E9, E10Q) are read into host memory and swapped in module by module; the recovery resume loads
+  with `map_location="cpu"`; none builds a whole state dict on the GPU. The budget footprints are
+  unaffected (the meter excludes memory that is not the model's since 2026-11-15; E5R's measured
+  6.105e9 agrees with the parameter estimate 6.113e9); recovery peaks of later runs can be lower.
+  Also: the hand-off link tolerates a second lane creating the same link at the same instant
+  (RC-SMOKE's `FileExistsError`). Resume: with a part's pruned hand-off attached and its stage-05
+  results committed (the hand-off holds the model only), `run_experiment.py` runs only 06 and 07;
+  a model without its results or of another removal set stops the run. Next: the full-size check
+  on E5R, then the resume sessions (RC-G2 section 3).
 - **2026-11-17 (research lead; agreed by Soheil and Amir; pre-registration section 10, amendment
   of 2026-11-17, post hoc and disclosed): the pruning design is locked.** Protection of layers 0,
   1 and 35 for every unit type and every arm stays. E5 (magnitude, activation, Taylor) removes

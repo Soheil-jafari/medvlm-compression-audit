@@ -137,7 +137,8 @@ def test_each_check_reads_only_the_hand_offs_of_its_card() -> None:
              for name, (card, seed, v) in script.PLAN_OF.items()}  # fmt: skip
     e9 = plans["e9_eval"]
     assert {n.kind for n in e9.needs} == {"teacher_adapter"}  # never a student adapter
-    assert {n.kind for n in plans["recovery"].needs} == {"adapter", "teacher_cache"}
+    required = {n.kind for n in plans["recovery"].needs if not n.optional}
+    assert required == {"adapter", "teacher_cache"}  # RC-G2's saved models are optional (11-18)
 
 
 def test_a_release_that_leaves_nothing_on_the_gpu_passes() -> None:

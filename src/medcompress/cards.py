@@ -598,9 +598,13 @@ def build_plan(
         title = "Gate 2 pilot at B2, seed 0 (validation)"
         if only:
             title += ": " + ", ".join(parts)
+        # a part's saved pruned model, when attached, is used and its stages 04-05 are skipped
+        # (2026-11-18; scripts/run_experiment.py checks it against the committed removal.json)
+        saved = tuple(Need("pruned", r, optional=True) for h in handoffs for r in h.runs)
         return CardPlan(
             card, title, 1, steps, handoffs=handoffs,  # the cache: only for the recoveries
-            needs=(Need("adapter", Run("E2")),) + ((Need("teacher_cache"),) if handoffs else ()),
+            needs=(Need("adapter", Run("E2")),) + ((Need("teacher_cache"),) if handoffs else ())
+            + saved,
             internet=True,
             notes=("the grid sessions of seed 0 attach these hand-offs and skip RC-G2's runs",),
         )  # fmt: skip

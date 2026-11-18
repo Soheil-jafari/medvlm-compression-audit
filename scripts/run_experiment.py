@@ -78,7 +78,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     forwarded = [a for a in (sys.argv[1:] if argv is None else argv) if a != "--plan-only"]
-    return run_stages_in_processes(spec.scripts, forwarded)
+    return run_stages_in_processes(stages_to_run(spec.scripts, config, run), forwarded)
+
+
+def stages_to_run(scripts: tuple[str, ...], config: Any, run: Any) -> tuple[str, ...]:
+    """The stages to run: a pruning run whose pruned model and stage-05 results are already
+    there (a saved hand-off attached, the results committed) runs only 06 and 07 (2026-11-18,
+    RC-G2 session 5: the model was saved, then stage 06 ran out of memory)."""
+    from medcompress.compression.recovery import saved_pruned_run
+    from medcompress.registry import PRUNE_RECOVER, SCORE_UNITS
+
+    if PRUNE_RECOVER not in scripts or run.budget is None or not saved_pruned_run(config, run):
+        return tuple(scripts)
+    skipped = (SCORE_UNITS, PRUNE_RECOVER)
+    print(f"  skipping {', '.join(Path(s).name for s in skipped)}: the pruned model of this run "
+          "is there and matches its committed removal.json", flush=True)  # fmt: skip
+    return tuple(s for s in scripts if s not in skipped)
 
 
 def run_stages_in_processes(
