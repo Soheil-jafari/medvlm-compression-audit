@@ -976,3 +976,33 @@ PyTorch of 14.56 GiB). The card stopped there; E7U did not run. The measured foo
 the offline estimate (6.113e9 for k = 29). Fixed on 2026-11-18 (section 3); E5R resumes from the
 saved model (06 and 07 only) once its `results_to_commit/` is committed.
 
+**Session 1 under the design of 2026-11-17 (`--only E5:magnitude --only E5:activation`), stage-05
+files received 2026-11-19:** E5 magnitude was pruned, recovered and saved (hand-off in
+`g2-b2-seed0-pruned-s1`); its stage 06 started but wrote no rows (the environment record lists
+`06_evaluate`; the out-of-memory load fixed on 2026-11-18); E5 activation did not run. Six files
+committed unchanged (SHA-256 checked) under `results/E5/magnitude/B2/seed0/`: `metrics.csv`
+(stage 05's 21 rows), `removal.json`, `budget_search.csv`, `recovery_steps.json`,
+`removal_by_layer.csv`, `environment.json`. The commit the session ran on is not in the files.
+
+- Budget search: k = 29 of 86 groups per unprotected layer (957 channel groups, 752,615,424
+  parameters), footprint 6.105e9 against the B2 target 5.954e9 (+2.55 %, within the band), 8
+  measurements. The unpruned model measured 7.6126e9 (the level check). Nothing removed in layers
+  0, 1 and 35. The removal set equals the offline replay's k = 29 selection from the committed
+  magnitude scores.
+- Recovery: 157 updates, 3,715 s, final loss 0.449, peak 10.99e9 bytes; 5 non-finite steps (22,
+  30, 58, 106, 117), the same 5 skipped.
+
+**Session 5's files, received 2026-11-19:** eight files committed unchanged (SHA-256 checked):
+`results/E5R/B2/seed0/` `metrics.csv` (stage 05's 21 rows), `budget_search.csv`,
+`recovery_steps.json`, `removal_by_layer.csv`, `environment.json`, and `results/E5R/nobudget/seed0/`
+`unit_scores.csv`, `unit_scores.settings.json`, `metrics.csv` (3,204 units; the scores equal a
+fresh seed-0 draw of the `random` criterion; the parent adapter is E2 seed 0's). **`removal.json`
+was not in the archive** (an empty `Untitled.htm` was, not committed): E5R's resume stops until it
+is committed (the runner checks the saved model against it). k = 29, 957 channel groups,
+footprint 6.105e9 (+2.55 %), 8 measurements; recovery 157 updates, 4,003 s, final loss 0.441, peak
+10.99e9 bytes, the same 5 non-finite steps as E5 magnitude (both visit the pool in the same
+order). E5 magnitude and E5R remove the same number of groups per layer, so their models have the
+same shapes and their footprints match at k = 29 (6,105,386,144 bytes each).
+
+Sessions 2 and 4 run at 3aa4ecb as full runs (2026-11-19; nothing of theirs was saved before).
+

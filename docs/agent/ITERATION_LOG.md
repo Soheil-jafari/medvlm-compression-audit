@@ -1542,3 +1542,10 @@ Append-only, newest at the bottom. One entry per iteration:
   and 05 skipped when the model and its committed stage-05 results match. Cells for the full-size
   check and the resume sessions (RC-G2 section 3).
 
+## Iteration 93: 2026-11-19 (interactive)
+- Committed unchanged (SHA-256 checked): E5 magnitude B2 seed 0's stage-05 files (RC-G2 session
+  1, 6 files) and E5R's (session 5: 5 files at B2 and its 3 scoring files). E5R's `removal.json`
+  was missing from the archive; asked for. Both at k = 29, footprint 6.105e9 (+2.55 %); E5
+  magnitude's removal equals the offline replay's. Summaries regenerated (identical on pandas
+  2.3.3 and 3.1.1). Sessions 2 and 4 running at 3aa4ecb as full runs.
+
