@@ -725,6 +725,23 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-20 (agent; the pre-registered rules applied, nothing chosen): Gate 2 read, comparator
+  chosen, futility stop.** RC-G2's five B2 runs (seed 0, validation) and the 30-group check are
+  committed. `scripts/choose_comparator.py` (pre-registration section 5 / section 11 item 12):
+  all four candidates and E7 reach small-finding recall 1.000 (13 small polyps); E5 magnitude and
+  E5 activation tie on mask-positive recall (1.000); E5 magnitude wins on the small margin (10.72
+  against 7.75): **the comparator is E5 magnitude**. E7 ties it on (i) and ranks below it on (ii)
+  (0.977 against 1.000, 2 of 86 probes): **the futility rule stops the study after seed 0**. No
+  seed-1/2 run takes place (E2, E7 and the comparator at B2, E3 `w8` for H2, A1); seed 0 is
+  reported as exploratory, with no confirmatory claim (H3 as `E7_vs_best_seed0`); by Gate 2 the
+  article shape is B (`docs/FINAL_GOAL.md`). `results/seed_plan/comparator_B2.json` is identical on
+  pandas 2.3.3 and 3.1.1; the cards refuse seeds 1 and 2. Observations reported in
+  `docs/results/GATE2.md`, used in no decision: small-finding recall is at the ceiling for every
+  arm; the lesion-mask effect is measured on the plain yes/no answer, and E5 magnitude, E5
+  activation and E6 answer "no" to every mask-positive probe there, so their effect is 0 by
+  construction (E7 0.395, E2 0.058). Any change to the endpoints or the rule would be a post hoc
+  amendment for the team, not done here. RC-E5, RC-E6 and RC-E7 set `ready` for seed 0 (their B2
+  runs are RC-G2's; only the test evaluations run).
 - **2026-11-18 (agent; implementation, no setting changed): the pruned-model load no longer runs
   out of GPU memory, and RC-G2 resumes from saved pruned models.** RC-G2 session 5 (account 3,
   5aa8c69) saved E5R (k = 29, footprint 6.105e9, level check -0.08 %) and then ran out of memory in

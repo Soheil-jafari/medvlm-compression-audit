@@ -1,0 +1,41 @@
+{
+  "E7": {
+    "label": "E7",
+    "mask_recall": 0.9767441860465116,
+    "small_margin": 6.209496140408401,
+    "small_recall": 1.0
+  },
+  "budget": "B2",
+  "comparator": "E5:magnitude",
+  "decided_by": "(iii)",
+  "futility_stop": true,
+  "ranking": [
+    {
+      "label": "E5:magnitude",
+      "mask_recall": 1.0,
+      "small_margin": 10.716629332074753,
+      "small_recall": 1.0
+    },
+    {
+      "label": "E5:activation",
+      "mask_recall": 1.0,
+      "small_margin": 7.750087536298311,
+      "small_recall": 1.0
+    },
+    {
+      "label": "E5:taylor",
+      "mask_recall": 0.9883720930232558,
+      "small_margin": 11.537481365295557,
+      "small_recall": 1.0
+    },
+    {
+      "label": "E6",
+      "mask_recall": 0.9767441860465116,
+      "small_margin": 9.231020476955633,
+      "small_recall": 1.0
+    }
+  ],
+  "seed": 0,
+  "seeds_1_2": "stop: E7 ranks below the comparator; seed 0 is reported as exploratory",
+  "split": "val"
+}

@@ -1,0 +1,5 @@
+experiment,budget,seed,metric,value,ci_low,ci_high
+E5:taylor,,0,scoring_units,3204,,
+E5:taylor,,0,scoring_calibration_images,128,,
+E5:taylor,,0,scoring_seconds,125.13485548300002,,
+E5:taylor,,0,scoring_peak_gpu_bytes,7821725696.0,,

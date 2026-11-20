@@ -1,0 +1,5 @@
+experiment,budget,seed,metric,value,ci_low,ci_high
+E6,,0,scoring_units,36,,
+E6,,0,scoring_calibration_images,128,,
+E6,,0,scoring_seconds,2736.4026601449987,,
+E6,,0,scoring_peak_gpu_bytes,8429634560.0,,

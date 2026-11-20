@@ -1,0 +1,16 @@
+{
+  "calibration_size": 128,
+  "criterion": "taylor",
+  "criterion_settings": {
+    "section": null
+  },
+  "mlp_channel_group_size": 128,
+  "parent_adapter": "7a69094038942039c2621d41c43b5a7408cd5cb50cefc46f520c8f051909fd14",
+  "seed": 0,
+  "unit_types": [
+    "decoder_layer",
+    "attention_head",
+    "mlp_channel_group"
+  ],
+  "variant": "taylor"
+}

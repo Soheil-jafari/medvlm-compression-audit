@@ -1,0 +1,19 @@
+{
+  "calibration_size": 128,
+  "criterion": "output_similarity",
+  "criterion_settings": {
+    "section": {
+      "embedder": {
+        "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+        "source": "sentence-transformers/all-MiniLM-L6-v2"
+      }
+    }
+  },
+  "mlp_channel_group_size": null,
+  "parent_adapter": "7a69094038942039c2621d41c43b5a7408cd5cb50cefc46f520c8f051909fd14",
+  "seed": 0,
+  "unit_types": [
+    "decoder_layer"
+  ],
+  "variant": null
+}

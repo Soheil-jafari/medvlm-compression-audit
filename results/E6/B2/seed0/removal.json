@@ -1,0 +1,23 @@
+{
+  "criterion": "output_similarity",
+  "recovery_fingerprint": "a4c937ef3607ccad",
+  "removal_settings": {
+    "allocation": "global",
+    "protected_first": 2,
+    "protected_last": 1,
+    "schedule": "one_shot",
+    "score_normalisation": "per_parameter"
+  },
+  "units": [
+    "lm.layer4",
+    "lm.layer5",
+    "lm.layer6",
+    "lm.layer2",
+    "lm.layer3",
+    "lm.layer7",
+    "lm.layer9",
+    "lm.layer16",
+    "lm.layer17",
+    "lm.layer26"
+  ]
+}

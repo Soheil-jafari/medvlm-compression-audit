@@ -1549,3 +1549,11 @@ Append-only, newest at the bottom. One entry per iteration:
   magnitude's removal equals the offline replay's. Summaries regenerated (identical on pandas
   2.3.3 and 3.1.1). Sessions 2 and 4 running at 3aa4ecb as full runs.
 
+## Iteration 94: 2026-11-20 (interactive)
+- Committed unchanged (SHA-256 checked): RC-G2 session 1 resume (E5 magnitude 06/07) and new (E5
+  activation), session 2 (E5 Taylor, E6), session 4 (E7, the 30-group check): 46 results files
+  and four run reports. Summaries regenerated (identical on both pandas versions).
+- Gate 2 (`docs/results/GATE2.md`): comparator E5 magnitude by (iii); E7 below it on (ii); the
+  futility rule stops the main tier after seed 0. RC-E5, RC-E6, RC-E7 `ready` for seed 0 (B2 test
+  evaluations); cells for them.
+

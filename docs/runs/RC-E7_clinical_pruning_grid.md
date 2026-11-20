@@ -15,7 +15,7 @@
   (compression runs come after the freeze, so the test split is open), and timed with the
   budget protocol.
 - Purpose: the pruning arms of the audit at every budget, with the shared recovery.
-- Status: `blocked` (see section 2)
+- Status: `ready` (2026-11-20) for seed 0: every requirement of section 2 is met (RC-G2 read: `docs/results/GATE2.md`). The B2 runs are RC-G2's: with their datasets attached they are skipped and only the two test evaluations run. Seeds 1 and 2 do not run: the futility rule stopped the study after seed 0 (`results/seed_plan/comparator_B2.json`; the plan refuses them)
 
 ## 2. Requirements
 

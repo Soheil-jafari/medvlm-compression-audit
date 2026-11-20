@@ -1006,3 +1006,33 @@ same shapes and their footprints match at k = 29 (6,105,386,144 bytes each).
 
 Sessions 2 and 4 run at 3aa4ecb as full runs (2026-11-19; nothing of theirs was saved before).
 
+**Session 1 resume and new (Soheil, commit 2e795a9, 2026-11-19), session 2 (account 3, commit
+3aa4ecb, 2026-11-19) and session 4 (Amir, commit 2e795a9, 2026-11-19), committed 2026-11-20:**
+all steps ok. 46 results files committed unchanged (SHA-256 checked; the session-1 "new" folder
+repeated E5 magnitude's four files byte for byte), and the four run reports as
+`docs/runs/reports/run_report_RC-G2_s1_resume.md`, `_s1_new.md`, `_s2.md` and `_s4.md` (each the
+same file as its folder's `run_report_RC-G2.md`, renamed so they do not overwrite each other).
+The committed rows of E5 magnitude's and E7's `metrics.csv` are all kept; the new files add
+rows.
+
+- Session 1 resume (35.4 min): stages 04 and 05 skipped ("the pruned model of this run is there
+  and matches its committed removal.json"); stages 06 and 07 ran from `g2-b2-seed0-pruned-s1a`.
+  Session 1 new: E5 activation in full (142.7 min); hand-off `G2_B2_seed0_pruned_E5_activation`.
+- Session 2: E5 Taylor in full (141.3 min, its scoring included) and E6 in full (163.8 min);
+  hand-offs `G2_B2_seed0_pruned_E5_taylor` and `G2_B2_seed0_pruned_E6`.
+- Session 4: E7 (157.8 min; E7's committed scores reused) and the 30-group check (29.1 min, against
+  the 2.2 h estimate); hand-off `G2_B2_seed0_pruned_E7`.
+- Level check -0.08 % in every stage 05. Every pruned load at 5.6 GiB allocated, peak 7.28 GiB
+  (the fix of 2026-11-18). Stage-07 peaks equal the search footprints within 0.03 %.
+- Budget search (target 5.954e9): E5 magnitude, activation and Taylor k = 29 (957 channel groups,
+  6.105e9, +2.55 %; each removal set equals the k = 29 selection from its own scores); E6 10
+  layers (6.064e9, +1.85 %); E7 874 channel groups and 11 KV groups (6.132e9, +3.00 %; the replay
+  estimated 879 and 11). Nothing removed in layers 0, 1 and 35.
+- Recovery: 5 non-finite steps in every run; skipped updates 5 (E5 x 3, E7) and 8 (E6); peaks
+  10.29e9 (E6) to 11.00e9 bytes.
+- The 30-group check: Spearman 0.972 (at least 0.7), slope 0.958 (0.891-1.025), intercept -0.006
+  (-0.076 to 0.065); with the exact effects, 2 of 30 groups switch at B2, no KV-group or layer
+  decision changes.
+- Gate 2 read on 2026-11-20 (`docs/results/GATE2.md`): comparator E5 magnitude; E7 ranks below it,
+  so the futility rule stops the study after seed 0.
+

@@ -1,0 +1,45 @@
+### RC-G2 run report
+
+- Run by / date: <your name> / 2026-11-19 13:54 (UTC)
+- Commit actually used: 3aa4ecb58be5338645c30ea0d4dc928cb94d04fe
+- Hardware: Tesla T4, Tesla T4
+- Library versions: python 3.13.16; pyyaml 6.0.3 (needs >=6.0); numpy 2.2.6 (needs >=1.24); pandas 2.3.3 (needs >=2.0); scipy 1.16.3 (needs >=1.10); scikit-learn 1.6.1 (needs >=1.3); matplotlib 3.10.0 (needs >=3.7); pillow 13.0.0 (needs >=9.1); torch 2.11.0+cu130 (needs >=2.8); torchvision 0.26.0+cu130 (needs >=0.23); transformers 5.19.0 (needs ==5.19.0); peft 0.21.2 (needs ==0.21.2); accelerate 1.15.0 (needs >=1.0); torchao 0.18.0 (needs >=0.16.0); optimum 2.3.0 (needs >=1.24.0)
+- Inputs verified: shared data /kaggle/input/datasets/soheiljafarifard/medcompress-data/medcompress_data (commit 4038a6bb4276ed9ce4dda2bbc8d542d074f544af); E0 teacher_cache /kaggle/input/datasets/soheiljafarifard/e0-teacher-cache/handoff/E0_teacher_cache; E2 seed 0 adapter /kaggle/input/datasets/soheiljafarifard/e2-seed0-adapter/handoff/E2_seed0_adapter
+- Per step (wall time, status):
+  - run E5 taylor B2 seed0: 141.3 min, ok
+  - run E6 B2 seed0: 163.8 min, ok
+- Peak GPU memory (from the results files):
+  - results/E5/taylor/B2/seed0/efficiency.csv: peak_memory_bytes = 6,105,741,984
+  - results/E5/taylor/B2/seed0/metrics.csv: recovery_peak_gpu_bytes = 10,995,124,224
+  - results/E5/taylor/nobudget/seed0/metrics.csv: scoring_peak_gpu_bytes = 7,821,725,696
+  - results/E6/B2/seed0/efficiency.csv: peak_memory_bytes = 6,063,672,992
+  - results/E6/B2/seed0/metrics.csv: recovery_peak_gpu_bytes = 10,291,753,472
+  - results/E6/nobudget/seed0/metrics.csv: scoring_peak_gpu_bytes = 8,429,634,560
+- Hand-offs (save the whole handoff folder of this session as ONE private Kaggle dataset; each folder inside is found by its manifest; write its name here):
+  - G2_B2_seed0_pruned_E5_taylor: /kaggle/working/handoff/G2_B2_seed0_pruned_E5_taylor (2 files, 6.00 GB); make it a private dataset
+  - G2_B2_seed0_pruned_E6: /kaggle/working/handoff/G2_B2_seed0_pruned_E6 (2 files, 5.97 GB); make it a private dataset
+- Results files to commit (22; copies in /kaggle/working/results_to_commit):
+  - results/E5/taylor/B2/seed0/budget_search.csv
+  - results/E5/taylor/B2/seed0/efficiency.csv
+  - results/E5/taylor/B2/seed0/efficiency_setup.json
+  - results/E5/taylor/B2/seed0/environment.json
+  - results/E5/taylor/B2/seed0/metrics.csv
+  - results/E5/taylor/B2/seed0/recovery_steps.json
+  - results/E5/taylor/B2/seed0/removal.json
+  - results/E5/taylor/B2/seed0/removal_by_layer.csv
+  - results/E5/taylor/nobudget/seed0/metrics.csv
+  - results/E5/taylor/nobudget/seed0/unit_scores.csv
+  - results/E5/taylor/nobudget/seed0/unit_scores.settings.json
+  - results/E6/B2/seed0/budget_search.csv
+  - results/E6/B2/seed0/efficiency.csv
+  - results/E6/B2/seed0/efficiency_setup.json
+  - results/E6/B2/seed0/environment.json
+  - results/E6/B2/seed0/metrics.csv
+  - results/E6/B2/seed0/recovery_steps.json
+  - results/E6/B2/seed0/removal.json
+  - results/E6/B2/seed0/removal_by_layer.csv
+  - results/E6/nobudget/seed0/metrics.csv
+  - results/E6/nobudget/seed0/unit_scores.csv
+  - results/E6/nobudget/seed0/unit_scores.settings.json
+- Anything unusual: none
+- Outcome: all steps ok
