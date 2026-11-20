@@ -95,7 +95,7 @@ tests/                   import, config, registry, script and utility tests
 | E0 | Teacher, full precision | pretrained | - | 1 |
 | E1 | Student fine-tuned on correct answers only, full precision | pretrained | - | 3 |
 | E2 | Student + offline distillation, full precision (start of all compression arms) | pretrained (+E0 cache) | - | 3 |
-| E3 | E2 + post-training quantization (GPTQ `w8` / `w4`; LLM.int8 `w8a8`) | E2 | measured | `w8`: 3 (H2); `w4`, `w8a8`: 1 |
+| E3 | E2 + post-training quantization (GPTQ `w8` / `w4`; LLM.int8 `w8a8`; *exploratory, 2026-11-20:* AWQ `awq_w4`) | E2 | measured | 1 (seed 0; the `w8` seeds 1, 2 stopped by the futility rule) |
 | E4 | Student trained with quantization-aware distillation (GRACE-style) | pretrained (+E0 cache) | measured | 1 (seed 0) |
 | E5 | E2 + generic structured pruning (magnitude, activation/Wanda-sp, Taylor) of 128-channel MLP groups, the same number from every unprotected layer (LLM-Pruner's allocation) + recovery; comparator candidate | E2 | B1-B3 | 1; 3 for the comparator at B2 |
 | E5R | *Exploratory (2026-11-17):* E5's design with seeded random scores (the random baseline on E5's units) | E2 | B2 | 1 (seed 0) |
@@ -126,6 +126,18 @@ all their units globally (`global`). Every arm meets the same measured budgets w
 (the smallest removal at or below target x 1.03) and the same recovery. An offline replay of the
 removal sets from the committed scores (an estimate): `results/replay/removal_replay.md`.
 Reasons and sources: `docs/decisions/pruning_design_2026-11-17.md`.
+
+### After Gate 2 (2026-11-20)
+
+The comparator is E5 magnitude, and E7 ranks below it, so the pre-registered futility rule
+stopped the main tier after seed 0: no seed-1/2 runs, seed 0 reported as exploratory, no
+confirmatory claim (`docs/results/GATE2.md`). Three exploratory additions were fixed before any
+test-split result of a pruned arm (pre-registration section 10, amendment of 2026-11-20;
+`docs/decisions/exploratory_additions_2026-11-20.md`), all outside H1-H4: **A** silent collapse
+and re-calibration cost (plain answers against the operating point, the threshold refitted on few
+labelled images, the lesion-mask audit at the operating threshold); **B** what each method
+forgets (flips against E2, their overlap, compression-identified exemplars); **C** AWQ as a
+second 4-bit post-training quantization arm (E3 `awq_w4`).
 Run `python scripts/run_experiment.py --list` for the live registry.
 
 ### Seeds (pre-registration section 11 item 12, 2026-11-08)

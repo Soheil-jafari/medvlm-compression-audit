@@ -725,6 +725,22 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-20 (research lead; pre-registration section 10, amendment of 2026-11-20): exploratory
+  additions after the futility stop.** Fixed and committed before any test-split result of a
+  pruned arm (the seed-0 B2 test evaluations were running). A: plain answers against the
+  operating point per finding and macro on each test, their gap, ECE; the re-calibration curve
+  (threshold refitted on n = 8 ... 128 and all validation images, stratified, 1,000 draws, seed 0;
+  n = 0 the plain answer); the lesion-mask audit at the operating threshold next to the
+  pre-registered plain-answer version. B: flips against E2 (forgotten, gained) by finding, size
+  stratum and mask; Jaccard overlaps between arms and families; compression-identified exemplars
+  (forgotten by at least half of the compressed student arms); image-bootstrap intervals (10,000,
+  seed 0). C: E3 `awq_w4` (AWQ, 4 bit, groups of 128, the same calibration and targets as `w4`),
+  with GPTQModel 7.6.0's AWQ path and its pure-PyTorch kernel `AwqTorchLinear` (runs on a T4; AWQ
+  Marlin needs compute capability 8.0); a smoke and a 4-layer scale check first. All exploratory:
+  no verdicts, no multiplicity correction; no pre-registered metric, the comparator or the futility
+  outcome changes. The mask audit at the operating threshold needs the audit margins, saved from
+  now on; earlier runs need a mask-audit-only rerun. Specification:
+  `docs/decisions/exploratory_additions_2026-11-20.md`.
 - **2026-11-20 (agent; the pre-registered rules applied, nothing chosen): Gate 2 read, comparator
   chosen, futility stop.** RC-G2's five B2 runs (seed 0, validation) and the 30-group check are
   committed. `scripts/choose_comparator.py` (pre-registration section 5 / section 11 item 12):

@@ -442,6 +442,58 @@ is refused. E7's 30-group check also fits the exact effect on the first-order es
 intercept with 95 % intervals) and re-runs E7's B2 selection with the 30 exact effects in place,
 reporting how many of the 30 switch and whether a KV-group or layer decision changes.
 
+**Amendment of 2026-11-20 (research lead): exploratory additions
+after the futility stop, fixed before any test-split result of a pruned arm.** Written and
+committed while the seed-0 B2 test evaluations (RC-E5, RC-E6, RC-E7) were running and before any
+of their results was committed or opened. All three additions are **exploratory**: outside H1-H4,
+no verdicts, no multiplicity correction, reported as such. No pre-registered metric, the
+comparator choice (E5 magnitude) or the futility outcome changes. Full specification:
+`docs/decisions/exploratory_additions_2026-11-20.md`.
+
+*Why.* The futility stop removed the confirmatory claims. Gate 2 (`docs/results/GATE2.md`) showed
+two things worth measuring on every arm: the plain answers of E5 magnitude, E5 activation and E6
+say "no" to every mask-positive polyp probe, so their plain macro balanced accuracy is 0.500 while
+E7's is 0.688; and E7 has the lowest calibration error (ECE 0.081, against 0.25-0.33). The
+operating-point metrics re-tune a threshold per arm on validation, which hides both. (The *plain
+answer* is the one-forward-pass yes/no decision, "yes" when log p(yes) >= log p(no), i.e. the
+margin threshold 0; not a free-text generation.)
+
+- **A. Silent collapse and re-calibration cost** (CPU, from saved outcomes). For every arm with
+  saved validation and test outcomes (E2, E1, E10, E10Q, E3 `w4` / `w8` / `w8a8`, the AWQ arm, E4,
+  E8, E9, E5 magnitude / activation / Taylor, E5R, E6, E7, E7U, the A-series, every budget; on what
+  exists, rerun as arms arrive), on each test (filtered, unfiltered, external), per finding and
+  macro: plain-answer yes rate, sensitivity, specificity and balanced accuracy; the
+  operating-point ones; their gap; ECE. *Re-calibration curve:* the operating threshold refitted by
+  the same rule (specificity 0.95 per finding) on n labelled validation images, n = 8, 16, 32, 64,
+  128 and all, drawn stratified by finding presence, 1,000 draws per n (seed 0), each threshold
+  applied to the test split; median and 2.5-97.5 % range of sensitivity, specificity and balanced
+  accuracy per n; the smallest n whose median balanced accuracy is within 0.02 of the
+  full-validation threshold's; n = 0 is the plain answer. *Lesion-mask audit at the operating
+  threshold:* the flip-rate difference of primary endpoint 2 scored on operating-point decisions,
+  next to the pre-registered plain-answer version, which stays as it is; the new one is labelled
+  exploratory and states the yes-rate confound (an arm that always says "no" cannot flip).
+- **B. What each method forgets** (CPU, from saved outcomes). Flips per arm against E2 seed 0, at
+  the operating point and on plain answers: test images from correct to wrong (forgotten) and from
+  wrong to correct (gained), by finding, size stratum (small / other polyps) and mask presence; the
+  Jaccard overlap of the forgotten sets for every pair of arms and between families (pruning,
+  quantization, distillation, native small model); "compression-identified exemplars" (after
+  Hooker et al.; Holste et al., MICCAI 2023): the images forgotten by at least half of the
+  compressed arms at B2 or the nearest budget, counted by finding, small-polyp share and mask area
+  against all test images; an image-bootstrap 95 % interval (10,000 resamples, seed 0) for every
+  count and rate.
+- **C. AWQ as a second 4-bit post-training quantization arm** (GPU). E3 `awq_w4`, seed 0: AWQ (Lin
+  et al., MLSys 2024) on E2, 4-bit weights, groups of 128, the same 128 calibration images as GPTQ,
+  decoder linear layers only, everything else as E3 `w4`; then the same validation, tests and
+  benchmark. Before the real run: a smoke and a full-size scale check of the quantization step (the
+  first 4 layers, as RC-SCALE's `gptq` check).
+
+*How.* A and B: `scripts/exploratory_analysis.py` (CPU, outcome hand-offs attached), writing
+`results/exploratory/` (CSV and a summary markdown). The operating-threshold lesion-mask audit
+needs the audit's per-probe margins, which the evaluation did not save before this amendment:
+from now on it saves them, and for runs already evaluated a mask-audit-only rerun writes them (it
+reproduces the saved plain-answer flips, which is checked). C: GPTQModel 7.6.0 (already pinned),
+its AWQ path and its pure-PyTorch AWQ kernel; details in the decision file.
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result

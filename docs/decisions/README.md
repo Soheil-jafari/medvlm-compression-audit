@@ -14,6 +14,7 @@ in `docs/agent/INBOX.md`; the agent then records the decision in
 | [D06](D06_training_recipe.md) | LoRA and optimiser recipe, recovery length, evaluation numbers | S05b, S06, S09 | answered 2026-10-12: all recommendations accepted |
 | [D07](D07_pruning_settings.md) | Scoring method and cost, removal order, grid, budgets | S09, S10 | partly answered 2026-10-12: removal order, grid, budget metric, tolerance and protocol accepted; scoring method, timing hardware and B1-B3 open |
 | [Pruning design](pruning_design_2026-11-17.md) | Protection of layers 0, 1, 35 for every unit; E5's per-layer allocation; E5R and E7U | S09, S10 | decided 2026-11-17 (pre-registration section 10, post hoc, disclosed) |
+| [Exploratory additions](exploratory_additions_2026-11-20.md) | A silent collapse and re-calibration cost; B what each method forgets; C AWQ `awq_w4` | after Gate 2 | decided 2026-11-20 (pre-registration section 10; exploratory) |
 | [D08](D08_quantization.md) | Quantization tools, settings, calibration; scope of E4 | S08 | answered 2026-10-12: GPTQ 4/8 bit + LLM.int8, E4 reduced GRACE with confidence-gated decoupled distillation, 128 calibration images |
 
 Memo layout: question; options; evidence for each option with verified sources

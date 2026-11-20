@@ -1557,3 +1557,8 @@ Append-only, newest at the bottom. One entry per iteration:
   futility rule stops the main tier after seed 0. RC-E5, RC-E6, RC-E7 `ready` for seed 0 (B2 test
   evaluations); cells for them.
 
+## Iteration 95: 2026-11-20 (interactive)
+- Amendment of 2026-11-20 written and committed first (section 10; decision file): exploratory
+  additions A (silent collapse, re-calibration cost, the mask audit at the operating threshold),
+  B (what each method forgets) and C (AWQ `awq_w4`), before any test-split result of a pruned arm.
+
