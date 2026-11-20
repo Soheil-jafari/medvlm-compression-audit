@@ -1036,3 +1036,9 @@ rows.
 - Gate 2 read on 2026-11-20 (`docs/results/GATE2.md`): comparator E5 magnitude; E7 ranks below it,
   so the futility rule stops the study after seed 0.
 
+**E5R's `removal.json`, received 2026-11-20:** committed unchanged under `results/E5R/B2/seed0/`.
+957 channel groups, 29 in each of layers 2-34: the 29 lowest of E5R's committed random scores in
+every layer (checked), in agreement with `removal_by_layer.csv` and `uniform_k`; the same recovery
+fingerprint as E5 magnitude. E5R's stage-05 files are complete, so session 5's resume (E5R 06 and
+07 only) can run.
+
