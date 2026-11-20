@@ -25,13 +25,14 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-QUANTIZATION_CHECKS = ("e4_training", "gptq", "e9_eval")  # the env of their cards
+QUANTIZATION_CHECKS = ("e4_training", "gptq", "awq", "e9_eval")  # the env of their cards
 PLAN_OF: dict[str, tuple[str, int | None, tuple[str, ...]]] = {
     "e7_first_order": ("RC-G2", None, ()),
     "budget_search": ("RC-G2", None, ()),
     "recovery": ("RC-G2", None, ()),
     "e4_training": ("RC-E4", 0, ()),
     "gptq": ("RC-E3", 0, ("w4",)),
+    "awq": ("RC-E3", 0, ("awq_w4",)),  # amendment of 2026-11-20
     "e9_eval": ("RC-E9", None, ()),
 }
 """The card whose hand-offs each check reads (2026-11-14: E9's check was given an unrelated E1
@@ -54,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--updates", type=int, default=20, help="recovery updates")
     parser.add_argument("--e4-updates", type=int, default=10, help="E4 training updates")
-    parser.add_argument("--layers", type=int, default=4, help="GPTQ decoder layers")
+    parser.add_argument("--layers", type=int, default=4, help="GPTQ / AWQ decoder layers")
     parser.add_argument("--batches", type=int, default=30, help="E9 evaluation batches")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     return parser

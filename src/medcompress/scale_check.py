@@ -61,6 +61,7 @@ CHECKS: tuple[str, ...] = (
     "recovery",
     "e4_training",
     "gptq",
+    "awq",
     "e9_eval",
 )
 RECOVERY_UPDATES_IN_PRODUCTION = 157
@@ -537,6 +538,82 @@ def check_gptq(config: Mapping[str, Any], result: CheckResult, *, layers: int) -
     result.note(host.summary())
 
 
+def check_awq(config: Mapping[str, Any], result: CheckResult, *, layers: int, out: Path) -> None:
+    """E3 ``awq_w4``'s AWQ quantization at full size on the first ``layers`` decoder layers
+    (amendment of 2026-11-20): the merged E2 cut to its first ``layers`` layers (full-size
+    layers, the real 128 calibration inputs) goes through GPTQModel's AWQ exactly as stage 03
+    runs it; then the result is reloaded with ``AwqTorchLinear`` and one calibration example is
+    run through it. Records the peak GPU memory, the seconds per layer and the host memory."""
+    import shutil
+
+    import torch
+
+    from medcompress.compression.pruning.stage import load_train_samples
+    from medcompress.compression.pruning.surgery import find_decoder_stack, remove_layers
+    from medcompress.compression.quantization import awq
+    from medcompress.compression.quantization.ptq import (
+        PTQRecipe,
+        calibration_batches,
+        load_parent,
+        release_cached_memory,
+    )
+    from medcompress.config import RunContext
+    from medcompress.data.calibration import calibration_set
+    from medcompress.models.loading import release_model
+
+    run = RunContext("E3", seed=0, variant="awq_w4")
+    recipe = PTQRecipe.from_config(config, "awq_w4")
+    assert recipe.calibration_size is not None and recipe.group_size is not None
+    calibration = calibration_set(config, load_train_samples(config), recipe.calibration_size,
+                                  0, "student")  # fmt: skip
+    model = load_parent(config, run, int(config["inputs"]["image_longest_side"]))
+    batches = calibration_batches(model, calibration, Path(config["paths"]["data_root"]))
+    module = model.module
+    total = len(find_decoder_stack(module).layers)
+    remove_layers(module, list(range(layers, total)))  # the first layers, full size
+    work = Path(out) / "awq_check"
+    shutil.rmtree(work, ignore_errors=True)
+    source, target = work / "source", work / "quantized"
+    module.save_pretrained(str(source), safe_serialization=True)
+    model.processor.save_pretrained(str(source))
+    release_model(model)
+    release_cached_memory()
+    host_before = host_rss_bytes()
+    _reset_peak()
+    started = time.perf_counter()
+    info = awq.quantize_folder(source, target, batches, bits=recipe.weight_bits,
+                               group_size=recipe.group_size,
+                               device="cuda:0" if torch.cuda.is_available() else "cpu")  # fmt: skip
+    seconds = time.perf_counter() - started
+    peak = _peak_gib()
+    result.note(
+        f"AWQ on {layers} of {total} decoder layers: {seconds / layers:.0f} s per layer "
+        f"({seconds / 60:.1f} min), {info.get('quantized_modules')} modules, mean loss "
+        f"{info.get('mean_loss')}; calibration examples {info['calibration_examples']}"
+    )
+    rss = host_rss_bytes()
+    if rss is not None and host_before is not None:
+        result.note(
+            f"host rss {rss / GIB:.1f} GiB ({(rss - host_before) / GIB:+.1f} GiB during AWQ)"
+        )
+    loaded = awq.load_folder(
+        target,
+        device="cuda:0" if torch.cuda.is_available() else "cpu",
+        dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+    )
+    example = {k: v.to(loaded.device) for k, v in awq.calibration_inputs(batches[:1])[0].items()}
+    with torch.no_grad():
+        logits = loaded(**example).logits
+    if not bool(torch.isfinite(logits).all()):
+        result.fail("the AWQ model gives non-finite logits on a calibration example")
+    result.note(f"reloaded with {awq.KERNEL}: logits {tuple(logits.shape)}, finite")
+    est = seconds / layers * total / 60
+    result.note(f"estimate for all {total} layers: about {est:.0f} min of AWQ (scales linearly)")
+    del loaded
+    shutil.rmtree(work, ignore_errors=True)
+    judge(result, [], peak)
+
+
 def check_e9_eval(config: Mapping[str, Any], result: CheckResult, *, batches: int) -> None:
     """E9's quantized teacher scoring ``batches`` batches of validation probes (WAIT without
     its hand-off)."""
@@ -582,6 +659,7 @@ EXPERIMENT_OF: dict[str, str] = {
     "recovery": "E7",
     "e4_training": "E4",
     "gptq": "E3",
+    "awq": "E3",
     "e9_eval": "E9",
 }
 
@@ -601,6 +679,8 @@ def run_check(name: str, config: Mapping[str, Any], out: Path, options: Mapping[
             check_e4_training(config, result, updates=options["e4_updates"])
         elif name == "gptq":
             check_gptq(config, result, layers=options["layers"])
+        elif name == "awq":
+            check_awq(config, result, layers=options["layers"], out=out)
         elif name == "e9_eval":
             check_e9_eval(config, result, batches=options["batches"])
         else:

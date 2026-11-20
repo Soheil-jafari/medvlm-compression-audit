@@ -124,6 +124,12 @@ python scripts/scale_check.py --check budget_search 2>&1 | tee /kaggle/working/s
 echo "exit code: ${PIPESTATUS[0]}"
 ```
 
+**Check `awq` (2026-11-20, amendment of that date):** E3 `awq_w4`'s AWQ through GPTQModel at full
+size on the first 4 decoder layers (the merged E2 cut to them; the real 128 calibration examples),
+then the reload with `AwqTorchLinear` and one forward pass; it prints the seconds per layer, the
+peak GPU memory and an estimate for all 36 layers. Run with `--check awq` (RC-E3 section 3b, cell
+(a)).
+
 ## 4. What to send back
 
 `/kaggle/working/scale/scale_report.md` (the table), `/kaggle/working/scale_check.txt` (the

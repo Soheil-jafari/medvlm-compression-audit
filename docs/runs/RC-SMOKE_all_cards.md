@@ -220,3 +220,7 @@ accepts a link made at the same moment by the other lane when it points at the s
 full-size check of RC-G2 section 3, cell (a), replaces a new smoke of stage 06: it loads the real
 E5R model through the fixed path.
 
+**Job "E3 awq_w4" (2026-11-20, amendment of that date):** stages 03, 06 (validation and test) and
+07 of E3 `awq_w4` with 2 calibration images, GPTQModel's AWQ and the `AwqTorchLinear` kernel. It
+runs before the AWQ run (RC-E3 section 3b, cell (a), with the scale check `awq`).
+

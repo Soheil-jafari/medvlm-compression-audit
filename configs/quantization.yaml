@@ -21,6 +21,11 @@ quantization:
       weight_bits: 8
       activation_bits: null
       group_size: 128
+    awq_w4:                               # exploratory (amendment of 2026-11-20): AWQ, Lin et al.
+      backend: awq                        # GPTQModel 7.6.0's AWQ, kernel AwqTorchLinear (runs on
+      weight_bits: 4                      # a T4); the same 128 calibration images and targets
+      activation_bits: null               # as w4
+      group_size: 128
     w8a8:
       backend: llm_int8                   # bitsandbytes LLM.int8(): 8-bit weights and activations,
       weight_bits: 8                      # 16-bit outlier features (reported as such)

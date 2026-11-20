@@ -252,10 +252,10 @@ def run_steps(
         present = need_path(step.skip_if_present, config) if step.skip_if_present else None
         if present is not None and present.exists():
             if step.skip_if_present and step.skip_if_present.kind == "quantized":
-                from medcompress.compression.quantization.ptq import MANIFEST_NAME, TENSORS_NAME
+                from medcompress.compression.quantization.ptq import quantized_checkpoint_complete
 
-                if not all((present / name).is_file() for name in (MANIFEST_NAME, TENSORS_NAME)):
-                    message = f"incomplete GPTQ checkpoint at {present}; use a fresh session"
+                if not quantized_checkpoint_complete(present):  # GPTQ codes or AWQ (2026-11-20)
+                    message = f"incomplete quantized checkpoint at {present}; use a fresh session"
                     session.steps.append(StepOutcome(step.label, "failed", 1))
                     session.unusual.append(message)
                     print(f"STOP: {message}")

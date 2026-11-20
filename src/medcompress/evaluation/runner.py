@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -537,6 +537,7 @@ def evaluate_model(
             "audit_original_yes": audit.original_yes,
             "audit_lesion_flip": audit.lesion_flip,
             "audit_random_flip": audit.random_flip,
+            **audit.margins(),  # amendment of 2026-11-20 (the audit at the operating threshold)
         }
     if wanted & FREE_TEXT_SUITES:
         rows_qa = free_text.sample_qa_rows(samples, settings.generation_samples, PROBE_SAMPLE_SEED)
@@ -613,6 +614,120 @@ def to_rows(metrics: Sequence[Metric], tag: str, budget: str, seed: int) -> list
     return rows
 
 
+def split_samples(
+    config: Mapping[str, Any], settings: Any
+) -> tuple[Sequence[VQASample], dict[str, float]]:
+    """The samples of ``settings.split`` as the evaluation scores them: the non-finite test
+    images dropped (second amendment of 2026-11-13), and the smoke's subset under RC-SMOKE.
+    Returns ``(samples, drop counts)``."""
+    from medcompress.config import load_config
+    from medcompress.data.nonfinite import drop_for_split
+    from medcompress.data.prepared import load_prepared
+
+    paths = config["paths"]
+    dataset = load_config(config["components"]["datasets"]["train_qa"])["dataset"]
+    samples = load_prepared(
+        Path(paths["data_root"]), dataset, Path(paths["private_root"]),
+        unfiltered_test=settings.split == "test_unfiltered",
+    )[settings.split]  # fmt: skip
+    samples, drop_counts = drop_for_split(config, settings.split, samples)
+    per_label = smoke_setting(config, "eval_images_per_label")
+    if per_label is not None:  # RC-SMOKE only: a few images, every finding both ways
+        samples = smoke_subset(samples, settings.findings, int(per_label))
+    return samples, drop_counts
+
+
+AUDIT_FILE = "audit_{split}.npz"
+"""The mask audit's per-probe arrays, margins included, written by ``scripts/save_outcomes.py
+--audit-only`` for a run evaluated before the margins were saved (amendment of 2026-11-20)."""
+
+
+def save_outcomes(
+    config: Mapping[str, Any],
+    run: RunContext | None,
+    *,
+    audit_only: bool = False,
+    force: bool = False,
+    model: VLMWrapper | None = None,
+    samples: Sequence[VQASample] | None = None,
+) -> Path:
+    """Score a run again and write its per-probe outcomes to the output root, never to
+    ``results/`` (amendment of 2026-11-20): the exploratory analyses need validation and test
+    outcomes that earlier sessions did not keep, and the mask audit's margins.
+
+    Without ``audit_only`` the split's outcomes file (:data:`RUN_FILES_BY_SPLIT`) is written; an
+    existing one is kept unless ``force``. With ``audit_only`` only the mask audit runs and
+    :data:`AUDIT_FILE` is written. Either way the recomputed rows are compared with the run's
+    committed rows of that split and the largest difference is printed, and the audit's
+    plain-answer flips are compared with the saved ones when a saved outcomes file is there.
+    Returns the file written.
+    """
+    from medcompress.config import ConfigError
+
+    settings = resolve_settings(config)
+    if run is None:
+        raise ConfigError("--exp is required")
+    if audit_only:
+        if "mask_audit" not in settings.suites and "image_reliance" not in settings.suites:
+            raise ConfigError(f"{run.experiment_tag}: the evaluation has no mask audit")
+        audit_suite = "mask_audit" if "mask_audit" in settings.suites else "image_reliance"
+        settings = replace(settings, suites=(audit_suite,))
+    paths = config["paths"]
+    metrics_name, outcomes_name = RUN_FILES_BY_SPLIT[settings.split]
+    folder = run.run_dir(paths["output_root"])
+    target = folder / (AUDIT_FILE.format(split=settings.split) if audit_only else outcomes_name)
+    if target.exists() and not force:
+        raise ConfigError(f"{target} exists; keep it (or pass --force to replace it)")
+    if samples is None:
+        samples, _drops = split_samples(config, settings)
+    thresholds = None
+    if settings.split in TEST_SPLITS and "clinical" in settings.suites:
+        thresholds = validation_thresholds(Path(paths["results_root"]), run, settings.findings)
+    if model is None:
+        side = config.get("inputs", {}).get("image_longest_side")
+        model = load_run_model(config, run, int(side))
+    result = evaluate_model(model, samples, settings, Path(paths["data_root"]), run.seed,
+                            thresholds=thresholds)  # fmt: skip
+    if not result.arrays:
+        raise ValueError(f"{run.experiment_tag}: nothing to save for split {settings.split}")
+    folder.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(target, **result.arrays)
+    committed = run.run_dir(paths["results_root"]) / metrics_name
+    print(f"wrote {target}; {compare_with_committed(result.metrics, committed)}", flush=True)
+    saved = folder / outcomes_name
+    if audit_only and saved.is_file():
+        with np.load(saved, allow_pickle=False) as old:
+            if "audit_lesion_flip" in old.files:
+                same = all(np.array_equal(old[k], result.arrays[k])
+                           for k in ("audit_sample_ids", "audit_lesion_flip",
+                                     "audit_random_flip"))  # fmt: skip
+                print(f"audit flips {'equal' if same else 'DIFFER from'} the saved ones in "
+                      f"{saved}", flush=True)  # fmt: skip
+                if not same:
+                    raise ValueError(f"the rerun audit differs from {saved}: not written over")
+    return target
+
+
+def compare_with_committed(metrics: Sequence[Metric], committed: Path) -> str:
+    """The largest difference between recomputed rows and the committed ones of a split."""
+    import csv
+
+    if not committed.is_file():
+        return f"no committed rows at {committed} to compare with"
+    with committed.open(encoding="utf-8", newline="") as handle:
+        rows = {r["metric"]: float(r["value"]) for r in csv.DictReader(handle)}
+    gaps = [
+        (abs(m.value - rows[m.name]), m.name)
+        for m in metrics
+        if m.name in rows and not math.isnan(m.value) and not m.name.endswith("_seconds")
+    ]
+    if not gaps:
+        return "no shared rows with the committed ones"
+    worst = max(gaps)
+    return f"{len(gaps)} rows compared with {committed.name}: largest difference {worst[0]:.3g} " \
+           f"({worst[1]})"  # fmt: skip
+
+
 def run_evaluation(
     config: Mapping[str, Any],
     run: RunContext | None,
@@ -632,7 +747,7 @@ def run_evaluation(
 
     Used by: all experiments (E0-E9, A1-A6).
     """
-    from medcompress.config import ConfigError, load_config
+    from medcompress.config import ConfigError
     from medcompress.utils.io import upsert_results
 
     settings = resolve_settings(config)
@@ -645,20 +760,7 @@ def run_evaluation(
     data_root = Path(paths["data_root"])
     drop_counts: dict[str, float] = {}
     if samples is None:
-        from medcompress.data.prepared import load_prepared
-
-        dataset = load_config(config["components"]["datasets"]["train_qa"])["dataset"]
-        samples = load_prepared(
-            data_root, dataset, Path(paths["private_root"]),
-            unfiltered_test=settings.split == "test_unfiltered",
-        )[settings.split]  # fmt: skip
-        from medcompress.data.nonfinite import drop_for_split
-
-        # the second amendment of 2026-11-13: non-finite test images go, for every arm
-        samples, drop_counts = drop_for_split(config, settings.split, samples)
-        per_label = smoke_setting(config, "eval_images_per_label")
-        if per_label is not None:  # RC-SMOKE only: a few images, every finding both ways
-            samples = smoke_subset(samples, settings.findings, int(per_label))
+        samples, drop_counts = split_samples(config, settings)
     thresholds = None
     if settings.split in TEST_SPLITS and "clinical" in settings.suites:
         thresholds = validation_thresholds(Path(paths["results_root"]), run, settings.findings)

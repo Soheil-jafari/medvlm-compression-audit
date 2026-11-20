@@ -188,6 +188,14 @@ def smoke_jobs() -> list[SmokeJob]:
             "RC-E3", "E3 w8a8", "A", _quantized("E3", "w8a8", None), ("RC-E3", 0, ("w8a8",), ())
         ),
         SmokeJob(
+            "RC-E3",
+            "E3 awq_w4",
+            "A",
+            (*_quantized("E3", "awq_w4", None), _test("E3", "awq_w4")),
+            ("RC-E3", 0, ("awq_w4",), ()),
+            note="exploratory (amendment of 2026-11-20): GPTQModel's AWQ, AwqTorchLinear",
+        ),
+        SmokeJob(
             "RC-E4",
             "E4",
             "A",

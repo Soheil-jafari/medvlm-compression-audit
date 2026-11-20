@@ -1561,4 +1561,9 @@ Append-only, newest at the bottom. One entry per iteration:
 - Amendment of 2026-11-20 written and committed first (section 10; decision file): exploratory
   additions A (silent collapse, re-calibration cost, the mask audit at the operating threshold),
   B (what each method forgets) and C (AWQ `awq_w4`), before any test-split result of a pruned arm.
+- E5R's `removal.json` committed unchanged (checked against its scores).
+- A and B built (CPU; card RC-EX1); the evaluation saves the mask-audit margins; `save_outcomes.py`
+  for earlier runs; RC-R1 exports E1's test outcomes. C: E3 `awq_w4` through GPTQModel 7.6.0's AWQ
+  with `AwqTorchLinear` (runs on a T4), checked end to end on CPU; smoke job and scale check `awq`.
+  Tests.
 

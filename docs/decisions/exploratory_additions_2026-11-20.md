@@ -95,6 +95,12 @@ finding) question; every interval resamples images (all probes of an image toget
   GEMV and ExLlamaV2 AWQ kernels need GPTQModel's compiled CUDA extensions. The arm uses
   `AwqTorchLinear`, the AWQ counterpart of the `TorchLinear` kernel E3 uses (kept on 2026-11-16),
   so the latency comparison with E3 `w4` stays kernel-for-kernel. No new library is pinned.
+  GPTQModel's own Qwen2.5-VL calibration builds prompts without the answer; the arm gives it our
+  calibration inputs instead (image, question and ground-truth answer, as the GPTQ arms). Checked
+  end to end on CPU on a small Qwen2.5-VL with GPTQModel 7.6.0 installed (`tests/test_awq.py`):
+  the inputs, AWQ, the save, the reload with `AwqTorchLinear` (vision tower and embeddings left in
+  16 bit), yes/no scoring through our wrapper. Not yet run on a GPU: the smoke and the scale check
+  come first.
 - **Before the real run:** a smoke (RC-SMOKE job "E3 awq_w4") and a full-size scale check of the
   quantization step on the first 4 decoder layers (RC-SCALE check `awq`).
 

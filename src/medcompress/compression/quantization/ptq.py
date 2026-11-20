@@ -48,7 +48,10 @@ if TYPE_CHECKING:
     from medcompress.data.base import VQASample
     from medcompress.models.base import VLMWrapper
 
-PTQ_BACKENDS: tuple[str, ...] = ("gptq", "llm_int8")
+PTQ_BACKENDS: tuple[str, ...] = ("gptq", "llm_int8", "awq")
+"""``awq``: GPTQModel's AWQ with the ``AwqTorchLinear`` kernel (E3 ``awq_w4``, exploratory;
+amendment of 2026-11-20; :mod:`medcompress.compression.quantization.awq`)."""
+CALIBRATED_BACKENDS: tuple[str, ...] = ("gptq", "awq")
 QUANTIZED_SUBDIR = "quantized"
 MANIFEST_NAME = "quant_manifest.json"
 TENSORS_NAME = "quantized.npz"
@@ -117,7 +120,7 @@ class PTQRecipe:
         size = (section.get("calibration") or {}).get("size")
         if _open(bits):
             open_keys.append(f"quantization.recipes.{name}.weight_bits")
-        if backend == "gptq":
+        if backend in CALIBRATED_BACKENDS:
             if _open(group):
                 open_keys.append(f"quantization.recipes.{name}.group_size")
             if _open(size):
@@ -130,14 +133,23 @@ class PTQRecipe:
             raise ConfigError(f"unknown quantization targets {unknown}; known: {DECODER_TARGETS}")
         if backend == "gptq" and int(bits) not in grid.SUPPORTED_BITS:
             raise ConfigError(f"GPTQ bits must be one of {grid.SUPPORTED_BITS}")
+        if backend == "awq":
+            from medcompress.compression.quantization.awq import check_targets
+
+            if int(bits) != 4:
+                raise ConfigError("the AWQ arm is 4-bit (amendment of 2026-11-20)")
+            try:
+                check_targets(targets)
+            except ValueError as exc:
+                raise ConfigError(str(exc)) from exc
         return cls(
             name=str(name),
             backend=str(backend),
             weight_bits=int(bits),
             activation_bits=recipe.get("activation_bits"),
-            group_size=int(group) if backend == "gptq" else None,
+            group_size=int(group) if backend in CALIBRATED_BACKENDS else None,
             targets=targets,
-            calibration_size=int(size) if backend == "gptq" else None,
+            calibration_size=int(size) if backend in CALIBRATED_BACKENDS else None,
             damping=float(recipe.get("damping", DEFAULT_DAMPING)),
             block_size=int(recipe.get("block_size", DEFAULT_BLOCK_SIZE)),
             llm_int8_threshold=float(recipe.get("llm_int8_threshold", LLM_INT8_THRESHOLD)),
@@ -739,6 +751,93 @@ def load_parent(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWra
     return load_pruned(student, pruned_dir(config, Run("E7", seed=run.seed, budget=run.budget)))
 
 
+def awq_quantize(
+    config: Mapping[str, Any],
+    run: RunContext,
+    recipe: PTQRecipe,
+    model: VLMWrapper,
+    batches: Sequence[Any],
+) -> dict[str, Any]:
+    """E3 ``awq_w4`` (amendment of 2026-11-20): save the merged parent (with its processor) to
+    a temporary folder, release it, run GPTQModel's AWQ on that copy with ``batches`` (the GPTQ
+    arms' calibration inputs) and save the result to ``<quantized>/awq``; the temporary copy is
+    removed. Returns what the manifest records."""
+    import shutil
+
+    from medcompress.compression.quantization import awq
+    from medcompress.models.loading import release_model
+    from medcompress.utils.disk import require_free_disk
+
+    folder = quantized_dir(config, run)
+    source = folder.parent / awq.SOURCE_SUBDIR
+    target = folder / awq.AWQ_SUBDIR
+    module = getattr(model, "module", model)
+    need = sum(p.numel() * p.element_size() for p in module.parameters())
+    require_free_disk(folder.parent, 2 * need, "the AWQ source copy and the quantized model")
+    shutil.rmtree(source, ignore_errors=True)
+    module.save_pretrained(str(source), safe_serialization=True)
+    processor = getattr(model, "processor", None)
+    if processor is not None:
+        processor.save_pretrained(str(source))
+    release_model(model)
+    release_cached_memory()
+    try:
+        import torch
+
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        assert recipe.group_size is not None
+        info = awq.quantize_folder(source, target, batches, bits=recipe.weight_bits,
+                                   group_size=recipe.group_size, device=device)  # fmt: skip
+    finally:
+        shutil.rmtree(source, ignore_errors=True)
+    info["quantized_weight_bytes"] = awq.quantized_weight_bytes(target)
+    info["checkpoint"] = awq.AWQ_SUBDIR
+    return info
+
+
+def quantized_checkpoint_complete(folder: Path | str) -> bool:
+    """A saved quantized checkpoint is complete: the manifest and the GPTQ codes, or the AWQ
+    checkpoint (amendment of 2026-11-20), or the manifest alone for LLM.int8."""
+    folder = Path(folder)
+    if not (folder / MANIFEST_NAME).is_file():
+        return False
+    manifest = json.loads((folder / MANIFEST_NAME).read_text(encoding="utf-8"))
+    backend = (manifest.get("recipe") or {}).get("backend")
+    if backend == "awq":
+        from medcompress.compression.quantization.awq import AWQ_SUBDIR
+
+        return any((folder / AWQ_SUBDIR).glob("*.safetensors"))
+    if backend == "llm_int8":
+        return True
+    return (folder / TENSORS_NAME).is_file()
+
+
+def load_awq_quantized(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:
+    """E3 ``awq_w4`` for evaluation and timing: the AWQ checkpoint loaded by GPTQModel with the
+    ``AwqTorchLinear`` kernel, wrapped like the student (its spec and processor, the image
+    side); the parent is not loaded."""
+    import torch
+    from transformers import AutoProcessor
+
+    from medcompress.compression.quantization import awq
+    from medcompress.config import load_config, student_config_path
+    from medcompress.models.hf import HFVLMWrapper
+    from medcompress.models.loading import ModelSpec, require_on_gpu
+
+    folder = quantized_dir(config, run) / awq.AWQ_SUBDIR
+    if not any(folder.glob("*.safetensors")):
+        raise ConfigError(f"no AWQ checkpoint at {folder}: run stage 03 first (or attach its "
+                          "hand-off)")  # fmt: skip
+    spec = ModelSpec.from_config(load_config(student_config_path(config)))
+    cuda = torch.cuda.is_available()
+    module = awq.load_folder(folder, device="cuda:0" if cuda else "cpu",
+                             dtype=torch.float16 if cuda else torch.float32)  # fmt: skip
+    processor = AutoProcessor.from_pretrained(str(folder))
+    wrapper = HFVLMWrapper(module, processor, spec, image_longest_side=side)
+    require_on_gpu(module, f"{run.experiment_tag} (AWQ)")
+    return wrapper
+
+
 def load_run_quantized(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:
     """The quantized model of ``run`` for evaluation and timing (runner, benchmark).
 
@@ -755,6 +854,8 @@ def load_run_quantized(config: Mapping[str, Any], run: RunContext, side: int) ->
         if made_from != expected:
             raise ValueError(f"{folder}: made from {made_from!r}, but {run.experiment_tag} "
                              f"starts from {expected!r}")  # fmt: skip
+        if (manifest.get("recipe") or {}).get("backend") == "awq":  # 2026-11-20: no parent load
+            return load_awq_quantized(config, run, side)
     model = load_parent(config, run, side)  # its own checks first (adapters, settings)
     if not manifest:
         raise ConfigError(f"no quantized checkpoint at {folder}: run stage 03 first (or attach "
@@ -795,7 +896,7 @@ def run_quantization(
     rows: dict[str, float] = {}
     extra: dict[str, Any] = {}
     records: dict[str, QuantizedMatrix] = {}
-    if recipe.backend == "gptq":
+    if recipe.backend in CALIBRATED_BACKENDS:
         side = config.get("inputs", {}).get("image_longest_side")
         if model is None and _open(side):
             raise ConfigError("settings still open: inputs.image_longest_side")
@@ -815,17 +916,22 @@ def run_quantization(
             model = load_parent(config, run, int(side))
         started = time.perf_counter()
         batches = calibration_batches(model, calibration, Path(paths["data_root"]))
-        retries: dict[str, dict[str, float | int]] = {}
-        records = gptq_quantize_decoder(
-            model, batches, recipe, damping_retries=retries,
-            batch_labels=[s.sample_id for s in calibration],
-        )  # fmt: skip
-        rows["quantization_damping_retries"] = sum(r["retries"] for r in retries.values())
-        if retries:
-            rows["quantization_max_effective_damping"] = max(
-                r["effective_damping"] for r in retries.values()
-            )
-            extra["damping_retries"] = retries
+        if recipe.backend == "awq":
+            extra["awq"] = awq_quantize(config, run, recipe, model, batches)  # releases model
+            rows["quantized_matrices_awq"] = float(extra["awq"].get("quantized_modules", 0))
+            model = None
+        else:
+            retries: dict[str, dict[str, float | int]] = {}
+            records = gptq_quantize_decoder(
+                model, batches, recipe, damping_retries=retries,
+                batch_labels=[s.sample_id for s in calibration],
+            )  # fmt: skip
+            rows["quantization_damping_retries"] = sum(r["retries"] for r in retries.values())
+            if retries:
+                rows["quantization_max_effective_damping"] = max(
+                    r["effective_damping"] for r in retries.values()
+                )
+                extra["damping_retries"] = retries
         rows["quantization_seconds"] = time.perf_counter() - started
         rows["quantization_calibration_images"] = float(len(calibration))
         extra["calibration_sample_ids"] = [s.sample_id for s in calibration]
@@ -842,6 +948,9 @@ def run_quantization(
     if records:
         manifest = json.loads((directory / MANIFEST_NAME).read_text(encoding="utf-8"))
         rows["quantized_weight_bytes"] = float(manifest["quantized_weight_bytes"])
+    if recipe.backend == "awq":
+        rows["quantized_matrices"] = rows.pop("quantized_matrices_awq")
+        rows["quantized_weight_bytes"] = float(extra["awq"]["quantized_weight_bytes"])
     rows["quantization_weight_bits"] = float(recipe.weight_bits)
     target = run.run_dir(paths["results_root"]) / "metrics.csv"
     upsert_results(

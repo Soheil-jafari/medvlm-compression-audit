@@ -130,6 +130,82 @@ Expected (estimate): `w4` peak near RC-Q0's 3.8 GB, `w8` near 5.2 GB, every peak
 weights are now freed during the swap); `num_parameters` 3,754,622,976 for all three (the logical
 count).
 
+## 3b. E3 `awq_w4`: AWQ, exploratory (amendment of 2026-11-20)
+
+AWQ (Lin et al., MLSys 2024) on E2, 4-bit weights in groups of 128, the same 128 cleaned
+calibration images (each with its question and ground-truth answer) and the same decoder targets
+as `w4`, seed 0; then the same validation, tests and benchmark. Library: GPTQModel 7.6.0, already
+pinned (`METHOD.AWQ`); kernel `AwqTorchLinear` (pure PyTorch, runs on a T4; AWQ Marlin needs
+compute capability 8.0), the AWQ counterpart of `w4`'s `TorchLinear`. Checked end to end on CPU
+on a small Qwen2.5-VL (`tests/test_awq.py`): our calibration inputs, AWQ, the save, the reload with
+`AwqTorchLinear`, yes/no scoring; not yet run on a GPU. Without `--variant` the card runs the
+three pre-registered variants only; `awq_w4` has its own hand-offs (`E3_seed0_awq_w4_quantized`,
+`E3_seed0_awq_w4_outcomes`). Stage 03 saves the merged E2 to a temporary folder (about 7.5 GB) for
+GPTQModel and removes it afterwards; the AWQ checkpoint is about 3.5 GB (estimates).
+
+(a) Smoke and scale check (any account, T4 x2; attach `medcompress-data`, `e2-seed0-adapter`).
+The smoke runs stages 03, 06 and 07 with 2 calibration images (after the fp16 calibration check
+it reads); the scale check runs AWQ at full size on the first 4 decoder layers with the real 128
+calibration examples, reloads the result with `AwqTorchLinear` and prints the seconds per layer,
+the peak and an estimate for all 36 layers. About 1-1.2 h in all (an estimate). Send
+`/kaggle/working/smoke/smoke_report.md`, `/kaggle/working/scale/scale_report.md` and the last 40
+lines of both logs.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/smoke_cards.py --job "E3 awq_w4" 2>&1 | tee /kaggle/working/smoke_awq.txt
+echo "smoke exit code: ${PIPESTATUS[0]}"
+python scripts/scale_check.py --check awq 2>&1 | tee /kaggle/working/scale_awq.txt
+echo "scale check exit code: ${PIPESTATUS[0]}"
+```
+
+(b) The run, once (a) passes (any account, T4 x2; attach `medcompress-data`, `e2-seed0-adapter`).
+About 2.5-3.5 h (an estimate: AWQ about the scale check's per-layer time x 36; validation 0.5 h,
+test 0.5 h, unfiltered test 0.8 h and the benchmark 0.15 h, `w4`'s measured times). Save the two
+hand-off folders as private datasets; send `results_to_commit/` and the run report.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-E3 --seed 0 --variant awq_w4 2>&1 | tee /kaggle/working/run_card_RC-E3_awq_w4.txt
+echo "exit code: ${PIPESTATUS[0]}"
+```
+
 ## 4. What to commit back
 
 For each variant `<v>` and seed `<k>`:

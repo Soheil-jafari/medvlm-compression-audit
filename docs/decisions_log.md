@@ -725,6 +725,20 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-20 (agent; implementation of the amendment of 2026-11-20, no pre-registered setting
+  changed).** A and B: `evaluation/exploratory.py` and `scripts/exploratory_analysis.py` (CPU, from
+  the attached outcome files, writing `results/exploratory/`); card RC-EX1. The evaluation now
+  saves the mask audit's margins (`audit_original_margin`, `audit_lesion_margin`,
+  `audit_random_margin`); `scripts/save_outcomes.py` scores a split again or reruns the audit
+  alone without writing any results file (it compares with the committed rows and the saved
+  flips). RC-R1 also exports E1's test outcomes. C: E3 `awq_w4` through GPTQModel 7.6.0 (already
+  pinned): `METHOD.AWQ` on a saved copy of the merged E2 with our calibration inputs (GPTQModel's
+  own Qwen2.5-VL preparation drops the answer), kernel `AwqTorchLinear` (pure PyTorch, runs on a
+  T4; AWQ Marlin needs compute capability 8.0, Machete newer; the GEMM / GEMV / ExLlamaV2 AWQ
+  kernels need compiled extensions); checked end to end on CPU (`tests/test_awq.py`); smoke job
+  "E3 awq_w4" and scale check `awq` (AWQ on the first 4 full-size layers) before the run; RC-E3
+  runs it only with `--variant awq_w4`, with its own hand-offs. E5R's `removal.json` committed
+  unchanged; session 5's resume can run.
 - **2026-11-20 (research lead; pre-registration section 10, amendment of 2026-11-20): exploratory
   additions after the futility stop.** Fixed and committed before any test-split result of a
   pruned arm (the seed-0 B2 test evaluations were running). A: plain answers against the

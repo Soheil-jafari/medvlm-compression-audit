@@ -12,7 +12,7 @@ experiment:
   requires: []
   budgets: []
   seeds: [0, 1, 2]                        # w8: 3 seeds for H2 (2026-11-08); w4, w8a8: seed 0 only
-  variants: [w8, w4, w8a8]
+  variants: [w8, w4, w8a8, awq_w4]        # awq_w4: exploratory, seed 0 (amendment of 2026-11-20)
   scripts:
     - scripts/03_quantize.py
     - scripts/06_evaluate.py

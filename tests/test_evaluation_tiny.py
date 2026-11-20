@@ -108,3 +108,37 @@ def test_e2_evaluation_loads_the_adapter_that_training_saved(
         assert (a.logp_yes, a.logp_no) == pytest.approx((b.logp_yes, b.logp_no), abs=1e-4)
     untouched = tiny_vlm.tiny_wrapper().score_yes_no(images, questions)
     assert any(abs(a.logp_yes - u.logp_yes) > 1e-3 for a, u in zip(trained, untouched, strict=True))
+
+
+def test_save_outcomes_rewrites_the_outcomes_and_never_the_results(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Amendment of 2026-11-20: outcomes that a session did not keep are scored again, and the
+    mask audit's margins added, without touching the committed rows."""
+    import numpy as np
+
+    from medcompress.config import ConfigError
+    from medcompress.evaluation.runner import save_outcomes
+
+    samples = write_dataset(tmp_path)
+    run = RunContext("E2", seed=0)
+    config = _config(tmp_path, max_new_tokens=4)
+    run_evaluation(config, run, model=tiny_vlm.tiny_wrapper(), samples=samples)
+    results = tmp_path / "results" / "E2" / "nobudget" / "seed0" / "metrics.csv"
+    before = results.read_bytes()
+    outputs = tmp_path / "outputs" / "E2" / "nobudget" / "seed0"
+    with np.load(outputs / "outcomes.npz") as saved:  # the evaluation saves the margins now
+        assert {"audit_original_margin", "audit_lesion_margin", "audit_random_margin"} <= set(
+            saved.files
+        )
+    with pytest.raises(ConfigError, match="exists"):
+        save_outcomes(config, run, model=tiny_vlm.tiny_wrapper(), samples=samples)
+    path = save_outcomes(config, run, model=tiny_vlm.tiny_wrapper(), samples=samples, force=True)
+    assert path == outputs / "outcomes.npz" and results.read_bytes() == before
+    assert "largest difference" in capsys.readouterr().out
+    audit = save_outcomes(config, run, audit_only=True, model=tiny_vlm.tiny_wrapper(),
+                          samples=samples)  # fmt: skip
+    assert audit == outputs / "audit_val.npz" and results.read_bytes() == before
+    assert "audit flips equal the saved ones" in capsys.readouterr().out
+    with np.load(audit) as arrays:
+        assert "audit_lesion_margin" in arrays.files and "probe_margin" not in arrays.files

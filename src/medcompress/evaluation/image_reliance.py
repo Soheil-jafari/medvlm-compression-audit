@@ -286,6 +286,22 @@ class MaskAuditResult:
     lesion_margin_drop: np.ndarray
     random_margin_drop: np.ndarray
     control_overlap: np.ndarray
+    original_margin: np.ndarray | None = None
+    """The unmodified image's margin (saved since 2026-11-20: with the two drops it gives the
+    lesion-masked and random-masked margins, for the audit at the operating threshold)."""
+
+    def margins(self) -> dict[str, np.ndarray]:
+        """``audit_original_margin``, ``audit_lesion_margin``, ``audit_random_margin`` (the
+        per-probe arrays the exploratory audit at the operating threshold reads; amendment of
+        2026-11-20). Empty without ``original_margin``."""
+        if self.original_margin is None:
+            return {}
+        base = np.asarray(self.original_margin, dtype=float)
+        return {
+            "audit_original_margin": base,
+            "audit_lesion_margin": base - self.lesion_margin_drop,
+            "audit_random_margin": base - self.random_margin_drop,
+        }
 
     def summary(self, *, n_resamples: int = 2000, seed: int = 0) -> dict[str, float]:
         """Flip rates, the lesion-mask effect with its paired bootstrap CI, and margin versions."""
@@ -385,6 +401,7 @@ def mask_audit(
         lesion_margin_drop=base_margin - les_margin,
         random_margin_drop=base_margin - ctl_margin,
         control_overlap=np.array(overlaps, dtype=float),
+        original_margin=base_margin,
     )
 
 

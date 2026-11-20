@@ -20,7 +20,9 @@ from medcompress.config import RunContext
 SEEDS: tuple[int, ...] = (0, 1, 2)
 BUDGETS: tuple[str, ...] = ("B1", "B2", "B3")
 E5_CRITERIA: tuple[str, ...] = ("magnitude", "activation", "taylor")
-E3_VARIANTS: tuple[str, ...] = ("w4", "w8", "w8a8")
+E3_VARIANTS: tuple[str, ...] = ("w4", "w8", "w8a8", "awq_w4")
+"""``awq_w4``: exploratory, seed 0 (amendment of 2026-11-20); its own hand-offs."""
+E3_PREREGISTERED: tuple[str, ...] = ("w4", "w8", "w8a8")
 ABLATION_VARIANTS: dict[str, tuple[str | None, ...]] = {
     "A1": (None,),
     "A2": (None,),
@@ -243,8 +245,9 @@ def benchmark_only_plan(card: str, seed: int | None, variants: Sequence[str] | N
     one as a dated re-measurement; the metrics files stay as committed."""
     if card == "RC-E3":
         s = _seed(card, seed, SEEDS)
-        runs = [Run("E3", s, variant=v) for v in (_pick(E3_VARIANTS, variants) if s == 0
-                                                  else ("w8",))]  # fmt: skip
+        picked = (_pick(E3_VARIANTS, variants) if variants else E3_PREREGISTERED) if s == 0 \
+            else ("w8",)  # fmt: skip
+        runs = [Run("E3", s, variant=v) for v in picked]
         parent: tuple[Need, ...] = (Need("adapter", Run("E2", s)),)
         gpus, title, plan_seed = 1, f"E3 benchmark only, seed {s}", s
     else:
@@ -552,17 +555,28 @@ def build_plan(
         # w8 is in the 3-seed tier for H2 (2026-11-08): seeds 1 and 2 quantize w8 only, behind
         # the futility gate; w4 and w8a8 stay seed 0
         s = _seed(card, seed, SEEDS)
-        chosen = _pick(E3_VARIANTS, variants) if s == 0 else ("w8",)
+        # without --variant: the three pre-registered variants; awq_w4 (exploratory, 2026-11-20)
+        # runs when it is asked for, in its own session and hand-offs
+        chosen = (_pick(E3_VARIANTS, variants) if variants else E3_PREREGISTERED) if s == 0 \
+            else ("w8",)  # fmt: skip
         if s != 0:
             _main_tier_go(card, s)
             if variants and set(variants) != {"w8"}:
                 raise CardError(f"{card} seed {s} runs w8 only (w4 and w8a8 are seed 0 only)")
         runs = [Run("E3", s, variant=v) for v in chosen]
         steps = [step for run in runs for step in (_experiment(run), *_test_evals(run))]
+        gptq = tuple(r for r in runs if r.variant != "awq_w4")
+        awq_runs = tuple(r for r in runs if r.variant == "awq_w4")
+        handoffs: list[Handoff] = []
+        if gptq:
+            handoffs += [Handoff("quantized", gptq, f"E3_seed{s}_quantized"),
+                         Handoff("outcomes", gptq, f"E3_seed{s}_outcomes")]  # fmt: skip
+        if awq_runs:
+            handoffs += [Handoff("quantized", awq_runs, f"E3_seed{s}_awq_w4_quantized"),
+                         Handoff("outcomes", awq_runs, f"E3_seed{s}_awq_w4_outcomes")]  # fmt: skip
         return CardPlan(
             card, f"E3 post-training quantization, seed {s}", 1, tuple(steps),
-            handoffs=(Handoff("quantized", tuple(runs), f"E3_seed{s}_quantized"),
-                      Handoff("outcomes", tuple(runs), f"E3_seed{s}_outcomes")),
+            handoffs=tuple(handoffs),
             needs=(Need("adapter", Run("E2", s)),), seed=s, quantization=True, internet=True,
         )  # fmt: skip
     if card == "RC-E4":
@@ -674,7 +688,9 @@ def build_plan(
             card, "E0, E1, E2 on the test split", 2,
             tuple(step for r in runs for step in _test_evals(r)),
             handoffs=(Handoff("outcomes", e2, "E2_test_outcomes"),
-                      Handoff("outcomes", (Run("E0"),), "E0_test_outcomes")),  # flips vs E0
+                      Handoff("outcomes", (Run("E0"),), "E0_test_outcomes"),  # flips vs E0
+                      # E1 too: the exploratory analyses A and B read it (2026-11-20)
+                      Handoff("outcomes", (Run("E1", 0),), "E1_test_outcomes")),
             needs=(Need("teacher_adapter"),)
             + tuple(Need("adapter", r) for r in runs if r.exp in ("E1", "E2")),
             internet=True,
