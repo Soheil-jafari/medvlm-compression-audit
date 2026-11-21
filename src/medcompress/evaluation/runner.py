@@ -640,6 +640,10 @@ def split_samples(
 AUDIT_FILE = "audit_{split}.npz"
 """The mask audit's per-probe arrays, margins included, written by ``scripts/save_outcomes.py
 --audit-only`` for a run evaluated before the margins were saved (amendment of 2026-11-20)."""
+RESCORED_SUBDIR = "rescored"
+"""``<output_root>/rescored/<run dir>/``: where ``save_outcomes`` writes. An attached outcomes
+hand-off links the run's own output folder to a read-only dataset, so reruns go beside it; the
+exploratory analysis finds both by the run path."""
 
 
 def save_outcomes(
@@ -674,10 +678,13 @@ def save_outcomes(
         settings = replace(settings, suites=(audit_suite,))
     paths = config["paths"]
     metrics_name, outcomes_name = RUN_FILES_BY_SPLIT[settings.split]
-    folder = run.run_dir(paths["output_root"])
-    target = folder / (AUDIT_FILE.format(split=settings.split) if audit_only else outcomes_name)
-    if target.exists() and not force:
-        raise ConfigError(f"{target} exists; keep it (or pass --force to replace it)")
+    saved_folder = run.run_dir(paths["output_root"])  # the evaluation's own (maybe attached)
+    folder = Path(paths["output_root"]) / RESCORED_SUBDIR / run.run_dir("")
+    name = AUDIT_FILE.format(split=settings.split) if audit_only else outcomes_name
+    target = folder / name
+    for existing in (target, *(() if audit_only else (saved_folder / outcomes_name,))):
+        if existing.exists() and not force:
+            raise ConfigError(f"{existing} exists; keep it (or pass --force to score again)")
     if samples is None:
         samples, _drops = split_samples(config, settings)
     thresholds = None
@@ -690,12 +697,8 @@ def save_outcomes(
                             thresholds=thresholds)  # fmt: skip
     if not result.arrays:
         raise ValueError(f"{run.experiment_tag}: nothing to save for split {settings.split}")
-    folder.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(target, **result.arrays)
-    committed = run.run_dir(paths["results_root"]) / metrics_name
-    print(f"wrote {target}; {compare_with_committed(result.metrics, committed)}", flush=True)
-    saved = folder / outcomes_name
-    if audit_only and saved.is_file():
+    saved = saved_folder / outcomes_name
+    if audit_only and saved.is_file():  # checked before anything is written
         with np.load(saved, allow_pickle=False) as old:
             if "audit_lesion_flip" in old.files:
                 same = all(np.array_equal(old[k], result.arrays[k])
@@ -704,7 +707,11 @@ def save_outcomes(
                 print(f"audit flips {'equal' if same else 'DIFFER from'} the saved ones in "
                       f"{saved}", flush=True)  # fmt: skip
                 if not same:
-                    raise ValueError(f"the rerun audit differs from {saved}: not written over")
+                    raise ValueError(f"the rerun audit differs from {saved}: nothing written")
+    folder.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(target, **result.arrays)
+    committed = run.run_dir(paths["results_root"]) / metrics_name
+    print(f"wrote {target}; {compare_with_committed(result.metrics, committed)}", flush=True)
     return target
 
 

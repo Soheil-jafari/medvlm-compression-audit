@@ -1,9 +1,13 @@
 """AWQ through GPTQModel (E3 ``awq_w4``; pre-registration section 10, amendment of 2026-11-20).
 
-AWQ (Lin et al., MLSys 2024) scales the input channels of each decoder linear layer by an
+AWQ (Lin et al., MLSys 2024) scales the input channels of decoder linear layers by an
 activation-aware factor searched on calibration activations, folds the inverse into the
-preceding operation and rounds the weights to 4 bit in groups of 128 (asymmetric, with zero
-points). The quantization and the kernel come from GPTQModel 7.6.0, already pinned for E3
+preceding operation and rounds the weights to 4 bit in groups of 128. Here the grid is
+**symmetric** (no stored zero points), as E3 ``w4``'s GPTQ grid (``grid.py``); the AWQ paper's
+reference setting stores zero points, one recipe line (``symmetric: false``) away. Under
+grouped-query attention ``o_proj`` gets no activation-aware scale (its input does not match
+``v_proj``'s output; GPTQModel logs its loss as "not applicable") and is rounded on the same
+grid. The quantization and the kernel come from GPTQModel 7.6.0, already pinned for E3
 (``requirements/train.txt``; AutoAWQ is archived):
 
 * quantization: ``QuantizeConfig(quant_method=METHOD.AWQ, format=FORMAT.GEMM)`` on a saved copy
@@ -68,30 +72,52 @@ def quantize_folder(
     *,
     bits: int,
     group_size: int,
+    symmetric: bool = True,
     device: str | None = None,
 ) -> dict[str, Any]:
     """AWQ-quantize the saved model at ``source`` with ``batches`` and save it to ``target``.
-    Returns what the manifest records (modules quantized, the mean AWQ loss, the kernel)."""
+    Returns what the manifest records: the modules quantized and those that got an AWQ scale,
+    the mean AWQ loss, the grid (symmetric / zero points), GPTQModel's fallback, the kernel."""
+    import contextlib
+
     from gptqmodel import BACKEND, GPTQModel, QuantizeConfig
     from gptqmodel.quantization import FORMAT, METHOD
 
+    source, target = Path(source).resolve(), Path(target).resolve()  # before the chdir below
     inputs = calibration_inputs(batches)
     where = {"device": device} if device else {}
-    config = QuantizeConfig(bits=bits, group_size=group_size, quant_method=METHOD.AWQ,
-                            format=FORMAT.GEMM, **where)  # fmt: skip
-    import contextlib
-
-    Path(target).parent.mkdir(parents=True, exist_ok=True)
+    config = QuantizeConfig(bits=bits, group_size=group_size, sym=symmetric,
+                            quant_method=METHOD.AWQ, format=FORMAT.GEMM, **where)  # fmt: skip
+    target.parent.mkdir(parents=True, exist_ok=True)
     # GPTQModel writes its AWQ logs to ./logs: run next to the checkpoint, not in the clone
-    with contextlib.chdir(Path(target).parent):
-        model = GPTQModel.load(str(Path(source).resolve()), config)
+    with contextlib.chdir(target.parent):
+        model = GPTQModel.load(str(source), config)
         # our inputs exactly (image, question, ground-truth answer), as the GPTQ arms are
         # calibrated; GPTQModel's own Qwen2.5-VL preparation would drop the answer
         model.prepare_dataset = lambda *args, **kwargs: inputs
         model.quantize(inputs, batch_size=1, backend=BACKEND.AWQ_TORCH)
-        model.save(str(Path(target).resolve()))
+        model.save(str(target))
         del model
-    return {"kernel": KERNEL, "calibration_examples": len(inputs), **read_quant_log(target)}
+    return {"kernel": KERNEL, "calibration_examples": len(inputs), **read_quant_log(target),
+            **read_quantize_config(target)}  # fmt: skip
+
+
+def read_quantize_config(folder: Path | str) -> dict[str, Any]:
+    """The grid GPTQModel recorded (``quantize_config.json``): bits, group size, zero points,
+    its fallback for modules it cannot scale."""
+    import json
+
+    path = Path(folder) / "quantize_config.json"
+    if not path.is_file():
+        return {}
+    config = json.loads(path.read_text(encoding="utf-8"))
+    meta = config.get("meta") or {}
+    return {
+        "grid": {k: config.get(k) for k in ("bits", "group_size", "zero_point", "sym", "desc_act",
+                                            "format", "quant_method") if k in config},
+        "fallback": meta.get("fallback"),
+        "quantizer": meta.get("quantizer"),
+    }  # fmt: skip
 
 
 def read_quant_log(folder: Path | str) -> dict[str, Any]:
@@ -107,9 +133,14 @@ def read_quant_log(folder: Path | str) -> dict[str, Any]:
             losses.append(float(row.get("loss", "")))
         except ValueError:
             continue
+    unscaled = sorted(
+        {row.get("module", "") for row in rows if row.get("loss") == "not applicable"}
+    )
     return {
         "quantized_modules": len(rows),
         "layers": len({row.get("layer") for row in rows}),
+        "scaled_modules": len(losses),
+        "modules_without_awq_scale": unscaled,  # rounded on the same grid, no AWQ scale
         "mean_loss": sum(losses) / len(losses) if losses else None,
     }
 

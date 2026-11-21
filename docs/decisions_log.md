@@ -737,8 +737,12 @@ must be logged here.
   T4; AWQ Marlin needs compute capability 8.0, Machete newer; the GEMM / GEMV / ExLlamaV2 AWQ
   kernels need compiled extensions); checked end to end on CPU (`tests/test_awq.py`); smoke job
   "E3 awq_w4" and scale check `awq` (AWQ on the first 4 full-size layers) before the run; RC-E3
-  runs it only with `--variant awq_w4`, with its own hand-offs. E5R's `removal.json` committed
-  unchanged; session 5's resume can run.
+  runs it only with `--variant awq_w4`, with its own hand-offs. The AWQ grid is symmetric (no zero
+  points), as `w4`'s GPTQ grid; the AWQ paper's reference setting stores zero points (one recipe
+  line; open for the research lead); `o_proj` gets no AWQ scale under grouped-query attention. The
+  AWQ wrapper's processor is loaded as `load_model` loads it and the parent's generation config is
+  restored (GPTQModel rewrites it). E5R's `removal.json` committed unchanged; session 5's resume
+  can run.
 - **2026-11-20 (research lead; pre-registration section 10, amendment of 2026-11-20): exploratory
   additions after the futility stop.** Fixed and committed before any test-split result of a
   pruned arm (the seed-0 B2 test evaluations were running). A: plain answers against the

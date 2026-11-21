@@ -26,6 +26,8 @@ quantization:
       weight_bits: 4                      # a T4); the same 128 calibration images and targets
       activation_bits: null               # as w4
       group_size: 128
+      symmetric: true                     # as w4's GPTQ grid (no zero points); the AWQ paper's
+                                          # reference setting stores zero points (false)
     w8a8:
       backend: llm_int8                   # bitsandbytes LLM.int8(): 8-bit weights and activations,
       weight_bits: 8                      # 16-bit outlier features (reported as such)

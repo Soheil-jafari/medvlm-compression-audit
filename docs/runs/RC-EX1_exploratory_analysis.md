@@ -21,7 +21,9 @@ and `audit_<split>.npz` from every attached dataset whose path ends in
 of earlier notebook versions (Kaggle keeps `/kaggle/working/` of a saved version). The evaluation
 saves the mask audit's margins from 2026-11-20 on; for runs evaluated before, `save_outcomes.py
 --audit-only` adds them (GPU, section 3b), and `save_outcomes.py` without `--audit-only` scores a
-split again where its outcomes were not kept. Neither writes a results file.
+split again where its outcomes were not kept. Both write to `outputs/rescored/<run>/`, beside the
+attached (read-only) outcomes, and never a results file; an audit rerun that does not reproduce
+the saved flips writes nothing.
 
 | Arm | Validation outcomes | Test outcomes (filtered, unfiltered) | Audit margins | How to complete |
 |---|---|---|---|---|
@@ -32,7 +34,7 @@ split again where its outcomes were not kept. Neither writes a results file.
 | E9 | RC-E9's outputs dataset | the same | no | audit-only reruns (two T4s) |
 | E10 | RC-E10's version output, if kept | not yet evaluated | no | its test evaluation saves them |
 | E5 magnitude / activation / Taylor, E6, E7 at B2 | the RC-G2 sessions' version outputs, if kept | `E5_seed0_outcomes`, `E6_seed0_outcomes`, `E7_seed0_outcomes` (the B2 test evaluations, running 2026-11-20) | no | section 3b |
-| E5R, E7U at B2 | RC-G2 session 5 (to come) | no test evaluation planned | yes (new code) | - |
+| E5R, E7U at B2 | RC-G2 session 5 (to come) | none yet: no card evaluates them on the test splits | yes (new code) | `06_evaluate.py --exp E5R --budget B2 --seed 0 -o evaluation.split=test` (and `test_unfiltered`; E7U alike) with the saved pruned model attached, about 1.7 h per arm |
 | E3 `awq_w4` | its run (RC-E3) | its run | yes (new code) | - |
 | E4, E8, E10Q, A1-A6 | not run yet | not run yet | yes when they run | - |
 
@@ -74,7 +76,8 @@ Attach `medcompress-data`, `e2-seed0-adapter`, the arm's pruned dataset(s) and i
 dataset from the B2 test evaluation (so the audit rerun is checked against the saved flips).
 Estimate: about 1 h per arm (validation in full about 0.6 h, two audit-only passes about 10 min
 each); split the arms over accounts by where their datasets are. Drop the validation line for an
-arm whose `outcomes.npz` you still have. Save `/kaggle/working/outputs/` as a private dataset.
+arm whose `outcomes.npz` you still have. Save `/kaggle/working/outputs/rescored/` as a private
+dataset.
 The log prints "largest difference" against the committed rows (expected about 0) and "audit
 flips equal the saved ones" for every audit.
 

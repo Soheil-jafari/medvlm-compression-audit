@@ -54,8 +54,11 @@ finding) question; every interval resamples images (all probes of an image toget
   *Data:* this needs the audit's per-probe margins (original, lesion masked, random masked). Until
   this amendment the evaluation saved only the plain-answer flips; from now on it saves the
   margins too (`audit_original_margin`, `audit_lesion_margin`, `audit_random_margin`). For runs
-  evaluated before, a mask-audit-only rerun on the GPU writes them; the rerun must reproduce the
-  saved plain-answer flips exactly (checked; the control regions are seeded).
+  evaluated before, a mask-audit-only rerun on the GPU writes them (`scripts/save_outcomes.py
+  --audit-only`, into `outputs/rescored/<run>/`, beside the attached read-only hand-off); the
+  rerun must reproduce the saved plain-answer flips exactly, or it writes nothing (the control
+  regions are seeded). The audit's thresholds are the ones the split's decisions used (its own
+  outcomes first, else validation's); a difference is noted.
 
 ## B. What each method forgets (CPU, from saved outcomes)
 
@@ -63,7 +66,8 @@ finding) question; every interval resamples images (all probes of an image toget
   both share: *forgotten* = E2 correct and the arm wrong; *gained* = E2 wrong and the arm right.
   Broken down by finding, size stratum (small polyps, other polyps; the pre-registered small
   threshold) and mask presence. Counts are per probe; images with at least one forgotten probe are
-  reported too.
+  reported too (over the images with a probe E2 got right). A run scored before the operating
+  point existed (E0, E1) gets it from its validation outcomes by the pre-registered rule, noted.
 - **Overlap:** the Jaccard overlap of the forgotten probe sets for every pair of arms, and between
   families (the union of the family's forgotten sets):
   - pruning: E5 (each criterion), E5R, E6, E7, E7U, A1-A6;
@@ -87,6 +91,14 @@ finding) question; every interval resamples images (all probes of an image toget
 - **Settings:** 4-bit weights, groups of 128, the same 128 calibration images as GPTQ (the cleaned
   calibration set of seed 0, amendment of 2026-11-13), decoder linear layers only (the same
   targets as E3 `w4`), everything else as E3 `w4`; then the same validation, tests and benchmark.
+  *Grid:* symmetric, without stored zero points, as E3 `w4`'s GPTQ grid (`grid.py`) and
+  GPTQModel's default (`symmetric: true` in the recipe); the AWQ paper's reference setting stores
+  zero points, which would be `symmetric: false` (a choice for the research lead, recorded here
+  as open until confirmed). *Scaled modules:* under grouped-query attention `o_proj` gets no
+  activation-aware scale (its input does not match `v_proj`'s output) and is rounded on the same
+  grid; q/k/v share the scale searched on the input layer norm, gate/up on the post-attention
+  norm, down_proj on up_proj's output. The manifest records the grid, the modules without an AWQ
+  scale and GPTQModel's fallback (round-to-nearest for modules it cannot scale).
 - **Library and kernel** (checked 2026-11-20 in the source of the pinned GPTQModel 7.6.0; AutoAWQ
   is archived): GPTQModel 7.6.0 implements AWQ quantization (`METHOD.AWQ`) and has a Qwen2.5-VL
   definition whose decoder targets are q/k/v/o and gate/up/down, as E3's. Its AWQ kernels:

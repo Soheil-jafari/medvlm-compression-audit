@@ -358,6 +358,29 @@ def recalibration_curve(
     }
 
 
+def ensure_operating_point(
+    arrays: Mapping[str, np.ndarray],
+    val: Mapping[str, np.ndarray] | None,
+    order: Sequence[str],
+) -> tuple[dict[str, np.ndarray] | None, str | None]:
+    """The outcomes with their operating-point answers and thresholds. A run scored before the
+    operating point existed (E0, E1, 2026-11-06) gets them by the pre-registered rule from its
+    validation outcomes, with a note; without those, None and a note."""
+    if "probe_yes_op" in arrays and "probe_op_threshold" in arrays:
+        return dict(arrays), None
+    if val is None:
+        return None, "no operating point and no validation outcomes to fit one"
+    fitted = fit_thresholds(val["probe_findings"], val["probe_truth"].astype(bool),
+                            val["probe_margin"], order)  # fmt: skip
+    out = dict(arrays)
+    out["probe_yes_op"] = apply_thresholds(out["probe_findings"], out["probe_margin"],
+                                           out["probe_yes"].astype(bool), fitted)  # fmt: skip
+    out["probe_op_threshold"] = np.array(
+        [fitted.get(str(f), math.nan) for f in out["probe_findings"]]
+    )
+    return out, "operating point refitted from the validation outcomes (scored before 2026-11-06)"
+
+
 # ------------------------------------------------- A3: the mask audit at the threshold
 
 
@@ -530,6 +553,17 @@ def count_and_rate(
     }
 
 
+def images_count_and_rate(
+    numerator: np.ndarray, denominator: np.ndarray, index: np.ndarray, weights: np.ndarray
+) -> dict[str, float]:
+    """:func:`count_and_rate` on images: an image counts once when any of its probes is in the
+    mask (numerator) or in the denominator mask."""
+    n_images = weights.shape[1]
+    num = (_per_image(numerator, index, n_images) > 0).astype(float)
+    den = (_per_image(denominator, index, n_images) > 0).astype(float)
+    return count_and_rate(num, den, np.arange(n_images), weights)
+
+
 def flip_table(
     masks: FlipMasks, groups: Mapping[str, np.ndarray], index: np.ndarray, weights: np.ndarray
 ) -> list[dict[str, object]]:
@@ -551,6 +585,14 @@ def flip_table(
                 "group": name,
                 "kind": "gained",
                 **count_and_rate(masks.gained & group, wrong, index, weights),
+            }
+        )
+        # images: at least one forgotten probe, over the images with a probe E2 got right
+        rows.append(
+            {
+                "group": name,
+                "kind": "forgotten_images",
+                **images_count_and_rate(masks.forgotten & group, right, index, weights),
             }
         )
     return rows
@@ -704,10 +746,18 @@ def run_all(
     # A1, A2, A3
     for run in ordered:
         val = load(run.files["val"]) if "val" in run.files else None
+        if val is not None:
+            val, note = ensure_operating_point(val, val, order)
+            if note:
+                notes.append(f"{run.label} val: {note}")
         for split in TEST_SPLITS:
             if split not in run.files:
                 continue
-            test = load(run.files[split])
+            test, note = ensure_operating_point(load(run.files[split]), val, order)
+            if note:
+                notes.append(f"{run.label} {split}: {note}")
+            if test is None:
+                continue
             for row in plain_vs_operating(test, order, n_bins):
                 written["plain_vs_operating"].append({"run": run.label, "split": split, **row})
             if val is not None:
@@ -723,14 +773,26 @@ def run_all(
                 )
         for split in OUTCOME_FILES:
             audit = audit_arrays(run, split)
-            source = (
-                val if val is not None else (load(run.files[split]) if split in run.files else None)
-            )
-            if audit is None or source is None:
+            if audit is None:
                 continue
-            result = mask_audit_at_threshold(
-                audit, thresholds_from_outcomes(source), resamples=resamples
-            )
+            # the thresholds the split's decisions used: its own outcomes first, then
+            # validation's (the same committed thresholds, fitted on validation)
+            own = load(run.files[split]) if split in run.files else None
+            own, _ = ensure_operating_point(own, val, order) if own is not None else (None, None)
+            source = own if own is not None else val
+            if source is None:
+                notes.append(f"{run.label} {split}: audit margins but no thresholds; skipped")
+                continue
+            thresholds = thresholds_from_outcomes(source)
+            if own is not None and val is not None:
+                other = thresholds_from_outcomes(val)
+                if any(not math.isclose(thresholds[f], other.get(f, math.nan), rel_tol=0,
+                                        abs_tol=1e-9) for f in thresholds):  # fmt: skip
+                    notes.append(
+                        f"{run.label} {split}: its thresholds differ from the validation "
+                        "file's (a rescored validation refits them); the split's used"
+                    )
+            result = mask_audit_at_threshold(audit, thresholds, resamples=resamples)
             written["mask_audit_operating"].append({"run": run.label, "split": split, **result})
     # B
     for split in TEST_SPLITS:
@@ -745,13 +807,26 @@ def run_all(
         if ref_run is None:
             notes.append(f"B on {split}: E2 seed 0 has no {OUTCOME_FILES[split]} (RC-R1): skipped")
             continue
-        ref = load(ref_run.files[split])
+
+        def with_op(run: ArmRun, split: str = split) -> dict[str, np.ndarray] | None:
+            val_arrays = load(run.files["val"]) if "val" in run.files else None
+            arrays, _note = ensure_operating_point(load(run.files[split]), val_arrays, order)
+            return arrays
+
+        ref = with_op(ref_run)
+        if ref is None:
+            notes.append(f"B on {split}: E2 seed 0 has no operating point: skipped")
+            continue
         groups = probe_groups(ref, order, size_thresholds, mask_findings)
         index, weights = bootstrap_weights(ref["probe_sample_ids"], resamples, SEED)
         forgotten: dict[str, dict[str, np.ndarray]] = {"op": {}, "plain": {}}
         others = [r for r in ordered if r is not ref_run and split in r.files]
-        for run in others:
-            arm = load(run.files[split])
+        for run in list(others):
+            arm = with_op(run)
+            if arm is None:
+                notes.append(f"B on {split}: {run.label} has no operating point: left out")
+                others.remove(run)
+                continue
             for decision in ("op", "plain"):
                 masks = flip_masks(ref, arm, decision)
                 forgotten[decision][run.label] = masks.forgotten

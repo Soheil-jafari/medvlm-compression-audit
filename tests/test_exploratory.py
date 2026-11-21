@@ -104,6 +104,9 @@ def test_flip_counts_against_the_reference() -> None:
     assert total["count"] == 5 and total["denominator"] == (ref["probe_yes_op"] == truth).sum()
     assert total["count_ci_low"] <= 5 <= total["count_ci_high"]
     assert sum(rows[(f"finding:{f}", "forgotten")]["count"] for f in ORDER) == 5
+    images = rows[("all", "forgotten_images")]  # images with at least one forgotten probe
+    assert images["count"] == len(set(ref["probe_sample_ids"][right].tolist()))
+    assert images["denominator"] == len(set(ref["probe_sample_ids"][ref["probe_yes_op"] == truth]))
     assert rows[("mask:yes", "gained")]["count"] + rows[("mask:no", "gained")]["count"] == 2
 
 
@@ -188,7 +191,11 @@ def test_the_driver_finds_the_runs_and_writes_every_table(tmp_path: Path) -> Non
             ("E7/B2/seed0", 5), ("E1/nobudget/seed0", 6))  # fmt: skip
     for tag, seed in tags:
         save(tag, "val", _outcomes(60, 0)[0])
-        save(tag, "test", _outcomes(45, seed, thresholds=fitted)[0])
+        test_arrays = _outcomes(45, seed, thresholds=fitted)[0]
+        if tag.startswith("E1"):  # scored before the operating point existed
+            test_arrays = {k: v for k, v in test_arrays.items()
+                           if k not in ("probe_yes_op", "probe_op_threshold")}  # fmt: skip
+        save(tag, "test", test_arrays)
     n = 10
     audit = {"audit_sample_ids": np.array([f"img{i:03d}" for i in range(n)]),
              "audit_findings": np.array(["polyp"] * n), "audit_original_yes": np.zeros(n, bool),
@@ -215,6 +222,7 @@ def test_the_driver_finds_the_runs_and_writes_every_table(tmp_path: Path) -> Non
     audit_row = next(csv.DictReader((tmp_path / "out" / "mask_audit_operating.csv").open()))
     assert audit_row["run"] == "E7@B2 seed0" and float(audit_row["op_lesion_mask_effect"]) == 1.0
     summary = (tmp_path / "out" / "SUMMARY.md").read_text()
+    assert "E1 seed0 test: operating point refitted" in summary
     assert "| E7@B2 seed0 | pruning | 1 | 1 | 0 | 0 / 1 / 0 |" in summary
     assert ex.parse_run(Path("x/E3/w4/nobudget/seed0/outcomes.npz"), ("E3",)) == (
         "E3",
@@ -223,3 +231,17 @@ def test_the_driver_finds_the_runs_and_writes_every_table(tmp_path: Path) -> Non
         0,
     )
     assert ex.parse_run(Path("x/noise/seed0/outcomes.npz"), ("E3",)) is None
+
+
+def test_a_run_without_the_operating_point_gets_it_from_its_validation_outcomes() -> None:
+    val, fitted = _outcomes(80, 0)
+    test, _ = _outcomes(50, 1, thresholds=fitted)
+    old = {k: v for k, v in test.items() if k not in ("probe_yes_op", "probe_op_threshold")}
+    refit, note = ex.ensure_operating_point(old, val, ORDER)
+    assert note and "refitted" in note
+    assert np.array_equal(refit["probe_yes_op"], test["probe_yes_op"])  # the same rule
+    assert ex.ensure_operating_point(test, None, ORDER) == (test, None)
+    missing, why = ex.ensure_operating_point(old, None, ORDER)
+    assert missing is None and "no validation outcomes" in why
+    path = Path("outputs/rescored/E2/nobudget/seed0/audit_val.npz")
+    assert ex.parse_run(path, ("E2",)) == ("E2", None, "nobudget", 0)  # reruns are found

@@ -303,6 +303,23 @@ def explicit_device_map(
     return planner()
 
 
+def load_processor(spec: ModelSpec, *, max_pixels: int | None = None) -> Any:
+    """The processor of ``spec`` loaded as :func:`load_model` loads it (the pinned revision for a
+    hub source; the files already fetched are read locally). Used where the model comes from
+    elsewhere (E3 ``awq_w4``, loaded by GPTQModel; 2026-11-20)."""
+    from transformers import AutoProcessor
+
+    revision = spec.resolved_revision
+    kwargs: dict[str, Any] = {"trust_remote_code": False}
+    if revision is not None and not Path(spec.source).expanduser().exists():
+        kwargs["revision"] = revision
+    if _already_fetched(spec.source, revision):
+        kwargs["local_files_only"] = True
+    if max_pixels is not None:
+        kwargs["max_pixels"] = max_pixels
+    return AutoProcessor.from_pretrained(spec.source, **kwargs)
+
+
 def require_on_gpu(module: Any, what: str, *, cuda: bool | None = None) -> None:
     """Raise :class:`GPUPlacementError` if any parameter is on the CPU or the meta device, any
     buffer is on the meta device, or the device map names the CPU or the disk (an offload).

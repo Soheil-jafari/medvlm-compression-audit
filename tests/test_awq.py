@@ -136,7 +136,9 @@ def test_awq_through_gptqmodel_on_a_small_qwen2_5_vl(tmp_path: Path) -> None:
     assert all(torch.isfinite(torch.tensor([s.logp_yes, s.logp_no])).all() for s in scored)
 
 
-def test_the_stage_saves_awq_and_the_runner_loads_it_without_the_parent(tmp_path: Path) -> None:
+def test_the_stage_saves_awq_and_the_runner_loads_it_without_the_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """``ptq.awq_quantize`` saves the parent, releases it, quantizes, removes the source copy;
     the manifest names the AWQ backend; ``load_run_quantized`` loads the AWQ model directly."""
     pytest.importorskip("gptqmodel")
@@ -182,8 +184,18 @@ def test_the_stage_saves_awq_and_the_runner_loads_it_without_the_parent(tmp_path
     assert not (folder.parent / awq.SOURCE_SUBDIR).exists()  # the source copy is removed
     assert info["quantized_modules"] == 14 and info["quantized_weight_bytes"] > 0
     assert all(p.device.type == "meta" for p in module.parameters())  # the parent was released
+    assert info["symmetric"] is True and info["grid"]["zero_point"] is False  # as w4's grid
+    assert info["modules_without_awq_scale"] == ["self_attn.o_proj"]  # GQA: no AWQ scale
+    assert info["scaled_modules"] == 12 and info["generation_config"]["eos_token_id"] == (
+        processor.tokenizer.eos_token_id
+    )
     ptq.save_quantized({}, recipe, folder, start_from=ptq.parent_of(run), extra={"awq": info})
     assert ptq.quantized_checkpoint_complete(folder)
-    loaded = ptq.load_run_quantized(config, run, 56)  # the AWQ branch: no parent load
+    loaded = ptq.load_awq_quantized(config, run, 56, processor=processor)
+    assert loaded.module.generation_config.eos_token_id == processor.tokenizer.eos_token_id
+    assert not loaded.module.generation_config.do_sample  # the parent's (GPTQModel: True)
     scores = loaded.score_yes_no([tiny_vlm.tiny_image(0)], [tiny_vlm.PROBE])
     assert torch.isfinite(torch.tensor([scores[0].logp_yes, scores[0].logp_no])).all()
+    routed: list[object] = []
+    monkeypatch.setattr(ptq, "load_awq_quantized", lambda *a, **k: routed.append(a) or "awq")
+    assert ptq.load_run_quantized(config, run, 56) == "awq" and routed  # no parent load

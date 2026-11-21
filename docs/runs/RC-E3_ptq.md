@@ -138,7 +138,9 @@ as `w4`, seed 0; then the same validation, tests and benchmark. Library: GPTQMod
 pinned (`METHOD.AWQ`); kernel `AwqTorchLinear` (pure PyTorch, runs on a T4; AWQ Marlin needs
 compute capability 8.0), the AWQ counterpart of `w4`'s `TorchLinear`. Checked end to end on CPU
 on a small Qwen2.5-VL (`tests/test_awq.py`): our calibration inputs, AWQ, the save, the reload with
-`AwqTorchLinear`, yes/no scoring; not yet run on a GPU. Without `--variant` the card runs the
+`AwqTorchLinear`, yes/no scoring; not yet run on a GPU. The grid is symmetric (no zero points),
+as `w4`'s GPTQ grid; `o_proj` gets no AWQ scale under grouped-query attention and is rounded on
+the same grid (the manifest records both). Without `--variant` the card runs the
 three pre-registered variants only; `awq_w4` has its own hand-offs (`E3_seed0_awq_w4_quantized`,
 `E3_seed0_awq_w4_outcomes`). Stage 03 saves the merged E2 to a temporary folder (about 7.5 GB) for
 GPTQModel and removes it afterwards; the AWQ checkpoint is about 3.5 GB (estimates).

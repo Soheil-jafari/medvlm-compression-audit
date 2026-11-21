@@ -772,6 +772,10 @@ def awq_quantize(
     source = folder.parent / awq.SOURCE_SUBDIR
     target = folder / awq.AWQ_SUBDIR
     module = getattr(model, "module", model)
+    recipes = (config.get("quantization") or {}).get("recipes") or {}
+    symmetric = bool((recipes.get(recipe.name) or {}).get("symmetric", True))
+    generation = getattr(module, "generation_config", None)
+    generation_dict = generation.to_dict() if generation is not None else None
     need = sum(p.numel() * p.element_size() for p in module.parameters())
     require_free_disk(folder.parent, 2 * need, "the AWQ source copy and the quantized model")
     shutil.rmtree(source, ignore_errors=True)
@@ -787,11 +791,14 @@ def awq_quantize(
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         assert recipe.group_size is not None
         info = awq.quantize_folder(source, target, batches, bits=recipe.weight_bits,
-                                   group_size=recipe.group_size, device=device)  # fmt: skip
+                                   group_size=recipe.group_size, symmetric=symmetric,
+                                   device=device)  # fmt: skip
     finally:
         shutil.rmtree(source, ignore_errors=True)
     info["quantized_weight_bytes"] = awq.quantized_weight_bytes(target)
     info["checkpoint"] = awq.AWQ_SUBDIR
+    info["symmetric"] = symmetric
+    info["generation_config"] = generation_dict  # the parent's, restored at load time
     return info
 
 
@@ -812,17 +819,20 @@ def quantized_checkpoint_complete(folder: Path | str) -> bool:
     return (folder / TENSORS_NAME).is_file()
 
 
-def load_awq_quantized(config: Mapping[str, Any], run: RunContext, side: int) -> VLMWrapper:
+def load_awq_quantized(
+    config: Mapping[str, Any], run: RunContext, side: int, *, processor: Any = None
+) -> VLMWrapper:
     """E3 ``awq_w4`` for evaluation and timing: the AWQ checkpoint loaded by GPTQModel with the
-    ``AwqTorchLinear`` kernel, wrapped like the student (its spec and processor, the image
-    side); the parent is not loaded."""
+    ``AwqTorchLinear`` kernel, wrapped like the student: the processor loaded as ``load_model``
+    loads it (the student's pinned source; ``processor`` replaces it in tests), the image side,
+    and the parent's own generation config restored from the manifest (GPTQModel rewrites it on
+    load). The parent is not loaded."""
     import torch
-    from transformers import AutoProcessor
 
     from medcompress.compression.quantization import awq
     from medcompress.config import load_config, student_config_path
     from medcompress.models.hf import HFVLMWrapper
-    from medcompress.models.loading import ModelSpec, require_on_gpu
+    from medcompress.models.loading import ModelSpec, load_processor, require_on_gpu
 
     folder = quantized_dir(config, run) / awq.AWQ_SUBDIR
     if not any(folder.glob("*.safetensors")):
@@ -832,7 +842,15 @@ def load_awq_quantized(config: Mapping[str, Any], run: RunContext, side: int) ->
     cuda = torch.cuda.is_available()
     module = awq.load_folder(folder, device="cuda:0" if cuda else "cpu",
                              dtype=torch.float16 if cuda else torch.float32)  # fmt: skip
-    processor = AutoProcessor.from_pretrained(str(folder))
+    manifest_path = folder.parent / MANIFEST_NAME
+    if manifest_path.is_file():
+        saved = json.loads(manifest_path.read_text(encoding="utf-8")).get("awq") or {}
+        if saved.get("generation_config"):
+            from transformers import GenerationConfig
+
+            module.generation_config = GenerationConfig.from_dict(saved["generation_config"])
+    if processor is None:
+        processor = load_processor(spec)
     wrapper = HFVLMWrapper(module, processor, spec, image_longest_side=side)
     require_on_gpu(module, f"{run.experiment_tag} (AWQ)")
     return wrapper

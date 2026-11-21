@@ -110,11 +110,17 @@ def test_e2_evaluation_loads_the_adapter_that_training_saved(
     assert any(abs(a.logp_yes - u.logp_yes) > 1e-3 for a, u in zip(trained, untouched, strict=True))
 
 
-def test_save_outcomes_rewrites_the_outcomes_and_never_the_results(
+def test_save_outcomes_writes_beside_the_attached_outcomes_and_never_the_results(
     tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
-    """Amendment of 2026-11-20: outcomes that a session did not keep are scored again, and the
-    mask audit's margins added, without touching the committed rows."""
+    """Amendment of 2026-11-20: a split is scored again, or its mask audit rerun with the
+    margins, into ``<output_root>/rescored/<run>/``: the run's own output folder may be an
+    attached, read-only hand-off. No results file changes; a rerun audit that differs from the
+    saved flips writes nothing."""
+    import os
+    import shutil
+    import stat
+
     import numpy as np
 
     from medcompress.config import ConfigError
@@ -126,19 +132,42 @@ def test_save_outcomes_rewrites_the_outcomes_and_never_the_results(
     run_evaluation(config, run, model=tiny_vlm.tiny_wrapper(), samples=samples)
     results = tmp_path / "results" / "E2" / "nobudget" / "seed0" / "metrics.csv"
     before = results.read_bytes()
-    outputs = tmp_path / "outputs" / "E2" / "nobudget" / "seed0"
-    with np.load(outputs / "outcomes.npz") as saved:  # the evaluation saves the margins now
+    own = tmp_path / "outputs" / "E2" / "nobudget" / "seed0"
+    with np.load(own / "outcomes.npz") as saved:  # the evaluation saves the margins now
         assert {"audit_original_margin", "audit_lesion_margin", "audit_random_margin"} <= set(
             saved.files
         )
-    with pytest.raises(ConfigError, match="exists"):
-        save_outcomes(config, run, model=tiny_vlm.tiny_wrapper(), samples=samples)
-    path = save_outcomes(config, run, model=tiny_vlm.tiny_wrapper(), samples=samples, force=True)
-    assert path == outputs / "outcomes.npz" and results.read_bytes() == before
-    assert "largest difference" in capsys.readouterr().out
-    audit = save_outcomes(config, run, audit_only=True, model=tiny_vlm.tiny_wrapper(),
+    # as on Kaggle: the run's output folder is a link to a read-only attached dataset
+    dataset = tmp_path / "dataset" / "E2_seed0_outcomes"
+    shutil.move(str(own), str(dataset))
+    os.symlink(dataset, own, target_is_directory=True)
+    for path in (dataset, *dataset.iterdir()):
+        path.chmod(path.stat().st_mode & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+    try:
+        with pytest.raises(ConfigError, match="exists"):  # the outcomes are there already
+            save_outcomes(config, run, model=tiny_vlm.tiny_wrapper(), samples=samples)
+        rescored = tmp_path / "outputs" / "rescored" / "E2" / "nobudget" / "seed0"
+        audit = save_outcomes(config, run, audit_only=True, model=tiny_vlm.tiny_wrapper(),
+                              samples=samples)  # fmt: skip
+        assert audit == rescored / "audit_val.npz" and results.read_bytes() == before
+        out = capsys.readouterr().out
+        assert "audit flips equal the saved ones" in out and "largest difference" in out
+        with np.load(audit) as arrays:
+            assert "audit_lesion_margin" in arrays.files and "probe_margin" not in arrays.files
+        full = save_outcomes(config, run, model=tiny_vlm.tiny_wrapper(), samples=samples,
+                             force=True)  # fmt: skip
+        assert full == rescored / "outcomes.npz" and results.read_bytes() == before
+        audit.unlink()
+        saved_file = dataset / "outcomes.npz"  # saved flips that the rerun cannot reproduce
+        saved_file.chmod(saved_file.stat().st_mode | stat.S_IWUSR)
+        with np.load(saved_file) as data:
+            arrays = {k: data[k] for k in data.files}
+        arrays["audit_lesion_flip"] = ~arrays["audit_lesion_flip"]
+        np.savez_compressed(saved_file, **arrays)
+        with pytest.raises(ValueError, match="nothing written"):
+            save_outcomes(config, run, audit_only=True, model=tiny_vlm.tiny_wrapper(),
                           samples=samples)  # fmt: skip
-    assert audit == outputs / "audit_val.npz" and results.read_bytes() == before
-    assert "audit flips equal the saved ones" in capsys.readouterr().out
-    with np.load(audit) as arrays:
-        assert "audit_lesion_margin" in arrays.files and "probe_margin" not in arrays.files
+        assert not audit.exists()
+    finally:
+        for path in (dataset, *dataset.iterdir()):
+            path.chmod(path.stat().st_mode | stat.S_IWUSR)
