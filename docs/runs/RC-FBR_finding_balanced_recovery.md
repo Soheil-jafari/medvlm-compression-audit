@@ -25,6 +25,15 @@
 - Outputs: arrays to `<output_root>/fbr/` (keep as private datasets; never commit them, nor
   `fbr_e2_margins.json`: they hold sample ids); rows and summaries to
   `results/exploratory/fbr/` (counts and metrics only).
+- **Which images are negatives.** A finding is labelled on an image only when the image's
+  abnormality answer has a value (`configs/data/kvasir_vqa_x1.yaml`, `label_mapping`); such an
+  image is labelled for all three findings. So a training probe's negative is an image showing
+  another of the three abnormalities, never normal mucosa: the label says absent, as the
+  amendment requires, and the limitation recorded on 2026-11-01 for validation and test applies
+  to the training probes too.
+- Cell (ii) runs with a pruning arm's config (E5's): E2's own config has no recovery section,
+  and the schedule's length is the registered recovery's 157 updates; E5's and E7's recovery
+  sections are identical (a test checks), so every arm reads the same schedule.
 - The pilot compares each FBR model with its arm's **registered** recovery on validation, so the
   validation `outcomes.npz` of E5 magnitude, E5 activation and E7 at B2 must be attached (the
   RC-G2 notebook versions, if kept; else RC-EX1 section 3b scores them), with an `audit_val.npz`
@@ -223,12 +232,14 @@ cp -r results/exploratory/fbr /kaggle/working/results_to_commit/results/explorat
 After the four runs, the pilot analysis (CPU notebook; attach the four `fbr-pilot-*` datasets,
 the registered validation outcomes and audit reruns, and the probe-answer datasets):
 `python scripts/fbr_analysis.py pilot --outcomes /kaggle/input --out /kaggle/working/fbr`, then
-send the zip of `/kaggle/working/fbr`.
+send the zip of `/kaggle/working/fbr`. Without the probe answers of every compared model the
+gate reads "not decidable yet" (never "failed"); an `audit_val.npz` that does not reproduce
+the attached outcomes' audit flips stops the analysis.
 
 ## 4. What to commit back
 
 - `results/exploratory/fbr/`: `diagnostic.csv`, `folds.csv`, `DIAGNOSTIC.md`; per run
-  `<label>/metrics.csv`, `training.json` (or `trial.json`); `pilot_*.csv`, `PILOT.md`.
+  `<label>/fbr_metrics.csv`, `training.json` (or `trial.json`); `pilot_*.csv`, `PILOT.md`.
 - Never: `fbr_e2_margins.json`, any `.npz`, decoded answer texts.
 
 ## 5. How the result is read

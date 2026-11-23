@@ -513,6 +513,9 @@ def train_fbr(
                   f"{parts['huber']:.4f}); non-finite {len(result.nonfinite_steps)}, skipped "
                   f"{len(result.skipped_steps)}; {result.seconds_per_update[-1]:.1f} s/update",
                   flush=True)  # fmt: skip
+    from medcompress.compression.distillation.offline_kd import _check_finite, named_trainable
+
+    _check_finite(named_trainable(module), result.steps)  # never merge a broken adapter
     result.seconds = time.perf_counter() - start
     result.peak_gpu_bytes = peak_gpu_bytes()
     module.eval()

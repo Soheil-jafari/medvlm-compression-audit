@@ -621,6 +621,11 @@ def find_registered(roots: Sequence[Path], known: Sequence[str]) -> dict[str, Mo
         outcomes = load(run.files[SPLIT])
         if SPLIT in run.audits:  # a mask-audit-only rerun: the audit with its margins
             audit = load(run.audits[SPLIT])
+            for name in ("audit_sample_ids", "audit_lesion_flip", "audit_random_flip"):
+                if name in outcomes and not np.array_equal(outcomes[name], audit[name]):
+                    raise ValueError(f"{key}: {run.audits[SPLIT]} does not reproduce the saved "
+                                     f"audit of {run.files[SPLIT]} ({name}); attach the matching "
+                                     "files")  # fmt: skip
             outcomes.update({k: v for k, v in audit.items() if k.startswith("audit_")})
         found[key] = ModelArrays(key, outcomes, load(answers[key]) if key in answers else None)
     return found
@@ -715,6 +720,11 @@ def run_pilot(roots: Sequence[Path], out: Path, order: Sequence[str],
         if key not in registered:
             raise ValueError(f"{label}: the registered recovery's validation outcomes of {key} "
                              "are not attached")  # fmt: skip
+        for m in (model, registered[key]):
+            if m.answers is not None and not aligned(m.answers, m.outcomes):
+                raise ValueError(
+                    f"{m.label}: its probe answers hold other probes than its outcomes"
+                )
         pairs.append((label, record, model, registered[key]))
     everything = [m for _l, _r, m, _reg in pairs] + [reg for *_x, reg in pairs]
     plan, folds = fold_plan(everything, order, settings.folds, settings.fold_min_per_class,
@@ -752,8 +762,12 @@ def run_pilot(roots: Sequence[Path], out: Path, order: Sequence[str],
                     "ci_high": intervals[name][1],
                 }
             )
+        decidable = all(math.isfinite(q[k]) for q in (q_fbr, q_reg) for k in q)
+        missing = [m.label for m in (model, reg) if m.answers is None]
         verdict[label] = {"arm": record["arm"], "control": record["control"],
-                          "collapsed": collapsed, **items, "pass": all(items.values())}  # fmt: skip
+                          "collapsed": collapsed, **items, "decidable": decidable,
+                          "missing_probe_answers": ", ".join(missing),
+                          "pass": all(items.values()) if decidable else None}  # fmt: skip
         report += report_rows(model, plan, order)
         if not any(r["model"] == reg.label for r in report):
             report += report_rows(reg, plan, order)
@@ -779,8 +793,14 @@ def run_pilot(roots: Sequence[Path], out: Path, order: Sequence[str],
                    "indistinguishable": bool(low <= 0.0 <= high)}  # fmt: skip
     needed = [lb for lb, v in verdict.items() if not v["control"]
               and v["arm"] in ("E5:magnitude", "E5:activation")]  # fmt: skip
-    passed = len(needed) == 2 and all(verdict[lb]["pass"] for lb in needed)
-    decided = "yes" if passed else "no" if len(needed) == 2 else "not decidable yet"
+    undecidable = [lb for lb in needed if not verdict[lb]["decidable"]]
+    passed = len(needed) == 2 and not undecidable and all(verdict[lb]["pass"] for lb in needed)
+    if len(needed) < 2 or undecidable:
+        gaps = sorted({verdict[lb]["missing_probe_answers"] for lb in undecidable} - {""})
+        why = f"probe answers missing: {'; '.join(gaps)}" if gaps else "a pilot arm is missing"
+        decided = f"not decidable yet ({why})"
+    else:
+        decided = "yes" if passed else "no"
     _write_csv(gate_rows, out / "pilot_gate.csv")
     _write_csv([{"run": k, **v} for k, v in verdict.items()], out / "pilot_verdict.csv")
     _write_csv(report, out / "pilot_report.csv")
@@ -807,4 +827,5 @@ def run_pilot(roots: Sequence[Path], out: Path, order: Sequence[str],
             f"{reading}"
         )
     (out / "PILOT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return {"passed": passed, "verdict": verdict, "simpler": simpler}
+    return {"passed": passed if not undecidable and len(needed) == 2 else None,
+            "verdict": verdict, "simpler": simpler}  # fmt: skip

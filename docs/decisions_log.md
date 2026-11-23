@@ -740,7 +740,14 @@ must be logged here.
   its own `training.json`, not in the registered run's). `evaluation/fbr_analysis.py`: folds from
   labels only, the cross-fitted threshold rule, the two recalibrations, the diagnostic
   (validation only), the gate, image-cluster paired bootstrap with thresholds refitted per
-  resample, the mask audit in both versions. Card RC-FBR.
+  resample, the mask audit in both versions. Card RC-FBR. After review: the FBR rows file is
+  `fbr_metrics.csv` (the aggregator reads `metrics.csv` as a registered run's); cell (ii) uses a
+  pruning arm's config (E2's has no recovery section); a gate with missing probe answers is "not
+  decidable", not failed; the probe answers are checked against the outcomes; an audit rerun is
+  merged only when it reproduces the saved flips; the adapter is checked finite before the merge.
+  A training probe's negative is an image with another of the three abnormalities (only images
+  with an abnormality value are labelled; the limitation of 2026-11-01), so the amendment's rule
+  holds as written.
 - **2026-11-22 (research lead; pre-registration section 10, amendment of 2026-11-22, recorded and
   committed 2026-11-23 before any FBR code): secondary study, finding-balanced recovery (FBR).**
   Developed after the futility stop from seed-0 validation results only (Gate 2; the plain-answer

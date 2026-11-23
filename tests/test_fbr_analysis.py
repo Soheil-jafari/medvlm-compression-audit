@@ -164,6 +164,16 @@ def test_the_driver_finds_the_runs_and_writes_the_diagnostic_and_the_pilot(tmp_p
     from medcompress.registry import REGISTRY
 
     base = _arrays()
+    rng = np.random.default_rng(3)
+    polyps = np.flatnonzero((base["probe_findings"] == "polyp") & base["probe_truth"])
+    base["audit_sample_ids"] = base["probe_sample_ids"][polyps]
+    base["audit_findings"] = base["probe_findings"][polyps]
+    base["audit_original_yes"] = base["probe_margin"][polyps] >= 0
+    base["audit_lesion_flip"] = rng.random(len(polyps)) < 0.3
+    base["audit_random_flip"] = rng.random(len(polyps)) < 0.1
+    margins = {"audit_original_margin": base["probe_margin"][polyps],
+               "audit_lesion_margin": base["probe_margin"][polyps] - 1.0,
+               "audit_random_margin": base["probe_margin"][polyps] - 0.2}  # fmt: skip
     inputs = tmp_path / "input"
     _save(inputs / "a" / "E2" / "nobudget" / "seed0", base)
     for variant, scale in (("magnitude", 0.5), ("activation", 0.4)):
@@ -172,6 +182,11 @@ def test_the_driver_finds_the_runs_and_writes_the_diagnostic_and_the_pilot(tmp_p
         answers = inputs / "ans" / "fbr" / "probe_answers" / "E5" / variant / "B2" / "seed0"
         answers.mkdir(parents=True)
         np.savez_compressed(answers / fa.ANSWERS_FILE.format(split="val"), **_answers(arrays))
+    rerun = inputs / "rescored" / "E5" / "magnitude" / "B2" / "seed0"  # an audit-only rerun
+    rerun.mkdir(parents=True)
+    audit = {k: base[k] for k in ("audit_sample_ids", "audit_findings", "audit_original_yes",
+                                  "audit_lesion_flip", "audit_random_flip")}  # fmt: skip
+    np.savez_compressed(rerun / "audit_val.npz", **audit, **margins)
     rows = fa.run_diagnostic([inputs], tmp_path / "out", ORDER, list(REGISTRY))
     assert rows == 3 * len(ORDER)
     text = (tmp_path / "out" / "DIAGNOSTIC.md").read_text()
@@ -202,6 +217,27 @@ def test_the_driver_finds_the_runs_and_writes_the_diagnostic_and_the_pilot(tmp_p
                                       "E5_activation_sampling_only"}  # fmt: skip
     assert result["simpler"]["control"] == "E5_activation_sampling_only"
     assert isinstance(result["passed"], bool)
+    with (tmp_path / "out" / "pilot_mask_audit.csv").open() as handle:
+        audits = {r["model"]: r for r in __import__("csv").DictReader(handle)}
+    assert audits["E5:magnitude@B2"]["operating_effect"] != ""  # margins from the rerun
+    assert float(audits["E5:magnitude@B2"]["lesion_margin_change"]) == pytest.approx(-1.0)
+    assert audits["E5:activation@B2"]["operating_effect"] == ""  # no margins: plain only
+    # without the registered arms' probe answers the gate is not decidable, never "failed"
+    for variant in ("magnitude", "activation"):
+        (inputs / "ans" / "fbr" / "probe_answers" / "E5" / variant / "B2" / "seed0" /
+         fa.ANSWERS_FILE.format(split="val")).unlink()  # fmt: skip
+    fbr_module.FBRSettings.load = classmethod(lambda cls, overrides=(): small)  # type: ignore
+    try:
+        undecided = fa.run_pilot([inputs], tmp_path / "out", ORDER, list(REGISTRY))
+    finally:
+        fbr_module.FBRSettings.load = original  # type: ignore
+    assert undecided["passed"] is None
+    assert "not decidable yet (probe answers missing" in (tmp_path / "out" / "PILOT.md").read_text()
+    # an audit rerun that does not reproduce the saved flips stops the analysis
+    np.savez_compressed(rerun / "audit_val.npz", **dict(audit, audit_lesion_flip=~audit[
+        "audit_lesion_flip"]), **margins)  # fmt: skip
+    with pytest.raises(ValueError, match="does not reproduce the saved audit"):
+        fa.run_diagnostic([inputs], tmp_path / "out", ORDER, list(REGISTRY))
     for name in ("pilot_gate.csv", "pilot_verdict.csv", "pilot_report.csv",
                  "pilot_mask_audit.csv", "PILOT.md"):  # fmt: skip
         assert (tmp_path / "out" / name).is_file()

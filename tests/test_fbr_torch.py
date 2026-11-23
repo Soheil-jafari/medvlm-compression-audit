@@ -293,7 +293,7 @@ def test_the_arm_stage_runs_the_trial_and_the_full_path(
     assert folder.name == "E5_magnitude_sampling_only"
     training = json.loads((folder / "training.json").read_text())
     assert training["margin_coefficient"] == 0.0 and training["training"]["steps"] == 2
-    with (folder / "metrics.csv").open() as handle:
+    with (folder / "fbr_metrics.csv").open() as handle:
         rows = list(csv.DictReader(handle))
     assert rows and {r["experiment"] for r in rows} == {"FBR:E5_magnitude_sampling_only"}
     arrays = tmp_path / "outputs" / "fbr" / "E5_magnitude_sampling_only"
@@ -303,3 +303,42 @@ def test_the_arm_stage_runs_the_trial_and_the_full_path(
     margins_file.write_text(json.dumps(cache))
     with pytest.raises(ValueError, match="not the one E2's margins"):
         fbr_stage.run_fbr_arm(config, run, margins_file=margins_file, out=out, trial_steps=1)
+
+
+def test_the_e2_margin_cache_matches_the_schedule_every_arm_builds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cell (ii) runs with a pruning arm's config (E2's has no recovery section) and writes the
+    fingerprint the arm run checks; E5's and E7's configs give the same schedule."""
+    from test_recovery import _config
+
+    from medcompress.compression import fbr_stage
+    from medcompress.compression.pruning import stage as pruning_stage
+    from medcompress.config import load_config
+    from medcompress.evaluation import runner
+
+    assert load_config("experiments/E2.yaml").get("recovery") is None
+    e5, e7 = load_config("experiments/E5.yaml"), load_config("experiments/E7.yaml")
+    assert (
+        e5["recovery"] == e7["recovery"]
+        and e5["components"]["domain"] == (e7["components"]["domain"])
+    )
+    samples = write_dataset(tmp_path)
+    config = _config(tmp_path)
+    config["recovery"] = {**config["recovery"], "batch_size": 1, "grad_accumulation": 14,
+                          "steps": 3}  # fmt: skip
+    monkeypatch.setattr(pruning_stage, "load_train_samples", lambda cfg: samples)
+    monkeypatch.setattr(runner, "load_trained_student",
+                        lambda cfg, exp, seed, side: tiny_vlm.tiny_wrapper(seed=0))  # fmt: skip
+    config["inputs"] = {"image_longest_side": 56}
+    real = fbr.choose_answer_ids
+    # the random tiny model never ranks a yes / no token first: count it as if it did
+    monkeypatch.setattr(fbr, "choose_answer_ids", lambda first, yes, no: real(
+        {**first, "y": int(yes[0]), "n": int(no[0])}, yes, no))  # fmt: skip
+    target = fbr_stage.run_e2_margin_cache(config, tmp_path / "margins", examples=2)
+    cache = json.loads(target.read_text())
+    schedule = fbr_stage._schedule(config, samples, steps=int(cache["steps"]))[0]
+    assert cache["schedule_fingerprint"] == schedule.fingerprint() and cache["steps"] == 3
+    assert set(cache["margins"]) == set(schedule.unique_keys())
+    assert cache["yes_target_id"] in cache["single_token_yes_ids"]
+    assert len(cache["decoded_examples"]) == 2

@@ -10,7 +10,7 @@
   ``trial_steps`` only that many updates, timed, for the budget estimate.
 
 Nothing here writes into ``results/<run>``: the FBR rows go to ``--out`` (by default
-``results/exploratory/fbr/<label>/``), the arrays to ``<output_root>/fbr/``.
+``results/exploratory/fbr/<label>/fbr_metrics.csv``), the arrays to ``<output_root>/fbr/``.
 """
 
 from __future__ import annotations
@@ -27,6 +27,9 @@ from medcompress.config import ConfigError, RunContext
 
 MARGINS_FILE = "fbr_e2_margins.json"
 RUN_FILE = "fbr_run.json"
+ROWS_FILE = "fbr_metrics.csv"
+"""The FBR model's validation rows (not ``metrics.csv``: the aggregator reads that name as a
+registered run's file)."""
 OUTPUT_SUBDIR = "fbr"
 
 
@@ -254,7 +257,7 @@ def run_fbr_arm(
     kept = ("arm", "control", "label", "margin_coefficient", "schedule")
     (arrays_dir / RUN_FILE).write_text(json.dumps({k: record[k] for k in kept}), encoding="utf-8")
     upsert_results(to_rows(evaluation.metrics, f"FBR:{label}", "B2", arm.seed),
-                   folder / "metrics.csv")  # fmt: skip
+                   folder / ROWS_FILE)  # fmt: skip
     (folder / "training.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
     print(f"wrote {folder} and {arrays_dir}", flush=True)
     return folder

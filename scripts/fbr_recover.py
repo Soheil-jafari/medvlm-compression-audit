@@ -6,7 +6,7 @@ Secondary study of the amendment of 2026-11-22 (docs/decisions/fbr_study_2026-11
 arm's pruned model before recovery is rebuilt from E2 seed 0 and its committed removal.json
 (checked against the committed parameter count and removal_by_layer.csv), trained with FBR (or,
 with ``--control``, the sampling-only recipe), merged, scored on validation (all suites) and on
-the probe-answer pass. Rows go to ``<out>/<label>/metrics.csv`` with ``training.json``; arrays
+the probe-answer pass. Rows go to ``<out>/<label>/fbr_metrics.csv`` with ``training.json``; arrays
 to ``<output_root>/fbr/<label>/``. ``--trial N`` stops after N updates and writes the timing and
 the estimate (``trial.json``) instead.
 
