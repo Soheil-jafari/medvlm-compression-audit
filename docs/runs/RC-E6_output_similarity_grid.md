@@ -119,3 +119,10 @@ Check before committing: `git status` shows no images, adapters, checkpoints or
 - Per run: wall time of scoring / search / recovery / evaluation, peak GPU memory:
 - Names of the private datasets with the pruned models and `outcomes*.npz` files:
 - Anything unusual (errors, retries, changed settings):
+
+**Seed-0 B2 test evaluations, received 2026-11-23 (account 3, commit ba77598, 2026-11-21;
+committed unchanged, SHA-256 checked; no test number is read in this record).** The run was
+skipped (stages 05-07 committed from RC-G2); `results/E6/B2/seed0/metrics_test.csv` and
+`metrics_test_unfiltered.csv` (about 30 and 49 min). 12 fewer rows than E5 magnitude's: empty
+reliability bins. Report `docs/runs/reports/run_report_RC-E6_seed0_test.md`; outcome bundle
+`E6_seed0_outcomes`.

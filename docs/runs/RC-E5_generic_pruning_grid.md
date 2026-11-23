@@ -140,3 +140,22 @@ Check before committing: `git status` shows no images, adapters, checkpoints or
 - Per run: wall time of scoring / search / recovery / evaluation, peak GPU memory:
 - Names of the private datasets with the pruned models and `outcomes*.npz` files:
 - Anything unusual (errors, retries, changed settings):
+
+**Seed-0 B2 test evaluations, received 2026-11-23 (committed unchanged, SHA-256 checked; no
+test number is read in this record).** The runs were skipped (stages 05-07 committed from RC-G2);
+only the two test evaluations ran.
+
+- Magnitude and activation (Soheil, commit 2ecf302, 2026-11-21): four files,
+  `results/E5/{magnitude,activation}/B2/seed0/metrics_test.csv` and
+  `metrics_test_unfiltered.csv`; about 32 and 50 min per evaluation; report
+  `docs/runs/reports/run_report_RC-E5_seed0_test_mag_act.md`.
+- Taylor (account 3, commit ba77598, 2026-11-21): two files,
+  `results/E5/taylor/B2/seed0/metrics_test.csv` and `metrics_test_unfiltered.csv`; report
+  `docs/runs/reports/run_report_RC-E5_seed0_test_taylor.md`. The same session ran RC-E6; its
+  `results_to_commit/` repeated the Taylor files byte for byte.
+- Activation's files have 15 fewer rows than magnitude's: the empty reliability-diagram bins
+  (`reliability_*:7` to `:11`), which are not written when no probe falls in them.
+- Both sessions wrote an outcome bundle named `E5_seed0_outcomes` (magnitude and activation in one,
+  Taylor in the other). See the decisions log of 2026-11-23: bundle names now carry the runs, and
+  the analysis keys outcome files by their run path, so the two existing bundles can be attached
+  together.

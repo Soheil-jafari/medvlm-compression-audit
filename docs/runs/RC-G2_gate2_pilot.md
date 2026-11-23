@@ -1042,3 +1042,18 @@ every layer (checked), in agreement with `removal_by_layer.csv` and `uniform_k`;
 fingerprint as E5 magnitude. E5R's stage-05 files are complete, so session 5's resume (E5R 06 and
 07 only) can run.
 
+**E7U in full (cell (c), commit 2e795a9, 2026-11-20), received 2026-11-23:** eight files committed
+unchanged (SHA-256 checked) under `results/E7U/B2/seed0/`: `metrics.csv` (stages 05, 06 and 07, the
+same 135 metric names as E5 magnitude's), `budget_search.csv`, `efficiency.csv`,
+`efficiency_setup.json`, `environment.json`, `recovery_steps.json`, `removal.json`,
+`removal_by_layer.csv`. Report `docs/runs/reports/run_report_RC-G2_s5b_e7u.md`; 142.6 min; hand-off
+`G2_B2_seed0_pruned_E7U` (6.00 GB), saved as `g2-b2-seed0-pruned-s5b`.
+
+- Budget search: k = 29 (8 measurements), footprint 6.105e9 against the target 5.954e9 (+2.55 %,
+  within the band), as E5's three criteria. The stage-07 peak (6,105,741,984 bytes) equals the
+  search footprint within 0.01 %.
+- `removal.json`: 957 channel groups, 29 in each of layers 2-34, exactly the 29 lowest of E7's
+  committed scores (per parameter) in every layer (checked; no tie at the 29th); the same removal
+  settings and recovery fingerprint as E5 magnitude. Parameters 3.755e9 to 3.002e9.
+- Recovery: 5 non-finite steps, 5 skipped updates; peak 11.00e9 bytes.
+- E5R's resume (cell (b)) has not been reported yet; its stages 06 and 07 are still missing.

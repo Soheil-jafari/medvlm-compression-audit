@@ -1,0 +1,23 @@
+### RC-E6 run report (seed 0)
+
+- Run by / date: <your name> / 2026-11-21 01:48 (UTC)
+- Commit actually used: ba77598ad5b846912cc36ae6af7e39ffa28ca403
+- Hardware: Tesla T4, Tesla T4
+- Library versions: python 3.13.16; pyyaml 6.0.3 (needs >=6.0); numpy 2.2.6 (needs >=1.24); pandas 2.3.3 (needs >=2.0); scipy 1.16.3 (needs >=1.10); scikit-learn 1.6.1 (needs >=1.3); matplotlib 3.10.0 (needs >=3.7); pillow 13.0.0 (needs >=9.1); torch 2.11.0+cu130 (needs >=2.8); torchvision 0.26.0+cu130 (needs >=0.23); transformers 5.19.0 (needs ==5.19.0); peft 0.21.2 (needs ==0.21.2); accelerate 1.15.0 (needs >=1.0); torchao 0.18.0 (needs >=0.16.0); optimum 2.3.0 (needs >=1.24.0)
+- Inputs verified: shared data /kaggle/input/datasets/soheiljafarifard/medcompress-data/medcompress_data (commit 4038a6bb4276ed9ce4dda2bbc8d542d074f544af); E6 B2 seed 0 pruned /kaggle/input/datasets/alexbd79/g2-b2-seed0-pruned-s2/handoff/G2_B2_seed0_pruned_E6; E0 teacher_cache /kaggle/input/datasets/soheiljafarifard/e0-teacher-cache/handoff/E0_teacher_cache; E2 seed 0 adapter /kaggle/input/datasets/soheiljafarifard/e2-seed0-adapter/handoff/E2_seed0_adapter
+- Per step (wall time, status):
+  - run E6 B2 seed0: 0.0 min, skipped
+  - test evaluation E6 B2 seed0: 30.1 min, ok
+  - unfiltered test evaluation E6 B2 seed0: 48.5 min, ok
+- Peak GPU memory (from the results files):
+  - none recorded
+- Hand-offs (save the whole handoff folder of this session as ONE private Kaggle dataset; each folder inside is found by its manifest; write its name here):
+  - E6_seed0_pruned: ['E6/B2/seed0/pruned'] came from an attached dataset
+  - E6_seed0_outcomes: /kaggle/working/e6/handoff/E6_seed0_outcomes (2 files, 0.00 GB); make it a private dataset
+- Results files to commit (4; copies in /kaggle/working/e6/results_to_commit):
+  - results/E5/taylor/B2/seed0/metrics_test.csv
+  - results/E5/taylor/B2/seed0/metrics_test_unfiltered.csv
+  - results/E6/B2/seed0/metrics_test.csv
+  - results/E6/B2/seed0/metrics_test_unfiltered.csv
+- Anything unusual: ignored: E5 taylor B2 seed 0 pruned at /kaggle/input/datasets/alexbd79/g2-b2-seed0-pruned-s2/handoff/G2_B2_seed0_pruned_E5_taylor: not read by RC-E6; ignored
+- Outcome: all steps ok
