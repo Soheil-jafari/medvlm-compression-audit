@@ -725,6 +725,22 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-23 (agent; implementation of the amendment of 2026-11-22, nothing tuned): FBR
+  built.** `compression/fbr.py`: the fixed values (`configs/fbr.yaml`, no key of the registered
+  recovery repeated; the registered recovery section is read unchanged), the probe schedule
+  (training split, one positive and one negative per finding and update, unique images per
+  stratum before repeats, seed 0, reuse logged), the registered example order 10 per update, the
+  margin (the evaluation's, one function for the student, E2 and the diagnostics), the update's
+  loss with the paired term's exact gradient (each member's margin gradient kept, one graph alive;
+  checked against a joint graph in both Huber regimes), the sampling-only control, the rebuild of
+  each arm's pruned model before recovery from E2 and `removal.json` (checked against the
+  committed parameter count and `removal_by_layer.csv`). `compression/fbr_stage.py` and four
+  scripts: the probe-answer pass (decoded answers, token ranks), E2's margin cache with the answer
+  spelling rule and report, the arm run (smoke, timed trial, pilot; its environment recorded in
+  its own `training.json`, not in the registered run's). `evaluation/fbr_analysis.py`: folds from
+  labels only, the cross-fitted threshold rule, the two recalibrations, the diagnostic
+  (validation only), the gate, image-cluster paired bootstrap with thresholds refitted per
+  resample, the mask audit in both versions. Card RC-FBR.
 - **2026-11-22 (research lead; pre-registration section 10, amendment of 2026-11-22, recorded and
   committed 2026-11-23 before any FBR code): secondary study, finding-balanced recovery (FBR).**
   Developed after the futility stop from seed-0 validation results only (Gate 2; the plain-answer

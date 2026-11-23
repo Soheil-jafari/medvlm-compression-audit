@@ -1567,3 +1567,17 @@ Append-only, newest at the bottom. One entry per iteration:
   with `AwqTorchLinear` (runs on a T4), checked end to end on CPU; smoke job and scale check `awq`.
   Tests.
 
+## Iteration 96: 2026-11-23 (interactive)
+- Committed unchanged (SHA-256 checked, verified by file list and row counts only; no test number
+  read): RC-E5 seed 0's B2 test evaluations (magnitude, activation, Taylor), RC-E6's, and RC-G2's
+  E7U in full (removal set equal to the 29 lowest E7 scores per layer). Summaries regenerated
+  (identical on both pandas versions).
+- Outcome bundles keyed by their runs (analysis reads by run path, a differing duplicate stops
+  it; a session running a subset names its bundles by it); the AWQ symmetric grid recorded as
+  decided; RC-R1 scores E0 on validation first and its smoke checks the non-finite drop; cells
+  for RC-R1 and for the E5R / E7U test evaluations.
+- FBR amendment (section 10, 2026-11-22) committed and pushed before any FBR code; then built:
+  the recipe with the exact paired-margin gradient, the probe schedule, the rebuild from
+  `removal.json`, E2's margin cache, the probe-answer pass, the cross-fitted diagnostic and the
+  pilot's gate; card RC-FBR. Tests.
+

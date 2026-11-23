@@ -138,6 +138,11 @@ and re-calibration cost (plain answers against the operating point, the threshol
 labelled images, the lesion-mask audit at the operating threshold); **B** what each method
 forgets (flips against E2, their overlap, compression-identified exemplars); **C** AWQ as a
 second 4-bit post-training quantization arm (E3 `awq_w4`).
+A secondary study followed (amendment of 2026-11-22, `docs/decisions/fbr_study_2026-11-22.md`),
+developed from seed-0 validation results only: **finding-balanced recovery (FBR)**, the
+registered recovery with each update split into 10 ordinary examples and 6 labelled training
+probes plus a paired margin term against E2, piloted at B2 on E5 magnitude, E5 activation and E7
+against a fixed gate (card RC-FBR; 30 T4 hours at most). Exploratory, outside H1-H4.
 Run `python scripts/run_experiment.py --list` for the live registry.
 
 ### Seeds (pre-registration section 11 item 12, 2026-11-08)

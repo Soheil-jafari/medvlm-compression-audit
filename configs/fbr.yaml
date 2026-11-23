@@ -1,0 +1,17 @@
+# Finding-balanced recovery (FBR): secondary, exploratory study (pre-registration section 10,
+# amendment of 2026-11-22; docs/decisions/fbr_study_2026-11-22.md). Fixed before any FBR run;
+# not tuned. Everything else of the recipe is the registered recovery (configs/recovery.yaml),
+# read from there unchanged: never copy or override its keys here (tests/test_fbr.py checks).
+fbr:
+  general_per_update: 10        # ordinary pool examples per update, loss (1 - w) CE + w KL
+  probes_per_finding: 2         # one positive and one negative per finding and update
+  margin_coefficient: 0.25      # the paired Huber margin term; 0 = the sampling-only control
+  huber_delta: 1.0
+  seed: 0                       # probe schedule and the registered example order
+  pilot_arms: ["E5:magnitude", "E5:activation", "E7"]
+  control_arm: "E5:activation"  # sampling-only (margin_coefficient 0)
+  decode_max_new_tokens: 8      # the decoded free answer to a probe
+  fold_min_per_class: 5         # positive and negative images of every finding per fold
+  folds: 3                      # 2 when the minimum fails (label counts only)
+  bootstrap_resamples: 10000
+  gpu_hours_cap: 30             # T4 hours for the pilot and its checks
