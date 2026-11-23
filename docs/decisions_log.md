@@ -725,6 +725,21 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-22 (research lead; pre-registration section 10, amendment of 2026-11-22, recorded and
+  committed 2026-11-23 before any FBR code): secondary study, finding-balanced recovery (FBR).**
+  Developed after the futility stop from seed-0 validation results only (Gate 2; the plain-answer
+  collapse of E5 magnitude, E5 activation and E6; E5R's oesophagitis drop, sensitivity 0.89 to
+  0.24 and AUROC 0.961 to 0.880, E2's values committed, E5R's as reported by the research lead);
+  no test or PolypGen result informed it. Exploratory, outside H1-H4. A CPU diagnostic of the
+  margins, token ranks, decoded answers and two cross-fitted recalibrations (validation only); the
+  recipe (the registered recovery with each update split into 10 ordinary examples and 6 labelled
+  training probes, probe cross-entropy plus 0.25 times a paired Huber margin term against E2's
+  cached margins; coefficients fixed) and its sampling-only control; a pilot on E5 magnitude, E5
+  activation and E7 at B2 with a fixed gate; 30 T4 hours at most. Values the request left open were
+  set by the agent and are listed in the decision file (section 11), among them: the ordinary
+  examples' loss is the registered 0.5 CE + 0.5 KL (the request wrote CE + 0.5 KL), 1,570 ordinary
+  examples instead of 2,512, the fold minimum of 5 and 5, the decoding rule, p = sigmoid(m).
+  Specification: `docs/decisions/fbr_study_2026-11-22.md`.
 - **2026-11-23 (agent; results committed unchanged, no test number read).** RC-E5 seed 0's B2 test
   evaluations (magnitude and activation, Soheil, 2ecf302; Taylor, account 3, ba77598) and RC-E6's
   (account 3, ba77598): `metrics_test.csv` and `metrics_test_unfiltered.csv` per run, SHA-256

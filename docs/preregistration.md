@@ -494,6 +494,53 @@ from now on it saves them, and for runs already evaluated a mask-audit-only reru
 reproduces the saved plain-answer flips, which is checked). C: GPTQModel 7.6.0 (already pinned),
 its AWQ path and its pure-PyTorch AWQ kernel; details in the decision file.
 
+### Amendment of 2026-11-22 (research lead; recorded 2026-11-23): secondary study: finding-balanced recovery (FBR), developed after the futility stop from seed-0 validation results
+
+*What informed it.* Seed-0 **validation** results at B2 only: Gate 2 (comparator E5 magnitude, E7
+below it, futility stop); the plain-answer collapse (the plain answers of E5 magnitude, E5
+activation and E6 say "no" to every mask-positive polyp probe: plain macro balanced accuracy
+0.500, E7's 0.688); E5R's oesophagitis drop (operating-point sensitivity 0.89 to 0.24, AUROC
+0.961 to 0.880 from E2 to E5R; E2's values are committed, E5R's as reported by the research lead,
+its stage 06 not being committed). **No test-split or PolypGen result informed it**: the B2 test
+files of E5 and E6 were committed on 2026-11-23 by SHA-256 and row counts, unopened.
+
+*Status.* Exploratory, outside H1-H4: no verdicts, no multiplicity correction; no pre-registered
+metric, the comparator or the futility outcome changes. PolypGen checks polyp endpoints only, so
+rare-finding claims rest on the internal test alone. Committed before any FBR code was written.
+
+*Specification* (full text and the values the agent set: `docs/decisions/fbr_study_2026-11-22.md`):
+
+- **Diagnostic** (validation only; E2 and every B2 pruning arm; per finding): the yes-no margin by
+  label, the ranks of the yes and no tokens, agreement of the margin sign with the decoded free
+  answer, parse failures, AUROC and AP; an intercept-per-finding recalibration (ridge b_f^2 / 2 on
+  the summed NLL) and one pooled temperature, both cross-fitted (image-grouped,
+  finding-stratified, 3 folds, identical across arms; 2 folds when the label counts require);
+  Brier, fixed-cutoff balanced accuracy, AUROC, cross-fitted sensitivity at specificity >= 0.95.
+- **Recipe**, identical for every arm, from the arm's pruned model before recovery (rebuilt from E2
+  and its committed `removal.json`, checked): the registered recovery's LoRA, optimiser, schedule,
+  157 updates of effective batch 16, fp16 loss scaling, frozen vision tower, formatting and
+  non-finite handling; each update is 10 ordinary examples with the registered loss
+  L0 = 0.5 CE + 0.5 KL(T = 2) on the cached teacher top-20 and 6 labelled training probes (one
+  positive and one negative per finding, training split, the evaluation template, negatives only
+  from labels saying absent, unique images cycled per stratum, seed 0);
+  L = (10/16) mean(L0) + (6/16) [mean probe CE + 0.25 mean_f Huber_1(d_f - d_f(E2))], d_f the
+  paired margin difference m(x+) - m(x-), E2's margins cached offline. **Coefficients fixed, not
+  tuned.** Control "sampling-only": the coefficient 0.25 set to 0.
+- **Pilot** (B2, seed 0, validation): FBR on E5 magnitude, E5 activation and E7, sampling-only on
+  E5 activation, each against its registered recovery, with cross-fitted operating points.
+- **Gate** (percentage points, against each arm's registered recovery): mean rare cross-fitted
+  sensitivity +5 or more; neither rare sensitivity -3 or worse, neither rare specificity -2 or
+  worse; decoded free-answer macro balanced accuracy +3 or more on the collapsed arms (E5
+  magnitude, E5 activation), no worse than -2 on the others; macro Brier no more than 0.01 worse;
+  polyp operating-point recall no more than 3 lower. Pass = both E5 arms pass; E7 reported either
+  way; a sampling-only control indistinguishable from FBR takes the credit. A failed gate is a
+  result; nothing is searched.
+- **Budget:** at most 30 T4 GPU hours for the pilot and its checks, estimated first from a timed
+  20-update trial.
+- **If the gate passes:** a second dated amendment freezes the recipe, checkpoint rule, thresholds
+  and analyses before FBR is applied to every B2 pruning arm and evaluated once on the filtered
+  and unfiltered tests and PolypGen (polyp endpoints only).
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result
