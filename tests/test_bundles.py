@@ -330,3 +330,45 @@ def test_a_resume_hand_off_is_copied_so_training_can_write_into_it(tmp_path: Pat
     )
     with pytest.raises(bundles.BundleError, match="not empty"):
         bundles.export_handoff(producer, [], out, kind="resume", meta=meta)
+
+
+def test_two_outcome_bundles_with_the_same_name_are_attached_by_their_runs(tmp_path: Path) -> None:
+    """2026-11-21: Soheil's and account 3's RC-E5 sessions each wrote ``E5_seed0_outcomes``
+    (magnitude and activation; Taylor). Both are hand-offs, both attach (their runs differ),
+    a lookup by the bare name stops and names both, a qualified name picks one, and a third
+    bundle with a run already attached stops the attach instead of replacing it."""
+    from medcompress.inputs import InputNotFound, classify_bundles, find_handoff
+
+    inputs = tmp_path / "input"
+
+    def outcomes(dataset: str, variants: list[str]) -> Path:
+        root = inputs / "datasets" / "owner" / dataset / "handoff" / "E5_seed0_outcomes"
+        items = []
+        for variant in variants:
+            run = Path("E5") / variant / "B2" / "seed0"
+            folder = root / "output_root" / run
+            folder.mkdir(parents=True)
+            (folder / "outcomes_test.npz").write_bytes(variant.encode())
+            items.append({"root": "output_root", "path": run.as_posix()})
+        bundles.write_bundle_manifest(
+            root, kind="outcomes", items=items, commit="0" * 40,
+            meta={"experiment": "E5", "seed": 0, "budget": "B2"},
+        )  # fmt: skip
+        return root
+
+    first = outcomes("e5-b2-test-mag-act", ["magnitude", "activation"])
+    second = outcomes("e5-b2-test-taylor", ["taylor"])
+    assert classify_bundles(inputs)[0] == sorted([first, second])
+    with pytest.raises(InputNotFound, match="matches 2 attached folders"):
+        find_handoff("E5_seed0_outcomes", inputs)
+    assert find_handoff("e5-b2-test-taylor/handoff/E5_seed0_outcomes", inputs) == second
+
+    consumer = _config(tmp_path / "analysis")
+    for bundle in (first, second):
+        bundles.attach_handoff(consumer, bundle)
+    output = Path(consumer["paths"]["output_root"]) / "E5"
+    assert sorted(p.parent.parent.name for p in output.glob("*/B2/seed0")) == [
+        "activation", "magnitude", "taylor"]  # fmt: skip
+    again = outcomes("e5-b2-test-taylor-copy", ["taylor"])
+    with pytest.raises(bundles.BundleError, match="already exists here"):
+        bundles.attach_handoff(consumer, again)

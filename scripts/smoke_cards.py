@@ -47,17 +47,20 @@ def main(argv: list[str] | None = None) -> int:
     from medcompress.card_runner import select_handoffs
     from medcompress.cards import build_plan
     from medcompress.config import config_root, load_config
+    from medcompress.data.nonfinite import read_drop
     from medcompress.inputs import InputNotFound, classify_bundles, find_shared_data
     from medcompress.smoke import (
         SMOKE_OVERRIDES,
         StageResult,
         card_verdicts,
+        drop_problem,
         job_experiments,
         parse_peaks,
         ready_for_cleanup,
         report_table,
         smoke_budgets,
         smoke_jobs,
+        stage_split,
         with_dependencies,
     )
     from medcompress.utils.disk import free_bytes, tree_bytes
@@ -132,13 +135,24 @@ def main(argv: list[str] | None = None) -> int:
             seconds = time.perf_counter() - started
             text = done.stdout + "\n" + done.stderr
             log.write_text(text, encoding="utf-8")
+            code = done.returncode
+            split = stage_split(stage)
+            if code == 0 and split is not None:  # the non-finite drop of a test stage
+                listed = read_drop(roots["results"], split)
+                problem = drop_problem(stage, done.stdout, None if listed is None else len(listed))
+                if problem is not None:
+                    print(f"[{devices}] {job.card} {job.name} {stage.label}: FAILED: {problem}",
+                          flush=True)  # fmt: skip
+                    text += f"\nsmoke check failed: {problem}\n"
+                    log.write_text(text, encoding="utf-8")
+                    code = 1
             loads, peak = parse_peaks(done.stdout)
             disk = (tree_bytes(out), free_bytes(out))
             result = StageResult(
                 job.card,
                 job.name,
                 stage.label,
-                done.returncode,
+                code,
                 seconds,
                 loads,
                 peak,
@@ -152,10 +166,10 @@ def main(argv: list[str] | None = None) -> int:
                 minutes = seconds / 60
                 rss = "n/a" if done.peak_rss is None else f"{done.peak_rss / 2**30:.1f} GiB"
                 low = "n/a" if done.min_available is None else f"{done.min_available / 2**30:.1f}"
-                print(f"[{devices}] {job.card} {job.name} {stage.label}: exit {done.returncode} "
+                print(f"[{devices}] {job.card} {job.name} {stage.label}: exit {code} "
                       f"in {minutes:.1f} min, host RSS peak {rss}, lowest available {low} GiB "
                       f"(log {log})", flush=True)  # fmt: skip
-            if done.returncode != 0:
+            if code != 0:
                 tail = "\n".join(text.strip().splitlines()[-15:])
                 print(f"--- last lines of {log.name} ---\n{tail}\n---", flush=True)
                 with lock:

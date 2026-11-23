@@ -245,3 +245,28 @@ def test_a_run_without_the_operating_point_gets_it_from_its_validation_outcomes(
     assert missing is None and "no validation outcomes" in why
     path = Path("outputs/rescored/E2/nobudget/seed0/audit_val.npz")
     assert ex.parse_run(path, ("E2",)) == ("E2", None, "nobudget", 0)  # reruns are found
+
+
+def test_two_bundles_with_the_same_name_are_both_read_by_their_run_paths(tmp_path: Path) -> None:
+    """Two sessions each wrote ``E5_seed0_outcomes`` (2026-11-21): one with magnitude and
+    activation, one with Taylor. Both are read; an identical copy is noted, a differing one
+    stops the analysis."""
+    known = ["E5", "E2"]
+    first = tmp_path / "datasets" / "a" / "handoff" / "E5_seed0_outcomes" / "E5"
+    second = tmp_path / "datasets" / "b" / "handoff" / "E5_seed0_outcomes" / "E5"
+    for root, variant in ((first, "magnitude"), (first, "activation"), (second, "taylor")):
+        folder = root / variant / "B2" / "seed0"
+        folder.mkdir(parents=True)
+        (folder / ex.OUTCOME_FILES["test"]).write_bytes(variant.encode())
+    runs, notes = ex.discover([tmp_path], known)
+    assert sorted(runs) == sorted(ex.ArmRun("E5", v, "B2", 0).label
+                                  for v in ("magnitude", "activation", "taylor"))  # fmt: skip
+    assert notes == []
+    copy = tmp_path / "datasets" / "c" / "E5" / "taylor" / "B2" / "seed0"
+    copy.mkdir(parents=True)
+    (copy / ex.OUTCOME_FILES["test"]).write_bytes(b"taylor")
+    runs, notes = ex.discover([tmp_path], known)
+    assert len(runs) == 3 and len(notes) == 1 and "identical copy" in notes[0]
+    (copy / ex.OUTCOME_FILES["test"]).write_bytes(b"another evaluation")
+    with pytest.raises(ValueError, match="differ"):
+        ex.discover([tmp_path], known)

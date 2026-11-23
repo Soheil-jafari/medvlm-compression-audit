@@ -67,7 +67,12 @@ layers, attention groups and channel groups together; \expid{E8} adds 4-bit quan
 to \expid{E7}, and \expid{E9} is the teacher at 4-bit (supplementary). Two exploratory
 arms at the primary budget use \expid{E5}'s units and allocation: \expid{E5R} with
 random scores, and \expid{E7U} with \expid{E7}'s scores, which separates our criterion
-from its allocation. Every arm meets the budget with the same rule: the smallest removal
+from its allocation. An exploratory 4-bit arm applies AWQ~\cite{lin_awq} to \expid{E2}
+with the calibration images and decoder targets of 4-bit GPTQ; AWQ's reference setting
+stores zero points, but we use GPTQ's symmetric grid (no zero points) on purpose, so the
+two 4-bit arms differ only in how the weights are scaled and rounded. Under grouped-query
+attention the output projection receives no activation-aware scale and is rounded on the
+same grid. Every arm meets the budget with the same rule: the smallest removal
 whose measured footprint is at or below the target plus 3\,\%. \todo{quantization backends and settings once
 fixed}
 

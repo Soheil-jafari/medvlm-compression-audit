@@ -52,7 +52,7 @@ def test_a_missing_or_doubled_input_stops_with_a_clear_message(tmp_path: Path) -
     with pytest.raises(InputNotFound, match="E2_seed1_adapter is not attached"):
         find_handoff("E2_seed1_adapter", tmp_path)
     _bundle(tmp_path / "notebooks" / "soheil" / "old-run" / "handoff" / "E0_teacher_adapter")
-    with pytest.raises(InputNotFound, match="more than once"):
+    with pytest.raises(InputNotFound, match="matches 2 attached folders"):
         find_handoff("E0_teacher_adapter", tmp_path)
 
 

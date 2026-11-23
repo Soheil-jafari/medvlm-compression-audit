@@ -83,13 +83,25 @@ def find_shared_data(root: str | Path | None = None) -> Path:
 
 
 def find_handoff(name: str, root: str | Path | None = None) -> Path:
-    """The folder of the manifest whose path (below the input root) contains ``name``."""
+    """The folder of the manifest whose path (below the input root) contains ``name``.
+
+    Two attached bundles with the same folder name (two sessions of one card each wrote
+    ``E5_seed0_outcomes``, 2026-11-21) both match, and the call stops with both paths; a name
+    qualified by the dataset (``<dataset slug>/handoff/E5_seed0_outcomes``) picks one. The
+    cards never look a hand-off up by name (they read every attached bundle's manifest: its
+    kind and runs), so this only concerns a cell that asks for one by name."""
     base = input_root(root)
     wanted = _normalise(name)
     found = [
         f for f in bundle_folders(base)
         if not is_shared_data(f) and wanted in _normalise(f.relative_to(base).as_posix())
     ]  # fmt: skip
+    if len(found) > 1:
+        listed = ", ".join(str(p.relative_to(base)) for p in found)
+        example = found[0].relative_to(base).as_posix()
+        raise InputNotFound(f"the hand-off {name} matches {len(found)} attached folders "
+                            f"({listed}): keep one, or qualify the name with its dataset, "
+                            f"e.g. {example}")  # fmt: skip
     return _one(found, f"the hand-off {name}", f"the private dataset made from {name}", base)
 
 

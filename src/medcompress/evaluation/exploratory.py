@@ -114,9 +114,15 @@ def discover(
     roots: Sequence[Path | str], known: Sequence[str]
 ) -> tuple[dict[str, ArmRun], list[str]]:
     """Every run with outcome files under ``roots`` (the attached outcome hand-offs or an
-    output root), and notes (duplicates: the first root wins)."""
+    output root), and notes. Files are keyed by the run path inside a bundle
+    (``<ID>[/<variant>]/<budget>/seed<k>/<file>``), never by the bundle's name, so two
+    bundles with the same name (e.g. two ``E5_seed0_outcomes`` from two sessions holding
+    different criteria) are both read. The same run and file found twice: byte-identical
+    copies are noted and the first kept; copies that differ stop the analysis (it never
+    picks one silently)."""
     runs: dict[str, ArmRun] = {}
     notes: list[str] = []
+    conflicts: list[str] = []
     names = {name: split for split, name in OUTCOME_FILES.items()}
     audits = {AUDIT_FILE.format(split=split): split for split in OUTCOME_FILES}
     for root in roots:
@@ -132,10 +138,27 @@ def discover(
             run = runs.setdefault(run.label, run)
             target = run.audits if path.name in audits else run.files
             if split in target and target[split] != path:
-                notes.append(f"{run.label} {path.name}: also at {path}; kept {target[split]}")
+                if _sha256(target[split]) == _sha256(path):
+                    notes.append(f"{run.label} {path.name}: an identical copy at {path}; "
+                                 f"kept {target[split]}")  # fmt: skip
+                else:
+                    conflicts.append(f"{run.label} {path.name}: {target[split]} and {path}")
                 continue
             target[split] = path
+    if conflicts:
+        raise ValueError("outcome files of the same run that differ (attach one of each):\n  "
+                         + "\n  ".join(conflicts))  # fmt: skip
     return runs, notes
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def load(path: Path) -> dict[str, np.ndarray]:

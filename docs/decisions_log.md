@@ -725,6 +725,38 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-23 (agent; results committed unchanged, no test number read).** RC-E5 seed 0's B2 test
+  evaluations (magnitude and activation, Soheil, 2ecf302; Taylor, account 3, ba77598) and RC-E6's
+  (account 3, ba77598): `metrics_test.csv` and `metrics_test_unfiltered.csv` per run, SHA-256
+  checked, verified by file list and row counts only (the rows missing against magnitude are
+  empty reliability bins). RC-G2 E7U in full (2e795a9): stages 05-07, k = 29 (+2.55 %, within the
+  band), its removal set equal to the 29 lowest E7 scores per layer (checked). Run reports renamed
+  per session. Summaries regenerated (identical on pandas 2.3.3 and 3.1.1).
+- **2026-11-22 (research lead; recorded 2026-11-23): the AWQ grid stays symmetric.** E3 `awq_w4`
+  keeps the symmetric 4-bit grid without stored zero points, as built. AWQ's reference setting
+  stores zero points; we matched GPTQ's grid (E3 `w4`) on purpose, so the two 4-bit arms differ
+  only in the scaling and rounding. Recorded in `docs/decisions/exploratory_additions_2026-11-20.md`
+  and the methods text, with the `o_proj` note (no AWQ scale under grouped-query attention; the
+  manifest lists it). No setting changed.
+- **2026-11-22 (research lead; implemented 2026-11-23): outcome bundles keyed by their runs.**
+  Two RC-E5 sessions wrote bundles both named `E5_seed0_outcomes` (magnitude and activation;
+  Taylor). The exploratory analysis keys outcome files by their run path inside a bundle
+  (`<ID>[/<variant>]/<budget>/seed<k>/<file>`), never by the bundle name, so both are read when
+  both are attached; a run found twice is kept once when the copies are byte-identical and stops
+  the analysis, naming both, when they differ. A session that runs a chosen subset now names its
+  bundles by it (`cards.runs_tag`): RC-E5 / RC-E6 / RC-E7 (variants and budgets), RC-E3 (a subset
+  of its pre-registered variants), RC-E8 (budgets), e.g. `E5_seed0_magnitude_activation_B2_outcomes`;
+  a full set keeps the plain name. RC-E4 and RC-R1 write one fixed set per card (no subsets);
+  RC-G2's names already carry the part. The cards that need hand-offs find them by manifest
+  (kind and run), never by name, so nothing reads the names.
+- **2026-11-23 (agent; implementation, no setting changed): RC-R1 unblocked up to its smoke.**
+  RC-R1 starts with E0's validation pass when E0's committed rows have no operating point (they
+  have none: RC-E0a section 3c never ran); its test steps read it. The RC-R1 smoke now fails a test
+  stage unless the evaluation reports dropping exactly the listed non-finite images of its split
+  (5 filtered, 8 unfiltered), and E2's job also runs the unfiltered test. Cells: RC-R1 section 3b
+  (smoke, then run), RC-EX1 section 3c (E5R after its resume, E7U); RC-EX1 lists where each B2
+  validation `outcomes.npz` can be (only the RC-G2 notebook versions; no bundle holds one) and
+  notes that the B2 test outcomes evaluated at 2ecf302 or later already hold the audit margins.
 - **2026-11-20 (agent; implementation of the amendment of 2026-11-20, no pre-registered setting
   changed).** A and B: `evaluation/exploratory.py` and `scripts/exploratory_analysis.py` (CPU, from
   the attached outcome files, writing `results/exploratory/`); card RC-EX1. The evaluation now

@@ -33,8 +33,9 @@ the saved flips writes nothing.
 | E3 `w4`, `w8`, `w8a8` | `E3_seed0_outcomes` | `E3_seed0_outcomes` | no | audit-only reruns (val, test, unfiltered) |
 | E9 | RC-E9's outputs dataset | the same | no | audit-only reruns (two T4s) |
 | E10 | RC-E10's version output, if kept | not yet evaluated | no | its test evaluation saves them |
-| E5 magnitude / activation / Taylor, E6, E7 at B2 | the RC-G2 sessions' version outputs, if kept | `E5_seed0_outcomes`, `E6_seed0_outcomes`, `E7_seed0_outcomes` (the B2 test evaluations, running 2026-11-20) | no | section 3b |
-| E5R, E7U at B2 | RC-G2 session 5 (to come) | none yet: no card evaluates them on the test splits | yes (new code) | `06_evaluate.py --exp E5R --budget B2 --seed 0 -o evaluation.split=test` (and `test_unfiltered`; E7U alike) with the saved pruned model attached, about 1.7 h per arm |
+| E5 magnitude / activation / Taylor, E6, E7 at B2 | the RC-G2 sessions' version outputs, if kept (see below) | E5: two bundles both named `E5_seed0_outcomes` (magnitude and activation; Taylor), `E6_seed0_outcomes`; E7: RC-E7 running (Amir) | test: yes (evaluated at 2ecf302 or later); validation: no | section 3b: the validation pass only where `outcomes.npz` was not kept |
+| E5R at B2 | its resume (RC-G2 cell (b)) writes it | section 3c | yes (new code) | section 3c, attach `g2-b2-seed0-pruned-s5` |
+| E7U at B2 | the version output of RC-G2 cell (c), 2026-11-20, if kept | section 3c | yes (new code) | section 3c, attach `g2-b2-seed0-pruned-s5b` |
 | E3 `awq_w4` | its run (RC-E3) | its run | yes (new code) | - |
 | E4, E8, E10Q, A1-A6 | not run yet | not run yet | yes when they run | - |
 
@@ -118,10 +119,91 @@ done
 grep -E "wrote|largest difference|audit flips|STOP|Error" /kaggle/working/save_outcomes.txt
 ```
 
+**Which B2 validation outcomes exist (2026-11-23).** No RC-G2 session wrote an outcomes
+hand-off (its only hand-offs are the pruned models), and the B2 test bundles hold the test
+splits only (4 files for magnitude and activation, 2 for Taylor, 2 for E6). So each B2 arm's
+validation `outcomes.npz` exists only in the saved version of the RC-G2 notebook that ran its
+stage 06, at `/kaggle/working/outputs/<run>/outcomes.npz`, if that version's output was kept.
+The agent cannot see Kaggle outputs; the owner checks the Output tab of each:
+
+| Run | Notebook version (stage 06) | Path in its output |
+|---|---|---|
+| E5 magnitude | Soheil, RC-G2 session 1 resume, 2026-11-19 (commit 2e795a9); not the 2026-11-16 version (old design) | `outputs/E5/magnitude/B2/seed0/outcomes.npz` |
+| E5 activation | Soheil, RC-G2 session 1 new, the same notebook version | `outputs/E5/activation/B2/seed0/outcomes.npz` |
+| E5 Taylor, E6 | account 3, RC-G2 session 2, 2026-11-19 (commit 3aa4ecb) | `outputs/E5/taylor/B2/seed0/`, `outputs/E6/B2/seed0/` |
+| E7 | Amir, RC-G2 session 4, 2026-11-19 (commit 2e795a9) | `outputs/E7/B2/seed0/outcomes.npz` |
+| E7U | RC-G2 cell (c), 2026-11-20 (commit 2e795a9) | `outputs/E7U/B2/seed0/outcomes.npz` |
+| E5R | not yet: its resume writes it | - |
+
+Where the file is there, add that notebook's output as an input of the analysis notebook and drop
+that run's validation line from the cell of section 3b; where it is not, keep the line. The GPU
+part of section 3b is unchanged. Its audit-only test lines are not needed for an arm whose test
+evaluation ran at 2ecf302 or later (E5's three criteria and E6: their `outcomes_test*.npz` already
+hold the audit margins); drop them there to save about 20 min per arm. An attached old-design
+`outcomes.npz` (the 2026-11-16 version of session 1) would differ from the 2026-11-19 one for
+the same run: the analysis then stops and names both files, rather than picking one.
+
+**Outcome bundles with the same name.** Two sessions of RC-E5 both wrote `E5_seed0_outcomes`
+(Soheil: magnitude and activation; account 3: Taylor). Attach both datasets: the analysis keys
+every outcome file by its run path inside the bundle (`E5/<criterion>/B2/seed0/...`), never by the
+bundle's name, so both are read. A run found twice is kept once when the copies are byte for
+byte the same, and stops the analysis when they differ. From 2026-11-23 a session that runs a
+chosen subset names its bundles by it (`E5_seed0_magnitude_activation_B2_outcomes`,
+`E7_seed0_B2_outcomes`, ...), so new bundles no longer share names.
+
+### 3c. Test evaluations of E5R and E7U at B2 (GPU, one T4; 2026-11-23)
+
+Both arms are exploratory (B2, seed 0). Their test outcomes are saved with the audit margins. The
+cells copy the new `metrics_test*.csv` into `results_to_commit/`. Save
+`/kaggle/working/outputs/` as a private dataset afterwards (`e5r-b2-test-outcomes`,
+`e7u-b2-test-outcomes`); send `results_to_commit/` and the log.
+
+(i) **E5R** (any account). Attach `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` (the
+card's resume asks for it) and `g2-b2-seed0-pruned-s5`. E5R's validation (stage 06) and benchmark
+(stage 07) have not run, and the test evaluation needs its validation operating point, so the cell
+runs RC-G2 cell (b)'s resume first. Estimate about 2.3 h (an estimate: validation 0.53 h and the
+benchmark about 10 min as in RC-G2, then the two test passes about 32 and 50 min, plus setup).
+
+```bash
+{setup}
+python scripts/run_card.py --card RC-G2 --only E5R --out /kaggle/working/resume 2>&1 | tee /kaggle/working/rc_ex1_e5r.txt
+echo "resume exit code: ${{PIPESTATUS[0]}}"
+DATA=$(python scripts/find_inputs.py data) || exit 1
+FROM=$(python scripts/find_inputs.py handoffs | sed 's/^/--from /' | tr '\n' ' ')
+for SPLIT in test test_unfiltered; do
+  python scripts/06_evaluate.py --exp E5R --budget B2 --seed 0 --data-root "$DATA" $FROM \
+    -o evaluation.split=$SPLIT 2>&1 | tee -a /kaggle/working/rc_ex1_e5r.txt
+  echo "$SPLIT exit code: ${{PIPESTATUS[0]}}"
+done
+mkdir -p /kaggle/working/results_to_commit/results/E5R/B2/seed0
+cp results/E5R/B2/seed0/metrics_test*.csv /kaggle/working/results_to_commit/results/E5R/B2/seed0/
+ls -l /kaggle/working/resume/results_to_commit/results/E5R/B2/seed0/ /kaggle/working/outputs/E5R/B2/seed0/
+```
+
+(ii) **E7U** (any account). Attach `medcompress-data`, `e2-seed0-adapter` and
+`g2-b2-seed0-pruned-s5b`. E7U's validation rows are committed (2026-11-23). Estimate about 1.6 h
+(the two test passes, about 32 and 50 min, plus setup; an estimate).
+
+```bash
+{setup}
+DATA=$(python scripts/find_inputs.py data) || exit 1
+FROM=$(python scripts/find_inputs.py handoffs | sed 's/^/--from /' | tr '\n' ' ')
+for SPLIT in test test_unfiltered; do
+  python scripts/06_evaluate.py --exp E7U --budget B2 --seed 0 --data-root "$DATA" $FROM \
+    -o evaluation.split=$SPLIT 2>&1 | tee -a /kaggle/working/rc_ex1_e7u.txt
+  echo "$SPLIT exit code: ${{PIPESTATUS[0]}}"
+done
+mkdir -p /kaggle/working/results_to_commit/results/E7U/B2/seed0
+cp results/E7U/B2/seed0/metrics_test*.csv /kaggle/working/results_to_commit/results/E7U/B2/seed0/
+ls -l /kaggle/working/outputs/E7U/B2/seed0/
+```
+
 ## 4. What to commit back
 
 - `results/exploratory/` (CSV files and `SUMMARY.md`), from `exploratory.zip`.
 - Nothing from 3b: it writes outcome files only (keep them as a private dataset).
+- From 3c: `results/E5R/B2/seed0/` (stage 06 and 07 files from the resume, `metrics_test.csv`,
+  `metrics_test_unfiltered.csv`) and `results/E7U/B2/seed0/metrics_test*.csv`.
 
 ## 5. Run report (filled by the person who ran it)
 

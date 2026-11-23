@@ -92,9 +92,11 @@ finding) question; every interval resamples images (all probes of an image toget
   calibration set of seed 0, amendment of 2026-11-13), decoder linear layers only (the same
   targets as E3 `w4`), everything else as E3 `w4`; then the same validation, tests and benchmark.
   *Grid:* symmetric, without stored zero points, as E3 `w4`'s GPTQ grid (`grid.py`) and
-  GPTQModel's default (`symmetric: true` in the recipe); the AWQ paper's reference setting stores
-  zero points, which would be `symmetric: false` (a choice for the research lead, recorded here
-  as open until confirmed). *Scaled modules:* under grouped-query attention `o_proj` gets no
+  GPTQModel's default (`symmetric: true` in the recipe). **Decided 2026-11-22 (research lead):
+  the grid stays symmetric, as built.** AWQ's reference setting stores zero points (asymmetric
+  grid, `symmetric: false`); we matched GPTQ's grid on purpose, so that E3 `awq_w4` and E3 `w4`
+  differ only in how the weights are scaled and rounded, not in the grid. The methods text says
+  so. *Scaled modules:* under grouped-query attention `o_proj` gets no
   activation-aware scale (its input does not match `v_proj`'s output) and is rounded on the same
   grid; q/k/v share the scale searched on the input layer norm, gate/up on the post-attention
   norm, down_proj on up_proj's output. The manifest records the grid, the modules without an AWQ

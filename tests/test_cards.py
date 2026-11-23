@@ -501,3 +501,41 @@ def test_the_benchmark_alone_runs_again_from_the_saved_hand_off() -> None:
         build_plan("RC-E3", 0, only=["validation"])
     with pytest.raises(CardError, match="--only is for RC-G2"):
         build_plan("RC-E4", 0, only=["benchmark"])
+
+
+def test_hand_off_names_carry_the_runs_of_a_chosen_subset() -> None:
+    """2026-11-23: two sessions of RC-E5 (magnitude and activation; Taylor) both wrote
+    ``E5_seed0_outcomes``. A session that runs a chosen subset now names its bundles by it;
+    the full set keeps the plain name."""
+    from medcompress.cards import build_plan
+
+    def names(card: str, **kw: object) -> list[str]:
+        return [h.name for h in build_plan(card, 0, **kw).handoffs]  # type: ignore[arg-type]
+
+    assert names("RC-E5") == ["E5_seed0_pruned", "E5_seed0_outcomes"]
+    assert names("RC-E5", variants=["magnitude", "activation"], budgets=["B2"]) == [
+        "E5_seed0_magnitude_activation_B2_pruned",
+        "E5_seed0_magnitude_activation_B2_outcomes",
+    ]
+    assert names("RC-E5", variants=["taylor"], budgets=["B2"]) == [
+        "E5_seed0_taylor_B2_pruned",
+        "E5_seed0_taylor_B2_outcomes",
+    ]
+    assert names("RC-E7", budgets=["B2"]) == ["E7_seed0_B2_pruned", "E7_seed0_B2_outcomes"]
+    assert names("RC-E6", budgets=["B1", "B2", "B3"]) == ["E6_seed0_pruned", "E6_seed0_outcomes"]
+    assert names("RC-E3", variants=["w4"]) == ["E3_seed0_w4_quantized", "E3_seed0_w4_outcomes"]
+    assert names("RC-E8", budgets=["B1"])[1] == "E8_seed0_B1_outcomes"
+
+
+def test_rc_r1_scores_e0_on_validation_first_while_its_operating_point_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E0's test reads its validation thresholds, which are not committed (2026-11-23)."""
+    from medcompress import cards
+
+    monkeypatch.setattr(cards, "e0_operating_point_committed", lambda: False)
+    labels = [s.label for s in cards.build_plan("RC-R1").steps]
+    assert labels[0] == "validation E0 (operating point)"
+    assert labels[1:3] == ["test evaluation E0 seed0", "unfiltered test evaluation E0 seed0"]
+    monkeypatch.setattr(cards, "e0_operating_point_committed", lambda: True)
+    assert cards.build_plan("RC-R1").steps[0].label == "test evaluation E0 seed0"

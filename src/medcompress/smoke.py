@@ -123,8 +123,40 @@ def _gptq_check(variant: str) -> SmokeStage:
     )
 
 
-def _test(exp: str, variant: str | None = None) -> SmokeStage:
-    return SmokeStage("06 test", EVAL, _run_args(exp, variant=variant), ("evaluation.split=test",))
+def _test(exp: str, variant: str | None = None, split: str = "test") -> SmokeStage:
+    label = "06 test" if split == "test" else f"06 {split.replace('_', ' ')}"
+    return SmokeStage(label, EVAL, _run_args(exp, variant=variant), (f"evaluation.split={split}",))
+
+
+_DROP_LINE = re.compile(r"^(test(?:_unfiltered)?): dropped (\d+) non-finite image", re.MULTILINE)
+
+
+def stage_split(stage: SmokeStage) -> str | None:
+    """The evaluation split a stage scores (from its ``evaluation.split`` override)."""
+    for item in stage.overrides:
+        key, _, value = item.partition("=")
+        if key == "evaluation.split":
+            return value
+    return None
+
+
+def drop_problem(stage: SmokeStage, stdout: str, listed: int | None) -> str | None:
+    """The check of the non-finite drop on a test stage (RC-R1's smoke, 2026-11-23): the
+    evaluation must print that it dropped exactly the listed images of its split
+    (``results/data/nonfinite_drop.csv``, one image per listed id: 5 on the filtered test,
+    8 on the unfiltered one) before the smoke subset is taken. None when it did, or for a
+    stage that is not a test evaluation."""
+    split = stage_split(stage)
+    if split not in ("test", "test_unfiltered"):
+        return None
+    if listed is None:
+        return f"{split}: no committed list of non-finite test images in the smoke's results"
+    found = [int(n) for name, n in _DROP_LINE.findall(stdout) if name == split]
+    if not found:
+        return f"{split}: the evaluation did not report the non-finite drop"
+    if found[-1] != listed:
+        return f"{split}: dropped {found[-1]} image(s), the list has {listed}"
+    return None
 
 
 def smoke_jobs() -> list[SmokeJob]:
@@ -317,7 +349,15 @@ def smoke_jobs() -> list[SmokeJob]:
             ("RC-E10", None, (), ()),
             after="E10",
         ),
-        SmokeJob("RC-R1", "E2 test", "B", (_test("E2"),), ("RC-R1", None, (), ())),
+        # the test evaluations drop the listed non-finite images (checked: drop_problem); E2
+        # also on the unfiltered test, whose list is longer
+        SmokeJob(
+            "RC-R1",
+            "E2 test",
+            "B",
+            (_test("E2"), _test("E2", split="test_unfiltered")),
+            ("RC-R1", None, (), ()),
+        ),
         SmokeJob("RC-R1", "E1 test", "B", (_test("E1"),), ("RC-R1", None, (), ())),
         # both T4s: the teacher
         SmokeJob(

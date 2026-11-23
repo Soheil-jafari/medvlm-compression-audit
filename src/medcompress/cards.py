@@ -234,6 +234,19 @@ def _g2_scores_committed() -> bool:
     ).is_file()
 
 
+def e0_operating_point_committed() -> bool:
+    """True when E0's committed validation rows hold its operating point (``op_threshold:``);
+    E0's test evaluation reads them (RC-E0a section 3c writes them)."""
+    from medcompress.config import repo_root
+
+    path = repo_root() / "results" / "E0" / "nobudget" / "seed0" / "metrics.csv"
+    if not path.is_file():
+        return False
+    with path.open(encoding="utf-8") as handle:
+        return any(line.split(",")[3].startswith("op_threshold:") for line in handle
+                   if line.count(",") >= 3)  # fmt: skip
+
+
 BENCHMARK_ONLY_CARDS: tuple[str, ...] = ("RC-E3", "RC-E9")
 """Cards whose benchmark can run again alone from their saved quantized hand-off (2026-11-15:
 RC-E3 seed 0's and E9's peaks included the replaced fp16 weights; re-measured with the fix)."""
@@ -297,6 +310,28 @@ def g2_plan_parts(only: Sequence[str] | None) -> tuple[tuple[str, ...], tuple[St
         steps.append(_experiment(run))
         handoffs.append(Handoff("pruned", (run,), f"G2_B2_seed0_pruned_{part.replace(':', '_')}"))
     return parts, tuple(steps), tuple(handoffs)
+
+
+def runs_tag(
+    runs: Sequence[Run],
+    *,
+    variants: Sequence[str] | None = None,
+    all_variants: Sequence[str | None] = (),
+    budgets: Sequence[str] | None = None,
+) -> str:
+    """The part of a hand-off name that says which runs a session holds when it ran a chosen
+    subset (2026-11-23): ``_magnitude_activation_B2`` for ``--variant magnitude --variant
+    activation --budget B2``; empty for a card's full set. Two sessions of one card that ran
+    different subsets then write differently named bundles (two ``E5_seed0_outcomes`` came
+    back on 2026-11-21); the readers key outcome files by their run path in any case."""
+    tokens: list[str] = []
+    chosen_variants = list(dict.fromkeys(r.variant for r in runs if r.variant))
+    if variants and set(chosen_variants) != {v for v in all_variants if v}:
+        tokens += chosen_variants
+    chosen_budgets = list(dict.fromkeys(r.budget for r in runs if r.budget))
+    if budgets and set(chosen_budgets) != set(BUDGETS):
+        tokens += chosen_budgets
+    return "".join(f"_{t}" for t in tokens)
 
 
 def _pick(values: Sequence[str], wanted: Sequence[str] | None) -> tuple[str, ...]:
@@ -569,8 +604,9 @@ def build_plan(
         awq_runs = tuple(r for r in runs if r.variant == "awq_w4")
         handoffs: list[Handoff] = []
         if gptq:
-            handoffs += [Handoff("quantized", gptq, f"E3_seed{s}_quantized"),
-                         Handoff("outcomes", gptq, f"E3_seed{s}_outcomes")]  # fmt: skip
+            tag = runs_tag(gptq, variants=variants, all_variants=E3_PREREGISTERED)
+            handoffs += [Handoff("quantized", gptq, f"E3_seed{s}{tag}_quantized"),
+                         Handoff("outcomes", gptq, f"E3_seed{s}{tag}_outcomes")]  # fmt: skip
         if awq_runs:
             handoffs += [Handoff("quantized", awq_runs, f"E3_seed{s}_awq_w4_quantized"),
                          Handoff("outcomes", awq_runs, f"E3_seed{s}_awq_w4_outcomes")]  # fmt: skip
@@ -638,9 +674,11 @@ def build_plan(
                 criteria = (variant or None,)
         runs = [Run(exp, s, b, v) for v in criteria for b in run_budgets]
         kept = runs if exp == "E7" else [r for r in runs if r.budget == "B2"]  # E8 / RC-T1
-        handoffs = [Handoff("outcomes", tuple(runs), f"{exp}_seed{s}_outcomes")]
-        if kept:
-            handoffs.insert(0, Handoff("pruned", tuple(kept), f"{exp}_seed{s}_pruned"))
+        tag = runs_tag(runs, variants=variants, budgets=budgets,
+                       all_variants=E5_CRITERIA if exp == "E5" else ())  # fmt: skip
+        handoffs = [Handoff("outcomes", tuple(runs), f"{exp}_seed{s}{tag}_outcomes")]
+        if kept:  # named by the session's runs, as its outcomes
+            handoffs.insert(0, Handoff("pruned", tuple(kept), f"{exp}_seed{s}{tag}_pruned"))
         return CardPlan(
             card, f"{exp} pruning grid, seed {s}", 1, tuple(_pruning(runs)),
             handoffs=tuple(handoffs),
@@ -656,7 +694,8 @@ def build_plan(
         return CardPlan(
             card, f"E8 clinical pruning + 4-bit, seed {s}", 1, tuple(steps),
             handoffs=(Handoff("quantized", b2, f"E8_seed{s}_quantized"),
-                      Handoff("outcomes", tuple(runs), f"E8_seed{s}_outcomes")),
+                      Handoff("outcomes", tuple(runs),
+                              f"E8_seed{s}{runs_tag(runs, budgets=budgets)}_outcomes")),
             needs=(Need("adapter", Run("E2", s)),)
             + tuple(Need("pruned", Run("E7", s, r.budget)) for r in runs),
             seed=s, quantization=True,
@@ -684,9 +723,12 @@ def build_plan(
         # outside the 3-seed tier)
         runs = [Run("E0"), Run("E1", 0)] + [Run("E2", s) for s in e2_seeds]
         e2 = tuple(r for r in runs if r.exp == "E2")  # RC-C1 compares E2 with every arm
+        steps = [step for r in runs for step in _test_evals(r)]
+        if not e0_operating_point_committed():  # E0's validation first (RC-E0a 3c, 2026-11-23)
+            steps.insert(0, Step("validation E0 (operating point)",
+                                 _script("06_evaluate.py", *Run("E0").args())))  # fmt: skip
         return CardPlan(
-            card, "E0, E1, E2 on the test split", 2,
-            tuple(step for r in runs for step in _test_evals(r)),
+            card, "E0, E1, E2 on the test split", 2, tuple(steps),
             handoffs=(Handoff("outcomes", e2, "E2_test_outcomes"),
                       Handoff("outcomes", (Run("E0"),), "E0_test_outcomes"),  # flips vs E0
                       # E1 too: the exploratory analyses A and B read it (2026-11-20)

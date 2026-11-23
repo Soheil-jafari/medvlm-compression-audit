@@ -151,3 +151,23 @@ def test_a_single_job_runs_with_what_it_reads() -> None:
     assert all(j.lane == "pre" or j.name == "E7" for j in picked)
     with pytest.raises(ValueError, match="unknown smoke jobs"):
         smoke.with_dependencies(jobs, None, ["E77"])
+
+
+def test_the_rc_r1_smoke_checks_the_non_finite_drop_of_each_test_split() -> None:
+    """2026-11-23: RC-R1's test stages must report that they dropped exactly the listed
+    images of their split; E2 also runs the unfiltered test."""
+    from medcompress import smoke
+
+    jobs = {j.name: j for j in smoke.smoke_jobs() if j.card == "RC-R1"}
+    splits = {name: [smoke.stage_split(s) for s in job.stages] for name, job in jobs.items()}
+    assert splits["E2 test"] == ["test", "test_unfiltered"]
+    assert splits["E1 test"] == ["test"] and splits["E0 validation and test"] == [None, "test"]
+    test, unfiltered = jobs["E2 test"].stages
+    line = "test: dropped 5 non-finite image(s) (107 rows) for every arm: 900 -> 895 images"
+    assert smoke.drop_problem(test, line, 5) is None
+    assert "list has 5" in smoke.drop_problem(test, line.replace("5 non", "4 non"), 5)
+    assert "did not report" in smoke.drop_problem(unfiltered, line, 8)
+    assert smoke.drop_problem(unfiltered, "test_unfiltered: dropped 8 non-finite image(s)", 8) \
+        is None  # fmt: skip
+    assert "no committed list" in smoke.drop_problem(test, line, None)
+    assert smoke.drop_problem(jobs["E0 validation and test"].stages[0], "", None) is None
