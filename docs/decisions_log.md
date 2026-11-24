@@ -725,6 +725,18 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-24 (agent; implementation and results, no pre-registered setting changed).**
+  Committed unchanged: E5R's resume, RC-E7's B2 test, E3 `awq_w4` (no test number read). AWQ's
+  peak (+0.580e9 over `w4`) is not an untied embedding (`state_bytes` equal, `lm_head` not
+  quantized) but AwqTorchLinear's per-call dequantization through int64 temporaries (0.643e9
+  bytes live for an MLP projection, measured on CPU with GPTQModel 7.6.0); kept as measured,
+  kernel for kernel. FBR code follows the clarification below (canonical targets, pooled margin,
+  the pre-registered parser, the diagnosis printed by cell (ii)). RC-R1's smoke: the teacher
+  adapter is selected when attached (tested); the smoke prints each job's hand-offs and any
+  missing one. Phase B: the A-series export their outcomes; E10 and E10Q run both test
+  evaluations; E4 pauses on `MEDCOMPRESS_STOP_AFTER_HOURS` (exit code 8, card "paused", resume
+  hand-off exported; the resume path of E4 fixed to where its training keeps it); sessions of at
+  most about 6 h on the three accounts, the smoke first for E8, A1-A6, E4, E10Q.
 - **2026-11-24 (research lead; clarification to the amendment of 2026-11-22, before any FBR
   training): FBR's margin, answer target and parser; E2's answer format.** Cell (ii) stopped: E2
   seed 0's greedy first token on the 942 schedule probes was "No" 307 times, another token 635

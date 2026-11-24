@@ -88,10 +88,36 @@ def test_the_ordinary_examples_follow_the_registered_order_ten_per_update() -> N
     assert fbr.general_indices(order, 2, 10) == order[20:] + order[:5]  # cycles as registered
 
 
-def test_huber_and_the_answer_token_rule() -> None:
+def test_huber_the_canonical_answer_tokens_and_the_first_token_report() -> None:
     assert fbr.huber(0.5, 1.0) == 0.125 and fbr.huber(-3.0, 1.0) == 2.5
     assert fbr.huber_slope(0.5, 1.0) == 0.5 and fbr.huber_slope(-3.0, 1.0) == -1.0
-    yes, no, info = fbr.choose_answer_ids({"a": 7, "b": 7, "c": 8, "d": 3, "e": 99}, [7, 8], [3])
-    assert (yes, no, info["other_first_tokens"]) == (7, 3, 1)
-    with pytest.raises(ValueError, match="never a single-token"):
-        fbr.choose_answer_ids({"a": 7}, [7], [3])
+
+    class Tokenizer:
+        vocab = {"yes": 7, "Yes": 8, "no": 3, "No": 4, "yes please": None}
+
+        def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+            return [self.vocab[text]] if self.vocab.get(text) else [1, 2]
+
+        def decode(self, ids: list[int]) -> str:
+            return {v: k for k, v in self.vocab.items() if v}.get(ids[0], "<other>")
+
+    class Wrapper:
+        tokenizer = Tokenizer()
+        yes_ids, no_ids = (8, 7), (4, 3)
+
+    answers = load_config("domain/endoscopy.yaml")["domain"]["probe"]["answers"]
+    assert answers == {"positive": "yes", "negative": "no"}  # the template's canonical answers
+    yes, no, report = fbr.canonical_answer_ids(Wrapper(), answers)
+    assert (yes, no) == (7, 3) and report["positive"] == {"text": "yes", "token": 7}
+    with pytest.raises(ValueError, match="stop and tell the research lead"):
+        fbr.canonical_answer_ids(Wrapper(), {"positive": "yes please", "negative": "no"})
+    with pytest.raises(ValueError, match="not one of"):
+        fbr.canonical_answer_ids(Wrapper(), {"positive": "no", "negative": "no"})
+    # E2 on 2026-11-24: "No" on some probes, other tokens on the rest, a yes spelling never
+    first = {"a": 4, "b": 4, "c": 99, "d": 99, "e": 98}
+    present = {"a": True, "b": False, "c": True, "d": False, "e": True}
+    rep = fbr.first_token_report(first, present, Wrapper.tokenizer.decode, (8, 7), (4, 3))
+    assert rep["by_label"]["positive"] == {"yes": 0, "no": 1, "other": 2}
+    assert rep["by_label"]["negative"] == {"yes": 0, "no": 1, "other": 1}
+    assert rep["yes_tokens"] == {} and rep["no_tokens"] == {"4": 2}
+    assert rep["top_other_tokens"][0] == {"token": 99, "text": "<other>", "count": 2}

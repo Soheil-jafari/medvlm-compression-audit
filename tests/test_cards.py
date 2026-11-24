@@ -94,7 +94,8 @@ def test_each_run_reads_the_e2_of_its_own_seed_and_the_hand_offs_it_needs() -> N
     assert labels["RC-E2_seed1"] == ["teacher cache"]
     assert labels["RC-E1_seed2"] == []
     assert labels["RC-E3_seed0"] == ["E2 seed0 adapter"]
-    assert labels["RC-E4_seed0"] == ["teacher cache"]  # E4 starts from the pretrained student
+    # E4 starts from the pretrained student; a paused session resumes (2026-11-24)
+    assert labels["RC-E4_seed0"] == ["teacher cache", "E4 seed0 resume (optional)"]
     assert labels["RC-B0"] == ["E2 seed0 adapter"]
     # seeds 1 and 2: E7 and the comparator at B2 only (seed plan, 2026-11-08)
     assert labels["RC-E8_seed0"] == [
@@ -539,3 +540,45 @@ def test_rc_r1_scores_e0_on_validation_first_while_its_operating_point_is_missin
     assert labels[1:3] == ["test evaluation E0 seed0", "unfiltered test evaluation E0 seed0"]
     monkeypatch.setattr(cards, "e0_operating_point_committed", lambda: True)
     assert cards.build_plan("RC-R1").steps[0].label == "test evaluation E0 seed0"
+
+
+def test_e4_pauses_on_the_session_limit_and_exports_its_resume_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-11-24: E4's training (about 7-14 h) runs in sessions of about 6 h. A stage that
+    stopped on ``MEDCOMPRESS_STOP_AFTER_HOURS`` exits 8; the card stops as "paused", the resume
+    state (beside E4's quantized model) is exported, and the next session attaches it."""
+    from medcompress.cli import PAUSED_EXIT_CODE, run_stage
+    from medcompress.config import RunContext
+    from medcompress.handoffs import handoff_items
+    from medcompress.utils.session import SessionPaused, stop_after_seconds
+
+    def stage() -> None:
+        raise SessionPaused("stopped after update 300 of 625")
+
+    assert run_stage("02_train_student", stage) == PAUSED_EXIT_CODE == runner_mod.PAUSED
+    monkeypatch.setenv("MEDCOMPRESS_STOP_AFTER_HOURS", "5.5")
+    assert stop_after_seconds() == 5.5 * 3600
+    monkeypatch.delenv("MEDCOMPRESS_STOP_AFTER_HOURS")
+    assert stop_after_seconds() is None
+    config = _config(tmp_path / "work")
+    assert handoff_items("resume", config, RunContext("E4", seed=0)) == [
+        ("checkpoint_root", "E4/nobudget/seed0/resume")
+    ]  # where qakd keeps it
+    assert handoff_items("resume", config, RunContext("E2", seed=0)) == [
+        ("checkpoint_root", "E2/seed0/resume")
+    ]
+    plan = build_plan("RC-E4", 0)
+    assert [h.name for h in plan.handoffs] == ["E4_seed0_quantized", "E4_seed0_outcomes",
+                                               "E4_seed0_resume"]  # fmt: skip
+    assert any(n.kind == "resume" and n.optional for n in plan.needs)
+    session = runner_mod.Session(plan, tmp_path / "work", "now")
+    runner_mod.run_steps(session, config, {}, repo=tmp_path, data_root=None, handoffs=[],
+                         runner=lambda c, e, log: 8)  # fmt: skip
+    assert [s.status for s in session.steps] == ["paused"] and not session.ok
+    assert session.outcome.startswith("PAUSED: run E4 seed0")
+    resume = Path(config["paths"]["checkpoint_root"]) / "E4" / "nobudget" / "seed0" / "resume"
+    (resume / "step").mkdir(parents=True)
+    (resume / "step" / "trainable.pt").write_bytes(b"x")
+    runner_mod.export_handoffs(session, config)
+    assert (tmp_path / "work" / "handoff" / "E4_seed0_resume").is_dir()

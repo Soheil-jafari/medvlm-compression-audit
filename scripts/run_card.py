@@ -248,7 +248,8 @@ def main(argv: list[str] | None = None) -> int:
 
     report_step_handoffs(session)
     collect_results(session, REPO)
-    failed = [s for s in session.steps if s.status in ("failed", "stopped: setting open")]
+    failed = [s for s in session.steps
+              if s.status in ("failed", "stopped: setting open", "paused")]  # fmt: skip
     code = 0 if session.ok else next((s.code for s in failed if s.code), 1)
     return _finish(session, code or (0 if session.ok else 1))
 

@@ -8,6 +8,8 @@
   validation and timed with the budget protocol.
 - Purpose: E10 "at 4 bit against E8" (item 14.3). The code was open at the freeze (section 12
   note) and was written on 2026-11-14. Descriptive, no verdict.
+- **2026-11-24:** the card also runs both test evaluations and exports `E10Q_seed0_outcomes`;
+  cell Z1 of `docs/runs/SESSIONS_2026-11-24_seed0_phase_b.md`, after the phase-B smoke.
 - Status: `ready` **after RC-SMOKE passed for RC-E10Q** (`scripts/run_card.py` refuses it
   before; the smoke job quantizes the smoke's own 2-step E10).
 

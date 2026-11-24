@@ -27,6 +27,8 @@ from medcompress.config import ConfigError, RunContext
 
 MARGINS_FILE = "fbr_e2_margins.json"
 RUN_FILE = "fbr_run.json"
+DIAGNOSIS_FILE = "fbr_e2_diagnosis.json"
+"""E2's answer-format diagnosis: counts and token strings only (no sample id; committable)."""
 ROWS_FILE = "fbr_metrics.csv"
 """The FBR model's validation rows (not ``metrics.csv``: the aggregator reads that name as a
 registered run's file)."""
@@ -102,60 +104,99 @@ def _schedule(config: Mapping[str, Any], train: Any, steps: int | None = None) -
     return schedule, settings, fbr, cfg
 
 
-def run_e2_margin_cache(config: Mapping[str, Any], out: Path, *, examples: int = 12) -> Path:
-    """E2 seed 0's margin of every probe of the FBR schedule (the training pass's function,
-    no gradient), the (yes, no) target tokens (the spelling E2 ranks first most often) and a
-    report: each spelling's tokens and a few decoded examples. Stops when E2's first tokens are
-    not single-token yes / no spellings."""
-    from medcompress.compression.fbr import choose_answer_ids, score_margins
+def probe_answers_config(config: Mapping[str, Any]) -> dict[str, str]:
+    """The probe template's canonical answers (``domain.probe.answers``)."""
+    from medcompress.config import load_config
+
+    domain = load_config(config["components"]["domain"])["domain"]
+    answers = (domain.get("probe") or {}).get("answers") or {}
+    if not {"positive", "negative"} <= set(answers):
+        raise ConfigError("domain.probe.answers needs positive and negative")
+    return {"positive": str(answers["positive"]), "negative": str(answers["negative"])}
+
+
+def run_e2_margin_cache(
+    config: Mapping[str, Any], out: Path, *, examples: int = 10, max_new_tokens: int = 32
+) -> Path:
+    """E2 seed 0's pooled margin of every probe of the FBR schedule (the training pass's
+    function, no gradient), the (yes, no) cross-entropy targets (the template's canonical
+    answers, checked to be single tokens) and the diagnosis of E2's answer format
+    (clarification of 2026-11-24): its greedy first token by label with the 20 most frequent
+    other tokens decoded; every schedule probe decoded (up to 8 tokens, as the FBR rule) and
+    read by the pre-registered parser, with the unparsed count; ``examples`` full answers each
+    to positive and negative probes (up to ``max_new_tokens``) printed. Writes
+    ``fbr_e2_margins.json`` (sample ids inside: never committed) and ``fbr_e2_diagnosis.json``
+    (counts and token strings only)."""
+    from collections import Counter
+
+    from medcompress.compression.fbr import (
+        FBRSettings,
+        canonical_answer_ids,
+        first_token_report,
+        score_margins,
+    )
     from medcompress.compression.pruning.stage import load_train_samples
+    from medcompress.evaluation.clinical import parse_yes_no
     from medcompress.evaluation.runner import load_trained_student
     from medcompress.models.tokens import NO_SPELLINGS, YES_SPELLINGS
 
     train = load_train_samples(config)
-    schedule, settings, _fbr, _cfg = _schedule(config, train)
+    schedule, _settings, _fbr, _cfg = _schedule(config, train)
     keys = set(schedule.unique_keys())
     probes = {p.key: p for u in schedule.updates for p in u if p.key in keys}
     e2 = load_trained_student(config, "E2", 0, _side(config))
+    yes_id, no_id, targets = canonical_answer_ids(e2, probe_answers_config(config))
     data_root = Path(config["paths"]["data_root"])
     started = time.perf_counter()
-    margins, first = score_margins(e2, list(probes.values()), data_root)
-    yes_id, no_id, counts = choose_answer_ids(first, e2.yes_ids, e2.no_ids)
+    margins, first = score_margins(e2, list(probes.values()), data_root, (yes_id, no_id))
     tokenizer = e2.tokenizer
-    spellings = {s: list(tokenizer.encode(s, add_special_tokens=False))
-                 for s in (*YES_SPELLINGS, *NO_SPELLINGS)}  # fmt: skip
-    shown = list(probes.values())[:examples]
-    decoded = e2.generate([data_root / p.image_path for p in shown], [p.question for p in shown],
-                          max_new_tokens=8)  # fmt: skip
-    report = {
-        "spelling_tokens": spellings,
+    present = {k: p.present for k, p in probes.items()}
+    tokens = first_token_report(first, present, tokenizer.decode, e2.yes_ids, e2.no_ids)
+    listed = list(probes.values())
+    decoded = e2.generate([data_root / p.image_path for p in listed], [p.question for p in listed],
+                          max_new_tokens=FBRSettings.load().decode_max_new_tokens)  # fmt: skip
+    parsed: dict[str, Counter] = {"positive": Counter(), "negative": Counter()}
+    for probe, answer in zip(listed, decoded, strict=True):
+        reading = parse_yes_no(answer.text) or "unparsed"
+        parsed["positive" if probe.present else "negative"][reading] += 1
+    positives = [p for p in listed if p.present][:examples]
+    shown = positives + [p for p in listed if not p.present][:examples]
+    full = e2.generate([data_root / p.image_path for p in shown], [p.question for p in shown],
+                       max_new_tokens=max_new_tokens)  # fmt: skip
+    diagnosis = {
+        "spelling_tokens": {s: list(tokenizer.encode(s, add_special_tokens=False))
+                            for s in (*YES_SPELLINGS, *NO_SPELLINGS)},
         "single_token_yes_ids": list(e2.yes_ids), "single_token_no_ids": list(e2.no_ids),
-        "yes_target_id": yes_id, "no_target_id": no_id,
-        "yes_target": tokenizer.decode([yes_id]), "no_target": tokenizer.decode([no_id]),
-        "first_token_counts": {k: {str(t): n for t, n in v.items()} if isinstance(v, dict) else v
-                               for k, v in counts.items()},
-        "decoded_examples": [{"finding": p.finding, "present": p.present, "answer": d.text,
-                              "first_token": d.token_ids[:1]} for p, d in zip(shown, decoded,
-                                                                              strict=True)],
+        "targets": targets,
+        "first_tokens": tokens,
+        "parser": "clinical.parse_yes_no (pre-registered): lower case, leading non-letters "
+                  "dropped, the answer must start with the word yes or no",
+        "decoded_up_to_tokens": FBRSettings.load().decode_max_new_tokens,
+        "parsed_by_label": {k: {r: int(n) for r, n in c.items()} for k, c in parsed.items()},
+        "probes": len(listed),
     }  # fmt: skip
+    examples_shown = [{"finding": p.finding, "present": p.present, "answer": a.text,
+                       "parsed": parse_yes_no(a.text) or "unparsed"}
+                      for p, a in zip(shown, full, strict=True)]  # fmt: skip
     document = {
-        "schedule_fingerprint": schedule.fingerprint(),
-        "schedule_log": schedule.log,
-        "findings": list(schedule.findings),
-        "steps": len(schedule.updates),
-        "margins": margins,
-        "seconds": time.perf_counter() - started,
-        **report,
-    }
+        "schedule_fingerprint": schedule.fingerprint(), "schedule_log": schedule.log,
+        "findings": list(schedule.findings), "steps": len(schedule.updates),
+        "margins": margins, "yes_target_id": yes_id, "no_target_id": no_id,
+        "seconds": time.perf_counter() - started, "diagnosis": diagnosis,
+    }  # fmt: skip
     out.mkdir(parents=True, exist_ok=True)
     target = out / MARGINS_FILE
     target.write_text(json.dumps(document, indent=1), encoding="utf-8")
+    (out / DIAGNOSIS_FILE).write_text(json.dumps(diagnosis, indent=1), encoding="utf-8")
     print(f"wrote {target}: {len(margins)} probes of {len(schedule.updates)} updates "
-          f"(schedule {schedule.fingerprint()}); targets {report['yes_target']!r} / "
-          f"{report['no_target']!r}", flush=True)  # fmt: skip
-    print(json.dumps({k: report[k] for k in ("spelling_tokens", "single_token_yes_ids",
-                                             "single_token_no_ids", "first_token_counts",
-                                             "decoded_examples")}, indent=1))  # fmt: skip
+          f"(schedule {schedule.fingerprint()}); targets {targets}", flush=True)  # fmt: skip
+    print(json.dumps(diagnosis, indent=1))
+    print("decoded answers (not committed):")
+    for row in examples_shown:
+        print(
+            f"  [{'positive' if row['present'] else 'negative'} {row['finding']}] "
+            f"{row['answer']!r} -> {row['parsed']}"
+        )
     return target
 
 
@@ -209,6 +250,14 @@ def run_fbr_arm(
     if control:
         fbr = dataclasses.replace(fbr, margin_coefficient=0.0)
     model, rebuild = rebuild_pruned(config, arm)
+    from medcompress.compression.fbr import canonical_answer_ids
+
+    yes_id, no_id, _targets = canonical_answer_ids(model, probe_answers_config(config))
+    if (yes_id, no_id) != (int(cache["yes_target_id"]), int(cache["no_target_id"])):
+        raise ValueError(
+            f"the canonical answer tokens ({yes_id}, {no_id}) are not the ones E2's "
+            f"cache was made with ({cache['yes_target_id']}, {cache['no_target_id']})"
+        )
     print(f"rebuilt {label} before recovery: {rebuild}", flush=True)
     records = {r.sample_id: r for r in load_pinned_teacher_cache(
         config, Path(paths["cache_root"]) / "teacher")}  # fmt: skip
@@ -218,7 +267,7 @@ def run_fbr_arm(
     setup_seconds = time.perf_counter() - t0
     result = train_fbr(
         model, examples, schedule, cache["margins"], cfg, fbr,
-        (int(cache["yes_target_id"]), int(cache["no_target_id"])),
+        (yes_id, no_id),
         data_root=data_root, seed=arm.seed, stop_after_steps=trial_steps,
     )  # fmt: skip
     folder = Path(out) / label

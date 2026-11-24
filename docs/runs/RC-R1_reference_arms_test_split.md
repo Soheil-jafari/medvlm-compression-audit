@@ -142,6 +142,17 @@ echo "exit code: ${PIPESTATUS[0]}"
 grep -E "dropped|FAILED|PASS|FAIL" /kaggle/working/smoke_cards_rc_r1.txt
 ```
 
+**Smoke of 2026-11-24 (reported):** "E2 test", "E2 test unfiltered" and "E1 test" passed. "E0
+validation and test" stopped at once: no teacher adapter at
+`/kaggle/working/smoke/checkpoints/E0/teacher_adapter`; its log linked only the E1 and E2
+adapters. Checked here: when `e0-teacher-adapter` (RC-TT1's export, kind `teacher_adapter`) is
+attached, the smoke selects it for every RC-R1 job, and the E0 job runs on both T4s (lane
+"both"; a test covers both). So the dataset was most likely not attached, and **a rerun of cell
+(a) with `e0-teacher-adapter` attached is enough** (the E2 and E1 jobs may run again; they
+passed). The smoke now prints for every job the hand-offs it was given and any it lacks ("NOT
+ATTACHED: teacher adapter"), so this shows before the job starts. The E1 dataset's name
+(`1-seed0-adapter` on Soheil's account) does not matter: it is found by its manifest.
+
 (b) **The run**, after the agent has added RC-R1 to `smoke_passed.yaml` (Soheil; GPU T4 x2,
 Internet on; the same four inputs). Seven steps: E0's validation (operating point), then the
 filtered and unfiltered test of E0, E1 seed 0 and E2 seed 0 (seed 0 only: the futility stop).

@@ -14,6 +14,9 @@
   - at **matched peak memory** with the pruned 3B arm whose measured footprint is nearest its
     own (after RC-B0, which fixes the budgets);
   - **at 4 bit** against E8 (the clinically pruned 3B at 4 bit).
+- **2026-11-24:** the test evaluations (filtered and unfiltered) are in the card's plan; for the
+  committed run, cell X1 of `docs/runs/SESSIONS_2026-11-24_seed0_phase_b.md` runs only the two
+  test passes (the committed benchmark is not measured again).
 - Status: `ready` (2026-11-12) for the training, the validation and the benchmark (steps
   2-4). Step 1 passed on Kaggle (commit 262a4f1): `training.mode: offline_kd`, the 2B pinned at
   revision 89644892e4d85e24eaac8bacfd4f463576704203 (section 6). The 4-bit E10 and the two

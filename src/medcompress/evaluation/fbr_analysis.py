@@ -12,7 +12,6 @@ Arrays of an outcomes file (``outcomes.npz``): ``probe_sample_ids``, ``probe_fin
 from __future__ import annotations
 
 import math
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,18 +37,14 @@ def require_validation(split: str) -> None:
 # ----------------------------------------------------------------------------- GPU pass
 
 
-_WORD = re.compile(r"[a-z]+")
-
-
 def parse_answer(text: str) -> int:
-    """1 for "yes", 0 for "no", -1 for anything else: the first word of the lower-cased,
-    stripped text, punctuation removed (decision file, section 8)."""
-    words = text.strip().lower().split()
-    if not words:
-        return -1
-    match = _WORD.search(words[0])
-    word = match.group(0) if match else ""
-    return 1 if word == "yes" else 0 if word == "no" else -1
+    """1 for "yes", 0 for "no", -1 for unparsed, by the pre-registered parser
+    ``clinical.parse_yes_no`` (clarification of 2026-11-24: one parser for FBR and the
+    evaluation)."""
+    from medcompress.evaluation.clinical import parse_yes_no
+
+    reading = parse_yes_no(text)
+    return 1 if reading == "yes" else 0 if reading == "no" else -1
 
 
 def probe_answers(

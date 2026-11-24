@@ -17,6 +17,7 @@ from medcompress.config import (
     load_config,
 )
 from medcompress.registry import BUDGET_IDS, REGISTRY, get_experiment, validate_run
+from medcompress.utils.session import SessionPaused
 
 NOT_IMPLEMENTED_EXIT_CODE = 3
 """Exit code used when a stage is still a stub, so pipelines never mistake it for success."""
@@ -32,6 +33,9 @@ GPU_PLACEMENT_EXIT_CODE = 6
 offloaded from the GPU (2026-11-13)."""
 
 DISK_SPACE_EXIT_CODE = 7
+PAUSED_EXIT_CODE = 8
+"""A training stage stopped on its session time limit with its state saved
+(``MEDCOMPRESS_STOP_AFTER_HOURS``; 2026-11-24): start it again with the resume hand-off."""
 """Exit code used when a save would not fit on the disk (nothing written; 2026-11-13)."""
 
 
@@ -340,6 +344,9 @@ def run_stage(stage: str, func: Callable[..., Any], /, **kwargs: Any) -> int:
     except ConfigError as exc:
         print(f"[{stage}] configuration incomplete: {exc}")
         return CONFIG_INCOMPLETE_EXIT_CODE
+    except SessionPaused as exc:
+        print(f"[{stage}] paused: {exc}")
+        return PAUSED_EXIT_CODE
     except RuntimeError as exc:
         from medcompress.models.loading import GPUPlacementError
         from medcompress.utils.disk import DiskSpaceError

@@ -30,6 +30,7 @@ from medcompress.handoffs import handoff_items
 from medcompress.utils import bundles
 
 CONFIG_INCOMPLETE = 4
+PAUSED = 8  # cli.PAUSED_EXIT_CODE: a training stopped on the session limit, state saved
 INPUT_CHECK_FAILED = 5
 ENVIRONMENT_FAILED = 6
 RESULT_DIRS: tuple[str, ...] = ("results", "paper", "docs/results")
@@ -81,6 +82,9 @@ class Session:
         if self.failure is not None:
             return f"FAILED: {self.failure}"
         bad = [s for s in self.steps if s.status not in ("ok", "skipped", "waiting on a setting")]
+        if bad and bad[0].status == "paused":
+            return (f"PAUSED: {bad[0].label} saved its state on the session limit; run the card "
+                    "again with the resume hand-off attached")  # fmt: skip
         if bad:
             return f"FAILED: {bad[0].label}: {bad[0].status} (exit code {bad[0].code})"
         return "FAILED: no step ran"
@@ -274,6 +278,11 @@ def run_steps(
             session.steps.append(StepOutcome(step.label, "waiting on a setting", code, seconds))
             session.unusual.append(f"{step.label}: waits on an open setting (see the log)")
             continue
+        if code == PAUSED:  # resume in a new session with the exported resume hand-off
+            session.steps.append(StepOutcome(step.label, "paused", code, seconds))
+            note = "paused on the session limit, state saved; run the card again with the resume"
+            session.unusual.append(f"{step.label}: {note} hand-off attached")
+            break
         status = "stopped: setting open" if code == CONFIG_INCOMPLETE else "failed"
         session.steps.append(StepOutcome(step.label, status, code, seconds))
         session.unusual.append(f"{step.label}: exit code {code}; the card stopped here")
@@ -309,7 +318,7 @@ def export_handoffs(session: Session, config: Mapping[str, Any]) -> None:
                     items.append((root, rel))
                 else:
                     missing.append(rel)
-        if missing:
+        if missing and handoff.kind != "resume":  # a finished training has no resume state
             session.unusual.append(f"hand-off {handoff.name}: not written yet: {missing}")
         if shared:
             session.handoffs.append(f"{handoff.name}: {shared} came from an attached dataset")

@@ -639,29 +639,61 @@ def score_margins(
     return margins, first
 
 
-def choose_answer_ids(
-    first_tokens: Mapping[str, int], yes_ids: Sequence[int], no_ids: Sequence[int]
+def canonical_answer_ids(
+    wrapper: HFVLMWrapper, answers: Mapping[str, str]
 ) -> tuple[int, int, dict[str, Any]]:
-    """The (yes, no) target tokens: the single-token spelling of each answer that E2 ranks
-    first most often on the schedule's probes (decision file, section 4). Ties go to the
-    lower token id.
+    """The (yes, no) cross-entropy targets: the probe template's canonical answers
+    (``domain.probe.answers``: positive "yes", negative "no"; clarification of 2026-11-24). Each
+    must encode to exactly one token that is one of the evaluation's single-token spellings of
+    its answer.
 
     Raises:
-        ValueError: E2 never ranks a yes (or a no) spelling first: the study stops there.
+        ValueError: an answer is not one such token: the study stops there (tell the research
+            lead).
     """
-    counts = {"yes": {}, "no": {}}  # type: dict[str, dict[int, int]]
-    other = 0
-    for token in first_tokens.values():
-        if token in yes_ids:
-            counts["yes"][token] = counts["yes"].get(token, 0) + 1
-        elif token in no_ids:
-            counts["no"][token] = counts["no"].get(token, 0) + 1
-        else:
-            other += 1
-    if not counts["yes"] or not counts["no"]:
-        raise ValueError(f"E2's first answer token is never a single-token yes / no spelling "
-                         f"(yes {counts['yes']}, no {counts['no']}, other {other}): stop and "
-                         "tell the research lead")  # fmt: skip
-    pick = {a: sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[0][0] for a, c in counts.items()}
-    return pick["yes"], pick["no"], {"yes_counts": counts["yes"], "no_counts": counts["no"],
-                                     "other_first_tokens": other}  # fmt: skip
+    tokenizer = wrapper.tokenizer
+    out: dict[str, int] = {}
+    for kind, pool in (("positive", wrapper.yes_ids), ("negative", wrapper.no_ids)):
+        text = str(answers[kind]).strip()
+        ids = list(tokenizer.encode(text, add_special_tokens=False))
+        if len(ids) != 1 or int(ids[0]) not in {int(i) for i in pool}:
+            raise ValueError(f"the canonical {kind} answer {text!r} encodes to {ids}, not one of "
+                             f"the single-token spellings {list(pool)}: stop and tell the "
+                             "research lead")  # fmt: skip
+        out[kind] = int(ids[0])
+    report = {"positive": {"text": answers["positive"], "token": out["positive"]},
+              "negative": {"text": answers["negative"], "token": out["negative"]}}  # fmt: skip
+    return out["positive"], out["negative"], report
+
+
+def first_token_report(
+    first_tokens: Mapping[str, int],
+    present: Mapping[str, bool],
+    decode: Any,
+    yes_ids: Sequence[int],
+    no_ids: Sequence[int],
+    top: int = 20,
+) -> dict[str, Any]:
+    """The model's greedy first answer token on the probes: how often it is a yes spelling, a
+    no spelling or another token, by label, and the ``top`` most frequent other tokens with
+    their decoded strings (the diagnosis of 2026-11-24)."""
+    from collections import Counter
+
+    yes, no = {int(i) for i in yes_ids}, {int(i) for i in no_ids}
+    counts = {label: {"yes": Counter(), "no": Counter(), "other": Counter()}
+              for label in ("positive", "negative")}  # fmt: skip
+    for key, token in first_tokens.items():
+        label = "positive" if present[key] else "negative"
+        kind = "yes" if token in yes else "no" if token in no else "other"
+        counts[label][kind][int(token)] += 1
+    other = counts["positive"]["other"] + counts["negative"]["other"]
+    return {
+        "by_label": {label: {kind: int(sum(c.values())) for kind, c in kinds.items()}
+                     for label, kinds in counts.items()},
+        "yes_tokens": {str(t): n for t, n in (counts["positive"]["yes"]
+                                              + counts["negative"]["yes"]).items()},
+        "no_tokens": {str(t): n for t, n in (counts["positive"]["no"]
+                                             + counts["negative"]["no"]).items()},
+        "top_other_tokens": [{"token": int(t), "text": decode([int(t)]), "count": int(n)}
+                             for t, n in other.most_common(top)],
+    }  # fmt: skip

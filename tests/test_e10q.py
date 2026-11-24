@@ -54,11 +54,13 @@ def test_the_card_checks_the_2bs_calibration_first_and_hands_off_the_codes() -> 
                                       "0")  # fmt: skip
     assert [s.argv[0] for s in plan.steps[1:]] == [
         "scripts/03_quantize.py", "scripts/06_evaluate.py", "scripts/07_benchmark_efficiency.py",
+        "scripts/06_evaluate.py", "scripts/06_evaluate.py",  # the two tests (2026-11-24)
     ]  # fmt: skip
     assert [(n.kind, n.run.label if n.run else None) for n in plan.needs] == [
         ("adapter", "E10 seed0")
     ]
-    assert [h.name for h in plan.handoffs] == ["E10Q_seed0_quantized"] and plan.quantization
+    assert [h.name for h in plan.handoffs] == ["E10Q_seed0_quantized", "E10Q_seed0_outcomes"]
+    assert plan.quantization
     assert GATED_CARDS["RC-E10Q"] == "RC-E10Q"
     (job,) = [j for j in smoke_jobs() if j.card == "RC-E10Q"]
     assert job.after == "E10" and job.stages[0].args[-2:] == ("--size", "2")

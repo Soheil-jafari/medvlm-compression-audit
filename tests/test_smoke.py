@@ -171,3 +171,35 @@ def test_the_rc_r1_smoke_checks_the_non_finite_drop_of_each_test_split() -> None
         is None  # fmt: skip
     assert "no committed list" in smoke.drop_problem(test, line, None)
     assert smoke.drop_problem(jobs["E0 validation and test"].stages[0], "", None) is None
+
+
+def test_the_rc_r1_smoke_passes_an_attached_teacher_adapter_to_the_e0_job(tmp_path) -> None:  # noqa: ANN001
+    """2026-11-24: the smoke's E0 job found no teacher adapter. When ``e0-teacher-adapter`` is
+    attached (RC-TT1's export layout), every RC-R1 job is given it, and the E0 job runs on
+    both T4s."""
+    from medcompress import smoke
+    from medcompress.card_runner import select_handoffs
+    from medcompress.cards import build_plan
+    from medcompress.config import load_config
+    from medcompress.utils import bundles
+
+    def bundle(name: str, kind: str, rel: str, meta: dict) -> object:
+        root = tmp_path / "input" / name
+        (root / "checkpoint_root" / rel).mkdir(parents=True)
+        (root / "checkpoint_root" / rel / "adapter_config.json").write_text("{}")
+        bundles.write_bundle_manifest(root, kind=kind, commit="0" * 40, meta=meta,
+                                      items=[{"root": "checkpoint_root", "path": rel}])  # fmt: skip
+        return root
+
+    teacher = bundle("e0-teacher-adapter", "teacher_adapter", "E0/teacher_adapter", {})
+    e1 = bundle("1-seed0-adapter", "adapter", "E1/seed0/adapter", {"experiment": "E1", "seed": 0})
+    e2 = bundle("e2-seed0-adapter", "adapter", "E2/seed0/adapter", {"experiment": "E2", "seed": 0})
+    config = load_config("base.yaml")
+    plan = build_plan("RC-R1")
+    needed, ignored = select_handoffs(plan, config, [teacher, e1, e2])
+    assert set(needed) == {teacher, e1, e2} and not ignored
+    assert smoke.missing_handoffs(plan, config, needed) == []
+    without, _ = select_handoffs(plan, config, [e1, e2])
+    assert len(smoke.missing_handoffs(plan, config, without)) == 1  # named before the job runs
+    job = next(j for j in smoke.smoke_jobs() if j.name == "E0 validation and test")
+    assert job.lane == "both" and job.plan[0] == "RC-R1"

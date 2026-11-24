@@ -1581,3 +1581,15 @@ Append-only, newest at the bottom. One entry per iteration:
   `removal.json`, E2's margin cache, the probe-answer pass, the cross-fitted diagnostic and the
   pilot's gate; card RC-FBR. Tests.
 
+## Iteration 97: 2026-11-24 (interactive)
+- Committed unchanged (SHA-256, file list and row counts; no test number read): E5R's resume (4
+  files), RC-E7 seed 0's B2 test (2), E3 `awq_w4` (6). AWQ's higher peak traced to
+  AwqTorchLinear's on-the-fly dequantization through int64 temporaries (0.643e9 bytes live for
+  a 2,048 x 11,008 projection, measured on CPU); its resident state equals `w4`'s.
+- FBR: clarification of 2026-11-24 committed before any training (E2 never starts with "yes";
+  the pooled margin with no chosen token; the template's "yes" / "no" as targets; the
+  pre-registered parser; plain-answer changes read as format). Cell (ii) prints the diagnosis.
+- RC-R1 smoke: the teacher adapter is passed when attached (tested); the smoke now names missing
+  hand-offs per job. Phase B: A-series export outcomes, E10 / E10Q gain test evaluations, E4
+  pauses cleanly and resumes from a hand-off; sessions page with every cell.
+

@@ -621,8 +621,11 @@ def build_plan(
             card, f"E4 quantization-aware distillation, seed {run.seed}", 1,
             (_experiment(run), *_test_evals(run)),
             handoffs=(Handoff("quantized", (run,), f"E4_seed{run.seed}_quantized"),
-                      Handoff("outcomes", (run,), f"E4_seed{run.seed}_outcomes")),
-            needs=(Need("teacher_cache"),), seed=run.seed, quantization=True, internet=True,
+                      Handoff("outcomes", (run,), f"E4_seed{run.seed}_outcomes"),
+                      # a paused session's state (MEDCOMPRESS_STOP_AFTER_HOURS; 2026-11-24)
+                      Handoff("resume", (run,), f"E4_seed{run.seed}_resume")),
+            needs=(Need("teacher_cache"), Need("resume", run, optional=True)), seed=run.seed,
+            quantization=True, internet=True,
         )  # fmt: skip
     if card == "RC-E9":
         _no_seed(card, seed)
@@ -711,8 +714,12 @@ def build_plan(
         if variants:
             choices = _pick([c for c in choices if c], variants)
         runs = [Run(exp, s, "B2", v) for v in choices]
+        # the outcomes (validation and both tests) go to a hand-off: the exploratory analysis B
+        # counts the A-series as a pruning family (2026-11-24)
+        tag = runs_tag(runs, variants=variants, all_variants=ABLATION_VARIANTS[exp])
         return CardPlan(
             card, f"{exp} ablation at B2, seed {s}", 1, tuple(_pruning(runs)),
+            handoffs=(Handoff("outcomes", tuple(runs), f"{exp}_seed{s}{tag}_outcomes"),),
             needs=(Need("adapter", Run("E2", s)), Need("teacher_cache")), seed=s, internet=True,
         )  # fmt: skip
     if card == "RC-R1":
@@ -781,8 +788,10 @@ def build_plan(
             _script("check_tokenizer_match.py", "--config", "experiments/E10.yaml"),
         )
         return CardPlan(
-            card, "E10 native 2B student, seed 0 (exploratory)", 1, (check, *_training(run)),
-            handoffs=(Handoff("adapter", (run,), "E10_seed0_adapter"),),
+            card, "E10 native 2B student, seed 0 (exploratory)", 1,
+            (check, *_training(run), *_test_evals(run)),  # the tests: 2026-11-24
+            handoffs=(Handoff("adapter", (run,), "E10_seed0_adapter"),
+                      Handoff("outcomes", (run,), "E10_seed0_outcomes")),
             needs=(Need("teacher_cache"),), internet=True,
             notes=("training.mode was set from the tokenizer check on 2026-11-12 (offline_kd); "
                    "the 2B is pinned at revision 89644892",),
@@ -802,10 +811,12 @@ def build_plan(
             ),
             Step(f"validation {run.label}", _script("06_evaluate.py", *run.args())),
             Step(f"benchmark {run.label}", _script("07_benchmark_efficiency.py", *run.args())),
+            *_test_evals(run),  # 2026-11-24
         )
         return CardPlan(
             card, "E10 at 4 bit (GPTQ w4 of the merged 2B), seed 0 (exploratory)", 1, steps,
-            handoffs=(Handoff("quantized", (run,), "E10Q_seed0_quantized"),),
+            handoffs=(Handoff("quantized", (run,), "E10Q_seed0_quantized"),
+                      Handoff("outcomes", (run,), "E10Q_seed0_outcomes")),
             needs=(Need("adapter", Run("E10")),), quantization=True, internet=True,
             notes=("commit results/calibration/seed0_replaced.csv with the 2B's rows (model e10)",),
         )  # fmt: skip

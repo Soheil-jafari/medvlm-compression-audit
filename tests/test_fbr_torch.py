@@ -244,6 +244,16 @@ def test_the_probe_answer_pass_matches_the_evaluations_probes(tmp_path: Path) ->
                          tmp_path, max_new_tokens=4)  # fmt: skip
 
 
+def _with_answers(config: dict) -> None:
+    """The tiny domain file with the template's canonical answers (as the real one has)."""
+    import yaml
+
+    path = Path(config["components"]["domain"])
+    domain = yaml.safe_load(path.read_text())
+    domain["domain"]["probe"]["answers"] = {"positive": "yes", "negative": "no"}
+    path.write_text(yaml.safe_dump(domain))
+
+
 def test_the_arm_stage_runs_the_trial_and_the_full_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -274,13 +284,14 @@ def test_the_arm_stage_runs_the_trial_and_the_full_path(
     keys = set(schedule.unique_keys())
     probes = [p for u in schedule.updates for p in u if p.key in keys]
     margins, first = fbr.score_margins(tiny_vlm.tiny_wrapper(seed=0), probes, tmp_path)
-    wrapper = tiny_vlm.tiny_wrapper(seed=0)
+    _with_answers(config)
+    words = tiny_vlm.tiny_processor().tokenizer.convert_tokens_to_ids
     cache = {
         "schedule_fingerprint": schedule.fingerprint(),
         "steps": 2,
         "margins": margins,
-        "yes_target_id": int(wrapper.yes_ids[0]),
-        "no_target_id": int(wrapper.no_ids[0]),
+        "yes_target_id": int(words("yes")),
+        "no_target_id": int(words("no")),
     }
     margins_file = tmp_path / "fbr_e2_margins.json"
     margins_file.write_text(json.dumps(cache))
@@ -331,14 +342,18 @@ def test_the_e2_margin_cache_matches_the_schedule_every_arm_builds(
     monkeypatch.setattr(runner, "load_trained_student",
                         lambda cfg, exp, seed, side: tiny_vlm.tiny_wrapper(seed=0))  # fmt: skip
     config["inputs"] = {"image_longest_side": 56}
-    real = fbr.choose_answer_ids
-    # the random tiny model never ranks a yes / no token first: count it as if it did
-    monkeypatch.setattr(fbr, "choose_answer_ids", lambda first, yes, no: real(
-        {**first, "y": int(yes[0]), "n": int(no[0])}, yes, no))  # fmt: skip
+    _with_answers(config)
     target = fbr_stage.run_e2_margin_cache(config, tmp_path / "margins", examples=2)
     cache = json.loads(target.read_text())
     schedule = fbr_stage._schedule(config, samples, steps=int(cache["steps"]))[0]
     assert cache["schedule_fingerprint"] == schedule.fingerprint() and cache["steps"] == 3
     assert set(cache["margins"]) == set(schedule.unique_keys())
-    assert cache["yes_target_id"] in cache["single_token_yes_ids"]
-    assert len(cache["decoded_examples"]) == 2
+    diagnosis = cache["diagnosis"]
+    yes_word = tiny_vlm.tiny_processor().tokenizer.convert_tokens_to_ids("yes")
+    assert cache["yes_target_id"] == yes_word == diagnosis["targets"]["positive"]["token"]
+    positives = {p.key for u in schedule.updates for p in u if p.present}
+    assert sum(diagnosis["first_tokens"]["by_label"]["positive"].values()) == len(positives)
+    parsed = diagnosis["parsed_by_label"]
+    assert sum(sum(c.values()) for c in parsed.values()) == len(cache["margins"])
+    saved = json.loads((tmp_path / "margins" / fbr_stage.DIAGNOSIS_FILE).read_text())
+    assert "margins" not in saved and saved["probes"] == len(cache["margins"])

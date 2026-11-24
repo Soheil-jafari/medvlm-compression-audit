@@ -8,7 +8,8 @@
   quantized with the E3 `w4` recipe (GPTQ, groups of 128, the same 128 calibration images of
   that seed). 9 runs, scored on validation and test and timed with the budget protocol.
 - Purpose: whether pruning and quantization combine, at the same budgets.
-- Status: `blocked` (see section 2)
+- Status: `ready` for seed 0 after the phase-B smoke (2026-11-24; sessions, cells and estimates in
+  `docs/runs/SESSIONS_2026-11-24_seed0_phase_b.md`). Before: `blocked` (see section 2)
 
 ## 2. Requirements
 

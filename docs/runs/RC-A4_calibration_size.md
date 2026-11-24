@@ -13,7 +13,8 @@
   the **validation** split and on the **test** split (ablations come after the freeze, so the
   test split is open), and timed with the budget protocol.
 - Purpose: how many calibration images the criterion needs (the appendix curve).
-- Status: `blocked` (see section 2)
+- Status: `ready` for seed 0 after the phase-B smoke (2026-11-24; sessions, cells and estimates in
+  `docs/runs/SESSIONS_2026-11-24_seed0_phase_b.md`). Before: `blocked` (see section 2)
 
 ## 2. Requirements
 

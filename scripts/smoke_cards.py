@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         card_verdicts,
         drop_problem,
         job_experiments,
+        missing_handoffs,
         parse_peaks,
         ready_for_cleanup,
         report_table,
@@ -111,7 +112,12 @@ def main(argv: list[str] | None = None) -> int:
         card, seed, variants, budget_list = job.plan
         plan = build_plan(card, seed, variants=list(variants) or None,
                           budgets=list(budget_list) or None)  # fmt: skip
-        handoffs, _ignored = select_handoffs(plan, config, found)
+        handoffs, ignored = select_handoffs(plan, config, found)
+        missing = missing_handoffs(plan, config, handoffs)
+        with lock:  # what the job is given (2026-11-24: an absent teacher adapter was silent)
+            print(f"[{devices}] {job.card} {job.name}: hand-offs {[p.name for p in handoffs]}"
+                  + (f"; ignored {ignored}" if ignored else "")
+                  + (f"; NOT ATTACHED: {missing}" if missing else ""), flush=True)  # fmt: skip
         stage_env = {**env, "CUDA_VISIBLE_DEVICES": devices}
         blocked = job.after is not None and job.after in failed
         for stage in job.stages:

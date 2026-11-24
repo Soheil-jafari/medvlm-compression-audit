@@ -49,7 +49,7 @@ updates, a validation pass 0.53 h, model loads a few minutes); cell (iii) measur
 |---|---|---|---|---|
 | (i) probe answers + audits | where each arm's datasets are | `medcompress-data`, `e2-seed0-adapter`, the arm's pruned dataset (`g2-b2-seed0-pruned-s1` E5 magnitude, `-s1b` E5 activation, `-s2` Taylor, `-s2b` E6, `-s4` E7, `-s5` E5R after its resume, `-s5b` E7U) | about 0.25 h per model (8 models: about 2 h) plus 10 min per audit rerun (3) | `/kaggle/working/outputs/` as `fbr-probe-answers-<account>` |
 | (i) CPU diagnostic | any (CPU) | the outcome datasets and the probe-answer datasets | minutes | send `fbr_diagnostic.zip` |
-| (ii) E2 margins | Soheil | `medcompress-data`, `e2-seed0-adapter` | about 0.3 h | `/kaggle/working/fbr_margins/` as `fbr-e2-margins` |
+| (ii) E2 margins + diagnosis | Soheil | `medcompress-data`, `e2-seed0-adapter` | about 0.6 h (the margins, then 942 probes decoded up to 8 tokens and 20 answers up to 32) | `/kaggle/working/fbr_margins/` as `fbr-e2-margins`; send `fbr_e2_diagnosis.json` and the log |
 | (iii) smoke + trial | Soheil | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`, `fbr-e2-margins` | about 0.8 h | send the log and `trial.json` |
 | (iv) pilot, one notebook per arm | Soheil (E5 magnitude), account 3 (E5 activation), Amir (E7), any (sampling-only on E5 activation) | as (iii) | about 2.2 h per arm (training about 1.2 h by estimate, validation 0.53 h, probe answers 0.15 h, setup), 4 arms about 9 h | `/kaggle/working/outputs/fbr/` as `fbr-pilot-<label>`; send `results_to_commit/` |
 
@@ -115,11 +115,18 @@ python scripts/fbr_analysis.py diagnostic --outcomes /kaggle/input --out /kaggle
 cd /kaggle/working && zip -qr fbr_diagnostic.zip fbr && ls -l fbr_diagnostic.zip
 ```
 
-### (ii) E2's margin cache and the answer spelling (GPU, one T4)
+### (ii) E2's margin cache and the diagnosis of E2's answer format (GPU, one T4)
 
-It prints each yes / no spelling's tokens, the single-token sets, the first tokens E2 ranks
-highest on the schedule's probes and a few decoded examples; it stops if those are not
-single-token yes / no spellings (then the study stops and the research lead is told).
+**2026-11-24:** the first run stopped as designed (E2's greedy first token: "No" 307, other 635,
+a yes spelling never; clarification of 2026-11-24, decision file section 12). From now on:
+the margin is the evaluation's pooled margin (no chosen token, no stop on the first token); the
+cross-entropy targets are the template's canonical "yes" / "no", checked to be single tokens of
+the yes / no spellings (that check still stops the study). The cell prints the diagnosis: E2's
+first token by label with the 20 most frequent other tokens decoded; every schedule probe decoded
+(up to 8 tokens) and read by the pre-registered parser (`clinical.parse_yes_no`), with the
+unparsed count by label; 10 full answers each to positive and negative probes. It writes
+`fbr_e2_margins.json` (sample ids: keep as a private dataset) and `fbr_e2_diagnosis.json`
+(counts and token strings only: send it; it is committed).
 
 ```bash
 %%bash
@@ -238,6 +245,7 @@ the attached outcomes' audit flips stops the analysis.
 
 ## 4. What to commit back
 
+- `results/exploratory/fbr/fbr_e2_diagnosis.json` (cell (ii); counts and token strings).
 - `results/exploratory/fbr/`: `diagnostic.csv`, `folds.csv`, `DIAGNOSTIC.md`; per run
   `<label>/fbr_metrics.csv`, `training.json` (or `trial.json`); `pilot_*.csv`, `PILOT.md`.
 - Never: `fbr_e2_margins.json`, any `.npz`, decoded answer texts.

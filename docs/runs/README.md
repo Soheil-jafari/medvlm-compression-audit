@@ -67,6 +67,7 @@ Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unf
 | [RC-A6](RC-A6_unit_granularity.md) | S10 | A6: layers only / heads and channel groups, B2, seed 0 (exploratory) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |
 | [RC-R1](RC-R1_reference_arms_test_split.md) | S11 | E0, E1, E2 on the test split (after the freeze); E0's validation first (2026-11-23) | Soheil | ready after its smoke (section 3b) |
 | [RC-EX1](RC-EX1_exploratory_analysis.md) | after Gate 2 | Exploratory analyses A and B (CPU); outcome completion and the E5R / E7U test evaluations (GPU) | any | ready |
+| [Phase B sessions](SESSIONS_2026-11-24_seed0_phase_b.md) | after Gate 2 | Seed 0 remaining cards in sessions of at most about 6 h: B1 / B3 of E5, E6, E7; E8; A1-A6; E4; E10's tests; E10Q; the phase-B smoke first | Soheil, Amir, account 3 | ready (the smoke first for E8, A1-A6, E4, E10Q) |
 | [RC-FBR](RC-FBR_finding_balanced_recovery.md) | after Gate 2 | Finding-balanced recovery: diagnostic, E2 margin cache, smoke and timed trial, pilot (B2, seed 0, validation; amendment of 2026-11-22) | Soheil, account 3, Amir | ready (cells (i)-(iii)); (iv) after (iii) |
 | [RC-C1](RC-C1_paired_comparisons.md) | S11 | Paired comparisons (H1-H4), tables, figures, verdicts; CPU only | Soheil | blocked (every test-split evaluation) |
 | [RC-X1](RC-X1_external_test_endobench.md) | S11 | EndoBench part A: terms, format, overlap with our images (no GPU); part B written after it | Farzan | set aside (D02 amendment 7) |

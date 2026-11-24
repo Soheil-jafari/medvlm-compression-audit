@@ -63,7 +63,8 @@ def test_the_card_checks_the_tokenizer_before_training() -> None:
     plan = build_plan("RC-E10")
     labels = [s.label for s in plan.steps]
     assert labels[0].startswith("tokenizer check") and "train E10 seed0" in labels
-    assert [h.name for h in plan.handoffs] == ["E10_seed0_adapter"]
+    assert labels[-2:] == ["test evaluation E10 seed0", "unfiltered test evaluation E10 seed0"]
+    assert [h.name for h in plan.handoffs] == ["E10_seed0_adapter", "E10_seed0_outcomes"]
 
 
 def test_the_tokenizer_check_picks_the_e2_recipe_only_when_every_cached_id_agrees(

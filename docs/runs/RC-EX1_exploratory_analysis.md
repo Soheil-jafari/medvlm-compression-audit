@@ -158,7 +158,9 @@ cells copy the new `metrics_test*.csv` into `results_to_commit/`. Save
 `/kaggle/working/outputs/` as a private dataset afterwards (`e5r-b2-test-outcomes`,
 `e7u-b2-test-outcomes`); send `results_to_commit/` and the log.
 
-(i) **E5R** (any account). Attach `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` (the
+(i) **E5R** (any account). 2026-11-24: E5R's resume is committed (validation and benchmark), so the
+`run_card.py --card RC-G2 --only E5R` line now only verifies and skips; keep it or drop it, and
+the cell takes about 1.6 h. Attach `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache` (the
 card's resume asks for it) and `g2-b2-seed0-pruned-s5`. E5R's validation (stage 06) and benchmark
 (stage 07) have not run, and the test evaluation needs its validation operating point, so the cell
 runs RC-G2 cell (b)'s resume first. Estimate about 2.3 h (an estimate: validation 0.53 h and the

@@ -1,18 +1,19 @@
 # Status
 
-**Last updated:** 2026-11-23, iteration 96 (interactive run mode)
+**Last updated:** 2026-11-24, iteration 97 (interactive run mode)
 **Overall:** IN PROGRESS (not `DONE`)
 **Current stage:** S07 done: **the pre-registration is frozen** (2026-11-08, Soheil and Amir, commit `18f1b47`); every change now needs a dated amendment. RC-B0 done 2026-11-11 (B1 / B2 / B3 = 6,786,040,422.4 / 5,953,608,908.8 / 5,121,177,395.2 bytes). Amendment of 2026-11-20 (exploratory additions A, B, C, fixed before any test-split result of a pruned arm; `docs/decisions/exploratory_additions_2026-11-20.md`): built: A and B (`scripts/exploratory_analysis.py`, card RC-EX1), the mask-audit margins (`scripts/save_outcomes.py` for earlier runs), E3 `awq_w4` (GPTQModel 7.6.0's AWQ, `AwqTorchLinear`; checked on CPU). Next: the AWQ smoke and scale check, then its run; the outcome completions; session 5's resume. Now (2026-11-20): RC-G2's five B2 runs and the 30-group check are committed; Gate 2 read (`docs/results/GATE2.md`): comparator E5 magnitude, and E7 ranks below it, so **the futility rule stopped the main tier after seed 0** (no seed-1/2 runs; seed 0 exploratory; article shape B by Gate 2); next the seed-0 B2 test evaluations (RC-E5, RC-E6, RC-E7 set `ready` for seed 0), RC-G2 session 5's resume (E5R's `removal.json` still to come), then the seed-0 rest (schedule phase B). Before (2026-11-19): E5 magnitude's and E5R's stage-05 files are committed (E5R's `removal.json` still to come; its resume waits for it); RC-G2 sessions 2 and 4 run at 3aa4ecb as full runs; next the session-1 resume (E5 magnitude 06-07, E5 activation in full) and, with E5R's `removal.json`, session 5's. Before (2026-11-18): the pruned-model load ran out of GPU memory in stage 06 (RC-G2 session 5 at 5aa8c69); fixed (the surgery frees what it replaces, the weights stream one tensor at a time); first the full-size stage-06 check on the saved E5R model, then commit each session's `results_to_commit/` and run the four resume sessions (saved first arms do 06 and 07 only; E5 activation, E6, E7:check and E7U run in full; RC-G2 section 3). Before (2026-11-17, amendment: the pruning design is locked: E5 removes the same k MLP channel groups from every unprotected layer, E5R and E7U added as exploratory arms at B2, E7 unchanged; `docs/decisions/pruning_design_2026-11-17.md`): the stage-05 smoke of E5 magnitude, E5R and E7U, then RC-G2 sessions 1, 2 and 4 at the same time on three accounts and session 5 (E5R, E7U) on any; the offline replay estimates k = 29 of 86 at B2 (`results/replay/`); session 1's first runs superseded (`results/superseded/`, the original pre-registered E5); RC-E9 done (benchmark re-measured: 7.35 GB); RC-E3 seed 0 done; kernel kept; the non-finite recovery steps to check on CPU; `ready` (2026-11-14): RC-E3 seed 0 (Amir, full rerun after the Hessian fix), RC-E9 (resume from attempt 3's quantized hand-off) then RC-E4 seed 0 (account 3); agent code still to come: the `external_test` split (E10's 4-bit run, `E10Q` / RC-E10Q, and its two comparisons written 2026-11-14; RC-E10Q waits for RC-SMOKE).
 **Article shape:** not yet known (decided by Gate 2 and H3; see `docs/FINAL_GOAL.md`)
 
 ## Next agent action
 
-**Now (2026-11-23, iteration 96).** After the futility stop: the B2 test evaluations of E5
-(three criteria) and E6 and RC-G2's E7U are committed (no test number read); RC-E7's B2 test
-evaluation is running (Amir). RC-R1 waits for its smoke (cells in its section 3b); RC-EX1 3c
-evaluates E5R (after its resume) and E7U on the tests. The secondary study FBR (amendment of
-2026-11-22) is locked and built (card RC-FBR, cells (i)-(iv)); next: its cells (i)-(iii), then
-the pilot within 30 T4 hours, then the gate as written. Waiting on the user: E5R's resume result.
+**Now (2026-11-24, iteration 97).** Committed: E5R's resume, RC-E7's B2 test, E3 `awq_w4` (its
+peak explained: AwqTorchLinear's int64 dequantization). FBR: cell (ii) stopped on E2's answer
+format (never a leading "yes"); clarification of 2026-11-24 committed before any training (pooled
+margin, canonical "yes" / "no" targets, the pre-registered parser, the format confound); cells
+(i)-(iii) re-given. RC-R1: rerun its smoke with `e0-teacher-adapter` attached. Phase B (all
+remaining seed-0 cards) is ready in sessions of at most about 6 h after one smoke
+(`docs/runs/SESSIONS_2026-11-24_seed0_phase_b.md`). PolypGen waits for Amir's access.
 
 0. Bug hunt requested by Soheil (iteration 35 onwards): evaluation and statistics fixed (split
    files, image-level bootstrap, bootstrap memory); training pool and teacher cache fixed

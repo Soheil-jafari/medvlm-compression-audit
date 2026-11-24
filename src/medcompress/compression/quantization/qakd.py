@@ -520,6 +520,8 @@ def run_qakd_training(
     from dataclasses import replace
 
     resume_dir = quantized_dir(config, run).parent / "resume"  # removed once the model is saved
+    from medcompress.utils.session import SessionPaused, stop_after_seconds
+
     result = train_lora(
         student,
         examples,
@@ -527,7 +529,12 @@ def run_qakd_training(
         seed=run.seed,
         attach_adapter=False,
         resume_dir=resume_dir,
+        stop_after_seconds=stop_after_seconds(),  # a clean stop before the session ends
     )
+    if result.steps < cfg.steps:
+        raise SessionPaused(f"E4 stopped after update {result.steps} of {cfg.steps}; its state "
+                            f"is saved in {resume_dir}: start the card again with the resume "
+                            "hand-off attached")  # fmt: skip
     quantized = export_qat(student, settings.targets)
     recipe = PTQRecipe.from_config(config)
     directory = save_quantized(

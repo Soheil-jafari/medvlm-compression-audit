@@ -131,6 +131,39 @@ def _test(exp: str, variant: str | None = None, split: str = "test") -> SmokeSta
 _DROP_LINE = re.compile(r"^(test(?:_unfiltered)?): dropped (\d+) non-finite image", re.MULTILINE)
 
 
+def missing_handoffs(plan: Any, config: Mapping[str, Any], handoffs: Sequence[Any]) -> list[str]:
+    """The plan's required hand-offs that no selected bundle holds (printed by the smoke before
+    a job runs; 2026-11-24: RC-R1's E0 job stopped on an unattached teacher adapter)."""
+    from medcompress.handoffs import handoff_items
+    from medcompress.utils import bundles
+
+    held: list[tuple[str, str]] = []
+    for path in handoffs:
+        try:
+            held += [
+                (i.get("root", ""), i.get("path", "")) for i in bundles.read_bundle(path).items
+            ]
+        except bundles.BundleError:
+            continue
+    missing = []
+    for need in plan.needs:
+        if need.optional or need.text or need.kind == "outcomes":
+            continue
+        try:
+            wanted = handoff_items(need.kind, config, need.run.context if need.run else None)
+        except Exception:  # noqa: BLE001 - a need the config cannot place is checked later
+            continue
+        from pathlib import PurePosixPath
+
+        def related(a: str, b: str) -> bool:
+            pa, pb = PurePosixPath(a), PurePosixPath(b)
+            return pa == pb or pa.is_relative_to(pb) or pb.is_relative_to(pa)
+
+        if not any(r == wr and related(p, wp) for wr, wp in wanted for r, p in held):
+            missing.append(need.label)
+    return missing
+
+
 def stage_split(stage: SmokeStage) -> str | None:
     """The evaluation split a stage scores (from its ``evaluation.split`` override)."""
     for item in stage.overrides:

@@ -11,6 +11,9 @@
   The result is exported in the same 4-bit format as E3 `w4` and evaluated and timed the same
   way.
 - Purpose: the "quantize during training" family of the audit.
+- **2026-11-24:** runs in sessions of about 6 h with a clean pause (`MEDCOMPRESS_STOP_AFTER_HOURS`;
+  the card stops as "paused" and exports the resume hand-off `E4_seed0_resume`, which the next
+  session attaches), after the phase-B smoke. Cells: `docs/runs/SESSIONS_2026-11-24_seed0_phase_b.md`.
 - Status: `ready` for seed 0 (2026-11-11): every requirement of section 2 is met (frozen,
   RC-E0b done, the E2 training values set); its peak at 1 x 16 is not measured, so the
   out-of-memory rule of section 2 applies

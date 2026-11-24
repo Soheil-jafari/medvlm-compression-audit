@@ -66,6 +66,11 @@ def handoff_items(
             raise ConfigError(f"{exp} saves no adapter of its own; adapters: {ADAPTER_EXPERIMENTS}")
         return [("checkpoint_root", adapter_relpath(run))]
     if kind == "resume":
+        if exp == "E4":  # its training keeps the state beside its quantized model (2026-11-24)
+            from medcompress.compression.quantization.ptq import quantized_dir
+
+            folder = quantized_dir(config, run).parent / RESUME_SUBDIR
+            return [("checkpoint_root", _relative(folder, paths["checkpoint_root"]))]
         return [("checkpoint_root", resume_relpath(run))]
     if kind == "pruned":
         from medcompress.compression.recovery import pruned_dir
