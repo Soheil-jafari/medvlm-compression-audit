@@ -725,6 +725,18 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-24 (research lead; clarification to the amendment of 2026-11-22, before any FBR
+  training): FBR's margin, answer target and parser; E2's answer format.** Cell (ii) stopped: E2
+  seed 0's greedy first token on the 942 schedule probes was "No" 307 times, another token 635
+  times, a yes spelling never. Finding about E2: the plain answer is the sign of the pooled
+  first-position margin (no text is parsed), which explains its low plain-answer metrics
+  (validation macro balanced accuracy 0.553, audit yes-rate 0.209) beside its good ranking.
+  Changes: m is the evaluation's pooled margin with no chosen token (the choice and its stop
+  removed); the CE target is the template's canonical "yes" / "no" (single-token check and stop
+  kept); decoded answers use the pre-registered parser `clinical.parse_yes_no`; plain and
+  decoded changes are read as format and readout results, the cross-fitted rare-finding
+  sensitivity stays the primary gate quantity. Decision file section 12; pre-registration
+  section 10.
 - **2026-11-23 (agent; implementation of the amendment of 2026-11-22, nothing tuned): FBR
   built.** `compression/fbr.py`: the fixed values (`configs/fbr.yaml`, no key of the registered
   recovery repeated; the registered recovery section is read unchanged), the probe schedule

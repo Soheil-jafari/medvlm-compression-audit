@@ -541,6 +541,23 @@ rare-finding claims rest on the internal test alone. Committed before any FBR co
   and analyses before FBR is applied to every B2 pruning arm and evaluated once on the filtered
   and unfiltered tests and PolypGen (polyp endpoints only).
 
+### Clarification of 2026-11-24 (research lead) to the amendment of 2026-11-22 (FBR), before any FBR training run
+
+FBR's cell (ii) stopped as designed: on the schedule's 942 training probes E2 seed 0's greedy
+first answer token was "No" 307 times, another token 635 times and a yes spelling never. This is
+a finding about E2, recorded in the decision file (section 12): the plain answer is the sign of
+the pooled first-position margin and parses no text, so E2's plain-answer metrics are low
+(validation macro balanced accuracy 0.553, mask-audit yes-rate 0.209) while its ranking is good;
+the pre-registered text parser would leave most of E2's answers unparsed. Changes: FBR's margin
+m is exactly the evaluation's pooled margin (the empirical token choice and its stop are
+removed); the cross-entropy target is the probe template's canonical answers "yes" / "no",
+which must each be one single-token spelling (the check and its stop stay); decoded answers are
+parsed by the pre-registered parser. Reading of the gate: FBR trains the answer format, so
+plain-answer and decoded-answer changes are a format and readout result, not restored
+knowledge; the primary gate quantity stays the cross-fitted rare-finding sensitivity. No
+coefficient, batch or gate item changes. Details: `docs/decisions/fbr_study_2026-11-22.md`,
+section 12.
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result
