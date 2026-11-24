@@ -1057,3 +1057,11 @@ same 135 metric names as E5 magnitude's), `budget_search.csv`, `efficiency.csv`,
   settings and recovery fingerprint as E5 magnitude. Parameters 3.755e9 to 3.002e9.
 - Recovery: 5 non-finite steps, 5 skipped updates; peak 11.00e9 bytes.
 - E5R's resume (cell (b)) has not been reported yet; its stages 06 and 07 are still missing.
+
+**E5R's resume (cell (b)), received 2026-11-24:** four files committed unchanged (SHA-256
+checked) under `results/E5R/B2/seed0/`: `metrics.csv` (117 rows: the 21 committed stage-05 rows
+unchanged, then stages 06 and 07; the names E5 magnitude has, less empty reliability bins),
+`efficiency.csv`, `efficiency_setup.json`, `environment.json` (its earlier stage entries kept).
+The stage-07 peak equals the search footprint within 0.01 %. E5R's validation operating point is
+now committed, so RC-EX1 3c(i) can run the test evaluations without the resume (the cell's
+resume line skips both stages).

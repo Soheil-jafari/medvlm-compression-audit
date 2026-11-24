@@ -333,3 +333,33 @@ in all** (`w4`, `w8`, `w8a8`: quantization, validation, benchmark, test and unfi
   Warm latency `w4` 1.52 s, `w8` 1.59 s, `w8a8` 2.47 s (TorchLinear for `w4` / `w8`, kept by
   decision of 2026-11-16). The validation and test files stay as committed.
 - Anything unusual: nothing else reported.
+
+**E3 `awq_w4` seed 0, received 2026-11-24 (committed unchanged, SHA-256 checked; no test number
+is read in this record).** All steps ok. Six files under `results/E3/awq_w4/nobudget/seed0/`:
+`metrics.csv` (119 rows; `w4`'s names except `quantization_damping_retries`, which AWQ has not),
+`metrics_test.csv`, `metrics_test_unfiltered.csv` (119 rows each, the non-finite drop rows
+included), `efficiency.csv`, `efficiency_setup.json` (252 `AwqTorchLinear` modules, no kernel
+problem), `environment.json`. Quantize, validation and benchmark 199 min; test 105 min;
+unfiltered test 129 min. Hand-offs `E3_seed0_awq_w4_quantized` (3.41 GB) and
+`E3_seed0_awq_w4_outcomes`, saved as `e3-seed0-awq`.
+
+- **Speed:** `AwqTorchLinear` is about 3x slower than `w4`'s `TorchLinear` in the evaluation
+  passes. It dequantizes every weight matrix to fp16 on each forward call (below), so the
+  latency comparison with `w4` is kernel for kernel, as decided, and says so.
+- **Peak memory (checked 2026-11-24).** `peak_memory_bytes` 4,097,587,360 against `w4`'s
+  3,517,358,496 (+0.580e9). It is **not** an untied embedding or an extra `lm_head` copy:
+  `state_bytes` is 3,401,638,560 against `w4`'s 3,405,009,312 (the weights resident before the
+  timed passes are the same size; `lm_head` is not quantized by either, and the tied matrix
+  is held once), and `benchmark_excluded_bytes` is 22,368 against 8,917,088 (both small).
+  The difference is transient, above the resident state: AWQ peaks 0.696e9 above
+  `benchmark_live_before_bytes`, `w4` 0.103e9. Cause, in the pinned GPTQModel 7.6.0 source:
+  `AwqTorchLinear.forward` calls `dequantize_gemm` on every call, and its 4-bit unpacking shifts
+  the int32 codes by an int64 `torch.arange`, so the unpacked codes, the zero points expanded
+  to every row and their difference are int64 tensors of the full matrix (8 bytes per weight)
+  before the fp16 result. Measured on CPU with the real shapes (every tensor the call allocates,
+  tracked until freed): a 2,048 x 11,008 MLP projection peaks at 0.643e9 bytes while being
+  dequantized (fp16 result 0.045e9); a 2,048 x 2,048 projection 0.120e9. That is genuine
+  overhead of this kernel (its on-the-fly dequantization), not of AWQ as a method and not of
+  the checkpoint; the closeness to the 0.62e9 embedding size is a coincidence. Reported as
+  measured; nothing is re-run. A kernel that unpacks in int32 or caches the fp16 weights would
+  change the peak (and the latency), which would be another arm.

@@ -132,3 +132,8 @@ Check before committing: `git status` shows no images, adapters, checkpoints or
 
 The B2 seed-0 run of this card is the 10,000-example side of the training-length check
 (pre-registration section 6); its 30,000-example counterpart, E7 from E2@30k, is run card RC-L1.
+
+**Seed-0 B2 test evaluation, received 2026-11-24 (Amir; committed unchanged, SHA-256 checked; no
+test number is read in this record).** `results/E7/B2/seed0/metrics_test.csv` and
+`metrics_test_unfiltered.csv` (119 rows each, the same metric names as E5 magnitude's, the
+non-finite drop rows included).
