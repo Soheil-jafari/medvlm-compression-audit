@@ -2,7 +2,8 @@
 # smoke_report.md that RC-SMOKE prints, with the commit it ran on; scripts/run_card.py refuses
 # a gated card (medcompress.smoke.GATED_CARDS) that is not listed.
 # RC-R1 passed at 9113632 but was removed on 2026-11-14: it smokes again with the drop of the
-# non-finite test images (second amendment of 2026-11-13), then runs.
+# non-finite test images (second amendment of 2026-11-13), then runs. It passed again at
+# ac6310e on 2026-11-24 (below), with the drop checked on every test stage.
 passed:
   RC-G2:
     commit: 9113632
@@ -40,3 +41,7 @@ passed:
     commit: a237c5c
     date: 2026-11-14
     note: "reduced smoke"
+  RC-R1:
+    commit: ac6310e
+    date: 2026-11-24
+    note: "E2 test and unfiltered test, E1 test, E0 validation and test (both T4s, teacher adapter attached) all PASS in 22 min; every test stage reported dropping exactly the listed non-finite images (drop_problem). E0's run starts with its validation (no operating point committed)"

@@ -9,7 +9,8 @@
   pre-registration is frozen, while the test split is still locked. Every comparison of the
   paper is on the test split, and E2 is the reference of H1 and of tables T2 and F1 to F5, so
   these three arms need a test-split evaluation after the freeze.
-- Status: `ready after its smoke` (2026-11-23; section 3b). Before: `blocked` (see section 2). Also before any test evaluation (second amendment of
+- Status: `ready` (2026-11-24: its smoke passed at ac6310e; `smoke_passed.yaml`). Run cell (b) of
+  section 3b. Before: `blocked` (see section 2). Also before any test evaluation (second amendment of
   2026-11-13): the list `results/data/nonfinite_drop.csv` is committed (2026-11-14; RC-CAL0 part
   A: 5 filtered and 8 unfiltered test images, from the student's encoder; every test evaluation
   drops them and refuses without the list); next, RC-SMOKE again for RC-R1
@@ -153,7 +154,13 @@ passed). The smoke now prints for every job the hand-offs it was given and any i
 ATTACHED: teacher adapter"), so this shows before the job starts. The E1 dataset's name
 (`1-seed0-adapter` on Soheil's account) does not matter: it is found by its manifest.
 
-(b) **The run**, after the agent has added RC-R1 to `smoke_passed.yaml` (Soheil; GPU T4 x2,
+**Smoke rerun of 2026-11-24 at ac6310e, passed:** with `e0-teacher-adapter` attached, all five
+stages passed in 22 min (E2 test 1.3 min, E2 unfiltered 1.3, E1 test 1.3, E0 validation 3.8, E0
+test 2.7; the 7B on both T4s at 8.50 / 8.12 GiB per load, stage peaks 8.64 / 8.12 GiB; host RSS
+peak 15.1 GiB). Every test stage reported dropping exactly the listed images. RC-R1 is in
+`smoke_passed.yaml`.
+
+(b) **The run**, after the agent has added RC-R1 to `smoke_passed.yaml` (done 2026-11-24) (Soheil; GPU T4 x2,
 Internet on; the same four inputs). Seven steps: E0's validation (operating point), then the
 filtered and unfiltered test of E0, E1 seed 0 and E2 seed 0 (seed 0 only: the futility stop).
 Estimate about 6 h (an estimate from measured passes: E0's validation took 2,802 s; a student test

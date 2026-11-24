@@ -725,6 +725,10 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-24 (agent): RC-R1's smoke passed at ac6310e** (E2 test and unfiltered test, E1 test,
+  E0 validation and test; every test stage dropped exactly the listed non-finite images; the
+  earlier E0 stop was the unattached teacher adapter). RC-R1 added back to `smoke_passed.yaml`
+  and set `ready`; nothing in RC-R1's plan or the evaluation changed between ac6310e and the head.
 - **2026-11-24 (agent; implementation and results, no pre-registered setting changed).**
   Committed unchanged: E5R's resume, RC-E7's B2 test, E3 `awq_w4` (no test number read). AWQ's
   peak (+0.580e9 over `w4`) is not an untied embedding (`state_bytes` equal, `lm_head` not

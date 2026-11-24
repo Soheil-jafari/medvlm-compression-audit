@@ -65,7 +65,7 @@ Its rows go to `metrics_test_unfiltered.csv`, its outcomes to `outcomes_test_unf
 | [RC-A4](RC-A4_calibration_size.md) | S10 | A4: 32 / 64 / 256 calibration images, B2, seed 0 (128 = E7) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |
 | [RC-A5](RC-A5_delta_definition.md) | S10 | A5: KL effect, B2, seed 0 (log-prob drop = E7) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1; unit set depends on D07 section 1) |
 | [RC-A6](RC-A6_unit_granularity.md) | S10 | A6: layers only / heads and channel groups, B2, seed 0 (exploratory) | Amir (card); seed 0 Soheil (proposal) | blocked (as RC-A1) |
-| [RC-R1](RC-R1_reference_arms_test_split.md) | S11 | E0, E1, E2 on the test split (after the freeze); E0's validation first (2026-11-23) | Soheil | ready after its smoke (section 3b) |
+| [RC-R1](RC-R1_reference_arms_test_split.md) | S11 | E0, E1, E2 on the test split (after the freeze); E0's validation first (2026-11-23) | Soheil | ready (smoke passed 2026-11-24) |
 | [RC-EX1](RC-EX1_exploratory_analysis.md) | after Gate 2 | Exploratory analyses A and B (CPU); outcome completion and the E5R / E7U test evaluations (GPU) | any | ready |
 | [Phase B sessions](SESSIONS_2026-11-24_seed0_phase_b.md) | after Gate 2 | Seed 0 remaining cards in sessions of at most about 6 h: B1 / B3 of E5, E6, E7; E8; A1-A6; E4; E10's tests; E10Q; the phase-B smoke first | Soheil, Amir, account 3 | ready (the smoke first for E8, A1-A6, E4, E10Q) |
 | [RC-FBR](RC-FBR_finding_balanced_recovery.md) | after Gate 2 | Finding-balanced recovery: diagnostic, E2 margin cache, smoke and timed trial, pilot (B2, seed 0, validation; amendment of 2026-11-22) | Soheil, account 3, Amir | ready (cells (i)-(iii)); (iv) after (iii) |
