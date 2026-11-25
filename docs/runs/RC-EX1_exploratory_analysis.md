@@ -213,3 +213,8 @@ ls -l /kaggle/working/outputs/E7U/B2/seed0/
 - Commit:
 - Datasets attached:
 - Anything unusual:
+
+**Section 3c results, received 2026-11-25 (committed unchanged, SHA-256 checked; no test number
+read):** E5R `results/E5R/B2/seed0/metrics_test.csv` and `metrics_test_unfiltered.csv` (101 rows
+each: E5 magnitude's names less empty reliability bins); E7U `results/E7U/B2/seed0/metrics_test.csv`
+and `metrics_test_unfiltered.csv` (119 rows each). Both include the non-finite drop rows.

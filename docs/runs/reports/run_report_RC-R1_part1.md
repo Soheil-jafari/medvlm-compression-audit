@@ -1,0 +1,24 @@
+### RC-R1 run report
+
+- Run by / date: <your name> / 2026-11-24 17:22 (UTC)
+- Commit actually used: a3047541d3c0756d6a8269fbaddb848f91c499cb
+- Hardware: Tesla T4, Tesla T4
+- Library versions: python 3.13.16; pyyaml 6.0.3 (needs >=6.0); numpy 2.2.6 (needs >=1.24); pandas 2.3.3 (needs >=2.0); scipy 1.16.3 (needs >=1.10); scikit-learn 1.6.1 (needs >=1.3); matplotlib 3.10.0 (needs >=3.7); pillow 13.0.0 (needs >=9.1); torch 2.11.0+cu130 (needs >=2.8); torchvision 0.26.0+cu130 (needs >=0.23); transformers 5.19.0 (needs ==5.19.0); peft 0.21.2 (needs ==0.21.2); accelerate 1.15.0 (needs >=1.0); torchao 0.18.0 (needs >=0.16.0); optimum 2.3.0 (needs >=1.24.0)
+- Inputs verified: shared data /kaggle/input/datasets/soheiljafarifard/medcompress-data/medcompress_data (commit 4038a6bb4276ed9ce4dda2bbc8d542d074f544af); E1 seed 0 adapter /kaggle/input/datasets/soheiljafarifard/1-seed0-adapter/handoff/E1_seed0_adapter; E0 seed 0 teacher_adapter /kaggle/input/datasets/soheiljafarifard/e0-teacher-adapter/handoff/E0_teacher_adapter; E2 seed 0 adapter /kaggle/input/datasets/soheiljafarifard/e2-seed0-adapter/handoff/E2_seed0_adapter
+- Per step (wall time, status):
+  - validation E0 (operating point): 46.6 min, ok
+  - test evaluation E0 seed0: 45.1 min, ok
+  - unfiltered test evaluation E0 seed0: 71.1 min, ok
+  - test evaluation E1 seed0: 1.6 min, failed (exit code 1)
+- Peak GPU memory (from the results files):
+  - results/E0/nobudget/seed0/metrics.csv: teacher_train_peak_gpu_bytes = 23,504,323,584
+- Hand-offs (save the whole handoff folder of this session as ONE private Kaggle dataset; each folder inside is found by its manifest; write its name here):
+  - E0_test_outcomes: /kaggle/working/handoff/E0_test_outcomes (3 files, 0.00 GB); make it a private dataset
+- Results files to commit (5; copies in /kaggle/working/results_to_commit):
+  - results/E0/nobudget/seed0/metrics.csv
+  - results/E0/nobudget/seed0/environment.json
+  - results/E0/nobudget/seed0/metrics_test.csv
+  - results/E0/nobudget/seed0/metrics_test_unfiltered.csv
+  - results/E1/nobudget/seed0/environment.json
+- Anything unusual: test evaluation E1 seed0: exit code 1; the card stopped here; hand-off E2_test_outcomes: not written yet: ['E2/nobudget/seed0']; hand-off E1_test_outcomes: not written yet: ['E1/nobudget/seed0']
+- Outcome: FAILED: test evaluation E1 seed0: failed (exit code 1)

@@ -220,3 +220,15 @@ Check before committing: `git status` shows no images, adapters or `outcomes*.np
 - Wall time per run:
 - Names of the private datasets with the `outcomes_test.npz` files:
 - Anything unusual (errors, retries, changed settings):
+
+**Run of 2026-11-24 at a304754 (Soheil), part 1: E0 done, stopped at E1's test** (report
+`docs/runs/reports/run_report_RC-R1_part1.md`; committed unchanged, SHA-256 checked; no test
+number read). E0 validation 46.6 min, E0 test 45.1 min, E0 unfiltered test 71.1 min (5 and 8
+images dropped as listed); hand-off `E0_test_outcomes` (saved as `r1-e0-test-outcomes`).
+Committed: `results/E0/nobudget/seed0/metrics.csv` (143 rows: the 109 committed rows kept,
+108 with the same value and `evaluation_seconds` new; 34 added, the operating point among them),
+`metrics_test.csv`, `metrics_test_unfiltered.csv` (120 rows each), `environment.json`.
+`teacher_train_peak_gpu_bytes` (23,504,323,584) is RC-TT1's training peak, carried over
+unchanged from the committed row; this evaluation's peak is in the log (16.63 GiB over both
+T4s). Not committed: E1's `environment.json` from the failed step (no E1 environment file was
+committed before; the rerun writes it). E1's test failed at the embedding (cause and fix below).
