@@ -159,3 +159,13 @@ only the two test evaluations ran.
   Taylor in the other). See the decisions log of 2026-11-23: bundle names now carry the runs, and
   the analysis keys outcome files by their run path, so the two existing bundles can be attached
   together.
+
+**G3: E5 activation at B1, seed 0 (commit be4a28b, 2026-11-25; committed unchanged,
+SHA-256 checked; no test number read).** All steps ok: run 145.9 min (the committed B2 unit
+scores reused), test 29.6 min, unfiltered test 46.7 min. 10 files under
+`results/E5/activation/B1/seed0/` (`metrics.csv` 135 rows; both test files 119 rows). k = 12 per
+layer (396 channel groups, layers 2-34), exactly the 12 lowest committed activation scores in
+every layer (checked); within the band (at its top, as the search rule picks); the shared
+recovery fingerprint; 5 non-finite steps skipped. Hand-off `E5_seed0_activation_B1_outcomes`
+(dataset `e5-act-b1-seed0`); the analysis keys it by its run path `E5/activation/B1/seed0`, apart
+from the B2 bundles. Report `docs/runs/reports/run_report_RC-E5_seed0_act_B1.md`.

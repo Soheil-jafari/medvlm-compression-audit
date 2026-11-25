@@ -214,12 +214,23 @@ Check before committing: `git status` shows no images, adapters or `outcomes*.np
 
 ## 6. Run report (filled by the person who ran it)
 
-- Run by / date:
-- Commit actually used:
-- Hardware and library versions (`pip freeze | grep -E "torch|transformers|peft"`):
-- Wall time per run:
-- Names of the private datasets with the `outcomes_test.npz` files:
-- Anything unusual (errors, retries, changed settings):
+- Run by / date: Soheil; session 1 on 2026-11-24 (17:22 UTC), session 2 (resume) on 2026-11-25.
+- Commit actually used: session 1 a304754; session 2 be4a28b.
+- Hardware and library versions: 2 x Tesla T4; torch 2.11.0+cu130, transformers 5.19.0, peft
+  0.21.2 (both sessions).
+- Wall time per run: session 1: E0 validation 46.6 min, E0 test 45.1, E0 unfiltered test 71.1;
+  E1 test failed after 1.6 min (the tied 3B student split over both T4s; fixed in be4a28b).
+  Session 2: E0's two tests skipped (committed and attached), E1 test 34.5 min, E1 unfiltered
+  53.5, E2 test 33.5, E2 unfiltered 53.5 (students on one T4).
+- Names of the private datasets with the `outcomes_test.npz` files: `r1-e0-test-outcomes`
+  (`E0_test_outcomes`: validation and both tests) and `r1-e1-e2-test-outcomes`
+  (`E1_test_outcomes`, `E2_test_outcomes`: both tests each).
+- Anything unusual: session 1's E1 failure above; nothing in session 2. Drops 5 and 8 images as
+  listed in every test. Committed unchanged (SHA-256, file list and row counts; no test number
+  read): E0's four files (2026-11-25, a69677b), then E1's `environment.json`,
+  `metrics_test.csv`, `metrics_test_unfiltered.csv` and E2's two test files (119 rows each).
+  Reports `docs/runs/reports/run_report_RC-R1_part1.md` and `_part2_resume.md`.
+- Status: `done` (2026-11-25).
 
 **Run of 2026-11-24 at a304754 (Soheil), part 1: E0 done, stopped at E1's test** (report
 `docs/runs/reports/run_report_RC-R1_part1.md`; committed unchanged, SHA-256 checked; no test

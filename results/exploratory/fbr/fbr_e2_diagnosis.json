@@ -1,0 +1,106 @@
+{
+ "spelling_tokens": {
+  "Yes": [
+   9454
+  ],
+  "yes": [
+   9693
+  ],
+  "YES": [
+   14004
+  ],
+  " Yes": [
+   7414
+  ],
+  " yes": [
+   9834
+  ],
+  "No": [
+   2753
+  ],
+  "no": [
+   2152
+  ],
+  "NO": [
+   8996
+  ],
+  " No": [
+   2308
+  ],
+  " no": [
+   902
+  ]
+ },
+ "single_token_yes_ids": [
+  9454,
+  9693,
+  14004,
+  7414,
+  9834
+ ],
+ "single_token_no_ids": [
+  2753,
+  2152,
+  8996,
+  2308,
+  902
+ ],
+ "targets": {
+  "positive": {
+   "text": "yes",
+   "token": 9693
+  },
+  "negative": {
+   "text": "no",
+   "token": 2152
+  }
+ },
+ "first_tokens": {
+  "by_label": {
+   "positive": {
+    "yes": 0,
+    "no": 29,
+    "other": 442
+   },
+   "negative": {
+    "yes": 0,
+    "no": 278,
+    "other": 193
+   }
+  },
+  "yes_tokens": {},
+  "no_tokens": {
+   "2753": 307
+  },
+  "top_other_tokens": [
+   {
+    "token": 68,
+    "text": "e",
+    "count": 630
+   },
+   {
+    "token": 0,
+    "text": "!",
+    "count": 4
+   },
+   {
+    "token": 9896,
+    "text": "pol",
+    "count": 1
+   }
+  ]
+ },
+ "parser": "clinical.parse_yes_no (pre-registered): lower case, leading non-letters dropped, the answer must start with the word yes or no",
+ "decoded_up_to_tokens": 8,
+ "parsed_by_label": {
+  "positive": {
+   "unparsed": 443,
+   "no": 28
+  },
+  "negative": {
+   "no": 278,
+   "unparsed": 193
+  }
+ },
+ "probes": 942
+}

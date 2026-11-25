@@ -137,3 +137,10 @@ The B2 seed-0 run of this card is the 10,000-example side of the training-length
 test number is read in this record).** `results/E7/B2/seed0/metrics_test.csv` and
 `metrics_test_unfiltered.csv` (119 rows each, the same metric names as E5 magnitude's, the
 non-finite drop rows included).
+
+**G9: E7 at B1, seed 0 (commit a304754; received 2026-11-25, committed unchanged, SHA-256 checked;
+no test number read).** All steps ok: run 160.4 min, test 29.9 min, unfiltered test 47.4 min. 10
+files under `results/E7/B1/seed0/` (`metrics.csv` 134 rows; both test files 119 rows). 371 units
+(366 channel groups, 5 KV groups; layers 3-34, none of the protected ones), all from E7's committed
+scores; within the band; the shared recovery fingerprint. Hand-offs `E7_seed0_B1_pruned` (6.89
+GB) and `E7_seed0_B1_outcomes`. Report `docs/runs/reports/run_report_RC-E7_seed0_B1.md`.
