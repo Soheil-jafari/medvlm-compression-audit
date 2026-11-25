@@ -10,17 +10,20 @@ pre-registered result.
 On the schedule's 942 training probes (471 positive, 471 negative), E2's greedy first answer
 token is never a yes spelling:
 
-| Label | First token: yes spelling | "No" | "e" | other |
-|---|---|---|---|---|
-| Positive | 0 | 29 | 442 | 0 |
-| Negative | 0 | 278 | 188 | 5 ("!" 4, "pol" 1) |
+| Label | First token: yes spelling | "No" | another token |
+|---|---|---|---|
+| Positive | 0 | 29 | 442 |
+| Negative | 0 | 278 | 193 |
+
+The other tokens over both labels: "e" 630, "!" 4, "pol" 1 (the diagnosis does not split them by
+label).
 
 E2 answers in the dataset's descriptive style: "evidence of polypoid lesion" / "No evidence of
 polypoid lesion" (and "evidence of ulcerative colitis" also for the ulcerative-colitis negatives
 shown). The pre-registered parser leaves 443 of the positives and 193 of the negatives unparsed
-(the rest parse as "no"). The four "!" first tokens are the four probes whose margin is
-non-finite (argmax of NaN logits returns token 0; all four negatives): at most 4 of the 157 FBR
-updates are skipped by the rule of 2026-11-25.
+(the rest parse as "no"). Four probes have a non-finite E2 margin, most likely the four "!" first
+tokens (argmax of NaN logits returns token 0); their labels are not recorded. Each schedule probe
+is used once, so at most 4 of the 157 FBR updates are skipped by the rule of 2026-11-25.
 
 ## What this means for the readouts (the research lead's reading, checked)
 

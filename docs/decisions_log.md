@@ -727,7 +727,7 @@ must be logged here.
 
 - **2026-11-25 (research lead; exploratory note committed before any use): the yes/no readout and a
   native-format readout.** FBR cell (ii): E2's greedy first token on the 942 training probes is
-  never a yes spelling ("e" 630, "No" 307, "!" 4 = the four non-finite margins, "pol" 1); its
+  never a yes spelling ("e" 630, "No" 307, "!" 4, most likely the four non-finite margins, "pol" 1); its
   answers are "evidence of ..." / "No evidence of ...". The plain answer's sign is not a valid
   yes/no answer for this model (the margin's ranking is); Gate 2's silent collapse may be partly a
   readout artifact; E7's plain advantage may come from a criterion scoring this readout. Added
