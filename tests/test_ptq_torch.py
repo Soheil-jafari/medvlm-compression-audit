@@ -540,3 +540,42 @@ def test_a_non_finite_calibration_example_is_named(tmp_path: Path) -> None:
     trace.remove()
     first = [k for k, v in trace.steps.items() if not script.describe(v)[0]][0]
     assert first == "pixel_values"  # the trace names the first step that is not finite
+
+
+def test_a_tied_embedding_model_is_never_split_across_gpus() -> None:
+    """2026-11-25: Qwen2.5-VL-3B ties ``embed_tokens`` to ``lm_head``; a plan over two T4s put
+    them on different GPUs and E1's test failed at the embedding. The plan is refused; the
+    untied 7B teacher is not affected."""
+    import transformers
+    from accelerate import init_empty_weights
+
+    from medcompress.compression.quantization.placement import (
+        check_shared_together,
+        placement_units,
+        plan_device_map,
+        shared_units,
+    )
+
+    def skeleton(tied: bool) -> object:
+        config = transformers.Qwen2_5_VLConfig(
+            text_config=dict(vocab_size=4096, hidden_size=256, intermediate_size=512,
+                             num_hidden_layers=4, num_attention_heads=4, num_key_value_heads=2,
+                             tie_word_embeddings=tied),
+            vision_config=dict(depth=2, hidden_size=64, intermediate_size=128, num_heads=2,
+                               out_hidden_size=256),
+            tie_word_embeddings=tied,
+        )  # fmt: skip
+        with init_empty_weights():
+            return transformers.AutoModelForImageTextToText.from_config(config, dtype=torch.float16)
+
+    student = skeleton(True)
+    groups = shared_units(student)
+    assert len(groups) == 1 and "lm_head" in groups[0]
+    assert any(name.endswith("embed_tokens") for name in groups[0])
+    units = placement_units(student)
+    total = sum(s for _, s in units)
+    device_map, _used = plan_device_map(units, {0: total, 1: total})
+    with pytest.raises(ValueError, match="never split across GPUs"):
+        check_shared_together(device_map, groups)
+    check_shared_together({name: 0 for name, _ in units}, groups)  # one GPU: fine
+    assert shared_units(skeleton(False)) == []  # the teacher's kind: untied

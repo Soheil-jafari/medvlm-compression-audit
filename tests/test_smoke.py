@@ -203,3 +203,18 @@ def test_the_rc_r1_smoke_passes_an_attached_teacher_adapter_to_the_e0_job(tmp_pa
     assert len(smoke.missing_handoffs(plan, config, without)) == 1  # named before the job runs
     job = next(j for j in smoke.smoke_jobs() if j.name == "E0 validation and test")
     assert job.lane == "both" and job.plan[0] == "RC-R1"
+
+
+def test_every_smoke_job_sees_the_gpus_the_real_card_shows_its_steps() -> None:
+    """2026-11-25: RC-R1's smoke gave E1 and E2 one T4 while the card showed them both, so the
+    smoke passed and the card split the tied student. The lanes must match the card's steps."""
+    import dataclasses
+
+    from medcompress import smoke
+
+    assert smoke.exposure_mismatches() == []
+    e1 = next(j for j in smoke.smoke_jobs() if j.name == "E1 test")
+    wrong = dataclasses.replace(e1, lane="both")  # what the card showed before the fix
+    assert smoke.exposure_mismatches([wrong]) == [
+        "RC-R1 E1 test 06 test: the smoke shows 2 GPU(s), the card [1]"
+    ]

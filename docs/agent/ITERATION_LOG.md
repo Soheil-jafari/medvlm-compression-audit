@@ -1593,3 +1593,12 @@ Append-only, newest at the bottom. One entry per iteration:
   hand-offs per job. Phase B: A-series export outcomes, E10 / E10Q gain test evaluations, E4
   pauses cleanly and resumes from a hand-off; sessions page with every cell.
 
+## Iteration 98: 2026-11-25 (interactive)
+- Committed unchanged: RC-R1 part 1 (E0), E5R and E7U B2 tests. RC-R1's smoke pass and the
+  phase-B smoke S0 recorded; E8, A1-A6, E4, E10Q ready.
+- RC-R1's E1 failure (tied 3B student split over two T4s) fixed: per-step GPUs, a planner refusal,
+  a smoke exposure check, a resume that skips E0. Cell (c).
+- Lesion-mask audit: non-finite masked images (E5R 1 / 3 / 15 probes); a NaN pass counts as a
+  flip when the original answer was "yes". Sensitivity rule recorded first (note of 2026-11-25),
+  then its code; FBR skips an update with a non-finite E2 margin.
+

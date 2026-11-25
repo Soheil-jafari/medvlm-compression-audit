@@ -299,7 +299,10 @@ def explicit_device_map(
 
         if spec is None:
             raise GPUPlacementError("a model split over several GPUs needs its spec to be planned")
-        return plan_for_model(spec, reserve=GPU_RESERVE)
+        try:
+            return plan_for_model(spec, reserve=GPU_RESERVE)
+        except ValueError as exc:  # a tied model split, or a plan over the caps: exit code 6
+            raise GPUPlacementError(f"{spec.name}: {exc}") from exc
     return planner()
 
 

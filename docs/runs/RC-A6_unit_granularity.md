@@ -13,7 +13,7 @@
   on the **validation** split and on the **test** split (ablations come after the freeze, so the
   test split is open), and timed with the budget protocol.
 - Purpose: does the criterion work at the size of the units it removes?
-- Status: `ready` for seed 0 after the phase-B smoke (2026-11-24; sessions, cells and estimates in
+- Status: `ready` for seed 0: the phase-B smoke passed at a304754 (2026-11-25; sessions, cells and estimates in
   `docs/runs/SESSIONS_2026-11-24_seed0_phase_b.md`). Before: `blocked` (see section 2)
 
 ## 2. Requirements

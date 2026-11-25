@@ -707,6 +707,78 @@ def audit_arrays(run: ArmRun, split: str) -> dict[str, np.ndarray] | None:
     return None
 
 
+# ------------------------------------------------- audit with non-finite masked images
+
+
+def audit_keys(arrays: Mapping[str, np.ndarray]) -> list[tuple[str, str]]:
+    """``(image, finding)`` of every audit probe."""
+    return [(str(i), str(f)) for i, f in zip(arrays["audit_sample_ids"], arrays["audit_findings"],
+                                              strict=True)]  # fmt: skip
+
+
+def audit_nonfinite(arrays: Mapping[str, np.ndarray]) -> dict[str, object]:
+    """One arm's audit probes with a non-finite margin (original, lesion masked, random
+    masked), and how many of the masked ones the pre-registered version counted as flips (a NaN
+    pass answers "no", so a flip exactly when the original answer was "yes"; note of
+    2026-11-25)."""
+    original = ~np.isfinite(arrays["audit_original_margin"])
+    lesion = ~np.isfinite(arrays["audit_lesion_margin"])
+    random = ~np.isfinite(arrays["audit_random_margin"])
+    return {
+        "audit_probes": int(len(original)),
+        "original_nonfinite": int(original.sum()),
+        "lesion_masked_nonfinite": int(lesion.sum()),
+        "random_masked_nonfinite": int(random.sum()),
+        "any_nonfinite": int((original | lesion | random).sum()),
+        "lesion_nonfinite_counted_as_flip": int(arrays["audit_lesion_flip"][lesion].sum()),
+        "random_nonfinite_counted_as_flip": int(arrays["audit_random_flip"][random].sum()),
+    }
+
+
+def audit_exclusion(audits: Sequence[Mapping[str, np.ndarray]]) -> set[tuple[str, str]]:
+    """The union over arms of the audit probes with any non-finite margin (the rule of
+    2026-11-25)."""
+    excluded: set[tuple[str, str]] = set()
+    for arrays in audits:
+        bad = ~(np.isfinite(arrays["audit_original_margin"])
+                & np.isfinite(arrays["audit_lesion_margin"])
+                & np.isfinite(arrays["audit_random_margin"]))  # fmt: skip
+        excluded |= {k for k, b in zip(audit_keys(arrays), bad, strict=True) if b}
+    return excluded
+
+
+def audit_sensitivity(
+    arrays: Mapping[str, np.ndarray], excluded: set[tuple[str, str]], *, resamples: int,
+    seed: int = SEED,
+) -> dict[str, object]:  # fmt: skip
+    """The pre-registered audit's flip and margin effects on the probes outside ``excluded``,
+    with the same paired image-cluster bootstrap (sensitivity analysis, note of 2026-11-25)."""
+    from medcompress.evaluation.statistics import paired_bootstrap_ci
+
+    keep = np.array([k not in excluded for k in audit_keys(arrays)], dtype=bool)
+    out: dict[str, object] = {"probes_kept": int(keep.sum()), "probes_dropped": int((~keep).sum())}
+    if not keep.any():
+        return out
+    images = np.asarray(arrays["audit_sample_ids"])[keep]
+    lesion = arrays["audit_lesion_flip"][keep].astype(float)
+    random = arrays["audit_random_flip"][keep].astype(float)
+    effect, low, high = paired_bootstrap_ci(np.mean, lesion, random, n_resamples=resamples,
+                                            seed=seed, clusters=images)  # fmt: skip
+    original = arrays["audit_original_margin"][keep]
+    lesion_drop = original - arrays["audit_lesion_margin"][keep]
+    random_drop = original - arrays["audit_random_margin"][keep]
+    m_effect, m_low, m_high = paired_bootstrap_ci(np.mean, lesion_drop, random_drop,
+                                                  n_resamples=resamples, seed=seed,
+                                                  clusters=images)  # fmt: skip
+    out.update({
+        "lesion_flip_rate": float(lesion.mean()), "random_flip_rate": float(random.mean()),
+        "lesion_mask_effect": effect, "lesion_mask_effect_ci_low": low,
+        "lesion_mask_effect_ci_high": high, "lesion_mask_margin_effect": m_effect,
+        "lesion_mask_margin_effect_ci_low": m_low, "lesion_mask_margin_effect_ci_high": m_high,
+    })  # fmt: skip
+    return out
+
+
 def _write(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     import csv
 
@@ -752,6 +824,8 @@ def run_all(
             "jaccard_arms",
             "jaccard_families",
             "exemplars",
+            "audit_nonfinite",
+            "audit_sensitivity",
         )
     }
     for run in ordered:
@@ -817,6 +891,26 @@ def run_all(
                     )
             result = mask_audit_at_threshold(audit, thresholds, resamples=resamples)
             written["mask_audit_operating"].append({"run": run.label, "split": split, **result})
+    # the audit with non-finite masked images (note of 2026-11-25): counts and the sensitivity
+    for split in OUTCOME_FILES:
+        with_margins = [(run, audit_arrays(run, split)) for run in ordered if split in run.files
+                        or split in run.audits]  # fmt: skip
+        evaluable = [(run, a) for run, a in with_margins if a is not None]
+        excluded = audit_exclusion([a for _run, a in evaluable])
+        for run, arrays in with_margins:
+            if arrays is None:
+                row = {"run": run.label, "split": split, "status": "not evaluable: no audit "
+                       "margins (mask-audit-only rerun needed)"}  # fmt: skip
+                written["audit_nonfinite"].append(row)
+                written["audit_sensitivity"].append(row)
+                continue
+            written["audit_nonfinite"].append({"run": run.label, "split": split,
+                                               **audit_nonfinite(arrays)})  # fmt: skip
+            written["audit_sensitivity"].append({
+                "run": run.label, "split": split, "union_dropped": len(excluded),
+                "arms_in_union": len(evaluable),
+                **audit_sensitivity(arrays, excluded, resamples=resamples),
+            })  # fmt: skip
     # B
     for split in TEST_SPLITS:
         ref_run = next(

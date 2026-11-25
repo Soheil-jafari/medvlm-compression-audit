@@ -447,8 +447,10 @@ def train_fbr(
     missing = [k for k in keys if k not in e2_margins]
     if missing:
         raise ValueError(f"E2's margin cache lacks {len(missing)} probes, e.g. {missing[:2]}")
-    if any(not math.isfinite(e2_margins[k]) for k in keys):
-        raise ValueError("E2's margin cache holds a non-finite margin")
+    nonfinite = sum(1 for k in keys if not math.isfinite(e2_margins[k]))
+    if nonfinite:  # its updates become non-finite and are skipped, as the registered recovery's
+        print(f"E2's margin is non-finite on {nonfinite} schedule probe(s): their updates are "
+              "skipped and logged (note of 2026-11-25)", flush=True)  # fmt: skip
     torch.manual_seed(seed)
     if not isinstance(student.module, peft.PeftModel):
         attach_lora(student, cfg.lora)

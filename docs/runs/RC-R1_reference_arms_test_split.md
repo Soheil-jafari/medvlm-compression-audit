@@ -232,3 +232,61 @@ Committed: `results/E0/nobudget/seed0/metrics.csv` (143 rows: the 109 committed 
 unchanged from the committed row; this evaluation's peak is in the log (16.63 GiB over both
 T4s). Not committed: E1's `environment.json` from the failed step (no E1 environment file was
 committed before; the rerun writes it). E1's test failed at the embedding (cause and fix below).
+
+**Why E1's test failed (checked 2026-11-25; the research lead's diagnosis confirmed).** RC-R1 is a
+2-GPU card, so the runner left both T4s visible to every step (`session_env` sets
+`CUDA_VISIBLE_DEVICES=0` only for one-GPU cards). E1's evaluation therefore planned the 3B
+student over two GPUs (visual .. layer 13 on GPU 0, layer 14 .. `lm_head` on GPU 1).
+Qwen2.5-VL-3B ties `embed_tokens` to `lm_head` (one weight); the planner listed the shared weight
+under both modules and put them on different GPUs, so the embedding's weight sat on cuda:1 while
+the input ids went to cuda:0 ("index is on cuda:0, ... other tensors on cuda:1"). The 7B teacher
+does not tie, so E0 ran. The smoke hid it: its E1 and E2 jobs ran in one-T4 lanes. Of the 2-GPU
+cards only RC-R1 mixes the teacher with students (E0a, E0b, E9, TT0, TT1 run the teacher alone).
+
+**Fixes (2026-11-25):**
+
+- **One T4 per student step:** a step can see fewer GPUs than its card (`Step.gpus`); RC-R1 runs
+  E0's steps on both T4s and E1's and E2's on `CUDA_VISIBLE_DEVICES=0`, as their validation runs.
+- **The loader refuses to split a tied model:** the placement planner finds modules that share a
+  weight (`placement.shared_units`) and refuses a plan that puts them on different GPUs, before any
+  weight loads (exit code 6, "a tied-embedding model is never split across GPUs").
+- **The smoke sees what the card sees:** `smoke.exposure_mismatches` compares each smoke job's
+  lane with the GPUs the real card shows that experiment's steps; the smoke prints any difference
+  before it runs, and a test keeps the list empty (it names this case: "the smoke shows 2 GPU(s),
+  the card [1]" for the old setup).
+- **Resume:** E0's validation step is gone (its operating point is committed), and every test step
+  is skipped when its results are committed and its outcomes are attached
+  (`Step.skip_if_tested`); RC-R1 reads attached outcome hand-offs (an optional need).
+
+(c) **Resume: E1 and E2 only** (Soheil; GPU T4 x2, the card's count, the same quota; E1 and E2 use
+one T4 each). Attach `medcompress-data`, `e0-teacher-adapter` (a required input of the card, not
+loaded), `1-seed0-adapter`, `e2-seed0-adapter`, `r1-e0-test-outcomes`. Four steps: E1 test and
+unfiltered test, E2 test and unfiltered test, about 2.8 h plus setup (an estimate: 32 + 50 min per
+student, as the B2 test evaluations). E0's two test steps print "skipped, its results are committed
+and its outcomes attached". Save `/kaggle/working/handoff/` as `r1-e1-e2-test-outcomes`
+(`E1_test_outcomes`, `E2_test_outcomes`); with `r1-e0-test-outcomes` that is RC-R1's full set for
+analysis B. Send `results_to_commit/` and the run report.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+python scripts/run_card.py --card RC-R1 2>&1 | tee /kaggle/working/run_card_RC-R1_resume.txt
+echo "run_card exit code: ${PIPESTATUS[0]}"
+```

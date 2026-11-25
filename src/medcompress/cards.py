@@ -11,6 +11,7 @@ the cards themselves. A card whose status is not ``ready`` is refused by the run
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -116,6 +117,10 @@ class Step:
     are committed (a run RC-G2 already made); only its test evaluation then runs.
     ``skip_if_present``: the step is skipped when this output is already there (an E1 or E2
     adapter attached with ``--from``), so a later session runs only what is left.
+    ``gpus``: the GPUs this step sees when it uses fewer than the card (2026-11-25: RC-R1's E1
+    test split the tied-embedding 3B student over both T4s); None = the card's.
+    ``skip_if_tested``: ``(run, split)``: skipped when the run's results of that test split are
+    committed and its outcomes are attached (a resumed RC-R1 runs only what is left).
     """
 
     label: str
@@ -124,6 +129,8 @@ class Step:
     optional: bool = False
     skip_if_pruned: Run | None = None
     skip_if_present: Need | None = None
+    gpus: int | None = None
+    skip_if_tested: tuple[Run, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -730,7 +737,12 @@ def build_plan(
         # outside the 3-seed tier)
         runs = [Run("E0"), Run("E1", 0)] + [Run("E2", s) for s in e2_seeds]
         e2 = tuple(r for r in runs if r.exp == "E2")  # RC-C1 compares E2 with every arm
-        steps = [step for r in runs for step in _test_evals(r)]
+        steps = [
+            dataclasses.replace(step, gpus=None if r.exp == "E0" else 1,  # the 7B on both T4s,
+                                skip_if_tested=(r, split))  # the 3B students on one (2026-11-25)
+            for r in runs
+            for step, split in zip(_test_evals(r), ("test", "test_unfiltered"), strict=True)
+        ]  # fmt: skip
         if not e0_operating_point_committed():  # E0's validation first (RC-E0a 3c, 2026-11-23)
             steps.insert(0, Step("validation E0 (operating point)",
                                  _script("06_evaluate.py", *Run("E0").args())))  # fmt: skip
@@ -741,7 +753,9 @@ def build_plan(
                       # E1 too: the exploratory analyses A and B read it (2026-11-20)
                       Handoff("outcomes", (Run("E1", 0),), "E1_test_outcomes")),
             needs=(Need("teacher_adapter"),)
-            + tuple(Need("adapter", r) for r in runs if r.exp in ("E1", "E2")),
+            + tuple(Need("adapter", r) for r in runs if r.exp in ("E1", "E2"))
+            # a resumed session attaches the outcomes already made (2026-11-25)
+            + tuple(Need("outcomes", r, optional=True) for r in runs),
             internet=True,
         )  # fmt: skip
     if card == "RC-C1":

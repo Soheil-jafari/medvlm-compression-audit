@@ -138,6 +138,45 @@ def placement_units(model: Any) -> list[tuple[str, int]]:
     return units
 
 
+def shared_units(model: Any) -> list[tuple[str, ...]]:
+    """Groups of placement units that hold the same tensor (a tied input embedding and
+    ``lm_head``: Qwen2.5-VL-3B ties them, the 7B does not). Such units must sit on one device:
+    split, the shared weight lands on one GPU and the other module's inputs on the other
+    (RC-R1's E1 test, 2026-11-25: "index is on cuda:0, ... other tensors on cuda:1")."""
+    tie = getattr(model, "tie_weights", None)
+    if callable(tie):  # a skeleton built under init_empty_weights is not tied yet; this ties it
+        tie()  # only when its config asks for it (the 7B's does not)
+    owner: dict[int, list[str]] = {}
+    names = [name for name, _size in placement_units(model)]
+    modules = dict(model.named_modules())
+    for name in names:
+        module = modules[name]
+        no_split = type(module).__name__ in set(getattr(model, "_no_split_modules", None) or ())
+        tensors = module.parameters() if no_split else module.parameters(recurse=False)
+        for tensor in tensors:
+            owner.setdefault(id(tensor), [])
+            if name not in owner[id(tensor)]:
+                owner[id(tensor)].append(name)
+    groups = {tuple(sorted(v)) for v in owner.values() if len(v) > 1}
+    return sorted(groups)
+
+
+def check_shared_together(device_map: Mapping[str, Any], groups: Sequence[Sequence[str]]) -> None:
+    """Refuse a plan that puts the units of a shared tensor on different devices.
+
+    Raises:
+        ValueError: a tied model would be split between its tied modules.
+    """
+    for group in groups:
+        devices = {device_map.get(name) for name in group}
+        if len(devices) > 1:
+            raise ValueError(
+                f"the model ties {', '.join(group)} (one shared weight) and the plan puts them on "
+                f"devices {sorted(map(str, devices))}: a tied-embedding model is never split "
+                "across GPUs; run it on one GPU (CUDA_VISIBLE_DEVICES=0)"
+            )
+
+
 def plan_device_map(
     units: Sequence[tuple[str, int]], caps: Mapping[int, int]
 ) -> tuple[dict[str, int], dict[int, int]]:
@@ -239,6 +278,7 @@ def plan_for_model(
         else {i: c - reserve for i, c in enumerate(capacities)}
     )
     device_map, used = plan_device_map(units, limits)
+    check_shared_together(device_map, shared_units(skeleton))  # refuse before any weight loads
     log(f"placement of {spec.name}: {weights / GIB:.2f} GiB in {len(units)} modules; caps "
         + ", ".join(f"GPU{g} {c / GIB:.2f}" for g, c in limits.items()) + " GiB")  # fmt: skip
     for line in device_map_lines(units, device_map):

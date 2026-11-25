@@ -131,6 +131,39 @@ def _test(exp: str, variant: str | None = None, split: str = "test") -> SmokeSta
 _DROP_LINE = re.compile(r"^(test(?:_unfiltered)?): dropped (\d+) non-finite image", re.MULTILINE)
 
 
+LANE_GPUS: Mapping[str, int] = {"pre": 1, "A": 1, "B": 1, "both": 2}
+
+
+def _exp_of(argv: Sequence[str]) -> str | None:
+    argv = list(argv)
+    return argv[argv.index("--exp") + 1] if "--exp" in argv else None
+
+
+def exposure_mismatches(jobs: Sequence[SmokeJob] | None = None) -> list[str]:
+    """Jobs whose lane shows a different number of GPUs than the real card shows the steps of
+    the same experiment (2026-11-25: RC-R1's smoke ran E1 and E2 on one T4 while the card
+    showed them both, which split the tied 3B student; the smoke must see what the card sees).
+    Printed by the smoke before it runs; a test keeps the list empty."""
+    from medcompress.cards import build_plan
+
+    out = []
+    for job in jobs if jobs is not None else smoke_jobs():
+        card, seed, variants, budgets = job.plan
+        try:
+            plan = build_plan(card, seed, variants=list(variants) or None,
+                              budgets=list(budgets) or None)  # fmt: skip
+        except Exception:  # noqa: BLE001 - a job whose card has no plan here (RC-CAL0)
+            continue
+        lane = LANE_GPUS[job.lane]
+        for stage in job.stages:
+            exp = _exp_of(stage.args)
+            real = {step.gpus or plan.gpus for step in plan.steps if _exp_of(step.argv) == exp}
+            if real and lane not in real:
+                out.append(f"{job.card} {job.name} {stage.label}: the smoke shows {lane} GPU(s), "
+                           f"the card {sorted(real)}")  # fmt: skip
+    return out
+
+
 def missing_handoffs(plan: Any, config: Mapping[str, Any], handoffs: Sequence[Any]) -> list[str]:
     """The plan's required hand-offs that no selected bundle holds (printed by the smoke before
     a job runs; 2026-11-24: RC-R1's E0 job stopped on an unattached teacher adapter)."""

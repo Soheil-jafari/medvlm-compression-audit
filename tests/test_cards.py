@@ -582,3 +582,47 @@ def test_e4_pauses_on_the_session_limit_and_exports_its_resume_state(
     (resume / "step" / "trainable.pt").write_bytes(b"x")
     runner_mod.export_handoffs(session, config)
     assert (tmp_path / "work" / "handoff" / "E4_seed0_resume").is_dir()
+
+
+def test_rc_r1_runs_students_on_one_t4_and_a_resume_skips_what_is_done(tmp_path: Path) -> None:
+    """2026-11-25: RC-R1 (2 GPUs) showed both T4s to E1's test, which split the tied 3B
+    student. Students now see one T4, the teacher both; a resumed session skips a test whose
+    results are committed and whose outcomes are attached."""
+    plan = build_plan("RC-R1")
+    gpus = {s.label: s.gpus for s in plan.steps}
+    assert gpus["test evaluation E0 seed0"] is None and gpus["test evaluation E1 seed0"] == 1
+    assert gpus["unfiltered test evaluation E2 seed0"] == 1 and plan.gpus == 2
+    assert all(s.skip_if_tested is not None for s in plan.steps)
+    assert any(n.kind == "outcomes" and n.optional and n.run.exp == "E0" for n in plan.needs)
+    env = runner_mod.session_env(tmp_path, 2, base={})
+    assert "CUDA_VISIBLE_DEVICES" not in env
+    assert runner_mod.step_gpu_env(env, 1)["CUDA_VISIBLE_DEVICES"] == "0"
+    assert (
+        runner_mod.step_gpu_env({"CUDA_VISIBLE_DEVICES": "1,0"}, 1)["CUDA_VISIBLE_DEVICES"] == "1"
+    )
+    assert runner_mod.step_gpu_env(env, None) is env
+    config = _config(tmp_path / "work")
+    repo = tmp_path / "repo"
+    from medcompress.config import RunContext
+
+    e0 = RunContext("E0", seed=0)
+    files = (("metrics_test.csv", "outcomes_test.npz"),
+             ("metrics_test_unfiltered.csv", "outcomes_test_unfiltered.npz"))  # fmt: skip
+    for metrics, outcomes in files:
+        committed = repo / e0.run_dir(config["paths"]["results_root"]) / metrics
+        committed.parent.mkdir(parents=True, exist_ok=True)
+        committed.write_text("x")
+        attached = e0.run_dir(Path(config["paths"]["output_root"])) / outcomes
+        attached.parent.mkdir(parents=True, exist_ok=True)
+        attached.write_bytes(b"x")
+    seen: list[tuple[str, str | None]] = []
+    session = runner_mod.Session(plan, tmp_path / "work", "now")
+    runner_mod.run_steps(
+        session, config, {}, repo=repo, data_root=None, handoffs=[],
+        runner=lambda c, e, log: seen.append((c[c.index("--exp") + 1],
+                                              e.get("CUDA_VISIBLE_DEVICES"))) or 0,
+    )  # fmt: skip
+    statuses = [(s.label, s.status) for s in session.steps]
+    assert [st for _l, st in statuses[:2]] == ["skipped"] * 2  # E0's tests: done and attached
+    assert all(st == "ok" for _l, st in statuses[2:]) and len(seen) == len(statuses) - 2
+    assert {exp for exp, _d in seen} <= {"E1", "E2"} and {d for _e, d in seen} == {"0"}

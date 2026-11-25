@@ -270,3 +270,43 @@ def test_two_bundles_with_the_same_name_are_both_read_by_their_run_paths(tmp_pat
     (copy / ex.OUTCOME_FILES["test"]).write_bytes(b"another evaluation")
     with pytest.raises(ValueError, match="differ"):
         ex.discover([tmp_path], known)
+
+
+def test_non_finite_masked_images_are_counted_and_dropped_for_every_arm() -> None:
+    """Note of 2026-11-25: a NaN masked pass answers "no", so it is a flip exactly when the
+    original answer was "yes"; the sensitivity analysis drops, for every arm, the union of the
+    probes with a non-finite margin in any arm."""
+
+    def arm(lesion_nan: list[int], random_nan: list[int], yes: list[bool]) -> dict:
+        n = 6
+        original = np.linspace(-2, 3, n)
+        lesion = original - 1.0
+        random = original - 0.2
+        lesion[lesion_nan] = np.nan
+        random[random_nan] = np.nan
+        yes_arr = np.array(yes)
+        return {
+            "audit_sample_ids": np.array([f"s{i}" for i in range(n)]),
+            "audit_findings": np.array(["polyp"] * n),
+            "audit_original_margin": original,
+            "audit_lesion_margin": lesion,
+            "audit_random_margin": random,
+            "audit_original_yes": yes_arr,
+            "audit_lesion_flip": np.where(np.isnan(lesion), yes_arr, (lesion >= 0) != yes_arr),
+            "audit_random_flip": np.where(np.isnan(random), yes_arr, (random >= 0) != yes_arr),
+        }
+
+    yes = [False, False, True, True, True, True]
+    a = arm([4], [1], yes)
+    b = arm([], [5], yes)
+    counts = ex.audit_nonfinite(a)
+    assert counts["lesion_masked_nonfinite"] == 1 and counts["random_masked_nonfinite"] == 1
+    assert counts["lesion_nonfinite_counted_as_flip"] == 1  # original yes: a spurious flip
+    assert counts["random_nonfinite_counted_as_flip"] == 0  # original no: none
+    excluded = ex.audit_exclusion([a, b])
+    assert excluded == {("s1", "polyp"), ("s4", "polyp"), ("s5", "polyp")}
+    for arrays in (a, b):
+        row = ex.audit_sensitivity(arrays, excluded, resamples=200)
+        assert row["probes_kept"] == 3 and row["probes_dropped"] == 3
+        assert math.isfinite(row["lesion_mask_margin_effect"])
+        assert row["lesion_mask_margin_effect"] == pytest.approx(0.8)  # 1.0 - 0.2 on every probe

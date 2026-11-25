@@ -16,6 +16,7 @@ Nothing here writes into ``results/<run>``: the FBR rows go to ``--out`` (by def
 from __future__ import annotations
 
 import json
+import math
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -174,6 +175,8 @@ def run_e2_margin_cache(
         "decoded_up_to_tokens": FBRSettings.load().decode_max_new_tokens,
         "parsed_by_label": {k: {r: int(n) for r, n in c.items()} for k, c in parsed.items()},
         "probes": len(listed),
+        # a non-finite E2 margin (fp16 overflow of an image): that update is skipped (2026-11-25)
+        "e2_nonfinite_margins": int(sum(1 for v in margins.values() if not math.isfinite(v))),
     }  # fmt: skip
     examples_shown = [{"finding": p.finding, "present": p.present, "answer": a.text,
                        "parsed": parse_yes_no(a.text) or "unparsed"}

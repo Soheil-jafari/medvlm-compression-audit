@@ -357,3 +357,22 @@ def test_the_e2_margin_cache_matches_the_schedule_every_arm_builds(
     assert sum(sum(c.values()) for c in parsed.values()) == len(cache["margins"])
     saved = json.loads((tmp_path / "margins" / fbr_stage.DIAGNOSIS_FILE).read_text())
     assert "margins" not in saved and saved["probes"] == len(cache["margins"])
+
+
+def test_a_non_finite_e2_margin_skips_its_update_instead_of_stopping(tmp_path: Path) -> None:
+    """Note of 2026-11-25: a non-finite margin of E2 on a training image (an fp16 overflow)
+    makes that update non-finite; it is skipped and logged, as the registered recovery does."""
+    from medcompress.compression.distillation.offline_kd import examples_from_samples
+
+    ctx, _general, _probes, ids = _setup(tmp_path, 0.25)
+    samples = write_dataset(tmp_path)
+    schedule = fbr.probe_schedule(fbr.training_probes(samples, TINY, TEMPLATE), TINY, steps=2,
+                                  seed=0)  # fmt: skip
+    examples = examples_from_samples(samples[:4], tmp_path,
+                                     records=teacher_records(samples[:4], tmp_path))  # fmt: skip
+    e2 = {k: 0.0 for k in schedule.unique_keys()}
+    e2[schedule.updates[1][0].key] = float("nan")  # the second update's first probe
+    result = fbr.train_fbr(tiny_vlm.tiny_wrapper(seed=0), examples, schedule, e2,
+                           dataclasses.replace(ctx.cfg, steps=2), ctx.settings, ids,
+                           data_root=tmp_path, seed=0)  # fmt: skip
+    assert result.steps == 2 and result.nonfinite_steps == [2] and result.skipped_steps == [2]

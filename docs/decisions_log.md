@@ -725,6 +725,17 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-25 (agent; implementation and results, no pre-registered setting changed).** Committed
+  unchanged: RC-R1 part 1 (E0 validation with its operating point, E0 test and unfiltered test;
+  `teacher_train_peak_gpu_bytes` is RC-TT1's training peak carried over), E5R's and E7U's B2 tests
+  (no test number read); E1's `environment.json` from the failed step not committed. RC-R1's E1
+  failure: the 2-GPU card showed both T4s to the tied 3B student, whose planner split
+  `embed_tokens` and `lm_head`; fixed by per-step GPUs (`Step.gpus`: students on one T4), a
+  planner refusal for split tied weights, a smoke check that lanes match the card's GPUs, and a
+  resume that skips committed-and-attached test steps. Phase-B smoke S0 passed at a304754: E8,
+  A1-A6, E4, E10Q in `smoke_passed.yaml` (A2 / A3 / A4 / A6 ran stage 04; their 05-07 are E7's
+  code, run in full by the E7, A1 and A5 jobs). The exploratory analysis writes the audit's
+  non-finite counts and the sensitivity version (rule above).
 - **2026-11-25 (agent, at the research lead's request; recorded before any effect size of it is
   computed): non-finite masked images in the lesion-mask audit.** E5R's outcomes show non-finite
   masked margins (1 / 86, 3 / 83, 15 / 144 audit probes on validation, test, unfiltered test),

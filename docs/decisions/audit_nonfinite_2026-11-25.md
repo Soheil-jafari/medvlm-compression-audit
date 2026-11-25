@@ -69,3 +69,13 @@ on every non-finite masked probe of E5R's three splits). Such flips are spurious
   recovery skips one (until now a non-finite E2 margin stopped the run before training; cell (ii)
   now counts them).
 - **The plain-answer collapse:** unaffected (original images only).
+
+## Implementation (2026-11-25, after this rule was committed)
+
+`scripts/exploratory_analysis.py` (card RC-EX1) now also writes `results/exploratory/
+audit_nonfinite.csv` (per arm and split: audit probes, non-finite original / lesion-masked /
+random-masked margins, and how many of the masked ones the pre-registered version counted as
+flips) and `audit_sensitivity.csv` (per arm and split: the union's size, the probes kept and
+dropped, the flip and margin effects with their intervals). Arms without audit margins appear as
+"not evaluable". `evaluation/exploratory.py`: `audit_nonfinite`, `audit_exclusion`,
+`audit_sensitivity`.

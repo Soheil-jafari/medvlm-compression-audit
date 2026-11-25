@@ -54,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         StageResult,
         card_verdicts,
         drop_problem,
+        exposure_mismatches,
         job_experiments,
         missing_handoffs,
         parse_peaks,
@@ -104,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config("base.yaml")
 
     jobs = with_dependencies(smoke_jobs(), args.card, args.job)  # keeps what the jobs read
+    for line in exposure_mismatches(jobs):  # the smoke must see the GPUs the card's steps see
+        print(f"WARNING: {line}", flush=True)
     results: list[StageResult] = []
     failed: set[str] = set()
     lock = threading.Lock()

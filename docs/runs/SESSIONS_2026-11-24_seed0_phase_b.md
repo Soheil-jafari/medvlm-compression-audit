@@ -67,6 +67,9 @@ grep -E "hand-offs|NOT ATTACHED|PASS|FAIL" /kaggle/working/smoke_phase_b.txt
 
 Send `smoke_report.md`; the agent adds each passing card to `smoke_passed.yaml`.
 
+**S0 passed (2026-11-25, a304754, 60 min, every card PASS):** E8, A1-A6, E4, E10Q (and the
+E7 and E10 jobs they read) are in `smoke_passed.yaml`; every session below can run.
+
 ## 3. Sessions
 
 Inputs: **D** = `medcompress-data`, **A** = `e2-seed0-adapter`, **C** = `e0-teacher-cache`.

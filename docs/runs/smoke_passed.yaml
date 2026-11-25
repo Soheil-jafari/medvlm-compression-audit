@@ -10,9 +10,9 @@ passed:
     date: 2026-11-13
     note: "also gates RC-E5 / RC-E6 / RC-E7; the stages still wait for RC-CAL0's committed calibration file (amendment of 2026-11-13). E7 05 prune+recover was killed by host RAM in the reduced smoke at a237c5c (fixed 2026-11-14); it smokes again before any E7 05 production run. 2026-11-17: the uniform_mlp allocation (E5, E5R, E7U) smokes before any of their production runs (RC-G2 section 3, cell (a))"
   RC-E8:
-    commit: 9113632
-    date: 2026-11-13
-    note: "waits for RC-CAL0's committed calibration file"
+    commit: a304754
+    date: 2026-11-25
+    note: "phase-B smoke S0 at a304754 (2026-11-25), 60 min, every stage PASS: quantized the smoke's own E7; the real run reads the attached g2-b2-seed0-pruned-s4 and refuses without it (a required input)"
   RC-E9:
     commit: 9113632
     date: 2026-11-13
@@ -20,28 +20,42 @@ passed:
     commit: 9113632
     date: 2026-11-13
   RC-A2:
-    commit: 9113632
-    date: 2026-11-13
+    commit: a304754
+    date: 2026-11-25
+    note: "phase-B smoke S0 at a304754 (2026-11-25), 60 min, every stage PASS: stage 04 (05-07 are E7's code, run in full by the E7, A1 and A5 jobs)"
   RC-A3:
-    commit: 9113632
-    date: 2026-11-13
+    commit: a304754
+    date: 2026-11-25
+    note: "phase-B smoke S0 at a304754 (2026-11-25), 60 min, every stage PASS: stage 04 (05-07 E7's code; its removal differs only in score_normalisation none, unit-tested)"
   RC-E3:
     commit: a237c5c
     date: 2026-11-14
     note: "reduced smoke, with the cleaned calibration set"
   RC-E4:
-    commit: a237c5c
-    date: 2026-11-14
-    note: "reduced smoke; QAT peak 11.29 GiB"
+    commit: a304754
+    date: 2026-11-25
+    note: "phase-B smoke S0 at a304754 (2026-11-25), 60 min, every stage PASS: 02 train peak 11.29 GiB, 06, 07"
   RC-A4:
-    commit: a237c5c
-    date: 2026-11-14
-    note: "reduced smoke"
+    commit: a304754
+    date: 2026-11-25
+    note: "phase-B smoke S0 at a304754 (2026-11-25), 60 min, every stage PASS: stage 04 n32 (05-07 E7's code)"
   RC-A6:
-    commit: a237c5c
-    date: 2026-11-14
-    note: "reduced smoke"
+    commit: a304754
+    date: 2026-11-25
+    note: "phase-B smoke S0 at a304754 (2026-11-25), 60 min, every stage PASS: stage 04 heads_channels (05-07 E7's code on a subset of its unit types)"
   RC-R1:
     commit: ac6310e
     date: 2026-11-24
     note: "E2 test and unfiltered test, E1 test, E0 validation and test (both T4s, teacher adapter attached) all PASS in 22 min; every test stage reported dropping exactly the listed non-finite images (drop_problem). E0's run starts with its validation (no operating point committed)"
+  RC-A1:
+    commit: a304754
+    date: 2026-11-25
+    note: "phase-B smoke S0 at a304754 (2026-11-25), 60 min, every stage PASS: 04 (re-weights the smoke's own E7 effects), 05, 06, 07"
+  RC-A5:
+    commit: a304754
+    date: 2026-11-25
+    note: "phase-B smoke S0 at a304754 (2026-11-25), 60 min, every stage PASS: logprob_drop 04-07; kl 04 (108 layers and KV groups scored exactly)"
+  RC-E10Q:
+    commit: a304754
+    date: 2026-11-25
+    note: "phase-B smoke S0 at a304754 (2026-11-25), 60 min, every stage PASS: calibration check (2B), 03 quantize, 06, 07 (peak 4.58 GiB)"

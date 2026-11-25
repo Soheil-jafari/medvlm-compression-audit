@@ -13,7 +13,7 @@
   the budget protocol.
 - Purpose: how much of the effect of the weights comes from rarity alone, and how much from the
   clinical tiers?
-- Status: `ready` for seed 0 after the phase-B smoke (2026-11-24; sessions, cells and estimates in
+- Status: `ready` for seed 0: the phase-B smoke passed at a304754 (2026-11-25; sessions, cells and estimates in
   `docs/runs/SESSIONS_2026-11-24_seed0_phase_b.md`). Before: `blocked` (see section 2)
 
 ## 2. Requirements

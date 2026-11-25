@@ -208,6 +208,29 @@ def made_by_g2(run: Any, config: Mapping[str, Any], repo: Path) -> bool:
     return True
 
 
+def step_gpu_env(env: Mapping[str, str], gpus: int | None) -> Mapping[str, str]:
+    """The environment of a step that uses fewer GPUs than its card: the first ``gpus`` of the
+    card's visible GPUs (2026-11-25: RC-R1 runs the 7B teacher on both T4s and the 3B students
+    on one, as their validation runs did)."""
+    if gpus is None:
+        return env
+    visible = [d for d in str(env.get("CUDA_VISIBLE_DEVICES", "")).split(",") if d.strip()]
+    chosen = visible[:gpus] if visible else [str(i) for i in range(gpus)]
+    return {**env, "CUDA_VISIBLE_DEVICES": ",".join(chosen)}
+
+
+def test_already_done(run: Any, split: str, config: Mapping[str, Any], repo: Path) -> bool:
+    """True when the run's results of the test ``split`` are committed in the clone and its
+    outcomes of that split are attached (a resumed card skips the step)."""
+    from medcompress.evaluation.runner import RUN_FILES_BY_SPLIT
+
+    metrics_name, outcomes_name = RUN_FILES_BY_SPLIT[split]
+    context = run.context
+    committed = Path(repo) / context.run_dir(config["paths"]["results_root"]) / metrics_name
+    attached = context.run_dir(Path(str(config["paths"]["output_root"]))) / outcomes_name
+    return committed.is_file() and attached.is_file()
+
+
 def step_command(step: Any, data_root: Path | None, handoffs: Sequence[Path]) -> list[str]:
     """The command of a step, with ``--data-root`` and ``--from`` when the step takes inputs."""
     command = [sys.executable, *step.argv]
@@ -267,9 +290,15 @@ def run_steps(
             session.steps.append(StepOutcome(step.label, "skipped"))
             print(f"== {step.label}: skipped, {step.skip_if_present.label} is already there")  # type: ignore[union-attr]
             continue
+        tested = getattr(step, "skip_if_tested", None)
+        if tested is not None and test_already_done(tested[0], tested[1], config, repo):
+            session.steps.append(StepOutcome(step.label, "skipped"))
+            print(f"== {step.label}: skipped, its results are committed and its outcomes attached")
+            continue
         print(f"== {step.label}", flush=True)
         start = time.perf_counter()
-        code = runner(step_command(step, data_root, handoffs), env, log)
+        step_env = step_gpu_env(env, getattr(step, "gpus", None))
+        code = runner(step_command(step, data_root, handoffs), step_env, log)
         seconds = time.perf_counter() - start
         if code == 0:
             session.steps.append(StepOutcome(step.label, "ok", code, seconds))
