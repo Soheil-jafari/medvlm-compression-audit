@@ -725,6 +725,16 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-25 (research lead; exploratory note committed before any use): the yes/no readout and a
+  native-format readout.** FBR cell (ii): E2's greedy first token on the 942 training probes is
+  never a yes spelling ("e" 630, "No" 307, "!" 4 = the four non-finite margins, "pol" 1); its
+  answers are "evidence of ..." / "No evidence of ...". The plain answer's sign is not a valid
+  yes/no answer for this model (the margin's ranking is); Gate 2's silent collapse may be partly a
+  readout artifact; E7's plain advantage may come from a criterion scoring this readout. Added
+  (exploratory): a native-format parser ("no ..." -> no, "evidence of ..." / "yes ..." -> yes,
+  else unparsed) checked against the training answers' patterns, its readout and a first-token
+  table per arm beside the pre-registered readouts; FBR's plain-readout changes are format
+  effects (recipe and gate unchanged). `docs/decisions/native_readout_2026-11-25.md`.
 - **2026-11-25 (agent; implementation and results, no pre-registered setting changed).** Committed
   unchanged: RC-R1 part 1 (E0 validation with its operating point, E0 test and unfiltered test;
   `teacher_train_peak_gpu_bytes` is RC-TT1's training peak carried over), E5R's and E7U's B2 tests

@@ -570,6 +570,21 @@ same probes for every arm) and recomputes the flip and margin effects with the s
 Recorded before any effect size of this version is computed. Details:
 `docs/decisions/audit_nonfinite_2026-11-25.md`.
 
+### Note of 2026-11-25 (research lead): the yes/no readout and a native-format readout (exploratory)
+
+FBR's cell (ii) showed that E2 never starts an answer with a yes spelling: it answers in the
+dataset's style ("evidence of ..." / "No evidence of ..."; first token "e" or "No"). So the
+plain answer (pooled first-token yes against no) is a valid ranking signal whose sign is not a
+valid yes/no answer for this model, which explains E2's low plain metrics; Gate 2's "silent
+collapse" may be partly a readout artifact, and E7's plain advantage may come from a criterion
+that scores this very readout. Added, exploratory and committed before any use: a threshold-free
+native-format parser of the decoded answers ("no ..." -> no; "evidence of ..." or "yes ..." ->
+yes; else unparsed), checked against the training split's answer patterns; its readout and a
+first-token table per arm, next to the pre-registered plain and operating-point readouts.
+FBR's CE targets teach a format E2 never uses, so plain-readout changes after FBR are format
+effects; FBR's recipe and gate are unchanged. Pre-registered metrics and parser unchanged.
+Details: `docs/decisions/native_readout_2026-11-25.md`.
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result
