@@ -558,6 +558,18 @@ knowledge; the primary gate quantity stays the cross-fitted rare-finding sensiti
 coefficient, batch or gate item changes. Details: `docs/decisions/fbr_study_2026-11-22.md`,
 section 12.
 
+### Note of 2026-11-25 (agent, at the research lead's request): non-finite masked images in the lesion-mask audit
+
+Some masked images give a non-finite margin for the 3B student (E5R: 1 of 86 validation, 3 of
+83 test and 15 of 144 unfiltered-test audit probes; every original margin finite), so the margin
+effect is undefined for every 3B-student arm, and such a probe is counted as a flip exactly when
+its original answer was "yes" (NaN margins give the answer "no"). The pre-registered audit stays
+as reported. A **labelled sensitivity analysis** drops, per split, every audit probe with a
+non-finite masked (or original) margin in any arm (the union over arms; both components; the
+same probes for every arm) and recomputes the flip and margin effects with the same bootstrap.
+Recorded before any effect size of this version is computed. Details:
+`docs/decisions/audit_nonfinite_2026-11-25.md`.
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result

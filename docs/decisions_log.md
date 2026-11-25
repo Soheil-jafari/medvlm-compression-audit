@@ -725,6 +725,17 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-25 (agent, at the research lead's request; recorded before any effect size of it is
+  computed): non-finite masked images in the lesion-mask audit.** E5R's outcomes show non-finite
+  masked margins (1 / 86, 3 / 83, 15 / 144 audit probes on validation, test, unfiltered test),
+  which make the margin effect undefined for every 3B-student arm; a non-finite masked pass is
+  scored "no", so it counts as a flip exactly when the original answer was "yes" (checked on every
+  such probe). Rule: a labelled sensitivity analysis drops, per split, every audit probe with a
+  non-finite masked or original margin in any arm (union over arms, same probes for every arm,
+  both components) and recomputes the flip and margin effects with the same bootstrap; the
+  pre-registered version stays. Arms without audit margins are not evaluable in it until their
+  audit-only rerun. FBR: a non-finite E2 margin makes the update non-finite (skipped and logged)
+  instead of stopping the run. `docs/decisions/audit_nonfinite_2026-11-25.md`.
 - **2026-11-24 (agent): RC-R1's smoke passed at ac6310e** (E2 test and unfiltered test, E1 test,
   E0 validation and test; every test stage dropped exactly the listed non-finite images; the
   earlier E0 stop was the unattached teacher adapter). RC-R1 added back to `smoke_passed.yaml`
