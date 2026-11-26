@@ -310,12 +310,21 @@ def test_the_arm_stage_runs_the_trial_and_the_full_path(
     assert folder.name == "E5_magnitude_sampling_only"
     training = json.loads((folder / "training.json").read_text())
     assert training["margin_coefficient"] == 0.0 and training["training"]["steps"] == 2
+    assert "error" not in training["pilot_inputs"]  # the pilot's analysis inputs, checked
     with (folder / "fbr_metrics.csv").open() as handle:
         rows = list(csv.DictReader(handle))
     assert rows and {r["experiment"] for r in rows} == {"FBR:E5_magnitude_sampling_only"}
     arrays = tmp_path / "outputs" / "fbr" / "E5_magnitude_sampling_only"
     assert {p.name for p in arrays.iterdir()} == {"outcomes.npz", "probe_answers_val.npz",
                                                   "fbr_run.json"}  # fmt: skip
+    # a cache with a non-finite margin on the schedule (the first one) serves the trial only
+    from medcompress.config import ConfigError
+
+    cache["margins"] = {**margins, schedule.updates[0][0].key: float("nan")}
+    margins_file.write_text(json.dumps(cache))
+    with pytest.raises(ConfigError, match="non-finite margin"):
+        fbr_stage.run_fbr_arm(config, run, margins_file=margins_file, out=out, control=True)
+    fbr_stage.run_fbr_arm(config, run, margins_file=margins_file, out=out, trial_steps=1)
     cache["schedule_fingerprint"] = "other"
     margins_file.write_text(json.dumps(cache))
     with pytest.raises(ValueError, match="not the one E2's margins"):
@@ -382,6 +391,8 @@ def test_a_non_finite_e2_margin_skips_its_update_instead_of_stopping(tmp_path: P
                            dataclasses.replace(ctx.cfg, steps=2), ctx.settings, ids,
                            data_root=tmp_path, seed=0)  # fmt: skip
     assert result.steps == 2 and result.nonfinite_steps == [2] and result.skipped_steps == [2]
+    assert [e["step"] for e in result.step_log] == [2]
+    assert result.step_log[0]["causes"][0] == "e2_margin" and result.step_log[0]["retries"] == 0
 
 
 def test_the_rescaled_paired_term_gives_the_same_gradient_as_the_first_formula(
@@ -442,3 +453,46 @@ def test_the_margin_cache_replaces_probes_with_a_non_finite_e2_margin(
     assert [r["nonfinite"] for r in rounds] == [1, 0] and rounds[0]["updates"] == [2]
     final = fbr_stage._schedule(config, samples, steps=3, exclude={bad_key})[0]
     assert cache["schedule_fingerprint"] == final.fingerprint() != first_schedule.fingerprint()
+
+
+def _overflow_update(
+    factor: float, causes: list[str] | None = None, *, retries: int = 3, amp: bool = True
+) -> tuple[dict, Any, Any]:
+    """One ``optimizer_update`` on a single fp32 parameter whose scaled gradient is
+    ``scale * factor``: above about 3.4e38 it overflows fp32 as fp16 overflows on the GPU."""
+    weight = torch.nn.Parameter(torch.ones(2))
+    optimizer = torch.optim.AdamW([weight], lr=1e-3)
+    scaler = torch.amp.GradScaler("cpu", init_scale=65536.0, enabled=amp)
+
+    def accumulate() -> tuple[dict[str, float], list[str]]:
+        loss = (weight * factor).sum()
+        scaler.scale(loss).backward()
+        return {"loss": float(loss.detach())}, list(causes or [])
+
+    _parts, entry = fbr.optimizer_update(accumulate, [weight], optimizer, scaler, amp=amp,
+                                         retries=retries, clip=1.0, step=1)  # fmt: skip
+    return entry, weight, optimizer
+
+
+def test_a_scale_only_overflow_is_retried_at_half_the_scale_then_stepped() -> None:
+    """Note of 2026-11-26, on CPU with the registered loss scaler: an update that overflows
+    only because of the scale is done again at half the scale (the optimiser stepped once, the
+    lr step not advanced); with no retry left, or none allowed (the first implementation, for
+    the diagnosis), it is skipped and logged with its causes; a genuine non-finite loss is
+    never retried."""
+    entry, weight, optimizer = _overflow_update(1e34)  # 65536e34 overflows, 32768e34 does not
+    assert entry["retries"] == 1 and entry["attempts"] == [[]] and not entry["skipped"]
+    assert entry["causes"] == [] and (entry["scale_before"], entry["scale_after"]) == (
+        65536.0, 32768.0)  # fmt: skip
+    assert optimizer.state[weight]["step"] == 1 and not torch.equal(weight, torch.ones(2))
+    entry, weight, optimizer = _overflow_update(1e35)  # needs a scale under 3,400
+    assert entry["retries"] == 3 and entry["skipped"] and entry["causes"] == ["scale_overflow"]
+    assert entry["scale_after"] == 4096.0 and not optimizer.state[weight]
+    assert torch.equal(weight, torch.ones(2))  # not stepped
+    entry, _w, _o = _overflow_update(1e34, ["pair_gradient"], retries=0)  # the diagnosis
+    assert entry["skipped"] and entry["causes"] == ["scale_overflow", "pair_gradient"]
+    assert entry["retries"] == 0 and entry["scale_after"] == 32768.0
+    entry, _w, _o = _overflow_update(1.0, ["probe_ce"])  # a genuine non-finite loss
+    assert entry["retries"] == 0 and entry["skipped"] and entry["causes"] == ["probe_ce"]
+    entry, _w, optimizer = _overflow_update(1.0)  # a finite update: stepped, nothing logged
+    assert entry["causes"] == [] and not entry["skipped"] and entry["retries"] == 0

@@ -310,6 +310,11 @@ def run_fbr_arm(
     if full.fingerprint() != cache["schedule_fingerprint"]:
         raise ValueError(f"the probe schedule ({full.fingerprint()}) is not the one E2's margins "
                          f"were cached for ({cache['schedule_fingerprint']})")  # fmt: skip
+    nonfinite = [k for k in full.unique_keys() if not math.isfinite(float(cache["margins"][k]))]
+    if nonfinite and trial_steps is None:  # the first cache (cell (ii)) is for the diagnosis only
+        raise ConfigError(f"E2's margin cache has {len(nonfinite)} non-finite margin(s) on the "
+                          "schedule: make it again with fbr_e2_margins.py --margins-only (note "
+                          "of 2026-11-26)")  # fmt: skip
     if control:
         fbr = dataclasses.replace(fbr, margin_coefficient=0.0)
     model, rebuild = rebuild_pruned(config, arm)
@@ -337,7 +342,8 @@ def run_fbr_arm(
     )  # fmt: skip
     for entry in result.step_log:  # every non-finite, retried or skipped update, with its cause
         print(f"FBR update {entry['step']}: causes {entry['causes'] or ['none']}, retries "
-              f"{entry['retries']}, skipped {entry['skipped']}, scale {entry['scale_before']} -> "
+              f"{entry['retries']} {entry['attempts'] or ''}, skipped {entry['skipped']}, scale "
+              f"{entry['scale_before']} -> "
               f"{entry['scale_after']}", flush=True)  # fmt: skip
     effective = result.steps - len(result.skipped_steps)
     print(f"FBR: {result.steps} updates, {effective} effective, skipped {result.skipped_steps}, "
@@ -375,17 +381,24 @@ def run_fbr_arm(
     answers = probe_answers(model, samples, eval_settings, data_root, fbr.decode_max_new_tokens)
     np.savez_compressed(arrays_dir / ANSWERS_FILE.format(split="val"), **answers)
     record["evaluation_seconds"] = time.perf_counter() - t1
-    from medcompress.evaluation.fbr_analysis import check_pilot_inputs
-
-    record["pilot_inputs"] = check_pilot_inputs(evaluation.arrays, answers,
-                                                list(eval_settings.findings))  # fmt: skip
-    print(f"validation pass: {len(evaluation.metrics)} metrics, suites "
-          f"{list(eval_settings.suites)}; pilot inputs checked: {record['pilot_inputs']}",
-          flush=True)  # fmt: skip
     kept = ("arm", "control", "label", "margin_coefficient", "schedule")
     (arrays_dir / RUN_FILE).write_text(json.dumps({k: record[k] for k in kept}), encoding="utf-8")
     upsert_results(to_rows(evaluation.metrics, f"FBR:{label}", "B2", arm.seed),
                    folder / ROWS_FILE)  # fmt: skip
     (folder / "training.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
-    print(f"wrote {folder} and {arrays_dir}", flush=True)
+    print(f"validation pass: {len(evaluation.metrics)} metrics, suites "
+          f"{list(eval_settings.suites)}; wrote {folder} and {arrays_dir}", flush=True)  # fmt: skip
+    # the pilot's analysis inputs, checked after everything is written (a failure keeps them)
+    from medcompress.evaluation.fbr_analysis import check_pilot_inputs
+
+    try:
+        record["pilot_inputs"] = check_pilot_inputs(evaluation.arrays, answers,
+                                                    list(eval_settings.findings))  # fmt: skip
+    except Exception as error:
+        record["pilot_inputs"] = {"error": f"{type(error).__name__}: {error}"}
+        (folder / "training.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
+        print(f"PILOT INPUT CHECK FAILED (the outputs above are kept): {error}", flush=True)
+        raise
+    (folder / "training.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
+    print(f"pilot inputs checked: {record['pilot_inputs']}", flush=True)
     return folder

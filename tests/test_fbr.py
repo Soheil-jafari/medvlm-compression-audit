@@ -127,10 +127,12 @@ def test_only_a_scale_overflow_is_retried() -> None:
     """Note of 2026-11-26: an update is retried at half the scale only when every loss and
     margin is finite and only a gradient is not; a genuine non-finite loss is skipped."""
     assert fbr.scale_overflow([], gradients_finite=False)  # an overflow in the backward pass
-    assert fbr.scale_overflow(["pair_gradient"], gradients_finite=False)
+    for gradient in fbr.GRADIENT_CAUSES:  # the backward pass that overflowed first
+        assert fbr.scale_overflow([gradient], gradients_finite=False)
     assert not fbr.scale_overflow([], gradients_finite=True)  # a finite update
-    for cause in ("ordinary_loss", "probe_ce", "student_margin", "e2_margin"):
+    for cause in fbr.SCALAR_CAUSES:
         assert not fbr.scale_overflow([cause, "pair_gradient"], gradients_finite=False)
+    assert fbr.SCALAR_CAUSES == ("ordinary_loss", "probe_ce", "student_margin", "e2_margin")
     assert fbr.SCALE_RETRIES == 3
 
 

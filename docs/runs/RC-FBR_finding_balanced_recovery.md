@@ -211,13 +211,15 @@ cat /kaggle/working/fbr_trial/E5_magnitude/trial.json
 The first trial (cell (iii), 2026-11-26) skipped updates 1-5: the paired term overflowed the
 loss scale (decision file section 14). One notebook, Soheil, about 1 h (an estimate: two
 20-update trials of about 7 min each, the margin cache again about 20 min without the decoding,
-the smoke about 10 min, setup). Attach `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`, `fbr-e2-margins` (the
-first cache). It runs, in order:
+the smoke about 10 min, setup). Attach `medcompress-data`, `e2-seed0-adapter`,
+`e0-teacher-cache`, `fbr-e2-margins` (the first cache). It runs, in order:
 
 1. **the diagnosis:** the first trial again with the first implementation's scaling and no
    retries (`--legacy-pair-grad`), on the first cache; it logs, for every non-finite or skipped
    update, which check fired (`ordinary_loss`, `probe_ce`, `student_margin`, `e2_margin`,
-   `pair_gradient`, `scale_overflow`) and the loss scale before and after;
+   `ordinary_gradient`, `probe_gradient`, `pair_gradient`: the backward pass whose gradient
+   overflowed first; `scale_overflow` in front when no retry was left) and the loss scale
+   before and after;
 2. **the margin cache again** (`--margins-only`): E2's non-finite probes replaced by the next
    unused image of their stratum; it prints the updates they were in; save
    `/kaggle/working/fbr_margins_v2/` as `fbr-e2-margins-v2`;
@@ -267,14 +269,15 @@ MEDCOMPRESS_RESULTS_ROOT=/kaggle/working/smoke_results python scripts/fbr_recove
   -o evaluation.bootstrap_resamples=20 -o evaluation.generation_samples=4 \
   2>&1 | tee /kaggle/working/fbr_smoke_v2.txt
 echo "smoke exit code: ${PIPESTATUS[0]}"
-grep -E "FBR update|FBR:|retry|round|trial:|validation pass|wrote /kaggle/working/fbr_smoke" \
+grep -E "FBR update|FBR:|retry|round|trial:|validation pass|pilot inputs|PILOT INPUT" \
   /kaggle/working/fbr_trial_legacy.txt /kaggle/working/fbr_e2_margins_v2.txt \
   /kaggle/working/fbr_trial_fixed.txt /kaggle/working/fbr_smoke_v2.txt
 ```
 
 Send the four logs and both `trial.json` files. It passes when the fixed trial skips no update
 for the loss scale alone, the margin cache ends with no non-finite margin, and the smoke prints
-its validation pass and exits 0.
+its validation pass and `pilot inputs checked` and exits 0. A pilot refuses a margin cache
+with a non-finite margin on the schedule (the first cache serves the diagnosis trial only).
 
 ### (iv) The pilot, one notebook per arm (GPU, one T4)
 
@@ -312,6 +315,7 @@ ARM="E5 --variant magnitude"; CONTROL=""                          # edit per not
 DATA=$(python scripts/find_inputs.py data) || exit 1
 FROM=$(python scripts/find_inputs.py handoffs | sed 's/^/--from /' | tr '\n' ' ')
 MARGINS=$(find /kaggle/input -path "*fbr-e2-margins-v2*" -name fbr_e2_margins.json | head -1)
+[ -n "$MARGINS" ] || { echo "fbr-e2-margins-v2 is not attached: stop"; exit 1; }
 echo "margins: $MARGINS"                                          # the cache of 2026-11-26
 export HF_HOME=/kaggle/temp/hf CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1
 python scripts/fbr_recover.py --exp $ARM --budget B2 --seed 0 --data-root "$DATA" $FROM \

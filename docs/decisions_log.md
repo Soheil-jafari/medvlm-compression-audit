@@ -736,6 +736,11 @@ must be logged here.
   replaces E2's non-finite probes from the margin cache alone. The smoke checks the pilot's
   inputs (`check_pilot_inputs`). Card RC-FBR cell (iii-b): the diagnosis trial, the new margin
   cache (`fbr-e2-margins-v2`), the fixed trial, the smoke again; cell (iv) waits for it.
+  Follow-up: the causes also name the backward pass whose gradient overflowed first
+  (`ordinary_gradient`, `probe_gradient`, `pair_gradient`), kept after `scale_overflow`; the
+  update and its retries in `optimizer_update` (tested on CPU with the loss scaler); a full run
+  refuses a margin cache with a non-finite margin on the schedule; the pilot-input check runs
+  after the rows and `training.json` are written.
 - **2026-11-26 (research lead; FBR implementation fixes recorded before any pilot run).** Cell
   (iii) skipped updates 1-5: the paired term's margin gradient at the full loss scale overflowed
   fp16. Fixes: the margin gradient of `scale * w * m` times the slope (equal in exact arithmetic,

@@ -28,7 +28,7 @@ import csv
 import json
 import math
 import time
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -368,8 +368,9 @@ def accumulate_update(
     scaler scales): each ordinary example ``L0 / 16``; each probe ``CE / 16``; per finding the
     paired term ``c (6/16) (1/F) Huber(d - d(E2))`` through its exact gradient (each member's
     margin gradient kept from its own forward pass). Returns the loss parts and the causes of a
-    non-finite update (empty when finite): ``ordinary_loss``, ``probe_ce``, ``student_margin``,
-    ``e2_margin``, ``pair_gradient``.
+    non-finite update (empty when finite): the losses and margins (``ordinary_loss``, ``probe_ce``,
+    ``student_margin``, ``e2_margin``), then the backward pass whose gradient first turned
+    non-finite (``ordinary_gradient``, ``probe_gradient``, ``pair_gradient``).
 
     The margin gradient is taken of ``scale * w * m`` (``w`` the paired term's weight per finding,
     note of 2026-11-26), so it enters the loss scaler at the size of the other terms; it is then
@@ -397,6 +398,10 @@ def accumulate_update(
         if cause not in causes:
             causes.append(cause)
 
+    def gradient_check(cause: str) -> None:  # the first backward pass that overflowed
+        if not any(c in GRADIENT_CAUSES for c in causes) and not grads_finite(ctx.params):
+            mark(cause)
+
     prescale = 1.0 if ctx.legacy_pair_scaling else pair_weight
     for example in general:
         gt, teacher = _micro_batches(ctx.student, [example], ctx.cfg)
@@ -409,6 +414,7 @@ def accumulate_update(
         if not math.isfinite(value):
             mark("ordinary_loss")
         general_total += value / accumulation
+    gradient_check("ordinary_gradient")
     for f_index, finding in enumerate(findings):
         pair = probes[2 * f_index : 2 * f_index + 2]
         if [(p.finding, p.present) for p in pair] != [(finding, True), (finding, False)]:
@@ -425,7 +431,10 @@ def accumulate_update(
                 found = torch.autograd.grad(ctx.scale(margin * prescale), ctx.params,
                                             retain_graph=True, allow_unused=True)  # fmt: skip
                 grads.append([None if g is None else g.detach().float() for g in found])
+                if not all(g is None or bool(torch.isfinite(g).all()) for g in found):
+                    mark("pair_gradient")  # the scaled margin gradient itself overflowed
             ctx.scale(ce / accumulation).backward()
+            gradient_check("probe_gradient")
             margins.append(float(margin.detach()))
             ce_value = float(ce.detach())
             if not math.isfinite(ce_value):
@@ -455,6 +464,7 @@ def accumulate_update(
                         mark("pair_gradient")
                     add = (k * delta).to(p.dtype)
                     p.grad = add if p.grad is None else p.grad + add
+            gradient_check("pair_gradient")
         del grads
     total = general_total + probe_total + coefficient * probe_share * huber_total
     parts = {"loss": total, "general": general_total, "probe_ce": probe_total,
@@ -472,12 +482,79 @@ def grads_finite(params: Sequence[Any]) -> bool:
 SCALE_RETRIES = 3
 """Retries of an update that overflowed only because of the loss scale (note of 2026-11-26)."""
 
+SCALAR_CAUSES = ("ordinary_loss", "probe_ce", "student_margin", "e2_margin")
+"""A non-finite loss or margin: a genuine non-finite update, never retried."""
+GRADIENT_CAUSES = ("ordinary_gradient", "probe_gradient", "pair_gradient")
+"""A non-finite gradient with every loss and margin finite: an overflow of the loss scale."""
+
 
 def scale_overflow(causes: Sequence[str], gradients_finite: bool) -> bool:
     """True when an update overflowed only because of the loss scale: every loss and margin
-    finite (no cause but a non-finite paired gradient), yet a gradient is not finite."""
-    scalar_causes = [c for c in causes if c != "pair_gradient"]
-    return not scalar_causes and (bool(causes) or not gradients_finite)
+    finite (no cause but a non-finite gradient), yet a gradient is not finite."""
+    if any(c in SCALAR_CAUSES for c in causes):
+        return False
+    return bool(causes) or not gradients_finite
+
+
+def optimizer_update(
+    accumulate: Callable[[], tuple[dict[str, float], list[str]]],
+    params: Sequence[Any],
+    optimizer: Any,
+    scaler: Any,
+    *,
+    amp: bool,
+    retries: int,
+    clip: float,
+    step: int,
+) -> tuple[dict[str, float], dict[str, Any]]:
+    """One update with the registered loss scaling and clipping. ``accumulate`` fills the
+    gradients and returns the loss parts and the causes of a non-finite update. An update that
+    overflowed only because of the loss scale is done again at half the scale, up to ``retries``
+    times, before any optimiser step (the learning rate, set by the caller, does not advance);
+    with no retry left it is skipped as registered (note of 2026-11-26). Returns the parts and
+    the update's record: the causes (``scale_overflow`` first, then those of the last attempt),
+    the causes of each retried attempt, whether it was skipped, the loss scale before and
+    after."""
+    import torch
+
+    scale_first = scaler.get_scale() if amp else None
+    attempts: list[list[str]] = []
+    while True:
+        parts, causes = accumulate()
+        overflow = amp and scale_overflow(causes, grads_finite(params))
+        if not (overflow and len(attempts) < retries):
+            break
+        attempts.append(list(causes))  # the same update again at half the scale
+        halved = scaler.get_scale() / 2
+        optimizer.zero_grad(set_to_none=True)
+        scaler.update(new_scale=halved)
+        print(f"FBR step {step}: loss-scale overflow only (every loss and margin finite; "
+              f"{causes or ['gradient']}); retry {len(attempts)} at scale {halved:g}",
+              flush=True)  # fmt: skip
+    if overflow:
+        causes = ["scale_overflow", *causes]  # no retry left (or none allowed)
+    broken = bool(causes)
+    if broken and params:  # the whole update is non-finite: the loss scaler skips it
+        first = params[0]
+        if first.grad is None:
+            first.grad = torch.zeros_like(first)
+        first.grad.fill_(float("inf"))
+    scale_before = scaler.get_scale() if amp else None
+    if amp:
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(params, clip)
+        scaler.step(optimizer)
+        scaler.update()
+    elif not broken:
+        torch.nn.utils.clip_grad_norm_(params, clip)
+        optimizer.step()
+    optimizer.zero_grad(set_to_none=True)
+    scale_after = scaler.get_scale() if amp else None
+    skipped = (scale_after < scale_before) if amp else broken
+    return parts, {
+        "step": step, "causes": causes, "retries": len(attempts), "attempts": attempts,
+        "skipped": bool(skipped), "scale_before": scale_first, "scale_after": scale_after,
+    }  # fmt: skip
 
 
 def train_fbr(
@@ -556,39 +633,15 @@ def train_fbr(
         for group in optimizer.param_groups:
             group["lr"] = _learning_rate(cfg, step)
         general = [examples[i] for i in general_indices(order, step, settings.general_per_update)]
-        scale_first = scaler.get_scale() if amp else None
-        attempt = 0
-        while True:  # an update that overflowed only because of the loss scale is retried
-            parts, causes = accumulate_update(ctx, general, schedule.updates[step], e2_margins)
-            overflow = scale_overflow(causes, grads_finite(params))
-            if not (amp and overflow and attempt < retries):
-                break
-            attempt += 1  # the same update again at half the scale; the lr step does not advance
-            halved = scaler.get_scale() / 2
-            optimizer.zero_grad(set_to_none=True)
-            scaler.update(new_scale=halved)
-            print(f"FBR step {step + 1}: loss-scale overflow only (every loss and margin "
-                  f"finite); retry {attempt} at scale {halved:g}", flush=True)  # fmt: skip
-        if overflow:
-            causes = ["scale_overflow"]  # no retry left (or none allowed): skipped as registered
-        broken = bool(causes)
+        update = schedule.updates[step]
+        parts, entry = optimizer_update(
+            lambda update=update, general=general: accumulate_update(ctx, general, update,
+                                                                     e2_margins),
+            params, optimizer, scaler, amp=amp, retries=retries, clip=clip, step=step + 1,
+        )  # fmt: skip
+        broken, skipped = bool(entry["causes"]), entry["skipped"]
         if broken:
             result.nonfinite_microbatches += 1
-            if params:  # the whole update is non-finite: the loss scaler skips it
-                first = params[0]
-                if first.grad is None:
-                    first.grad = torch.zeros_like(first)
-                first.grad.fill_(float("inf"))
-        scale_before = scaler.get_scale() if amp else None
-        if amp:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(params, clip)
-            scaler.step(optimizer)
-            scaler.update()
-        elif not broken:
-            torch.nn.utils.clip_grad_norm_(params, clip)
-            optimizer.step()
-        optimizer.zero_grad(set_to_none=True)
         result.steps = step + 1
         result.losses.append(parts["loss"] if not broken else float("nan"))
         result.general_losses.append(parts["general"])
@@ -596,18 +649,12 @@ def train_fbr(
         result.margin_huber.append(parts["huber"])
         if broken:
             result.nonfinite_steps.append(step + 1)
-        skipped = (scale_before is not None and scaler.get_scale() < scale_before) or (
-            not amp and broken
-        )
         if skipped:
             result.skipped_steps.append(step + 1)
-        if attempt:
+        if entry["retries"]:
             result.retried_steps.append(step + 1)
-        if broken or skipped or attempt:
-            result.step_log.append({
-                "step": step + 1, "causes": causes, "retries": attempt, "skipped": skipped,
-                "scale_before": scale_first, "scale_after": scaler.get_scale() if amp else None,
-            })  # fmt: skip
+        if broken or skipped or entry["retries"]:
+            result.step_log.append(entry)
         result.seconds_per_update.append(time.perf_counter() - began)
         if result.steps % LOG_EVERY == 0 or result.steps == steps:
             print(f"FBR step {result.steps}/{cfg.steps}: loss {parts['loss']:.4f} (ordinary "
