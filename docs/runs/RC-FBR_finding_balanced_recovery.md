@@ -51,7 +51,8 @@ updates, a validation pass 0.53 h, model loads a few minutes); cell (iii) measur
 | (i) CPU diagnostic | any (CPU) | the outcome datasets and the probe-answer datasets | minutes | send `fbr_diagnostic.zip` |
 | (ii) E2 margins + diagnosis | Soheil | `medcompress-data`, `e2-seed0-adapter` | about 0.6 h (the margins, then 942 probes decoded up to 8 tokens and 20 answers up to 32) | `/kaggle/working/fbr_margins/` as `fbr-e2-margins`; send `fbr_e2_diagnosis.json` and the log |
 | (iii) smoke + trial | Soheil | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`, `fbr-e2-margins` | about 0.8 h | send the log and `trial.json` |
-| (iv) pilot, one notebook per arm | Soheil (E5 magnitude), account 3 (E5 activation), Amir (E7), any (sampling-only on E5 activation) | as (iii) | about 2.2 h per arm (training about 1.2 h by estimate, validation 0.53 h, probe answers 0.15 h, setup), 4 arms about 9 h | `/kaggle/working/outputs/fbr/` as `fbr-pilot-<label>`; send `results_to_commit/` |
+| (iii-b) trial again after the fixes of 2026-11-26 | Soheil | `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`, `fbr-e2-margins` | about 1 h | `/kaggle/working/fbr_margins_v2/` as `fbr-e2-margins-v2`; send the four logs and both `trial.json` |
+| (iv) pilot, one notebook per arm | Soheil (E5 magnitude), account 3 (E5 activation), Amir (E7), any (sampling-only on E5 activation) | as (iii), with `fbr-e2-margins-v2` in place of `fbr-e2-margins` | about 2 h per arm (training about 0.91 h from the trial, validation 0.53 h, probe answers 0.15 h, setup), 4 arms about 8-9 h | `/kaggle/working/outputs/fbr/` as `fbr-pilot-<label>`; send `results_to_commit/` |
 
 Total by estimate about 13-14 T4 hours (with up to 1.8 h more where a registered validation pass
 must be rerun), under the cap.
@@ -205,7 +206,84 @@ echo "trial exit code: ${PIPESTATUS[0]}"
 cat /kaggle/working/fbr_trial/E5_magnitude/trial.json
 ```
 
+### (iii-b) The trial again after the fixes of 2026-11-26 (GPU, one T4)
+
+The first trial (cell (iii), 2026-11-26) skipped updates 1-5: the paired term overflowed the
+loss scale (decision file section 14). One notebook, Soheil, about 1 h (an estimate: two
+20-update trials of about 7 min each, the margin cache again about 20 min without the decoding,
+the smoke about 10 min, setup). Attach `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`, `fbr-e2-margins` (the
+first cache). It runs, in order:
+
+1. **the diagnosis:** the first trial again with the first implementation's scaling and no
+   retries (`--legacy-pair-grad`), on the first cache; it logs, for every non-finite or skipped
+   update, which check fired (`ordinary_loss`, `probe_ce`, `student_margin`, `e2_margin`,
+   `pair_gradient`, `scale_overflow`) and the loss scale before and after;
+2. **the margin cache again** (`--margins-only`): E2's non-finite probes replaced by the next
+   unused image of their stratum; it prints the updates they were in; save
+   `/kaggle/working/fbr_margins_v2/` as `fbr-e2-margins-v2`;
+3. **the trial with the fixes**, on the new cache: expected, no skip in updates 1-20 except a
+   genuine non-finite one, and any scale-only overflow retried (logged);
+4. **the smoke again** on the new cache (2 updates, the smoke's evaluation subset, a scratch
+   results copy): it runs the validation pass, the probe answers and the new check of the pilot
+   inputs (keys, alignment, the cross-fitted folds, the operating points, the audit), so a
+   pilot cannot fail at its end on them.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+DATA=$(python scripts/find_inputs.py data) || exit 1
+FROM=$(python scripts/find_inputs.py handoffs | sed 's/^/--from /' | tr '\n' ' ')
+OLD=$(find /kaggle/input -name fbr_e2_margins.json | head -1); echo "first cache: $OLD"
+export HF_HOME=/kaggle/temp/hf CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1
+ARM="--exp E5 --variant magnitude --budget B2 --seed 0"
+python scripts/fbr_recover.py $ARM --data-root "$DATA" $FROM --margins "$OLD" \
+  --out /kaggle/working/fbr_trial_legacy --trial 20 --legacy-pair-grad 2>&1 | tee /kaggle/working/fbr_trial_legacy.txt
+python scripts/fbr_e2_margins.py --data-root "$DATA" $FROM --out /kaggle/working/fbr_margins_v2 \
+  --margins-only 2>&1 | tee /kaggle/working/fbr_e2_margins_v2.txt
+python scripts/fbr_recover.py $ARM --data-root "$DATA" $FROM \
+  --margins /kaggle/working/fbr_margins_v2/fbr_e2_margins.json \
+  --out /kaggle/working/fbr_trial_fixed --trial 20 2>&1 | tee /kaggle/working/fbr_trial_fixed.txt
+cp -r results /kaggle/working/smoke_results                       # the smoke never writes results/
+MEDCOMPRESS_RESULTS_ROOT=/kaggle/working/smoke_results python scripts/fbr_recover.py $ARM \
+  --data-root "$DATA" $FROM --margins /kaggle/working/fbr_margins_v2/fbr_e2_margins.json \
+  --out /kaggle/working/fbr_smoke -o recovery.steps=2 -o smoke.eval_images_per_label=2 \
+  -o evaluation.bootstrap_resamples=20 -o evaluation.generation_samples=4 \
+  2>&1 | tee /kaggle/working/fbr_smoke_v2.txt
+echo "smoke exit code: ${PIPESTATUS[0]}"
+grep -E "FBR update|FBR:|retry|round|trial:|validation pass|wrote /kaggle/working/fbr_smoke" \
+  /kaggle/working/fbr_trial_legacy.txt /kaggle/working/fbr_e2_margins_v2.txt \
+  /kaggle/working/fbr_trial_fixed.txt /kaggle/working/fbr_smoke_v2.txt
+```
+
+Send the four logs and both `trial.json` files. It passes when the fixed trial skips no update
+for the loss scale alone, the margin cache ends with no non-finite margin, and the smoke prints
+its validation pass and exits 0.
+
 ### (iv) The pilot, one notebook per arm (GPU, one T4)
+
+**After cell (iii-b) passes.** Attach `medcompress-data`, `e2-seed0-adapter`, `e0-teacher-cache`,
+`fbr-e2-margins-v2` (not the first cache). About 2 h per arm (an estimate: training 0.91 h from
+the trial, validation 0.53 h, probe answers 0.15 h, setup). Save `/kaggle/working/outputs/fbr/`
+as `fbr-pilot-<label>` (`fbr-pilot-e5-magnitude`, `fbr-pilot-e5-activation`, `fbr-pilot-e7`,
+`fbr-pilot-e5-activation-control`) and send `results_to_commit/` and the log (it lists every
+skipped and retried update with its cause).
 
 Set `ARM` to one of `"E5 --variant magnitude"`, `"E5 --variant activation"`, `"E7"`, and for the
 control `"E5 --variant activation"` with `CONTROL=--control`.
@@ -233,7 +311,8 @@ python scripts/find_inputs.py handoffs                          # the hand-offs 
 ARM="E5 --variant magnitude"; CONTROL=""                          # edit per notebook
 DATA=$(python scripts/find_inputs.py data) || exit 1
 FROM=$(python scripts/find_inputs.py handoffs | sed 's/^/--from /' | tr '\n' ' ')
-MARGINS=$(find /kaggle/input -name fbr_e2_margins.json | head -1); echo "margins: $MARGINS"
+MARGINS=$(find /kaggle/input -path "*fbr-e2-margins-v2*" -name fbr_e2_margins.json | head -1)
+echo "margins: $MARGINS"                                          # the cache of 2026-11-26
 export HF_HOME=/kaggle/temp/hf CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1
 python scripts/fbr_recover.py --exp $ARM --budget B2 --seed 0 --data-root "$DATA" $FROM \
   --margins "$MARGINS" $CONTROL 2>&1 | tee /kaggle/working/fbr_pilot.txt

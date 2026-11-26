@@ -27,11 +27,22 @@ from medcompress.compression.fbr_stage import run_e2_margin_cache  # noqa: E402
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser(__doc__.splitlines()[0], experiment_args=False)
     parser.add_argument("--out", type=Path, default=Path("/kaggle/working/fbr_margins"))
+    parser.add_argument(
+        "--margins-only",
+        action="store_true",
+        help="skip decoding every probe (the diagnosis of 2026-11-24 is done)",
+    )
     args = parser.parse_args(argv)
     args.exp = "E5"  # a pruning arm's config: the registered recovery section (157 updates)
     # sets the schedule; E2's own config has none. E2 seed 0 itself is loaded (stage 05's way).
     config = resolve_config(args)
-    return run_stage("fbr_e2_margins", run_e2_margin_cache, config=config, out=args.out)
+    return run_stage(
+        "fbr_e2_margins",
+        run_e2_margin_cache,
+        config=config,
+        out=args.out,
+        diagnosis_decode=not args.margins_only,
+    )
 
 
 if __name__ == "__main__":

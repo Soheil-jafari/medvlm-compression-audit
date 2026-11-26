@@ -725,6 +725,17 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-26 (agent; implementation after the note, no pre-registered setting changed).** In
+  `compression/fbr.py`: the paired term's margin gradient taken of `scale * w * m`, then times
+  the Huber slope (`--legacy-pair-grad` keeps the first formula, trial only, for the diagnosis);
+  a test checks both give the same gradient in fp32; the causes of every non-finite update
+  (`ordinary_loss`, `probe_ce`, `student_margin`, `e2_margin`, `pair_gradient`,
+  `scale_overflow`), the scale before and after, the retries (up to 3, only when every loss and
+  margin is finite, the lr step not advanced), the same in the control; `probe_schedule` skips
+  excluded probes (the next unused image of the stratum). `fbr_e2_margins.py --margins-only`
+  replaces E2's non-finite probes from the margin cache alone. The smoke checks the pilot's
+  inputs (`check_pilot_inputs`). Card RC-FBR cell (iii-b): the diagnosis trial, the new margin
+  cache (`fbr-e2-margins-v2`), the fixed trial, the smoke again; cell (iv) waits for it.
 - **2026-11-26 (research lead; FBR implementation fixes recorded before any pilot run).** Cell
   (iii) skipped updates 1-5: the paired term's margin gradient at the full loss scale overflowed
   fp16. Fixes: the margin gradient of `scale * w * m` times the slope (equal in exact arithmetic,

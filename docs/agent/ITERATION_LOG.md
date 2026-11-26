@@ -1610,3 +1610,13 @@ Append-only, newest at the bottom. One entry per iteration:
   correction before any use), then the native-format readout, the first-token table, the
   training-pattern check; methods text; RC-EX1 cell (c).
 
+## Iteration 100: 2026-11-26 (interactive)
+- FBR cell (iii): updates 1-5 skipped. Cause from the code: the paired term's margin gradient
+  was taken at the full loss scale, then multiplied by the small pair weight, so it overflowed
+  fp16 while the other terms did not. Note of 2026-11-26 committed first.
+- Fixed: the scaled pair weight inside the gradient (tested equal in fp32), scale-only retries
+  (both arms), every skipped update logged with its cause, E2's non-finite probes replaced by
+  the next unused image of their stratum. The smoke checks the pilot's inputs.
+- Registered recovery: skipped for scale alone only in E6 B2 (updates 1-3); results stand.
+- Card RC-FBR cell (iii-b) written; the pilot waits for it.
+

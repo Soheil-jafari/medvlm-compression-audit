@@ -43,6 +43,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--control", action="store_true", help="sampling-only (coefficient 0)")
     parser.add_argument("--trial", type=int, default=None, metavar="N",
                         help="stop after N updates and write the timing")  # fmt: skip
+    parser.add_argument("--legacy-pair-grad", action="store_true",
+                        help="diagnosis trial only: the first implementation's scaling of the "
+                        "paired term, no retries (note of 2026-11-26)")  # fmt: skip
     parser.add_argument("--out", type=Path, default=None,
                         help="default: <results_root>/exploratory/fbr")  # fmt: skip
     args, run = parse_stage_args(parser, argv, script=SCRIPT, default_exp=None)
@@ -50,7 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     out = args.out or Path(config["paths"]["results_root"]) / "exploratory" / "fbr"
     return run_stage("fbr_recover", run_fbr_arm, config=config, arm=run,
                      margins_file=args.margins, out=out, control=args.control,
-                     trial_steps=args.trial)  # fmt: skip
+                     trial_steps=args.trial,
+                     legacy_pair_scaling=args.legacy_pair_grad)  # fmt: skip
 
 
 if __name__ == "__main__":

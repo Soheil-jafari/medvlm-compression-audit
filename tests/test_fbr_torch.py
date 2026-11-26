@@ -8,6 +8,7 @@ import contextlib
 import csv
 import dataclasses
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -381,3 +382,63 @@ def test_a_non_finite_e2_margin_skips_its_update_instead_of_stopping(tmp_path: P
                            dataclasses.replace(ctx.cfg, steps=2), ctx.settings, ids,
                            data_root=tmp_path, seed=0)  # fmt: skip
     assert result.steps == 2 and result.nonfinite_steps == [2] and result.skipped_steps == [2]
+
+
+def test_the_rescaled_paired_term_gives_the_same_gradient_as_the_first_formula(
+    tmp_path: Path,
+) -> None:
+    """Note of 2026-11-26: the margin gradient taken of ``scale * w * m`` and multiplied by the
+    slope equals the first implementation's (``scale * m``, then ``w * slope``) in fp32."""
+    ctx, general, probes, _ids = _setup(tmp_path, 0.25)
+    e2 = {p.key: (1.5 if p.present else -0.5) for p in probes}
+
+    def grads(context: Any) -> list[Any]:
+        for p in context.params:
+            p.grad = None
+        context.module.train()
+        _parts, causes = fbr.accumulate_update(context, general, probes, e2)
+        assert causes == []
+        return [None if p.grad is None else p.grad.clone() for p in context.params]
+
+    new = grads(ctx)
+    legacy = grads(dataclasses.replace(ctx, legacy_pair_scaling=True))
+    assert all(a is None or torch.allclose(a, b, rtol=1e-5, atol=1e-8)
+               for a, b in zip(new, legacy, strict=True))  # fmt: skip
+
+
+def test_the_margin_cache_replaces_probes_with_a_non_finite_e2_margin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_recovery import _config
+
+    from medcompress.compression import fbr_stage
+    from medcompress.compression.pruning import stage as pruning_stage
+    from medcompress.evaluation import runner
+
+    samples = write_dataset(tmp_path)
+    config = _config(tmp_path)
+    config["recovery"] = {**config["recovery"], "batch_size": 1, "grad_accumulation": 14,
+                          "steps": 3}  # fmt: skip
+    config["inputs"] = {"image_longest_side": 56}
+    _with_answers(config)
+    monkeypatch.setattr(pruning_stage, "load_train_samples", lambda cfg: samples)
+    monkeypatch.setattr(runner, "load_trained_student",
+                        lambda cfg, exp, seed, side: tiny_vlm.tiny_wrapper(seed=0))  # fmt: skip
+    first_schedule = fbr_stage._schedule(config, samples, steps=3)[0]
+    bad_key = first_schedule.updates[1][0].key  # update 2's first probe overflows for E2
+    real = fbr.score_margins
+
+    def scored(wrapper: Any, probes: list, data_root: Path, ids: Any = None) -> tuple:
+        margins, first = real(wrapper, probes, data_root, ids)
+        return {k: (float("nan") if k == bad_key else v) for k, v in margins.items()}, first
+
+    monkeypatch.setattr(fbr, "score_margins", scored)
+    target = fbr_stage.run_e2_margin_cache(config, tmp_path / "m", examples=1,
+                                           diagnosis_decode=False)  # fmt: skip
+    cache = json.loads(target.read_text())
+    assert cache["excluded"] == [bad_key] and bad_key not in cache["margins"]
+    assert all(math.isfinite(v) for v in cache["margins"].values())
+    rounds = cache["diagnosis"]["e2_nonfinite_rounds"]
+    assert [r["nonfinite"] for r in rounds] == [1, 0] and rounds[0]["updates"] == [2]
+    final = fbr_stage._schedule(config, samples, steps=3, exclude={bad_key})[0]
+    assert cache["schedule_fingerprint"] == final.fingerprint() != first_schedule.fingerprint()

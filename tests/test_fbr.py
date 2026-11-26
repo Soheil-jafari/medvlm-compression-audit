@@ -121,3 +121,27 @@ def test_huber_the_canonical_answer_tokens_and_the_first_token_report() -> None:
     assert rep["by_label"]["negative"] == {"yes": 0, "no": 1, "other": 1}
     assert rep["yes_tokens"] == {} and rep["no_tokens"] == {"4": 2}
     assert rep["top_other_tokens"][0] == {"token": 99, "text": "<other>", "count": 2}
+
+
+def test_only_a_scale_overflow_is_retried() -> None:
+    """Note of 2026-11-26: an update is retried at half the scale only when every loss and
+    margin is finite and only a gradient is not; a genuine non-finite loss is skipped."""
+    assert fbr.scale_overflow([], gradients_finite=False)  # an overflow in the backward pass
+    assert fbr.scale_overflow(["pair_gradient"], gradients_finite=False)
+    assert not fbr.scale_overflow([], gradients_finite=True)  # a finite update
+    for cause in ("ordinary_loss", "probe_ce", "student_margin", "e2_margin"):
+        assert not fbr.scale_overflow([cause, "pair_gradient"], gradients_finite=False)
+    assert fbr.SCALE_RETRIES == 3
+
+
+def test_an_excluded_probe_is_replaced_by_the_next_unused_image_of_its_stratum() -> None:
+    probes = fbr.training_probes(_samples(), FINDINGS, "Is there {finding}?")
+    base = fbr.probe_schedule(probes, FINDINGS, steps=3, seed=0)
+    target = base.updates[1][1]  # update 2's polyp negative
+    replaced = fbr.probe_schedule(probes, FINDINGS, steps=3, seed=0, exclude={target.key})
+    assert target.key not in replaced.unique_keys()
+    assert replaced.updates[0] == base.updates[0]  # updates before it unchanged
+    assert replaced.updates[1][1].key == base.updates[2][1].key  # the next one of its stratum
+    assert [u[0] for u in replaced.updates] == [u[0] for u in base.updates]  # other strata too
+    assert replaced.log["polyp:negative"]["excluded_skipped"] == 1
+    assert fbr.probe_schedule(probes, FINDINGS, steps=3, seed=0).fingerprint() == base.fingerprint()

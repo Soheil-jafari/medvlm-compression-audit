@@ -97,7 +97,9 @@ def run_probe_answers(
 # ----------------------------------------------------------------------------- cell (ii)
 
 
-def _schedule(config: Mapping[str, Any], train: Any, steps: int | None = None) -> Any:
+def _schedule(
+    config: Mapping[str, Any], train: Any, steps: int | None = None, exclude: Any = ()
+) -> Any:
     from medcompress.compression.distillation.offline_kd import TrainConfig
     from medcompress.compression.fbr import (
         FBRSettings,
@@ -111,7 +113,8 @@ def _schedule(config: Mapping[str, Any], train: Any, steps: int | None = None) -
     fbr = FBRSettings.load()
     cfg = TrainConfig.from_config({**recovery_config(config), "mode": "offline_kd"})
     probes = training_probes(train, settings.findings, settings.template, settings.display_names)
-    schedule = probe_schedule(probes, settings.findings, steps or cfg.steps, fbr.seed)
+    schedule = probe_schedule(probes, settings.findings, steps or cfg.steps, fbr.seed,
+                              exclude=exclude)  # fmt: skip
     return schedule, settings, fbr, cfg
 
 
@@ -126,8 +129,16 @@ def probe_answers_config(config: Mapping[str, Any]) -> dict[str, str]:
     return {"positive": str(answers["positive"]), "negative": str(answers["negative"])}
 
 
+MAX_EXCLUSION_ROUNDS = 4
+
+
 def run_e2_margin_cache(
-    config: Mapping[str, Any], out: Path, *, examples: int = 10, max_new_tokens: int = 32
+    config: Mapping[str, Any],
+    out: Path,
+    *,
+    examples: int = 10,
+    max_new_tokens: int = 32,
+    diagnosis_decode: bool = True,
 ) -> Path:
     """E2 seed 0's pooled margin of every probe of the FBR schedule (the training pass's
     function, no gradient), the (yes, no) cross-entropy targets (the template's canonical
@@ -152,24 +163,49 @@ def run_e2_margin_cache(
     from medcompress.models.tokens import NO_SPELLINGS, YES_SPELLINGS
 
     train = load_train_samples(config)
-    schedule, _settings, _fbr, _cfg = _schedule(config, train)
-    keys = set(schedule.unique_keys())
-    probes = {p.key: p for u in schedule.updates for p in u if p.key in keys}
     e2 = load_trained_student(config, "E2", 0, _side(config))
     yes_id, no_id, targets = canonical_answer_ids(e2, probe_answers_config(config))
     data_root = Path(config["paths"]["data_root"])
     started = time.perf_counter()
-    margins, first = score_margins(e2, list(probes.values()), data_root, (yes_id, no_id))
+    # E2's margin on every schedule probe; a probe whose margin is non-finite is replaced by the
+    # next unused image of its stratum, and the new probes are scored (note of 2026-11-26)
+    excluded: set[str] = set()
+    margins: dict[str, float] = {}
+    first: dict[str, int] = {}
+    rounds = []
+    for round_index in range(1, MAX_EXCLUSION_ROUNDS + 1):
+        schedule, _settings, _fbr, cfg = _schedule(config, train, exclude=excluded)
+        probes = {p.key: p for u in schedule.updates for p in u}
+        new = [p for k, p in probes.items() if k not in margins]
+        m, f = score_margins(e2, new, data_root, (yes_id, no_id))
+        margins.update(m)
+        first.update(f)
+        bad = sorted(k for k in probes if not math.isfinite(margins[k]))
+        at = [t + 1 for t, u in enumerate(schedule.updates) if any(p.key in bad for p in u)]
+        rounds.append({"round": round_index, "scored": len(new), "nonfinite": len(bad),
+                       "updates": at})  # fmt: skip
+        print(f"E2 margins, round {round_index}: {len(new)} probes scored, {len(bad)} non-finite"
+              + (f" (in updates {at}): replaced by the next unused image of their stratum"
+                 if bad else ""), flush=True)  # fmt: skip
+        if not bad:
+            break
+        excluded |= set(bad)
+    else:
+        raise ValueError(f"E2's margins are still non-finite after {MAX_EXCLUSION_ROUNDS} rounds")
+    margins = {k: margins[k] for k in probes}  # the final schedule's probes only
+    first = {k: first[k] for k in probes}
     tokenizer = e2.tokenizer
     present = {k: p.present for k, p in probes.items()}
     tokens = first_token_report(first, present, tokenizer.decode, e2.yes_ids, e2.no_ids)
     listed = list(probes.values())
-    decoded = e2.generate([data_root / p.image_path for p in listed], [p.question for p in listed],
-                          max_new_tokens=FBRSettings.load().decode_max_new_tokens)  # fmt: skip
     parsed: dict[str, Counter] = {"positive": Counter(), "negative": Counter()}
-    for probe, answer in zip(listed, decoded, strict=True):
-        reading = parse_yes_no(answer.text) or "unparsed"
-        parsed["positive" if probe.present else "negative"][reading] += 1
+    if diagnosis_decode:
+        decoded = e2.generate([data_root / p.image_path for p in listed],
+                              [p.question for p in listed],
+                              max_new_tokens=FBRSettings.load().decode_max_new_tokens)  # fmt: skip
+        for probe, answer in zip(listed, decoded, strict=True):
+            reading = parse_yes_no(answer.text) or "unparsed"
+            parsed["positive" if probe.present else "negative"][reading] += 1
     positives = [p for p in listed if p.present][:examples]
     shown = positives + [p for p in listed if not p.present][:examples]
     full = e2.generate([data_root / p.image_path for p in shown], [p.question for p in shown],
@@ -185,8 +221,12 @@ def run_e2_margin_cache(
         "decoded_up_to_tokens": FBRSettings.load().decode_max_new_tokens,
         "parsed_by_label": {k: {r: int(n) for r, n in c.items()} for k, c in parsed.items()},
         "probes": len(listed),
-        # a non-finite E2 margin (fp16 overflow of an image): that update is skipped (2026-11-25)
-        "e2_nonfinite_margins": int(sum(1 for v in margins.values() if not math.isfinite(v))),
+        # non-finite E2 margins (fp16 overflow of an image): replaced (note of 2026-11-26)
+        "e2_nonfinite_rounds": rounds,
+        "e2_excluded_probes": len(excluded),
+        "e2_nonfinite_margins_final": int(sum(1 for v in margins.values()
+                                              if not math.isfinite(v))),
+        "decoded": bool(diagnosis_decode),
     }  # fmt: skip
     examples_shown = [{"finding": p.finding, "present": p.present, "answer": a.text,
                        "parsed": parse_yes_no(a.text) or "unparsed"}
@@ -195,6 +235,7 @@ def run_e2_margin_cache(
         "schedule_fingerprint": schedule.fingerprint(), "schedule_log": schedule.log,
         "findings": list(schedule.findings), "steps": len(schedule.updates),
         "margins": margins, "yes_target_id": yes_id, "no_target_id": no_id,
+        "excluded": sorted(excluded),  # sample ids inside: this file is never committed
         "seconds": time.perf_counter() - started, "diagnosis": diagnosis,
     }  # fmt: skip
     out.mkdir(parents=True, exist_ok=True)
@@ -224,6 +265,7 @@ def run_fbr_arm(
     out: Path,
     control: bool = False,
     trial_steps: int | None = None,
+    legacy_pair_scaling: bool = False,
 ) -> Path:
     """FBR (or, with ``control``, the sampling-only recipe) on one arm, from its pruned model
     before recovery; then the validation pass and the probe answers. With ``trial_steps`` it
@@ -238,7 +280,12 @@ def run_fbr_arm(
         require_teacher_records,
         training_pool,
     )
-    from medcompress.compression.fbr import rebuild_pruned, recovery_config, train_fbr
+    from medcompress.compression.fbr import (
+        SCALE_RETRIES,
+        rebuild_pruned,
+        recovery_config,
+        train_fbr,
+    )
     from medcompress.compression.lora import merge_adapter
     from medcompress.compression.pruning.stage import load_train_samples
     from medcompress.evaluation.fbr_analysis import ANSWERS_FILE, probe_answers
@@ -255,8 +302,11 @@ def run_fbr_arm(
     label = arm_label(arm, control)
     t0 = time.perf_counter()
     train = load_train_samples(config)
-    schedule, settings, fbr, cfg = _schedule(config, train)
-    full = _schedule(config, train, steps=int(cache["steps"]))[0]
+    if legacy_pair_scaling and trial_steps is None:
+        raise ConfigError("the legacy paired-term scaling is for the diagnosis trial only")
+    excluded = set(cache.get("excluded", ()))  # E2's non-finite probes, replaced (2026-11-26)
+    schedule, settings, fbr, cfg = _schedule(config, train, exclude=excluded)
+    full = _schedule(config, train, steps=int(cache["steps"]), exclude=excluded)[0]
     if full.fingerprint() != cache["schedule_fingerprint"]:
         raise ValueError(f"the probe schedule ({full.fingerprint()}) is not the one E2's margins "
                          f"were cached for ({cache['schedule_fingerprint']})")  # fmt: skip
@@ -282,7 +332,16 @@ def run_fbr_arm(
         model, examples, schedule, cache["margins"], cfg, fbr,
         (yes_id, no_id),
         data_root=data_root, seed=arm.seed, stop_after_steps=trial_steps,
+        legacy_pair_scaling=legacy_pair_scaling,
+        retries=0 if legacy_pair_scaling else SCALE_RETRIES,
     )  # fmt: skip
+    for entry in result.step_log:  # every non-finite, retried or skipped update, with its cause
+        print(f"FBR update {entry['step']}: causes {entry['causes'] or ['none']}, retries "
+              f"{entry['retries']}, skipped {entry['skipped']}, scale {entry['scale_before']} -> "
+              f"{entry['scale_after']}", flush=True)  # fmt: skip
+    effective = result.steps - len(result.skipped_steps)
+    print(f"FBR: {result.steps} updates, {effective} effective, skipped {result.skipped_steps}, "
+          f"retried {result.retried_steps}", flush=True)  # fmt: skip
     folder = Path(out) / label
     folder.mkdir(parents=True, exist_ok=True)
     record = {
@@ -316,6 +375,13 @@ def run_fbr_arm(
     answers = probe_answers(model, samples, eval_settings, data_root, fbr.decode_max_new_tokens)
     np.savez_compressed(arrays_dir / ANSWERS_FILE.format(split="val"), **answers)
     record["evaluation_seconds"] = time.perf_counter() - t1
+    from medcompress.evaluation.fbr_analysis import check_pilot_inputs
+
+    record["pilot_inputs"] = check_pilot_inputs(evaluation.arrays, answers,
+                                                list(eval_settings.findings))  # fmt: skip
+    print(f"validation pass: {len(evaluation.metrics)} metrics, suites "
+          f"{list(eval_settings.suites)}; pilot inputs checked: {record['pilot_inputs']}",
+          flush=True)  # fmt: skip
     kept = ("arm", "control", "label", "margin_coefficient", "schedule")
     (arrays_dir / RUN_FILE).write_text(json.dumps({k: record[k] for k in kept}), encoding="utf-8")
     upsert_results(to_rows(evaluation.metrics, f"FBR:{label}", "B2", arm.seed),

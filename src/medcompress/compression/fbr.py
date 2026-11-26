@@ -28,7 +28,7 @@ import csv
 import json
 import math
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -163,13 +163,19 @@ class ProbeSchedule:
 
 
 def probe_schedule(
-    probes: Sequence[TrainingProbe], findings: Sequence[str], steps: int, seed: int
+    probes: Sequence[TrainingProbe],
+    findings: Sequence[str],
+    steps: int,
+    seed: int,
+    exclude: Collection[str] = (),
 ) -> ProbeSchedule:
     """One positive and one negative probe per finding for each of ``steps`` updates.
 
     Per (finding, label) stratum the unique images, sorted, are shuffled with
     ``numpy.random.default_rng(seed + cycle)``; every image is used once before any repeats,
-    then the next cycle reshuffles. Independent of any model.
+    then the next cycle reshuffles. A probe in ``exclude`` (its key) is never used: it is
+    replaced by the next unused image of the same stratum (note of 2026-11-26: the training
+    images on which E2's margin is non-finite, decided from E2's margin cache alone).
 
     Raises:
         ValueError: a stratum has no image.
@@ -188,6 +194,11 @@ def probe_schedule(
     queues: dict[tuple[str, bool], list[TrainingProbe]] = {}
     cycles: dict[tuple[str, bool], int] = {}
     uses: dict[tuple[str, bool], dict[str, int]] = {}
+    excluded = set(exclude)
+    skipped: dict[tuple[str, bool], int] = {}
+    for key, group in strata.items():
+        if group and all(p.key in excluded for p in group):
+            raise ValueError(f"every image of {key} is excluded")
 
     def take(key: tuple[str, bool]) -> TrainingProbe:
         if not queues.get(key):
@@ -197,6 +208,15 @@ def probe_schedule(
             queues[key] = [group[int(i)] for i in order]
             cycles[key] = cycle + 1
         probe = queues[key].pop(0)
+        while probe.key in excluded:  # the next unused image of the same stratum
+            skipped[key] = skipped.get(key, 0) + 1
+            if not queues[key]:
+                cycle = cycles.get(key, 0)
+                group = strata[key]
+                order = np.random.default_rng(seed + cycle).permutation(len(group))
+                queues[key] = [group[int(i)] for i in order]
+                cycles[key] = cycle + 1
+            probe = queues[key].pop(0)
         uses.setdefault(key, {})
         uses[key][probe.image_path] = uses[key].get(probe.image_path, 0) + 1
         return probe
@@ -212,6 +232,7 @@ def probe_schedule(
                 "uses": int(sum(counts.values())),
                 "max_reuse": int(max(counts.values())),
                 "images_reused": int(sum(1 for n in counts.values() if n > 1)),
+                "excluded_skipped": int(skipped.get((f, v), 0)),
             }
     return ProbeSchedule(tuple(findings), updates, log)
 
@@ -290,6 +311,10 @@ class FBRResult:
     nonfinite_microbatches: int = 0
     peak_gpu_bytes: int | None = None
     seconds_per_update: list[float] = field(default_factory=list)
+    step_log: list[dict[str, Any]] = field(default_factory=list)
+    """Per non-finite, retried or skipped update: the causes, the loss scale before and after
+    (note of 2026-11-26)."""
+    retried_steps: list[int] = field(default_factory=list)
 
     def summary(self) -> dict[str, Any]:
         def mean(values: Sequence[float]) -> float | None:
@@ -305,6 +330,9 @@ class FBRResult:
             "skipped_steps": list(self.skipped_steps),
             "nonfinite_microbatches": self.nonfinite_microbatches,
             "peak_gpu_bytes": self.peak_gpu_bytes,
+            "effective_updates": self.steps - len(self.skipped_steps),
+            "retried_steps": list(self.retried_steps),
+            "step_log": list(self.step_log),
         }  # fmt: skip
 
 
@@ -325,6 +353,9 @@ class UpdateContext:
     device: Any
     scale: Any  # the loss scaler's scale() (identity without fp16)
     autocast: Any
+    legacy_pair_scaling: bool = False
+    """True only for the diagnosis of 2026-11-26: the paired term's margin gradient taken at the
+    full loss scale (the first implementation), which overflowed fp16 in the first updates."""
 
 
 def accumulate_update(
@@ -332,12 +363,19 @@ def accumulate_update(
     general: Sequence[TrainExample],
     probes: Sequence[TrainingProbe],
     e2_margins: Mapping[str, float],
-) -> tuple[dict[str, float], bool]:
+) -> tuple[dict[str, float], list[str]]:
     """Forward and backward of one update into the parameters' ``.grad`` (scaled as the loss
     scaler scales): each ordinary example ``L0 / 16``; each probe ``CE / 16``; per finding the
     paired term ``c (6/16) (1/F) Huber(d - d(E2))`` through its exact gradient (each member's
-    margin gradient kept from its own forward pass). Returns the loss parts and whether the
-    update is non-finite."""
+    margin gradient kept from its own forward pass). Returns the loss parts and the causes of a
+    non-finite update (empty when finite): ``ordinary_loss``, ``probe_ce``, ``student_margin``,
+    ``e2_margin``, ``pair_gradient``.
+
+    The margin gradient is taken of ``scale * w * m`` (``w`` the paired term's weight per finding,
+    note of 2026-11-26), so it enters the loss scaler at the size of the other terms; it is then
+    multiplied by the Huber slope (``|slope| <= delta = 1``). The first implementation took it of
+    ``scale * m`` and multiplied by ``w * slope`` afterwards: the same gradient in exact
+    arithmetic, but held at 16-32 times the other terms while scaled, which overflowed fp16."""
     import torch
 
     from medcompress.compression.distillation.batching import move
@@ -352,7 +390,14 @@ def accumulate_update(
     coefficient = settings.margin_coefficient
     probe_share = settings.probes_per_finding * len(findings) / accumulation  # 6/16
     pair_weight = coefficient * probe_share / len(findings)
-    general_total, probe_total, huber_total, broken = 0.0, 0.0, 0.0, False
+    general_total, probe_total, huber_total = 0.0, 0.0, 0.0
+    causes: list[str] = []
+
+    def mark(cause: str) -> None:
+        if cause not in causes:
+            causes.append(cause)
+
+    prescale = 1.0 if ctx.legacy_pair_scaling else pair_weight
     for example in general:
         gt, teacher = _micro_batches(ctx.student, [example], ctx.cfg)
         gt = move(gt, ctx.device)
@@ -361,7 +406,8 @@ def accumulate_update(
             ctx.module, gt, teacher, ctx.cfg,
             backward=lambda t: ctx.scale(t / accumulation).backward(), autocast=ctx.autocast,
         )  # fmt: skip
-        broken = broken or not math.isfinite(value)
+        if not math.isfinite(value):
+            mark("ordinary_loss")
         general_total += value / accumulation
     for f_index, finding in enumerate(findings):
         pair = probes[2 * f_index : 2 * f_index + 2]
@@ -376,22 +422,27 @@ def accumulate_update(
                 ce = answer_ce_loss(logits, batch.targets)
             margin = answer_margin(logits[:, 0, :], ctx.yes_ids, ctx.no_ids)[0]
             if coefficient > 0:
-                found = torch.autograd.grad(ctx.scale(margin), ctx.params, retain_graph=True,
-                                            allow_unused=True)  # fmt: skip
+                found = torch.autograd.grad(ctx.scale(margin * prescale), ctx.params,
+                                            retain_graph=True, allow_unused=True)  # fmt: skip
                 grads.append([None if g is None else g.detach().float() for g in found])
             ctx.scale(ce / accumulation).backward()
             margins.append(float(margin.detach()))
             ce_value = float(ce.detach())
-            broken = broken or not (math.isfinite(ce_value) and math.isfinite(margins[-1]))
+            if not math.isfinite(ce_value):
+                mark("probe_ce")
+            if not math.isfinite(margins[-1]):
+                mark("student_margin")
             probe_total += ce_value / accumulation
             del logits, ce, margin, batch
-        residual = (margins[0] - margins[1]) - (e2_margins[pair[0].key] - e2_margins[pair[1].key])
+        e2_pair = (e2_margins[pair[0].key], e2_margins[pair[1].key])
+        if not all(math.isfinite(v) for v in e2_pair):
+            mark("e2_margin")
+        residual = (margins[0] - margins[1]) - (e2_pair[0] - e2_pair[1])
         if not math.isfinite(residual):
-            broken = True
             continue
         huber_total += huber(residual, settings.huber_delta) / len(findings)
         if coefficient > 0:
-            k = pair_weight * huber_slope(residual, settings.huber_delta)
+            k = (pair_weight / prescale) * huber_slope(residual, settings.huber_delta)
             with torch.no_grad():
                 for p, g_pos, g_neg in zip(ctx.params, grads[0], grads[1], strict=True):
                     if g_pos is None and g_neg is None:
@@ -400,14 +451,33 @@ def accumulate_update(
                     delta = (g_pos if g_pos is not None else zero) - (
                         g_neg if g_neg is not None else zero
                     )
-                    broken = broken or not bool(torch.isfinite(delta).all())
+                    if not bool(torch.isfinite(delta).all()):
+                        mark("pair_gradient")
                     add = (k * delta).to(p.dtype)
                     p.grad = add if p.grad is None else p.grad + add
         del grads
     total = general_total + probe_total + coefficient * probe_share * huber_total
     parts = {"loss": total, "general": general_total, "probe_ce": probe_total,
              "huber": huber_total}  # fmt: skip
-    return parts, broken
+    return parts, causes
+
+
+def grads_finite(params: Sequence[Any]) -> bool:
+    """True when every accumulated gradient is finite (an overflow shows here first)."""
+    import torch
+
+    return all(p.grad is None or bool(torch.isfinite(p.grad).all()) for p in params)
+
+
+SCALE_RETRIES = 3
+"""Retries of an update that overflowed only because of the loss scale (note of 2026-11-26)."""
+
+
+def scale_overflow(causes: Sequence[str], gradients_finite: bool) -> bool:
+    """True when an update overflowed only because of the loss scale: every loss and margin
+    finite (no cause but a non-finite paired gradient), yet a gradient is not finite."""
+    scalar_causes = [c for c in causes if c != "pair_gradient"]
+    return not scalar_causes and (bool(causes) or not gradients_finite)
 
 
 def train_fbr(
@@ -422,6 +492,8 @@ def train_fbr(
     data_root: Path,
     seed: int,
     stop_after_steps: int | None = None,
+    legacy_pair_scaling: bool = False,
+    retries: int = SCALE_RETRIES,
 ) -> FBRResult:
     """Attach the registered LoRA and train ``cfg.steps`` FBR updates (fewer with
     ``stop_after_steps``: the timed trial). ``e2_margins``: E2's margin of every probe of the
@@ -447,10 +519,12 @@ def train_fbr(
     missing = [k for k in keys if k not in e2_margins]
     if missing:
         raise ValueError(f"E2's margin cache lacks {len(missing)} probes, e.g. {missing[:2]}")
-    nonfinite = sum(1 for k in keys if not math.isfinite(e2_margins[k]))
-    if nonfinite:  # its updates become non-finite and are skipped, as the registered recovery's
-        print(f"E2's margin is non-finite on {nonfinite} schedule probe(s): their updates are "
-              "skipped and logged (note of 2026-11-25)", flush=True)  # fmt: skip
+    bad = {k for k in keys if not math.isfinite(e2_margins[k])}
+    if bad:  # its updates become non-finite and are skipped, as the registered recovery's
+        at = [t + 1 for t, update in enumerate(schedule.updates[: cfg.steps])
+              if any(p.key in bad for p in update)]  # fmt: skip
+        print(f"E2's margin is non-finite on {len(bad)} schedule probe(s), in updates {at}: "
+              "those updates are skipped and logged (note of 2026-11-25)", flush=True)  # fmt: skip
     torch.manual_seed(seed)
     if not isinstance(student.module, peft.PeftModel):
         attach_lora(student, cfg.lora)
@@ -471,6 +545,7 @@ def train_fbr(
         {True: target_ids(student, answer_ids[0]), False: target_ids(student, answer_ids[1])},
         list(student.yes_ids), list(student.no_ids), Path(data_root), device, scaler.scale,
         lambda: torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp),
+        legacy_pair_scaling,
     )  # fmt: skip
     result = FBRResult()
     reset_peak()
@@ -481,7 +556,22 @@ def train_fbr(
         for group in optimizer.param_groups:
             group["lr"] = _learning_rate(cfg, step)
         general = [examples[i] for i in general_indices(order, step, settings.general_per_update)]
-        parts, broken = accumulate_update(ctx, general, schedule.updates[step], e2_margins)
+        scale_first = scaler.get_scale() if amp else None
+        attempt = 0
+        while True:  # an update that overflowed only because of the loss scale is retried
+            parts, causes = accumulate_update(ctx, general, schedule.updates[step], e2_margins)
+            overflow = scale_overflow(causes, grads_finite(params))
+            if not (amp and overflow and attempt < retries):
+                break
+            attempt += 1  # the same update again at half the scale; the lr step does not advance
+            halved = scaler.get_scale() / 2
+            optimizer.zero_grad(set_to_none=True)
+            scaler.update(new_scale=halved)
+            print(f"FBR step {step + 1}: loss-scale overflow only (every loss and margin "
+                  f"finite); retry {attempt} at scale {halved:g}", flush=True)  # fmt: skip
+        if overflow:
+            causes = ["scale_overflow"]  # no retry left (or none allowed): skipped as registered
+        broken = bool(causes)
         if broken:
             result.nonfinite_microbatches += 1
             if params:  # the whole update is non-finite: the loss scaler skips it
@@ -506,8 +596,18 @@ def train_fbr(
         result.margin_huber.append(parts["huber"])
         if broken:
             result.nonfinite_steps.append(step + 1)
-        if (scale_before is not None and scaler.get_scale() < scale_before) or (not amp and broken):
+        skipped = (scale_before is not None and scaler.get_scale() < scale_before) or (
+            not amp and broken
+        )
+        if skipped:
             result.skipped_steps.append(step + 1)
+        if attempt:
+            result.retried_steps.append(step + 1)
+        if broken or skipped or attempt:
+            result.step_log.append({
+                "step": step + 1, "causes": causes, "retries": attempt, "skipped": skipped,
+                "scale_before": scale_first, "scale_after": scaler.get_scale() if amp else None,
+            })  # fmt: skip
         result.seconds_per_update.append(time.perf_counter() - began)
         if result.steps % LOG_EVERY == 0 or result.steps == steps:
             print(f"FBR step {result.steps}/{cfg.steps}: loss {parts['loss']:.4f} (ordinary "

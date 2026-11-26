@@ -853,3 +853,35 @@ def run_pilot(roots: Sequence[Path], out: Path, order: Sequence[str],
     (out / "PILOT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"passed": passed if not undecidable and len(needed) == 2 else None,
             "verdict": verdict, "simpler": simpler}  # fmt: skip
+
+
+PILOT_OUTCOME_KEYS = ("probe_sample_ids", "probe_findings", "probe_truth", "probe_margin",
+                      "audit_sample_ids", "audit_lesion_flip", "audit_random_flip",
+                      "audit_original_margin")  # fmt: skip
+PILOT_ANSWER_KEYS = ("probe_decoded", "probe_decoded_text", "probe_first_token")
+
+
+def check_pilot_inputs(
+    outcomes: Mapping[str, np.ndarray], answers: Mapping[str, np.ndarray], order: Sequence[str]
+) -> dict[str, object]:
+    """After an FBR model's validation pass (2026-11-26; the smoke shows it): the arrays the
+    pilot reads are there and aligned, and its CPU path runs on them (folds with a minimum of
+    one image per class, the cross-fitted decisions, the report rows, the mask audit).
+
+    Raises:
+        ValueError: a key is missing or the two files hold other probes.
+    """
+    missing = [k for k in PILOT_OUTCOME_KEYS if k not in outcomes]
+    missing += [k for k in PILOT_ANSWER_KEYS if k not in answers]
+    if missing:
+        raise ValueError(f"the pilot's inputs lack {missing}")
+    if not aligned(answers, outcomes):
+        raise ValueError("the probe answers and the outcomes hold other probes")
+    ids, findings = outcomes["probe_sample_ids"], outcomes["probe_findings"]
+    truth = outcomes["probe_truth"].astype(bool)
+    plan = assign_folds(ids, findings, truth, order, k=2, min_per_class=1)
+    model = ModelArrays("check", outcomes, answers)
+    rows = report_rows(model, plan, order)
+    audit = mask_audit(model, plan, order)
+    return {"probes": int(len(ids)), "audit_probes": int(len(outcomes["audit_sample_ids"])),
+            "folds": plan.k, "report_rows": len(rows), "audit_versions": sorted(audit)}  # fmt: skip
