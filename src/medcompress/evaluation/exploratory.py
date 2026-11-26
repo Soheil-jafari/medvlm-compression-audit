@@ -826,6 +826,8 @@ def run_all(
             "exemplars",
             "audit_nonfinite",
             "audit_sensitivity",
+            "native_readout",
+            "first_tokens",
         )
     }
     for run in ordered:
@@ -911,6 +913,28 @@ def run_all(
                 "arms_in_union": len(evaluable),
                 **audit_sensitivity(arrays, excluded, resamples=resamples),
             })  # fmt: skip
+    # the native-format readout and the first tokens (note of 2026-11-25), from the decoded
+    # probe answers (fbr/probe_answers/<run dir>/probe_answers_<split>.npz)
+    from medcompress.evaluation.native_readout import readout_rows
+
+    seen_answers: set[tuple[str, str]] = set()
+    for root in roots:
+        for path in sorted(Path(root).rglob("probe_answers_*.npz")):
+            split = path.stem.removeprefix("probe_answers_")
+            parsed = parse_run(path, known)
+            if parsed is None or "probe_answers" not in path.parts or split not in OUTCOME_FILES:
+                continue
+            label = ArmRun(*parsed).label
+            if (label, split) in seen_answers:
+                notes.append(f"{label} {path.name}: also at {path}; the first kept")
+                continue
+            seen_answers.add((label, split))
+            readout, tokens = readout_rows(label, split, load(path), order)
+            written["native_readout"] += readout
+            written["first_tokens"] += tokens
+    if not seen_answers:
+        notes.append("native readout: no decoded probe answers attached (FBR cell (i), "
+                     "fbr_probe_answers.py)")  # fmt: skip
     # B
     for split in TEST_SPLITS:
         ref_run = next(

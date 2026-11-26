@@ -725,6 +725,16 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-25 (agent; implementation after the note, no pre-registered setting changed).** RC-R1
+  done (E1, E2 tests committed unchanged; E0's two tests skipped as designed); G3 (E5 activation
+  B1: the 12 lowest committed scores per layer, checked) and G9 (E7 B1) committed; FBR cell (ii)'s
+  diagnosis committed (`results/exploratory/fbr/fbr_e2_diagnosis.json`). Four E2 margins of the
+  942 schedule probes are non-finite (at most 4 of 157 updates skipped). Built: the native parser
+  (`evaluation/native_readout.py`), the first token saved by the probe-answer pass and its
+  `--any-split` option for the tests, `scripts/native_answer_patterns.py` (training split,
+  phrases and counts), the native readout and first-token tables in the exploratory analysis, the
+  native decoded-answer quantity beside the locked one in the FBR pilot (not in the verdict), the
+  readout paragraph in the methods text. RC-EX1 cells (c) (the first complete CPU pass) and 3e.
 - **2026-11-25 (research lead; exploratory note committed before any use): the yes/no readout and a
   native-format readout.** FBR cell (ii): E2's greedy first token on the 942 training probes is
   never a yes spelling ("e" 630, "No" 307, "!" 4, most likely the four non-finite margins, "pol" 1); its

@@ -173,6 +173,17 @@ the cached teacher outputs, on the same data subset, for the same number of step
 and with the same hyper-parameters, checked by a configuration fingerprint.
 \todo{recovery hyper-parameters once fixed}
 
+\paragraph{The yes/no readout.} The probes are read from the first answer position: the
+log-probability of every single-token spelling of ``yes'' against every spelling of ``no''.
+Our students answer in the dataset's descriptive style (``evidence of polypoid lesion'', ``No
+evidence of polypoid lesion''): \expid{E2} never begins an answer with a yes spelling (942 of
+942 training probes), so the sign of this margin is not a yes/no answer for it, although its
+order ranks positives above negatives well. We therefore read the probes at a per-finding
+operating point (a threshold at specificity 0.95 fitted on validation), report the plain sign
+readout as pre-registered, and add an exploratory native-format readout that parses the decoded
+answer in the dataset's style; differences between arms in the plain readout can reflect the
+answer format, and the clinical criterion scores this readout directly.
+
 \subsection{Mask audit}
 To test whether a compressed model still looks at the lesion, we mask the lesion in
 images with a positive, mask-annotated finding and record how often the yes/no

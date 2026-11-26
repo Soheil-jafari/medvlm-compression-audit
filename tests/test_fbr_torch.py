@@ -239,6 +239,11 @@ def test_the_probe_answer_pass_matches_the_evaluations_probes(tmp_path: Path) ->
     assert (arrays["probe_yes_rank"] >= 1).all() and (arrays["probe_no_rank"] >= 1).all()
     assert set(arrays["probe_decoded"].tolist()) <= {-1, 0, 1}
     assert len(arrays["probe_decoded_text"]) == len(scored.sample_ids)
+    assert len(arrays["probe_first_token"]) == len(scored.sample_ids)  # note of 2026-11-25
+    assert list(arrays["yes_ids"]) == list(wrapper.yes_ids)
+    test_split = fa.probe_answers(wrapper, samples, dataclasses.replace(settings, split="test"),
+                                  tmp_path, max_new_tokens=4, any_split=True)  # fmt: skip
+    assert len(test_split["probe_first_token"]) == len(test_split["probe_sample_ids"])
     with pytest.raises(ValueError, match="validation only"):
         fa.probe_answers(wrapper, samples, dataclasses.replace(settings, split="test"),
                          tmp_path, max_new_tokens=4)  # fmt: skip

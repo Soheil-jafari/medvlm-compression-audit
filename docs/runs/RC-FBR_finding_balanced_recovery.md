@@ -58,6 +58,12 @@ must be rerun), under the cap.
 
 ### (i) Probe answers (GPU), the audit reruns, then the diagnostic (CPU)
 
+**2026-11-25:** the pass also saves each probe's greedy first answer token (the first-token
+table) and its decoded texts feed the native-format readout (note of 2026-11-25); the CPU step
+is RC-EX1's cell (c), which writes the native readout and the first-token table next to the
+diagnostic. E7's and the E5 arms' first tokens and native readout on validation answer the E7
+question of that note.
+
 One cell per account, with the lines of the arms whose datasets that account holds (E2 in one
 of them). The audit-only lines are for the three pilot arms (their validation outcomes predate the
 audit margins).

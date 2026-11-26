@@ -61,20 +61,30 @@ def _validation_settings(config: Mapping[str, Any]) -> Any:
 # ----------------------------------------------------------------------------- cell (i)
 
 
-def run_probe_answers(config: Mapping[str, Any], run: RunContext | None) -> Path:
-    """Decoded answers and token ranks of the run's validation probes, written to
-    ``<output_root>/fbr/probe_answers/<run dir>/probe_answers_val.npz``."""
+def run_probe_answers(
+    config: Mapping[str, Any], run: RunContext | None, *, any_split: bool = False
+) -> Path:
+    """Decoded answers, first tokens and token ranks of the run's probes, written to
+    ``<output_root>/fbr/probe_answers/<run dir>/probe_answers_<split>.npz``. Validation only,
+    unless ``any_split`` (the native-format readout of the tests, note of 2026-11-25; the split
+    comes from ``-o evaluation.split=``)."""
     from medcompress.compression.fbr import FBRSettings
     from medcompress.evaluation.fbr_analysis import ANSWERS_FILE, probe_answers
     from medcompress.evaluation.runner import load_run_model, split_samples
 
     if run is None:
         raise ConfigError("--exp is required")
-    settings = _validation_settings(config)
-    samples, _drops = split_samples(config, settings)
+    if any_split:
+        from medcompress.evaluation.runner import resolve_settings
+
+        settings = resolve_settings(config)
+    else:
+        settings = _validation_settings(config)
+    samples, _drops = split_samples(config, settings)  # the drop list applies on the tests
     model = load_run_model(config, run, _side(config))
     arrays = probe_answers(model, samples, settings, Path(config["paths"]["data_root"]),
-                           FBRSettings.load().decode_max_new_tokens)  # fmt: skip
+                           FBRSettings.load().decode_max_new_tokens,
+                           any_split=any_split)  # fmt: skip
     folder = Path(config["paths"]["output_root"]) / OUTPUT_SUBDIR / "probe_answers"
     target = folder / run.run_dir("") / ANSWERS_FILE.format(split=settings.split)
     target.parent.mkdir(parents=True, exist_ok=True)

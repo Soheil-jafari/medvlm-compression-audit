@@ -200,9 +200,113 @@ cp results/E7U/B2/seed0/metrics_test*.csv /kaggle/working/results_to_commit/resu
 ls -l /kaggle/working/outputs/E7U/B2/seed0/
 ```
 
+### 3d. The first complete CPU pass: cell (c) (2026-11-25)
+
+Run after the notes of 2026-11-25 (non-finite masked images; the native-format readout) are
+committed, which they are: the pass writes A, B, the audit's non-finite counts and sensitivity
+version, the native readout and the first-token table (`results/exploratory/`), and the training
+answer patterns that the native parser is checked against. A Kaggle CPU notebook (any account
+that can read the datasets below); Internet on; about 15-30 min (an estimate: the 1,000 draws per
+n of A and the 10,000 resamples of B over about 20 runs).
+
+**Attach** (each found by its path inside the dataset, never by its name; attach everything you
+have, a run found twice stops the analysis only if the copies differ):
+
+| Dataset (account) | What it holds |
+|---|---|
+| `medcompress-data` (Soheil) | the shared data (the training answer patterns) |
+| `r1-e0-test-outcomes` (Soheil) | E0: validation and both tests |
+| `r1-e1-e2-test-outcomes` (Soheil) | E1 and E2 seed 0: both tests |
+| the RC-E3 seed 0 outcomes (`E3_seed0_outcomes`, as saved) | E3 `w4`, `w8`, `w8a8`: validation and both tests |
+| `e3-seed0-awq` | E3 `awq_w4`: the quantized model and its outcomes (validation and both tests) |
+| RC-E9's outputs dataset (as saved) | E9: validation and both tests |
+| the two `E5_seed0_outcomes` datasets (Soheil: magnitude and activation; account 3: Taylor), `E6_seed0_outcomes` (account 3), RC-E7's B2 test outcomes (Amir) | the B2 tests of E5 x 3, E6, E7 |
+| `e5r-b2-test-outcomes`, `e7u-b2-test-outcomes` (as saved by RC-EX1 3c) | E5R and E7U: both tests (and E5R's validation from its resume, if in it) |
+| `e5-act-b1-seed0` (G3), `e7-b1-seed0` (G9: its outcomes bundle) | E5 activation and E7 at B1: validation and both tests |
+| the RC-G2 notebook versions' outputs (Soheil, account 3, Amir), where kept | the B2 arms' validation `outcomes.npz` (section 3b's table) |
+| any `fbr-probe-answers-*` (FBR cell (i)) | decoded probe answers: the native readout and the first tokens |
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache
+pip install -q -r requirements/base.txt && pip install -q -e . --no-deps
+DATA=$(python scripts/find_inputs.py data) || exit 1
+python scripts/native_answer_patterns.py --data-root "$DATA" 2>&1 | tee /kaggle/working/native_patterns.txt
+python scripts/exploratory_analysis.py --outcomes /kaggle/input 2>&1 | tee /kaggle/working/exploratory.txt
+echo "exit code: ${PIPESTATUS[0]}"
+cd /kaggle/working/medvlm-compression-audit && zip -qr /kaggle/working/exploratory.zip results/exploratory
+ls -l /kaggle/working/exploratory.zip
+```
+
+Send `exploratory.zip` and both logs. `SUMMARY.md` lists every run found, what is missing and
+why. If the pattern step prints "MORE THAN 5% UNPARSED", the native readout waits for the
+research lead (note of 2026-11-25).
+
+**Still missing for a complete first pass (2026-11-25):**
+
+- validation outcomes of the B2 arms (E5 x 3, E6, E7, E7U) and of E2 and E1, unless the RC-G2,
+  RC-E2 and RC-E1 notebook versions kept them (section 3b scores them where not; A's
+  re-calibration curve needs them, the operating point does not: the test files carry it);
+- audit margins of the runs evaluated before 2026-11-20 (E3 `w4` / `w8` / `w8a8` and E9, all
+  splits; the B2 arms' validation): the audit at the operating threshold and the non-finite
+  sensitivity mark them "not evaluable" until a mask-audit-only rerun (section 3b);
+- decoded probe answers for the native readout (FBR cell (i) on validation; section 3e for the
+  tests);
+- the phase-B arms (B1 / B3 grid, E8, A1-A6, E4, E10's tests, E10Q) as their sessions finish;
+  PolypGen (blocked).
+
+### 3e. Decoded probe answers on the test splits (GPU; the native readout, note of 2026-11-25)
+
+The same pass as FBR cell (i), per run and split, with `--any-split` (the non-finite drop list
+applies). Cost (estimates: generation of at most 8 tokens per probe dominates): about 0.25 h for
+a model's filtered test and 0.4 h for its unfiltered test, plus about 0.25 h for its validation
+(FBR cell (i)); E3 `awq_w4` about three times as long (its kernel); E0 and E9 on both T4s. For
+the 18 runs in A today (E0, E1, E2, E3 x 4, E9, E5 x 3, E5R, E6, E7, E7U at B2, E5 activation and
+E7 at B1): about 12 GPU h for both tests, about 16 h with validation; split across accounts by
+where the models are. Save `/kaggle/working/outputs/` as `fbr-probe-answers-<account>-test`.
+
+```bash
+%%bash
+cd /kaggle/working && rm -rf medvlm-compression-audit
+git clone -q -b research-loop https://github.com/Soheil-jafari/medvlm-compression-audit.git
+cd medvlm-compression-audit && echo "commit: $(git log -1 --format=%H)"
+export MEDCOMPRESS_OUTPUT_ROOT=/kaggle/working/outputs          # path roots outside the clone,
+export MEDCOMPRESS_CHECKPOINT_ROOT=/kaggle/working/checkpoints  # so removing the clone keeps
+export MEDCOMPRESS_CACHE_ROOT=/kaggle/working/cache              # every output
+python - <<'PY' || pip uninstall -y -q torchao   # peft needs torchao 0.16.0 or newer, or none
+import sys
+from importlib import metadata
+try:
+    version = tuple(int(x) for x in metadata.version("torchao").split(".")[:2])
+except metadata.PackageNotFoundError:
+    sys.exit(0)
+sys.exit(0 if version >= (0, 16) else 1)
+PY
+pip install -q -r requirements/base.txt -r requirements/train.txt && pip install -q -e . --no-deps
+python scripts/find_inputs.py data > /dev/null || exit 1        # stops if the shared data are not attached
+python scripts/find_inputs.py handoffs                          # the hand-offs found by their manifests
+DATA=$(python scripts/find_inputs.py data) || exit 1
+FROM=$(python scripts/find_inputs.py handoffs | sed 's/^/--from /' | tr '\n' ' ')
+export HF_HOME=/kaggle/temp/hf CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1
+for SPEC in "E5 --variant magnitude --budget B2" "E5 --variant activation --budget B2"; do  # this account's runs
+  for SPLIT in test test_unfiltered; do
+    python scripts/fbr_probe_answers.py --exp $SPEC --seed 0 --data-root "$DATA" $FROM \
+      --any-split -o evaluation.split=$SPLIT 2>&1 | tee -a /kaggle/working/probe_answers_test.txt
+  done
+done
+grep -E "wrote|Error|STOP" /kaggle/working/probe_answers_test.txt
+```
+
 ## 4. What to commit back
 
-- `results/exploratory/` (CSV files and `SUMMARY.md`), from `exploratory.zip`.
+- `results/exploratory/` (CSV files and `SUMMARY.md`, with `audit_nonfinite.csv`,
+  `audit_sensitivity.csv`, `native_readout.csv`, `first_tokens.csv`, `native_answer_patterns*.csv`),
+  from `exploratory.zip`.
 - Nothing from 3b: it writes outcome files only (keep them as a private dataset).
 - From 3c: `results/E5R/B2/seed0/` (stage 06 and 07 files from the resume, `metrics_test.csv`,
   `metrics_test_unfiltered.csv`) and `results/E7U/B2/seed0/metrics_test*.csv`.

@@ -1602,3 +1602,11 @@ Append-only, newest at the bottom. One entry per iteration:
   flip when the original answer was "yes". Sensitivity rule recorded first (note of 2026-11-25),
   then its code; FBR skips an update with a non-finite E2 margin.
 
+## Iteration 99: 2026-11-25 (interactive)
+- Committed unchanged: RC-R1's resume (RC-R1 done), G3 (E5 activation B1), G9 (E7 B1), FBR
+  cell (ii)'s E2 diagnosis.
+- E2 answers in the dataset's style ("evidence of ..." / "No evidence of ..."): the plain
+  answer's sign is not a yes/no answer for it. Note of 2026-11-25 committed first (with a
+  correction before any use), then the native-format readout, the first-token table, the
+  training-pattern check; methods text; RC-EX1 cell (c).
+

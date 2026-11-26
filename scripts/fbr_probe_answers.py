@@ -33,10 +33,14 @@ SCRIPT = "scripts/06_evaluate.py"
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser(__doc__.splitlines()[0])
+    parser.add_argument("--any-split", action="store_true",
+                        help="allow the test splits (-o evaluation.split=test|test_unfiltered): "
+                        "the native-format readout (note of 2026-11-25)")  # fmt: skip
     args, run = parse_stage_args(parser, argv, script=SCRIPT, default_exp=None,
                                  require_budget=False)  # fmt: skip
     config = resolve_config(args)
-    return run_stage("fbr_probe_answers", run_probe_answers, config=config, run=run)
+    return run_stage("fbr_probe_answers", run_probe_answers, config=config, run=run,
+                     any_split=args.any_split)  # fmt: skip
 
 
 if __name__ == "__main__":

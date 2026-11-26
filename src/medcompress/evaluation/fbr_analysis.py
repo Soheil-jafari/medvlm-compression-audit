@@ -48,24 +48,33 @@ def parse_answer(text: str) -> int:
 
 
 def probe_answers(
-    model: Any, samples: Sequence[Any], settings: Any, data_root: Path, max_new_tokens: int
+    model: Any,
+    samples: Sequence[Any],
+    settings: Any,
+    data_root: Path,
+    max_new_tokens: int,
+    *,
+    any_split: bool = False,
 ) -> dict[str, np.ndarray]:
     """For every probe of the evaluation (the same probes as ``runner.score_probes``): the
     margin, the best rank of a yes and of a no spelling among all tokens at the answer position
-    (1 = top), and the greedy decoded answer (at most ``max_new_tokens``), parsed."""
+    (1 = top), the greedy first answer token (id and text; note of 2026-11-25), and the greedy
+    decoded answer (at most ``max_new_tokens``), parsed. Validation only, unless ``any_split``
+    (the native-format readout of the tests; note of 2026-11-25)."""
     import torch
 
     from medcompress.evaluation.image_reliance import subsample_per_finding, unique_image_probes
     from medcompress.evaluation.runner import _CHUNK, PROBE_SAMPLE_SEED
 
-    require_validation(settings.split)
+    if not any_split:
+        require_validation(settings.split)
     probes = subsample_per_finding(
         unique_image_probes(samples, settings.findings, settings.template,
                             display_names=settings.display_names),
         settings.max_per_finding, seed=PROBE_SAMPLE_SEED,
     )  # fmt: skip
     yes_ids, no_ids = list(model.yes_ids), list(model.no_ids)
-    margin, yes_rank, no_rank, decoded, texts = [], [], [], [], []
+    margin, yes_rank, no_rank, decoded, texts, first = [], [], [], [], [], []
     for start in range(0, len(probes), _CHUNK):
         part = probes[start : start + _CHUNK]
         images = [Path(data_root) / p.image_path for p in part]
@@ -81,6 +90,7 @@ def probe_answers(
                                     - torch.logsumexp(row[no_ids], 0)))  # fmt: skip
                 yes_rank.append(min(int((row > row[i]).sum()) + 1 for i in yes_ids))
                 no_rank.append(min(int((row > row[i]).sum()) + 1 for i in no_ids))
+                first.append(int(row.argmax()))
         for output in model.generate(images, questions, max_new_tokens=max_new_tokens):
             texts.append(output.text)
             decoded.append(parse_answer(output.text))
@@ -93,6 +103,10 @@ def probe_answers(
         "probe_no_rank": np.array(no_rank, dtype=np.int64),
         "probe_decoded": np.array(decoded, dtype=np.int8),
         "probe_decoded_text": np.array(texts),
+        "probe_first_token": np.array(first, dtype=np.int64),
+        "probe_first_token_text": np.array([model.tokenizer.decode([t]) for t in first]),
+        "yes_ids": np.array(yes_ids, dtype=np.int64),
+        "no_ids": np.array(no_ids, dtype=np.int64),
     }
 
 
@@ -449,6 +463,18 @@ def gate_quantities(
     out["macro_brier"] = float(np.mean(briers))
     out["plain_macro_ba"] = float(np.mean(plain_ba))
     out["decoded_macro_ba"] = float(np.mean(decoded_ba)) if decoded_ba else math.nan
+    if model.answers is not None and "probe_decoded_text" in model.answers:  # 2026-11-25, beside
+        from medcompress.evaluation.native_readout import parse_native  # the locked item only
+
+        readings = np.array(
+            [parse_native(str(t)) or "" for t in model.answers["probe_decoded_text"]]
+        )
+        native_ba = []
+        for f in order:
+            r = findings == f
+            sens = wmean((readings == "yes").astype(float), r & truth)
+            native_ba.append((sens + wmean((readings == "no").astype(float), r & ~truth)) / 2)
+        out["decoded_macro_ba_native"] = float(np.mean(native_ba))
     return out
 
 
@@ -463,7 +489,7 @@ def gate(
     """The gate of section 7 (absolute percentage points against the arm's registered
     recovery)."""
     pp = 100.0
-    d = {k: (fbr[k] - registered[k]) * pp for k in fbr}
+    d = {k: (fbr[k] - registered[k]) * pp for k in fbr if k in registered}
     decoded_ok = d["decoded_macro_ba"] >= 3.0 if collapsed else d["decoded_macro_ba"] >= -2.0
     return {
         "delta_R": d["R"] >= 5.0,
@@ -493,7 +519,8 @@ def paired_bootstrap(
         qa = gate_quantities(a, plan, order, rare, w)
         qb = gate_quantities(b, plan, order, rare, w)
         for key in qa:
-            draws.setdefault(key, []).append(qa[key] - qb[key])
+            if key in qb:
+                draws.setdefault(key, []).append(qa[key] - qb[key])
     out = {}
     for key, values in draws.items():
         v = np.asarray(values, dtype=float)
@@ -751,13 +778,15 @@ def run_pilot(roots: Sequence[Path], out: Path, order: Sequence[str],
                     "control": record["control"],
                     "quantity": name,
                     "fbr": q_fbr[name],
-                    "registered": q_reg[name],
-                    "difference": q_fbr[name] - q_reg[name],
-                    "ci_low": intervals[name][0],
-                    "ci_high": intervals[name][1],
+                    "registered": q_reg.get(name, math.nan),
+                    "difference": q_fbr[name] - q_reg.get(name, math.nan),
+                    "ci_low": intervals.get(name, (math.nan, math.nan))[0],
+                    "ci_high": intervals.get(name, (math.nan, math.nan))[1],
                 }
             )
-        decidable = all(math.isfinite(q[k]) for q in (q_fbr, q_reg) for k in q)
+        reported_only = ("decoded_macro_ba_native", "plain_macro_ba")  # not gate inputs
+        decidable = all(math.isfinite(q[k]) for q in (q_fbr, q_reg) for k in q
+                        if k not in reported_only)  # fmt: skip
         missing = [m.label for m in (model, reg) if m.answers is None]
         verdict[label] = {"arm": record["arm"], "control": record["control"],
                           "collapsed": collapsed, **items, "decidable": decidable,
