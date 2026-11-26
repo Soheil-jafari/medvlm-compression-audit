@@ -585,6 +585,18 @@ FBR's CE targets teach a format E2 never uses, so plain-readout changes after FB
 effects; FBR's recipe and gate are unchanged. Pre-registered metrics and parser unchanged.
 Details: `docs/decisions/native_readout_2026-11-25.md`.
 
+### Note of 2026-11-26 (research lead): FBR implementation fixes before the pilot
+
+Cell (iii)'s trial skipped updates 1-5: the paired term's margin gradient was taken at the full
+loss scale and overflowed fp16 (a scaler warm-up, not bad images). Fixed: the margin gradient is
+taken of `scale * w * m` and multiplied by the slope (the same gradient in exact arithmetic);
+an update that overflows for the loss scale alone is retried at half the scale (up to 3 times,
+logged), in FBR and its control alike, so only genuinely non-finite updates are skipped, as
+registered; E2's four non-finite training probes are replaced by the next unused image of their
+stratum (decided from E2's margin cache alone). The registered recovery skipped for the scale
+alone only in E6 at B2 (updates 1-3); its results stand. No coefficient, batch or gate item
+changes. `docs/decisions/fbr_study_2026-11-22.md`, section 14.
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result

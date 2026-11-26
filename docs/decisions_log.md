@@ -725,6 +725,15 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-26 (research lead; FBR implementation fixes recorded before any pilot run).** Cell
+  (iii) skipped updates 1-5: the paired term's margin gradient at the full loss scale overflowed
+  fp16. Fixes: the margin gradient of `scale * w * m` times the slope (equal in exact arithmetic,
+  tested); scale-only overflows retried at half the scale (up to 3, logged), in FBR and the
+  control; every non-finite, retried or skipped update logged with its causes and scales; E2's
+  four non-finite training probes replaced by the next unused image of their stratum (from the
+  margin cache alone). The registered recovery skipped for scale alone only in E6 B2 (updates
+  1-3); its results stand. The smoke now prints its validation pass and checks the pilot's
+  inputs. Decision file section 14; pre-registration section 10.
 - **2026-11-25 (agent; implementation after the note, no pre-registered setting changed).** RC-R1
   done (E1, E2 tests committed unchanged; E0's two tests skipped as designed); G3 (E5 activation
   B1: the 12 lowest committed scores per layer, checked) and G9 (E7 B1) committed; FBR cell (ii)'s
