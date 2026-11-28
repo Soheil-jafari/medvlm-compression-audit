@@ -77,3 +77,9 @@ its bound.
 3. If any arm's benchmark peak exceeds target x 1.03 by more than 0.1 %, the research lead is
    told before anything else is done with it. The aggregation prints a line for such an arm,
    and every results commit checks it.
+
+**Correction (2026-11-28, same day; the decision is unchanged).** "Identical for identical removal
+sets" is imprecise: the arms named there remove different units (different criteria) but the same
+number of channel groups per layer (k = 29 at B2, 12 at B1, 45 at B3). The difference between the
+two measures is identical for the same removal shape, whichever units are removed.
+
