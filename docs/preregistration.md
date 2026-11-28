@@ -597,6 +597,25 @@ stratum (decided from E2's margin cache alone). The registered recovery skipped 
 alone only in E6 at B2 (updates 1-3); its results stand. No coefficient, batch or gate item
 changes. `docs/decisions/fbr_study_2026-11-22.md`, section 14.
 
+**Addendum of 2026-11-28 to the note of 2026-11-26.** Later registered runs also skipped updates
+for the scale alone (skipped but not non-finite in `recovery_steps.json`; the loop logs no cause,
+so the cause is inferred): E5 activation B3 updates 1 and 2, E5 Taylor B3 update 1, E7 B3 update
+2; E5 magnitude B1 none. This supersedes "only in E6 at B2". The results stand as registered.
+
+### Note of 2026-11-28 (research lead): stage-07 benchmark peaks just above target x 1.03
+
+Recorded before any accuracy result of G4, G6 or G10 is read. The +-3 % band is applied to the
+footprint the budget search measures (section 4; D07; amendment of 2026-11-17 item 2; the
+selection rule of 2026-11-16), and every pruning arm is inside it on that measure. The stage-07
+benchmark peak, measured with the same function and protocol on the recovered model, is above
+target x 1.03 for E7 B1, E5 activation B3 and E5 Taylor B3, by at most 0.012 % (0.65 MB); the
+difference between the two measures depends on the removal set (-1.9 to +1.8 MB so far). The
+search rule stays unchanged for every remaining run; the three arms are kept and flagged
+("benchmark peak above target x 1.03") in the budget-match table, the main table and the methods
+text; they are not outside the tolerance, so section 6's sensitivity analysis is not run for
+them. An excess above 0.1 % goes to the research lead first.
+`docs/decisions/budget_band_2026-11-28.md`.
+
 ## 11. Amendments before the freeze
 
 ### Amendment of 2026-10-31 (Soheil): evaluation settings frozen, before any model result

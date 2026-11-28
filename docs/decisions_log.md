@@ -725,6 +725,17 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-28 (research lead; recorded before any accuracy result of G4, G6, G10 is read): the
+  budget band and the stage-07 peak.** The +-3 % band is on the search footprint (section 4, D07,
+  amendment of 2026-11-17, 2026-11-16); every arm is inside it. The stage-07 benchmark peak is
+  above target x 1.03 for E7 B1, E5 activation B3, E5 Taylor B3, by at most 0.012 % (0.65 MB);
+  same function and protocol, different model state (before recovery, in-process, against the
+  recovered checkpoint); the difference depends on the removal set (-1.9 to +1.8 MB). Search rule
+  unchanged for every remaining run; the three are kept and flagged ("benchmark peak above target
+  x 1.03") in the budget-match table, the main table and the methods text; not outside the
+  tolerance, no sensitivity analysis. An excess above 0.1 % goes to the research lead first.
+  Addendum to the note of 2026-11-26: scale-only skips also in G4 (1, 2), G6 (1), G10 (2).
+  `docs/decisions/budget_band_2026-11-28.md`; pre-registration section 10.
 - **2026-11-26 (agent; implementation after the note, no pre-registered setting changed).** In
   `compression/fbr.py`: the paired term's margin gradient taken of `scale * w * m`, then times
   the Huber slope (`--legacy-pair-grad` keeps the first formula, trial only, for the diagnosis);
