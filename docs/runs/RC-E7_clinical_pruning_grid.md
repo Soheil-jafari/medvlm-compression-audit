@@ -144,3 +144,18 @@ files under `results/E7/B1/seed0/` (`metrics.csv` 134 rows; both test files 119 
 (366 channel groups, 5 KV groups; layers 3-34, none of the protected ones), all from E7's committed
 scores; within the band; the shared recovery fingerprint. Hand-offs `E7_seed0_B1_pruned` (6.89
 GB) and `E7_seed0_B1_outcomes`. Report `docs/runs/reports/run_report_RC-E7_seed0_B1.md`.
+
+**G10: E7 at B3, seed 0 (commit 0d8feb1; received 2026-11-28, committed unchanged, SHA-256
+checked; no test number read).** All steps ok: run 137.8 min, test 26.3 min, unfiltered test 41.8
+min. 10 files under `results/E7/B3/seed0/` (`metrics.csv` 134 rows; both test files 119 rows).
+1067 units (1050 channel groups, 13 KV groups, 4 whole layers: 11, 12, 17, 34; none in the
+protected layers 0, 1, 35), all from E7's committed scores; within the band on both measures; the
+shared recovery fingerprint; level check -0.08 %; the five non-finite steps skipped and update 2
+also for the scale alone (addendum to the note of 2026-11-26). Hand-offs `E7_seed0_B3_pruned`
+(5.12 GB) and `E7_seed0_B3_outcomes` (dataset `e7-b3-seed0`). Report
+`docs/runs/reports/run_report_RC-E7_seed0_B3.md`.
+
+**Note of 2026-11-28 (budget band).** G9's (E7 B1) stage-07 benchmark peak is 492,317 bytes
+(0.0070 %) above target x 1.03; its search footprint is inside the band. Kept and flagged
+(`docs/decisions/budget_band_2026-11-28.md`).
+

@@ -17,7 +17,10 @@ $+3\%$ above the target, or below it when the last unit crosses the target; a ru
 outside $\pm3\%$ is reported and marked. Footprints are measured on the same hardware
 with the same protocol, and each arm's measured footprint and its gap to the target are
 reported (Table~\ref{tab:budget-match}); parameter counts are reported but never used
-for matching. Every training arm is
+for matching. The band is defined on the footprint the search measures; the benchmark of
+the saved, recovered model uses the same protocol on a different model state, and the two
+differ by up to about 2\,MB depending on the removal set. Arms whose benchmark peak lies
+above the target times $1.03$ (by at most $0.012\%$) are kept and marked with $\dagger$. Every training arm is
 run with three seeds. All decisions that could favour one arm (finding list, finding
 weights, lesion-size strata, budgets, statistical tests, the rule that picks the
 best generic pruning arm) are frozen before the first compression run.

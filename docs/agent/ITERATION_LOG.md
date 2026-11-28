@@ -1620,3 +1620,12 @@ Append-only, newest at the bottom. One entry per iteration:
 - Registered recovery: skipped for scale alone only in E6 B2 (updates 1-3); results stand.
 - Card RC-FBR cell (iii-b) written; the pilot waits for it.
 
+## Iteration 101: 2026-11-28 (interactive)
+- Committed unchanged: G1 (E5 magnitude B1), G4 (E5 activation B3), G6 (E5 Taylor B3), G10 (E7
+  B3). Scale-only skips in the registered recovery: G4 1-2, G6 1, G10 2 (addendum to the note of
+  2026-11-26).
+- Budget band: on the search footprint (section 4, D07, amendment of 2026-11-17); every arm
+  inside. The stage-07 peak, same function and protocol on the recovered model, is above target
+  x 1.03 for E7 B1, E5 activation B3, E5 Taylor B3 (at most 0.012 %). Note of 2026-11-28 first,
+  then the flag in the budget-match table, the main table and the methods text.
+

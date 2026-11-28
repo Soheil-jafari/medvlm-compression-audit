@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from pathlib import Path
 
 import pandas as pd
@@ -58,6 +58,31 @@ def arm_labels(experiment_id: str) -> list[str]:
     """Return ``ID`` or ``ID:variant`` labels for one registry experiment."""
     spec = REGISTRY[experiment_id]
     return [f"{experiment_id}:{v}" for v in spec.variants] if spec.variants else [experiment_id]
+
+
+BENCHMARK_FLAG = "$^\\dagger$"
+"""Marks an arm whose stage-07 benchmark peak is above target x 1.03 although its search
+footprint, on which the band is defined, is inside (note of 2026-11-28)."""
+BENCHMARK_EXCESS_LIMIT = 0.001
+"""An excess above 0.1 % of target x 1.03 goes to the research lead first (note of
+2026-11-28); the aggregation prints a line for it."""
+
+
+def budget_tolerance() -> float:
+    """The pre-registered tolerance of the budget band (``configs/budgets.yaml``)."""
+    from medcompress.config import load_config
+
+    return float(load_config("budgets.yaml")["budgets"]["tolerance"])
+
+
+def benchmark_excess(target: object, peak: object, tolerance: float) -> float | None:
+    """The stage-07 benchmark peak's excess over ``target x (1 + tolerance)``, relative to that
+    bound: positive when above, otherwise ``None`` (also when a number is missing)."""
+    if not (_finite(target) and _finite(peak)):
+        return None
+    bound = float(target) * (1 + tolerance)  # type: ignore[arg-type]
+    excess = (float(peak) - bound) / bound  # type: ignore[arg-type]
+    return excess if excess > 0 else None
 
 
 def lookup_summary(summary: pd.DataFrame) -> dict[tuple[str, str, str], Mapping[str, float]]:
@@ -128,8 +153,10 @@ def tabular(columns: Sequence[str], rows: Iterable[Sequence[str]], align: str | 
     return "\n".join(lines)
 
 
-def main_table(summary: pd.DataFrame) -> str:
-    """T2: accuracy, balanced accuracy, small-finding recall and lesion-mask effect per arm."""
+def main_table(summary: pd.DataFrame, flagged: Collection[tuple[str, str]] = ()) -> str:
+    """T2: accuracy, balanced accuracy, small-finding recall and lesion-mask effect per arm;
+    ``flagged`` the ``(arm, budget)`` pairs whose benchmark peak is above target x 1.03 (marked
+    with a dagger; note of 2026-11-28; the summary of the test rows has no budget rows)."""
     look = lookup_summary(summary)
     rows = []
 
@@ -137,11 +164,14 @@ def main_table(summary: pd.DataFrame) -> str:
         values = [fmt_mean_sd(look.get((arm, budget, m))) for m in MAIN_METRICS]
         return [fmt_seeds(look, arm, budget, MAIN_METRICS), *values]
 
+    def label(arm: str, budget: str) -> str:  # the flag of 2026-11-28
+        return latex_escape(arm) + (BENCHMARK_FLAG if (arm, budget) in flagged else "")
+
     rows += [["ref", latex_escape(arm), *cells(arm, "")] for arm in arm_labels("E2")]
     rows += [["meas.", latex_escape(arm), *cells(arm, "")] for arm in arm_labels("E3")]
     for budget in BUDGET_IDS:
         for exp in ("E5", "E6", "E7", "E8"):
-            rows += [[budget, latex_escape(arm), *cells(arm, budget)] for arm in arm_labels(exp)]
+            rows += [[budget, label(arm, budget), *cells(arm, budget)] for arm in arm_labels(exp)]
     columns = ["Seeds", "Accuracy", "Balanced acc.", "Small-finding recall", "Lesion-mask effect"]
     return tabular(["Budget", "Arm", *columns], rows)
 
@@ -281,20 +311,46 @@ def write_budget_match(everything: pd.DataFrame, tables_dir: Path) -> Path:
     path = Path(tables_dir) / "budget_match.tex"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(budget_match_table(everything), encoding="utf-8")
+    for experiment, budget, seed, excess in benchmark_excesses(everything):  # 2026-11-28
+        if excess > BENCHMARK_EXCESS_LIMIT:
+            print(f"BUDGET: {experiment} {budget} seed {seed}: the benchmark peak is "
+                  f"{100 * excess:.3f} % above target x 1.03 (more than 0.1 %): tell the "
+                  "research lead before using it", flush=True)  # fmt: skip
     return path
+
+
+def benchmark_excesses(rows: pd.DataFrame) -> list[tuple[str, str, int, float]]:
+    """``(experiment, budget, seed, excess)`` for every budget-matched run whose stage-07
+    benchmark peak is above target x 1.03 (the excess relative to that bound; note of
+    2026-11-28)."""
+    if rows.empty:
+        return []
+    tolerance = budget_tolerance()
+    keyed = rows.assign(budget=rows["budget"].fillna("").astype(str))
+    mine = keyed[keyed["metric"].isin(("budget_target", "peak_memory_bytes"))
+                 & (keyed["budget"] != "")]  # fmt: skip
+    found = []
+    for (experiment, budget, seed), group in mine.groupby(["experiment", "budget", "seed"]):
+        v = dict(zip(group["metric"], group["value"], strict=False))
+        excess = benchmark_excess(v.get("budget_target"), v.get("peak_memory_bytes"), tolerance)
+        if excess is not None:
+            found.append((str(experiment), str(budget), int(seed), excess))
+    return found
 
 
 def budget_match_table(rows: pd.DataFrame) -> str:
     """Every budget-matched run: its budget, the target, the footprint the search measured for the
     chosen removal (stage 05; the gap and the tolerance refer to it), the gap to the target,
-    whether it is within the tolerance, and the stage-07 benchmark peak of the saved model
-    (2026-11-16).
+    whether it is within the tolerance, the stage-07 benchmark peak of the saved model
+    (2026-11-16), and that peak against target x 1.03 (note of 2026-11-28: a peak above it is
+    flagged, not marked outside the tolerance, which refers to the search footprint).
 
     The search keeps the smallest removal whose measured footprint is at or below the target
     times 1.03 (``budgets.smallest_prefix_meeting_target``), so an arm lands between 0 and +3 %
     above the target (below it when the last unit crosses the target)."""
     header = ["Run", "Budget", "Target (GB)", "Search footprint (GB)", "Gap", "Within tolerance",
-              "Benchmark peak (GB)"]  # fmt: skip
+              "Benchmark peak (GB)", "Benchmark vs target x 1.03"]  # fmt: skip
+    tolerance = budget_tolerance()
     table = []
     if not rows.empty:
         keyed = rows.assign(budget=rows["budget"].fillna("").astype(str))
@@ -309,12 +365,16 @@ def budget_match_table(rows: pd.DataFrame) -> str:
                 continue  # a budgeted run without a search (quantized arms)
             gap = v.get("budget_relative_gap")
             within = {1.0: "yes", 0.0: "no"}
+            peak = v.get("peak_memory_bytes", math.nan)
+            excess = benchmark_excess(v.get("budget_target"), peak, tolerance)
+            versus = (MISSING if not _finite(peak) else "below" if excess is None
+                      else f"{100 * excess:+.3f}\\% above{BENCHMARK_FLAG}")  # fmt: skip
             table.append([latex_escape(f"{experiment} seed {int(seed)}"), str(budget),
                           fmt_value(v.get("budget_target", float("nan")) / 1e9, 3),
                           fmt_value(v.get("budget_footprint", float("nan")) / 1e9, 3),
                           MISSING if gap is None else f"{100 * gap:+.2f}\\%",
                           within.get(v.get("budget_within_tolerance"), MISSING),
-                          fmt_value(v.get("peak_memory_bytes", math.nan) / 1e9, 3)])  # fmt: skip
+                          fmt_value(peak / 1e9, 3), versus])  # fmt: skip
     return tabular(header, table or [[MISSING] * len(header)])
 
 
@@ -327,15 +387,22 @@ TABLE_WRITERS = {
 }
 
 
-def write_tables(rows: pd.DataFrame, summary: pd.DataFrame, tables_dir: Path) -> list[Path]:
-    """Write every table and ``numbers.tex`` to ``tables_dir``; return the paths."""
+def write_tables(
+    rows: pd.DataFrame,
+    summary: pd.DataFrame,
+    tables_dir: Path,
+    flagged: Collection[tuple[str, str]] = (),
+) -> list[Path]:
+    """Write every table and ``numbers.tex`` to ``tables_dir``; return the paths. ``flagged``:
+    the arms the main table marks (:func:`benchmark_excesses`, note of 2026-11-28)."""
     tables_dir = Path(tables_dir)
     tables_dir.mkdir(parents=True, exist_ok=True)
     written = []
     primary = primary_rows(summary)  # the sensitivity analyses reach numbers.tex only
     for name, writer in TABLE_WRITERS.items():
         path = tables_dir / name
-        path.write_text(writer(primary), encoding="utf-8")
+        text = main_table(primary, flagged) if writer is main_table else writer(primary)
+        path.write_text(text, encoding="utf-8")
         written.append(path)
     setup = tables_dir / "setup_data.tex"
     setup.write_text(setup_data_table(rows), encoding="utf-8")

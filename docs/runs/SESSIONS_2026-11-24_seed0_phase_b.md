@@ -74,6 +74,8 @@ E7 and E10 jobs they read) are in `smoke_passed.yaml`; every session below can r
 
 Inputs: **D** = `medcompress-data`, **A** = `e2-seed0-adapter`, **C** = `e0-teacher-cache`.
 
+**Done and committed:** G3, G9 (2026-11-25); G1, G4, G6, G10 (2026-11-28).
+
 | # | Account | ARGS | Inputs | Estimate | Save handoff/ as |
 |---|---|---|---|---|---|
 | G1 | account 3 | `--card RC-E5 --seed 0 --variant magnitude --budget B1` | D, A, C | 4.0 h | `e5-mag-b1-seed0` |

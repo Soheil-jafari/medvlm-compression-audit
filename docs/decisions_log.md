@@ -725,6 +725,13 @@ must be logged here.
   its name (`scripts/find_inputs.py`; `run_card.py` does the same when `--data-root` and `--from`
   are not given). A missing input stops the cell with a clear message.
 
+- **2026-11-28 (agent; results and implementation after the note, no pre-registered setting
+  changed).** Committed unchanged (SHA-256 checked, no test number read): G1 (E5 magnitude B1),
+  G4 (E5 activation B3), G6 (E5 Taylor B3), G10 (E7 B3); every uniform removal is exactly the k
+  lowest committed scores per layer (k = 12 at B1, 45 at B3), E7 B3 uses no protected layer.
+  The flag of the note: `budget_match.tex` has a column "Benchmark vs target x 1.03"; the main
+  table marks E7 B1, E5 activation B3, E5 Taylor B3 with a dagger; the methods text and both
+  captions say so; the aggregation prints a `BUDGET:` line for an excess above 0.1 % (none).
 - **2026-11-28 (research lead; recorded before any accuracy result of G4, G6, G10 is read): the
   budget band and the stage-07 peak.** The +-3 % band is on the search footprint (section 4, D07,
   amendment of 2026-11-17, 2026-11-16); every arm is inside it. The stage-07 benchmark peak is

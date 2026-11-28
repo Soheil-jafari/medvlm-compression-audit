@@ -169,3 +169,31 @@ every layer (checked); within the band (at its top, as the search rule picks); t
 recovery fingerprint; 5 non-finite steps skipped. Hand-off `E5_seed0_activation_B1_outcomes`
 (dataset `e5-act-b1-seed0`); the analysis keys it by its run path `E5/activation/B1/seed0`, apart
 from the B2 bundles. Report `docs/runs/reports/run_report_RC-E5_seed0_act_B1.md`.
+
+**G1, G4, G6 (received 2026-11-28; committed unchanged, SHA-256 checked; no test number read).**
+All steps ok in each; the shared recovery fingerprint; level check -0.08 %; the five non-finite
+recovery steps (22, 30, 58, 106, 117) skipped.
+
+- **G1: E5 magnitude at B1** (commit 0d8feb1): run 144.2 min, test 29.3 min, unfiltered test
+  46.5 min. 10 files under `results/E5/magnitude/B1/seed0/` (`metrics.csv` 135 rows; both test
+  files 119 rows). k = 12 per layer (396 channel groups, layers 2-34), exactly the 12 lowest
+  committed magnitude scores in every layer (checked); within the band on both measures; no
+  scale-only skip. Hand-off `E5_seed0_magnitude_B1_outcomes` (dataset `e5-mag-b1-seed0`).
+  Report `docs/runs/reports/run_report_RC-E5_seed0_mag_B1.md`.
+- **G4: E5 activation at B3** (commit 6d3336d): run 144.4 min, test 27.4 min, unfiltered test
+  43.6 min. 10 files under `results/E5/activation/B3/seed0/` (`metrics.csv` 120 rows; both test
+  files 107 rows: reliability bins with no probe are not written, every other metric name as in
+  G6). k = 45 per layer (1485 channel groups, layers 2-34), exactly the 45 lowest committed
+  activation scores in every layer (checked). Within the band on the search footprint; the
+  stage-07 benchmark peak is 653,683 bytes (0.0124 %) above target x 1.03, flagged (note of
+  2026-11-28). Updates 1 and 2 also skipped for the scale alone (addendum to the note of
+  2026-11-26). Hand-off `E5_seed0_activation_B3_outcomes` (dataset `e5-act-b3-seed0`). Report
+  `docs/runs/reports/run_report_RC-E5_seed0_act_B3.md`.
+- **G6: E5 Taylor at B3** (commit 6d3336d): run 141.2 min, test 26.2 min, unfiltered test 41.5
+  min. 10 files under `results/E5/taylor/B3/seed0/` (`metrics.csv` 135 rows; both test files 119
+  rows). k = 45 per layer (1485 channel groups, layers 2-34), exactly the 45 lowest committed
+  Taylor scores in every layer (checked). Within the band on the search footprint; the benchmark
+  peak is flagged as G4's (the same 1485-unit shape, the same peak). Update 1 also skipped for the
+  scale alone. Hand-off `E5_seed0_taylor_B3_outcomes` (dataset `e5-tay-b3-seed0`). Report
+  `docs/runs/reports/run_report_RC-E5_seed0_taylor_B3.md`.
+

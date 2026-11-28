@@ -174,4 +174,49 @@ def test_the_budget_match_table_shows_each_run_and_its_gap() -> None:
                      ("budget_relative_gap", 0.0147), ("budget_within_tolerance", 1.0))
     ])  # fmt: skip
     table = budget_match_table(rows)
-    assert "E5:magnitude seed 0 & B2 & 5.954 & 6.041 & +1.47\\% & yes & --" in table
+    assert "E5:magnitude seed 0 & B2 & 5.954 & 6.041 & +1.47\\% & yes & -- & --" in table
+
+
+def test_a_benchmark_peak_above_target_times_1_03_is_flagged_not_outside(capsys) -> None:  # noqa: ANN001
+    """Note of 2026-11-28: the band is on the search footprint; a stage-07 peak above target x
+    1.03 is flagged in the budget-match table and the main table, and an excess above 0.1 % is
+    printed for the research lead."""
+    from medcompress.evaluation.report import (
+        BENCHMARK_FLAG,
+        benchmark_excess,
+        benchmark_excesses,
+        budget_match_table,
+        main_table,
+        write_budget_match,
+    )
+
+    target = 5121177395.2
+    bound = target * 1.03
+    assert benchmark_excess(target, 5275466400.0, 0.03) == pytest.approx(653683 / bound, rel=1e-3)
+    assert benchmark_excess(target, 5215492768.0, 0.03) is None  # below the bound
+    assert benchmark_excess(target, float("nan"), 0.03) is None
+
+    def run(experiment: str, peak: float) -> list[dict]:
+        return [{"experiment": experiment, "budget": "B3", "seed": 0, "metric": m, "value": v,
+                 "split": s}
+                for m, v, s in (("budget_target", target, "val"),
+                                ("budget_footprint", 5273622176.0, "val"),
+                                ("budget_relative_gap", 0.0298, "val"),
+                                ("budget_within_tolerance", 1.0, "val"),
+                                ("peak_memory_bytes", peak, ""))]  # fmt: skip
+
+    rows = pd.DataFrame(run("E5:activation", 5275466400.0) + run("E7", 5215492768.0))
+    table = budget_match_table(rows)
+    assert f"& yes & 5.275 & +0.012\\% above{BENCHMARK_FLAG}" in table  # within, and flagged
+    assert "E7 seed 0 & B3 & 5.121 & 5.274 & +2.98\\% & yes & 5.215 & below" in table
+    found = benchmark_excesses(rows)
+    assert [(e, b, seed) for e, b, seed, _x in found] == [("E5:activation", "B3", 0)]
+    text = main_table(pd.DataFrame(), {(e, b) for e, b, _s, _x in found})
+    assert f"B3 & E5:activation{BENCHMARK_FLAG} &" in text and "B3 & E7 &" in text
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as folder:
+        write_budget_match(rows, Path(folder))
+        assert "BUDGET:" not in capsys.readouterr().out  # 0.012 %: flagged, nothing printed
+        write_budget_match(pd.DataFrame(run("E7", bound * 1.002)), Path(folder))
+        assert "more than 0.1 %" in capsys.readouterr().out

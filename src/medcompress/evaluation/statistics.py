@@ -331,7 +331,10 @@ def aggregate_results(
     summary = summarise_over_seeds(rows)
     tables = Path(tables_dir or root / "paper" / "tables")
     figures = Path(figures_dir or root / "paper" / "figures")
-    written += write_tables(rows, summary, tables)
+    from medcompress.evaluation.report import benchmark_excesses
+
+    flagged = {(e, b) for e, b, _seed, _x in benchmark_excesses(everything)}  # 2026-11-28
+    written += write_tables(rows, summary, tables, flagged)
     from medcompress.evaluation.report import write_budget_match
 
     written.append(write_budget_match(everything, tables))  # the search's rows (2026-11-16)
